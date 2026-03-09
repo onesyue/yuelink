@@ -47,8 +47,8 @@ class ProfilePage extends ConsumerWidget {
                 profile: profile,
                 isActive: isActive,
                 onTap: () {
-                  ref.read(activeProfileIdProvider.notifier).state =
-                      profile.id;
+                  ref.read(activeProfileIdProvider.notifier).select(
+                      profile.id);
                 },
                 onUpdate: () {
                   ref.read(profilesProvider.notifier).update(profile);
@@ -174,8 +174,8 @@ class ProfilePage extends ConsumerWidget {
                             .read(profilesProvider.notifier)
                             .add(name: name, url: url);
                         // Auto-select the new profile
-                        ref.read(activeProfileIdProvider.notifier).state =
-                            profile.id;
+                        ref.read(activeProfileIdProvider.notifier).select(
+                            profile.id);
                         if (ctx.mounted) Navigator.pop(ctx);
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(

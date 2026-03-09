@@ -2,12 +2,25 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/profile.dart';
 import '../services/profile_service.dart';
+import '../services/settings_service.dart';
 
 // ------------------------------------------------------------------
-// Current active profile
+// Current active profile (persisted)
 // ------------------------------------------------------------------
 
-final activeProfileIdProvider = StateProvider<String?>((ref) => null);
+final activeProfileIdProvider =
+    StateNotifierProvider<ActiveProfileNotifier, String?>(
+  (ref) => ActiveProfileNotifier(),
+);
+
+class ActiveProfileNotifier extends StateNotifier<String?> {
+  ActiveProfileNotifier([super.initial]);
+
+  void select(String? id) {
+    state = id;
+    SettingsService.setActiveProfileId(id);
+  }
+}
 
 // ------------------------------------------------------------------
 // Profiles list

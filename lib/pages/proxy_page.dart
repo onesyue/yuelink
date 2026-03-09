@@ -13,10 +13,19 @@ class ProxyPage extends ConsumerStatefulWidget {
 }
 
 class _ProxyPageState extends ConsumerState<ProxyPage> {
+  String _searchQuery = '';
+  final _searchController = TextEditingController();
+
   @override
   void initState() {
     super.initState();
     Future.microtask(() => ref.read(proxyGroupsProvider.notifier).refresh());
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   @override
@@ -52,35 +61,105 @@ class _ProxyPageState extends ConsumerState<ProxyPage> {
       );
     }
 
+    // Filter groups/nodes by search query
+    final filteredGroups = _filterGroups(groups);
+
     return Scaffold(
-      body: RefreshIndicator(
-        onRefresh: () async {
-          ref.read(proxyGroupsProvider.notifier).refresh();
-        },
-        child: ListView.builder(
-          padding: const EdgeInsets.all(12),
-          itemCount: groups.length,
-          itemBuilder: (context, index) {
-            return _ProxyGroupCard(group: groups[index]);
-          },
-        ),
+      body: Column(
+        children: [
+          // Search bar
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+            child: TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: '搜索节点...',
+                prefixIcon: const Icon(Icons.search, size: 20),
+                suffixIcon: _searchQuery.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear, size: 18),
+                        onPressed: () {
+                          _searchController.clear();
+                          setState(() => _searchQuery = '');
+                        },
+                      )
+                    : null,
+                isDense: true,
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+                filled: true,
+                fillColor:
+                    Theme.of(context).colorScheme.surfaceContainerHighest,
+              ),
+              onChanged: (v) => setState(() => _searchQuery = v.trim()),
+            ),
+          ),
+
+          // Group list
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: () async {
+                ref.read(proxyGroupsProvider.notifier).refresh();
+              },
+              child: filteredGroups.isEmpty
+                  ? Center(
+                      child: Text('未找到匹配的节点',
+                          style: Theme.of(context).textTheme.bodyMedium))
+                  : ListView.builder(
+                      padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+                      itemCount: filteredGroups.length,
+                      itemBuilder: (context, index) {
+                        return _ProxyGroupCard(
+                          group: filteredGroups[index],
+                          searchQuery: _searchQuery,
+                        );
+                      },
+                    ),
+            ),
+          ),
+        ],
       ),
     );
+  }
+
+  List<ProxyGroup> _filterGroups(List<ProxyGroup> groups) {
+    if (_searchQuery.isEmpty) return groups;
+    final q = _searchQuery.toLowerCase();
+    return groups
+        .where((g) =>
+            g.name.toLowerCase().contains(q) ||
+            g.all.any((n) => n.toLowerCase().contains(q)))
+        .toList();
   }
 }
 
 class _ProxyGroupCard extends ConsumerWidget {
   final ProxyGroup group;
-  const _ProxyGroupCard({required this.group});
+  final String searchQuery;
+
+  const _ProxyGroupCard({required this.group, required this.searchQuery});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final delays = ref.watch(delayResultsProvider);
     final testing = ref.watch(delayTestingProvider);
 
+    // Filter nodes if searching
+    final visibleNodes = searchQuery.isEmpty
+        ? group.all
+        : group.all
+            .where(
+                (n) => n.toLowerCase().contains(searchQuery.toLowerCase()))
+            .toList();
+
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: ExpansionTile(
+        initiallyExpanded: searchQuery.isNotEmpty,
         title: Text(group.name,
             style: const TextStyle(fontWeight: FontWeight.w600)),
         subtitle: Row(
@@ -100,7 +179,7 @@ class _ProxyGroupCard extends ConsumerWidget {
             child: Wrap(
               spacing: 6,
               runSpacing: 6,
-              children: group.all.map((name) {
+              children: visibleNodes.map((name) {
                 final isSelected = name == group.now;
                 final delay = delays[name];
                 final isTesting = testing.contains(name);
@@ -119,7 +198,8 @@ class _ProxyGroupCard extends ConsumerWidget {
                           const SizedBox(
                             width: 12,
                             height: 12,
-                            child: CircularProgressIndicator(strokeWidth: 1.5),
+                            child:
+                                CircularProgressIndicator(strokeWidth: 1.5),
                           )
                         else if (delay != null)
                           Text(
@@ -156,16 +236,16 @@ class _ProxyGroupCard extends ConsumerWidget {
               children: [
                 OutlinedButton.icon(
                   onPressed: testing.isEmpty
-                      ? () => ref
-                          .read(delayTestProvider)
-                          .testGroup(group.all)
+                      ? () =>
+                          ref.read(delayTestProvider).testGroup(visibleNodes)
                       : null,
                   icon: const Icon(Icons.speed, size: 16),
-                  label: Text(
-                      testing.isEmpty ? '测速全部' : '测速中 (${testing.length})'),
+                  label: Text(testing.isEmpty
+                      ? '测速全部'
+                      : '测速中 (${testing.length})'),
                 ),
                 const Spacer(),
-                Text('${group.all.length} 个节点',
+                Text('${visibleNodes.length}/${group.all.length} 节点',
                     style: Theme.of(context).textTheme.bodySmall),
               ],
             ),

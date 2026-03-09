@@ -1,16 +1,58 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/traffic.dart';
 import '../providers/core_provider.dart';
 import '../providers/profile_provider.dart';
+import '../providers/proxy_provider.dart';
 import '../services/profile_service.dart';
 
-class HomePage extends ConsumerWidget {
+class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends ConsumerState<HomePage> {
+  DateTime? _connectedSince;
+  Timer? _uptimeTimer;
+
+  @override
+  void dispose() {
+    _uptimeTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startUptimeTimer() {
+    _connectedSince = DateTime.now();
+    _uptimeTimer?.cancel();
+    _uptimeTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  void _stopUptimeTimer() {
+    _uptimeTimer?.cancel();
+    _uptimeTimer = null;
+    _connectedSince = null;
+  }
+
+  String get _uptimeText {
+    if (_connectedSince == null) return '';
+    final diff = DateTime.now().difference(_connectedSince!);
+    final h = diff.inHours;
+    final m = diff.inMinutes % 60;
+    final s = diff.inSeconds % 60;
+    if (h > 0) return '${h}h ${m}m ${s}s';
+    if (m > 0) return '${m}m ${s}s';
+    return '${s}s';
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final status = ref.watch(coreStatusProvider);
     final traffic = ref.watch(trafficProvider);
     final isMock = ref.watch(isMockModeProvider);
@@ -18,8 +60,17 @@ class HomePage extends ConsumerWidget {
     final isTransitioning =
         status == CoreStatus.starting || status == CoreStatus.stopping;
 
-    // Keep traffic polling alive when running
+    // Keep traffic polling alive
     if (isRunning) ref.watch(trafficPollingProvider);
+
+    // Track uptime
+    ref.listen(coreStatusProvider, (prev, next) {
+      if (next == CoreStatus.running) {
+        _startUptimeTimer();
+      } else if (next == CoreStatus.stopped) {
+        _stopUptimeTimer();
+      }
+    });
 
     return Scaffold(
       body: SafeArea(
@@ -43,11 +94,9 @@ class HomePage extends ConsumerWidget {
                       Icon(Icons.science_outlined,
                           size: 16, color: Colors.amber.shade700),
                       const SizedBox(width: 6),
-                      Text(
-                        '开发模式 · 模拟数据',
-                        style: TextStyle(
-                            fontSize: 12, color: Colors.amber.shade700),
-                      ),
+                      Text('开发模式 · 模拟数据',
+                          style: TextStyle(
+                              fontSize: 12, color: Colors.amber.shade700)),
                     ],
                   ),
                 ),
@@ -59,6 +108,7 @@ class HomePage extends ConsumerWidget {
                   isRunning: isRunning, isTransitioning: isTransitioning),
               const SizedBox(height: 24),
 
+              // Status text
               Text(
                 isTransitioning
                     ? (status == CoreStatus.starting ? '连接中...' : '断开中...')
@@ -70,16 +120,20 @@ class HomePage extends ConsumerWidget {
                           : Theme.of(context).colorScheme.onSurface,
                     ),
               ),
+
+              // Uptime
+              if (isRunning && _connectedSince != null) ...[
+                const SizedBox(height: 4),
+                Text(_uptimeText,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color:
+                            Theme.of(context).colorScheme.onSurfaceVariant)),
+              ],
+
               const SizedBox(height: 8),
 
-              // Active profile name
-              if (isRunning)
-                Text(
-                  _getActiveProfileName(ref),
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                ),
+              // Active node info
+              if (isRunning) _ActiveNodeInfo(),
               const SizedBox(height: 24),
 
               // Traffic stats
@@ -135,18 +189,6 @@ class HomePage extends ConsumerWidget {
     );
   }
 
-  String _getActiveProfileName(WidgetRef ref) {
-    final isMock = ref.read(isMockModeProvider);
-    if (isMock) return '模拟节点';
-    final profiles = ref.read(profilesProvider);
-    final activeId = ref.read(activeProfileIdProvider);
-    return profiles.whenOrNull(
-          data: (list) =>
-              list.where((p) => p.id == activeId).firstOrNull?.name,
-        ) ??
-        '';
-  }
-
   Future<void> _toggle(BuildContext context, WidgetRef ref) async {
     final actions = ref.read(coreActionsProvider);
     final status = ref.read(coreStatusProvider);
@@ -158,12 +200,10 @@ class HomePage extends ConsumerWidget {
     }
 
     if (isMock) {
-      // In mock mode, start with empty config
       await actions.start('');
       return;
     }
 
-    // Load active profile config
     final activeId = ref.read(activeProfileIdProvider);
     if (activeId == null) {
       if (context.mounted) {
@@ -176,8 +216,42 @@ class HomePage extends ConsumerWidget {
 
     final config = await ProfileService.loadConfig(activeId);
     if (config == null) return;
-
     await actions.start(config);
+  }
+}
+
+class _ActiveNodeInfo extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final groups = ref.watch(proxyGroupsProvider);
+    // Find the main selector group
+    final mainGroup = groups.isEmpty
+        ? null
+        : groups.firstWhere(
+            (g) => g.name == '节点选择' || g.type == 'Selector',
+            orElse: () => groups.first,
+          );
+
+    if (mainGroup == null) return const SizedBox.shrink();
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.near_me,
+              size: 14, color: Theme.of(context).colorScheme.primary),
+          const SizedBox(width: 6),
+          Text(mainGroup.now,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  fontWeight: FontWeight.w500)),
+        ],
+      ),
+    );
   }
 }
 

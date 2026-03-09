@@ -1,15 +1,33 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'ffi/core_controller.dart';
 import 'pages/home_page.dart';
 import 'pages/log_page.dart';
 import 'pages/profile_page.dart';
 import 'pages/proxy_page.dart';
 import 'pages/settings_page.dart';
+import 'providers/profile_provider.dart';
+import 'services/settings_service.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const ProviderScope(child: YueLinkApp()));
+
+  // Restore persisted settings before first frame
+  final savedTheme = await SettingsService.getThemeMode();
+  final savedProfileId = await SettingsService.getActiveProfileId();
+
+  // Initialize core
+  CoreController.instance;
+
+  runApp(ProviderScope(
+    overrides: [
+      // Seed providers with saved values
+      themeProvider.overrideWith((ref) => savedTheme),
+      activeProfileIdProvider.overrideWith((ref) => ActiveProfileNotifier(savedProfileId)),
+    ],
+    child: const YueLinkApp(),
+  ));
 }
 
 class YueLinkApp extends ConsumerWidget {
@@ -38,14 +56,14 @@ class YueLinkApp extends ConsumerWidget {
   }
 }
 
-class MainShell extends StatefulWidget {
+class MainShell extends ConsumerStatefulWidget {
   const MainShell({super.key});
 
   @override
-  State<MainShell> createState() => _MainShellState();
+  ConsumerState<MainShell> createState() => _MainShellState();
 }
 
-class _MainShellState extends State<MainShell> {
+class _MainShellState extends ConsumerState<MainShell> {
   int _currentIndex = 0;
 
   static const _pages = [
@@ -80,6 +98,25 @@ class _MainShellState extends State<MainShell> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    // Check if first launch (no profiles) and jump to profile page
+    Future.microtask(() {
+      final profiles = ref.read(profilesProvider);
+      profiles.whenData((list) {
+        if (list.isEmpty && mounted) {
+          setState(() => _currentIndex = 2); // Profile page
+        }
+      });
+    });
+  }
+
+  /// Navigate to a specific tab programmatically.
+  void navigateTo(int index) {
+    if (mounted) setState(() => _currentIndex = index);
+  }
+
+  @override
   Widget build(BuildContext context) {
     final isWide = MediaQuery.sizeOf(context).width > 600;
 
@@ -91,13 +128,9 @@ class _MainShellState extends State<MainShell> {
               selectedIndex: _currentIndex,
               onDestinationSelected: (i) => setState(() => _currentIndex = i),
               labelType: NavigationRailLabelType.all,
-              leading: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                child: Text('YueLink',
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleMedium
-                        ?.copyWith(fontWeight: FontWeight.bold)),
+              leading: const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: _AppLogo(),
               ),
               destinations: _destinations
                   .map((d) => NavigationRailDestination(
@@ -121,6 +154,37 @@ class _MainShellState extends State<MainShell> {
         onDestinationSelected: (i) => setState(() => _currentIndex = i),
         destinations: _destinations,
       ),
+    );
+  }
+}
+
+class _AppLogo extends StatelessWidget {
+  const _AppLogo();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.primaryContainer,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(
+            Icons.link_rounded,
+            size: 20,
+            color: Theme.of(context).colorScheme.primary,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text('YueLink',
+            style: Theme.of(context)
+                .textTheme
+                .labelSmall
+                ?.copyWith(fontWeight: FontWeight.bold)),
+      ],
     );
   }
 }
