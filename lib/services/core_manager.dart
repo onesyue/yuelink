@@ -101,8 +101,10 @@ class CoreManager {
   /// On Android, also starts the VpnService to obtain the TUN fd and injects
   /// it into the config so mihomo uses the OS-managed TUN interface.
   Future<bool> start(String configYaml) async {
+    debugPrint('[CoreManager] start() called, running=$_running, mode=$_mode');
     if (_running) return true;
     await _ensureInit();
+    debugPrint('[CoreManager] init done, initialized=$_initialized');
 
     // Apply overwrite layer on top of base config
     final overwrite = await OverwriteService.load();
@@ -214,8 +216,10 @@ class CoreManager {
     final appDir = await getApplicationSupportDirectory();
     final configFile = File('${appDir.path}/${AppConstants.configFileName}');
     await configFile.writeAsString(configYaml);
+    debugPrint('[CoreManager] config written to: ${configFile.path}');
 
     final ok = _core.start(configYaml);
+    debugPrint('[CoreManager] _core.start() returned: $ok');
     if (!ok) return false;
 
     _running = true;

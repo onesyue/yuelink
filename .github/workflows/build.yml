@@ -283,6 +283,23 @@ jobs:
       - run: flutter pub get
       - run: flutter build windows --release
 
+      - name: Ensure libclash.dll in Release dir
+        shell: pwsh
+        run: |
+          $releaseDir = "build\windows\x64\runner\Release"
+          $dllSrc = "windows\libs\amd64\libclash.dll"
+          $dllDst = "$releaseDir\libclash.dll"
+          if ((Test-Path $dllSrc) -and -not (Test-Path $dllDst)) {
+            Write-Host "Copying libclash.dll to Release directory"
+            Copy-Item $dllSrc $dllDst
+          }
+          if (Test-Path $dllDst) {
+            Write-Host "libclash.dll present in Release: $(Get-Item $dllDst | Select-Object -ExpandProperty Length) bytes"
+          } else {
+            Write-Error "libclash.dll NOT found in Release directory!"
+            exit 1
+          }
+
       - name: Build installer with Inno Setup
         shell: pwsh
         run: |

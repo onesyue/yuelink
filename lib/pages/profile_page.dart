@@ -55,57 +55,42 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
         children: [
           // ── Top bar ──────────────────────────────────────────────
           Padding(
-            padding: const EdgeInsets.fromLTRB(32, 24, 32, 20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            padding: EdgeInsets.fromLTRB(32, MediaQuery.of(context).padding.top + 16, 32, 20),
+            child: Row(
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        s.navProfile.toUpperCase(),
-                        style: YLText.caption.copyWith(
-                          letterSpacing: 2.0,
-                          fontWeight: FontWeight.w600,
-                          color: YLColors.zinc400,
-                        ),
-                      ),
+                Expanded(
+                  child: Text(
+                    s.navProfile,
+                    style: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: -0.5,
+                      color: isDark ? Colors.white : Colors.black,
                     ),
-                    // Action buttons (moved from FABs)
-                    IconButton(
-                      icon: const Icon(Icons.content_paste, size: 18),
-                      tooltip: s.pasteFromClipboard,
-                      onPressed: () => _pasteFromClipboard(context, ref),
-                      style: IconButton.styleFrom(
-                        foregroundColor: YLColors.zinc500,
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.folder_open, size: 18),
-                      tooltip: s.importLocalFile,
-                      onPressed: () => _importLocalFile(context, ref),
-                      style: IconButton.styleFrom(
-                        foregroundColor: YLColors.zinc500,
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.add, size: 20),
-                      tooltip: s.addSubscription,
-                      onPressed: () => _showAddDialog(context, ref),
-                      style: IconButton.styleFrom(
-                        foregroundColor: isDark ? Colors.white : YLColors.primary,
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  s.navProfile,
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: -0.5,
-                    color: isDark ? Colors.white : Colors.black,
+                IconButton(
+                  icon: const Icon(Icons.content_paste, size: 18),
+                  tooltip: s.pasteFromClipboard,
+                  onPressed: () => _pasteFromClipboard(context, ref),
+                  style: IconButton.styleFrom(
+                    foregroundColor: YLColors.zinc500,
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.folder_open, size: 18),
+                  tooltip: s.importLocalFile,
+                  onPressed: () => _importLocalFile(context, ref),
+                  style: IconButton.styleFrom(
+                    foregroundColor: YLColors.zinc500,
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.add, size: 20),
+                  tooltip: s.addSubscription,
+                  onPressed: () => _showAddDialog(context, ref),
+                  style: IconButton.styleFrom(
+                    foregroundColor: isDark ? Colors.white : YLColors.primary,
                   ),
                 ),
               ],

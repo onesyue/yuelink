@@ -91,7 +91,7 @@ class SettingsService {
   // ── Connection mode (tun / systemProxy) ─────────────────────────────────
 
   static Future<String> getConnectionMode() async {
-    return (await get<String>('connectionMode')) ?? 'tun';
+    return (await get<String>('connectionMode')) ?? 'systemProxy';
   }
 
   static Future<void> setConnectionMode(String mode) async {

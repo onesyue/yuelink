@@ -36,12 +36,46 @@ class CoreBindings {
       }
       throw Exception('Cannot load libclash.dylib — run: dart setup.dart build -p macos');
     } else if (Platform.isWindows) {
-      return DynamicLibrary.open('libclash.dll');
+      return _loadWindowsLibrary();
     } else if (Platform.isIOS) {
       // iOS: statically linked, symbols are in the process itself
       return DynamicLibrary.process();
     }
     throw UnsupportedError('Unsupported platform: ${Platform.operatingSystem}');
+  }
+
+  static DynamicLibrary _loadWindowsLibrary() {
+    final exeDir = File(Platform.resolvedExecutable).parent.path;
+    // ignore: avoid_print
+    print('[CoreBindings] exe directory: $exeDir');
+
+    // Search order: next to exe, then bare name (system PATH)
+    final candidates = [
+      '$exeDir\\libclash.dll',
+      'libclash.dll',
+    ];
+
+    for (final path in candidates) {
+      final file = File(path);
+      final exists = file.existsSync();
+      // ignore: avoid_print
+      print('[CoreBindings] trying: $path (exists: $exists)');
+      if (exists) {
+        try {
+          return DynamicLibrary.open(path);
+        } catch (e) {
+          // ignore: avoid_print
+          print('[CoreBindings] load failed for $path: $e');
+        }
+      }
+    }
+
+    throw Exception(
+      'Cannot load libclash.dll\n'
+      'exe directory: $exeDir\n'
+      'Searched: ${candidates.join(", ")}\n'
+      'Run: dart setup.dart build -p windows && dart setup.dart install -p windows',
+    );
   }
 
   static String _getMacArch() {
@@ -93,58 +127,6 @@ class CoreBindings {
   late final int Function(Pointer<Utf8>) updateConfig = _lib
       .lookupFunction<Int32 Function(Pointer<Utf8>), int Function(Pointer<Utf8>)>(
     'UpdateConfig',
-  );
-
-  // ------------------------------------------------------------------
-  // Proxies
-  // ------------------------------------------------------------------
-
-  /// char* GetProxies()
-  late final Pointer<Utf8> Function() getProxies =
-      _lib.lookupFunction<Pointer<Utf8> Function(), Pointer<Utf8> Function()>(
-    'GetProxies',
-  );
-
-  /// int ChangeProxy(char* groupName, char* proxyName)
-  late final int Function(Pointer<Utf8>, Pointer<Utf8>) changeProxy = _lib
-      .lookupFunction<
-        Int32 Function(Pointer<Utf8>, Pointer<Utf8>),
-        int Function(Pointer<Utf8>, Pointer<Utf8>)
-      >('ChangeProxy');
-
-  /// int TestDelay(char* proxyName, char* url, int timeoutMs)
-  late final int Function(Pointer<Utf8>, Pointer<Utf8>, int) testDelay = _lib
-      .lookupFunction<
-        Int32 Function(Pointer<Utf8>, Pointer<Utf8>, Int32),
-        int Function(Pointer<Utf8>, Pointer<Utf8>, int)
-      >('TestDelay');
-
-  // ------------------------------------------------------------------
-  // Traffic & Connections
-  // ------------------------------------------------------------------
-
-  /// char* GetTraffic()
-  late final Pointer<Utf8> Function() getTraffic =
-      _lib.lookupFunction<Pointer<Utf8> Function(), Pointer<Utf8> Function()>(
-    'GetTraffic',
-  );
-
-  /// char* GetConnections()
-  late final Pointer<Utf8> Function() getConnections =
-      _lib.lookupFunction<Pointer<Utf8> Function(), Pointer<Utf8> Function()>(
-    'GetConnections',
-  );
-
-  /// int CloseConnection(char* connId)
-  late final int Function(Pointer<Utf8>) closeConnection = _lib
-      .lookupFunction<Int32 Function(Pointer<Utf8>), int Function(Pointer<Utf8>)>(
-    'CloseConnection',
-  );
-
-  /// void CloseAllConnections()
-  late final void Function() closeAllConnections =
-      _lib.lookupFunction<Void Function(), void Function()>(
-    'CloseAllConnections',
   );
 
   // ------------------------------------------------------------------

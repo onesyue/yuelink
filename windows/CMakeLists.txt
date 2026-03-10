@@ -106,3 +106,11 @@ install(DIRECTORY "${PROJECT_BUILD_DIR}/${FLUTTER_ASSET_DIR_NAME}"
 install(FILES "${AOT_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"
   CONFIGURATIONS Profile;Release
   COMPONENT Runtime)
+
+# Bundle libclash.dll (Go core) next to the executable.
+set(LIBCLASH_DIR "${CMAKE_CURRENT_SOURCE_DIR}/libs/amd64")
+if(EXISTS "${LIBCLASH_DIR}/libclash.dll")
+  install(FILES "${LIBCLASH_DIR}/libclash.dll"
+    DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+    COMPONENT Runtime)
+endif()

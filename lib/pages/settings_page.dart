@@ -12,7 +12,6 @@ import '../providers/split_tunnel_provider.dart';
 import '../services/app_notifier.dart';
 import '../services/auto_update_service.dart';
 import '../services/core_manager.dart';
-import '../services/geo_resource_service.dart';
 import '../services/settings_service.dart';
 import '../services/vpn_service.dart';
 import '../services/webdav_service.dart';
@@ -22,8 +21,6 @@ import 'connections_page.dart';
 import 'log_page.dart';
 import 'overwrite_page.dart';
 import 'proxy_provider_page.dart';
-import 'settings/dns_query_page.dart';
-import 'settings/running_config_page.dart';
 
 // ── Settings-level providers ─────────────────────────────────────────────────
 
@@ -93,29 +90,15 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         children: [
           // ── Top bar ──────────────────────────────────────────────
           Padding(
-            padding: const EdgeInsets.fromLTRB(32, 24, 32, 20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  s.navSettings.toUpperCase(),
-                  style: YLText.caption.copyWith(
-                    letterSpacing: 2.0,
-                    fontWeight: FontWeight.w600,
-                    color: YLColors.zinc400,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  s.navSettings,
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: -0.5,
-                    color: isDark ? Colors.white : Colors.black,
-                  ),
-                ),
-              ],
+            padding: EdgeInsets.fromLTRB(32, MediaQuery.of(context).padding.top + 16, 32, 20),
+            child: Text(
+              s.navSettings,
+              style: TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.w600,
+                letterSpacing: -0.5,
+                color: isDark ? Colors.white : Colors.black,
+              ),
             ),
           ),
           Container(
@@ -139,7 +122,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   children: [
                     // Theme
                     YLInfoRow(
-                      label: s.sectionAppearance,
+                      label: s.themeLabel,
                       trailing: SizedBox(
                         width: 240,
                         child: SegmentedButton<ThemeMode>(
@@ -235,7 +218,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 ),
               ),
 
-              // ══ 2. Proxy ══════════════════════════════════════════
+              // ══ 2. Proxy (desktop only — mobile always uses VPN) ═══
+              if (isDesktop) ...[
               _SectionTitle(s.sectionConnection),
               _SettingsCard(
                 child: Column(
@@ -263,25 +247,24 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                         },
                       ),
                     ),
-                    if (isDesktop) ...[
-                      Divider(height: 1, thickness: 0.5, color: dividerColor),
-                      YLSettingsRow(
-                        title: s.setSystemProxyOnConnect,
-                        description: s.setSystemProxyOnConnectSub,
-                        trailing: Switch(
-                          value: systemProxyOnConnect,
-                          onChanged: (v) async {
-                            ref
-                                .read(systemProxyOnConnectProvider.notifier)
-                                .state = v;
-                            await SettingsService.setSystemProxyOnConnect(v);
-                          },
-                        ),
+                    Divider(height: 1, thickness: 0.5, color: dividerColor),
+                    YLSettingsRow(
+                      title: s.setSystemProxyOnConnect,
+                      description: s.setSystemProxyOnConnectSub,
+                      trailing: Switch(
+                        value: systemProxyOnConnect,
+                        onChanged: (v) async {
+                          ref
+                              .read(systemProxyOnConnectProvider.notifier)
+                              .state = v;
+                          await SettingsService.setSystemProxyOnConnect(v);
+                        },
                       ),
-                    ],
+                    ),
                   ],
                 ),
               ),
+              ],
 
               // ══ 3. Subscription & Sync ════════════════════════════
               _SectionTitle(s.sectionSubscription),
@@ -358,21 +341,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                           ),
                         ],
                       ),
-                    ),
-                    Divider(height: 1, thickness: 0.5, color: dividerColor),
-                    YLInfoRow(
-                      label: s.runMode,
-                      trailing: _ModeChip(mode: CoreManager.instance.mode),
-                    ),
-                    Divider(height: 1, thickness: 0.5, color: dividerColor),
-                    YLInfoRow(
-                      label: s.mixedPort,
-                      value: '${AppConstants.defaultMixedPort}',
-                    ),
-                    Divider(height: 1, thickness: 0.5, color: dividerColor),
-                    YLInfoRow(
-                      label: s.apiPort,
-                      value: '${AppConstants.defaultApiPort}',
                     ),
                     Divider(height: 1, thickness: 0.5, color: dividerColor),
                     // Log level
@@ -474,66 +442,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                               )
                           : null,
                     ),
-                    Divider(height: 1, thickness: 0.5, color: dividerColor),
-                    // DNS query
-                    YLInfoRow(
-                      label: s.dnsQuery,
-                      trailing: const Icon(Icons.chevron_right, size: 18,
-                          color: YLColors.zinc400),
-                      enabled: status == CoreStatus.running,
-                      onTap: status == CoreStatus.running
-                          ? () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                    builder: (_) => const DnsQueryPage()),
-                              )
-                          : null,
-                    ),
-                    Divider(height: 1, thickness: 0.5, color: dividerColor),
-                    // Running config
-                    YLInfoRow(
-                      label: s.runningConfig,
-                      trailing: const Icon(Icons.chevron_right, size: 18,
-                          color: YLColors.zinc400),
-                      enabled: status == CoreStatus.running,
-                      onTap: status == CoreStatus.running
-                          ? () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                    builder: (_) =>
-                                        const RunningConfigPage()),
-                              )
-                          : null,
-                    ),
-                    Divider(height: 1, thickness: 0.5, color: dividerColor),
-                    // Flush DNS cache
-                    YLInfoRow(
-                      label: s.flushDnsCache,
-                      trailing: const Icon(Icons.chevron_right, size: 18,
-                          color: YLColors.zinc400),
-                      enabled: status == CoreStatus.running,
-                      onTap: status == CoreStatus.running
-                          ? () => _flushDns(context)
-                          : null,
-                    ),
-                    Divider(height: 1, thickness: 0.5, color: dividerColor),
-                    // Flush Fake-IP cache
-                    YLInfoRow(
-                      label: s.flushFakeIpCache,
-                      trailing: const Icon(Icons.chevron_right, size: 18,
-                          color: YLColors.zinc400),
-                      enabled: status == CoreStatus.running,
-                      onTap: status == CoreStatus.running
-                          ? () => _flushFakeIp(context)
-                          : null,
-                    ),
                   ],
                 ),
               ),
-              const SizedBox(height: 8),
-
-              // Geo resources (inline)
-              const _GeoResourceSection(),
               const SizedBox(height: 8),
 
               // Split tunnel (Android only)
@@ -635,26 +546,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     AppNotifier.info(s.updatingAll);
     final result = await AutoUpdateService.instance.updateAll();
     AppNotifier.success(s.updateAllResult(result.updated, result.failed));
-  }
-
-  Future<void> _flushDns(BuildContext context) async {
-    final s = S.of(context);
-    final ok = await CoreManager.instance.api.flushDnsCache();
-    if (ok) {
-      AppNotifier.success(s.dnsCacheCleared);
-    } else {
-      AppNotifier.error(s.operationFailed);
-    }
-  }
-
-  Future<void> _flushFakeIp(BuildContext context) async {
-    final s = S.of(context);
-    final ok = await CoreManager.instance.api.flushFakeIpCache();
-    if (ok) {
-      AppNotifier.success(s.fakeIpCacheCleared);
-    } else {
-      AppNotifier.error(s.operationFailed);
-    }
   }
 
   Future<void> _launchUrl(String url) async {
@@ -833,31 +724,6 @@ class _WebDavSectionState extends State<_WebDavSection> {
 
 // ── Helper widgets ────────────────────────────────────────────────────────────
 
-class _ModeChip extends StatelessWidget {
-  final CoreMode mode;
-  const _ModeChip({required this.mode});
-
-  @override
-  Widget build(BuildContext context) {
-    final s = S.of(context);
-    final (name, color) = switch (mode) {
-      CoreMode.mock => (s.modeMock, Colors.amber.shade700),
-      CoreMode.ffi => ('FFI', Colors.green),
-      CoreMode.subprocess => (s.modeSubprocess, Colors.blue),
-    };
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(YLRadius.sm),
-      ),
-      child: Text(name,
-          style: TextStyle(
-              fontSize: 11, fontWeight: FontWeight.w600, color: color)),
-    );
-  }
-}
-
 // ── Settings page helper widgets ─────────────────────────────────────────────
 
 /// Section title — matches the dashboard top bar label style.
@@ -903,136 +769,6 @@ class _SettingsCard extends StatelessWidget {
         boxShadow: YLShadow.card(context),
       ),
       child: child,
-    );
-  }
-}
-
-// ── Geo Resource Section ──────────────────────────────────────────────────────
-
-class _GeoResourceSection extends StatefulWidget {
-  const _GeoResourceSection();
-
-  @override
-  State<_GeoResourceSection> createState() => _GeoResourceSectionState();
-}
-
-class _GeoResourceSectionState extends State<_GeoResourceSection> {
-  List<GeoFileInfo>? _infos;
-  bool _updating = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _refresh();
-  }
-
-  Future<void> _refresh() async {
-    final infos = await GeoResourceService.instance.getAllInfo();
-    if (mounted) setState(() => _infos = infos);
-  }
-
-  Future<void> _updateAll() async {
-    setState(() => _updating = true);
-    final s = S.of(context);
-    try {
-      final results = await GeoResourceService.instance.updateAll();
-      final allOk = results.values.every((ok) => ok);
-      if (allOk) {
-        AppNotifier.success(s.geoUpdateSuccess);
-      } else {
-        AppNotifier.warning(s.geoUpdateFailed);
-      }
-      await _refresh();
-    } finally {
-      if (mounted) setState(() => _updating = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final s = S.of(context);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final infos = _infos;
-    final dividerColor = isDark
-        ? Colors.white.withValues(alpha: 0.06)
-        : Colors.black.withValues(alpha: 0.06);
-
-    return _SettingsCard(
-      child: Column(
-        children: [
-          // Header
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 8, 10),
-            child: Row(
-              children: [
-                Icon(Icons.public_rounded, size: 16,
-                    color: isDark ? YLColors.zinc400 : YLColors.zinc500),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(s.sectionGeoResources, style: YLText.titleMedium),
-                      const SizedBox(height: 2),
-                      Text(s.geoResourcesHint,
-                          style: YLText.caption.copyWith(
-                              color: isDark ? YLColors.zinc500 : YLColors.zinc400)),
-                    ],
-                  ),
-                ),
-                _updating
-                    ? const Padding(
-                        padding: EdgeInsets.all(12),
-                        child: SizedBox(
-                            width: 16, height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2)),
-                      )
-                    : IconButton(
-                        icon: Icon(Icons.download_for_offline_outlined,
-                            size: 18,
-                            color: isDark ? YLColors.zinc400 : YLColors.zinc500),
-                        tooltip: s.geoUpdateAll,
-                        onPressed: _updateAll,
-                      ),
-              ],
-            ),
-          ),
-          if (infos != null)
-            for (final info in infos) ...[
-              Divider(height: 1, thickness: 0.5, color: dividerColor),
-              YLInfoRow(
-                label: info.name,
-                value: info.exists
-                    ? '${info.sizeFormatted}  ·  '
-                        '${info.modified?.toLocal().toString().substring(0, 16) ?? ""}'
-                    : s.geoNotFound,
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      info.exists ? Icons.check_circle_outline : Icons.error_outline,
-                      size: 14,
-                      color: info.exists ? YLColors.connected : YLColors.zinc400,
-                    ),
-                    const SizedBox(width: 4),
-                    InkWell(
-                      onTap: _updating
-                          ? null
-                          : () async {
-                              setState(() => _updating = true);
-                              await GeoResourceService.instance.update(info.name);
-                              await _refresh();
-                              if (mounted) setState(() => _updating = false);
-                            },
-                      child: Icon(Icons.refresh_rounded, size: 16,
-                          color: isDark ? YLColors.zinc400 : YLColors.zinc500),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-        ],
-      ),
     );
   }
 }

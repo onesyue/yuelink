@@ -195,6 +195,17 @@ class MihomoApi {
     await _get('/providers/proxies/${Uri.encodeComponent(name)}/healthcheck');
   }
 
+  /// Get all rule providers.
+  Future<Map<String, dynamic>> getRuleProviders() async {
+    return _get('/providers/rules');
+  }
+
+  /// Update a rule provider (trigger re-download).
+  Future<bool> updateRuleProvider(String name) async {
+    final resp = await _put('/providers/rules/${Uri.encodeComponent(name)}');
+    return resp.statusCode == 204 || resp.statusCode == 200;
+  }
+
   // ------------------------------------------------------------------
   // DNS
   // ------------------------------------------------------------------

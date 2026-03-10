@@ -125,6 +125,8 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
 
     final isWide = MediaQuery.sizeOf(context).width > 640;
 
+    final topPadding = MediaQuery.of(context).padding.top;
+
     return Scaffold(
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -133,7 +135,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
           if (isMock)
             Container(
               color: Colors.amber.withValues(alpha: 0.12),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
+              padding: EdgeInsets.fromLTRB(16, topPadding + 5, 16, 5),
               child: Row(
                 children: [
                   Icon(Icons.science_outlined,
@@ -151,7 +153,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
             child: isTransitioning
                 ? const Center(child: CircularProgressIndicator())
                 : SingleChildScrollView(
-                    padding: const EdgeInsets.all(24),
+                    padding: EdgeInsets.fromLTRB(24, isMock ? 24 : topPadding + 24, 24, 24),
                     child: Center(
                       child: ConstrainedBox(
                         constraints: const BoxConstraints(maxWidth: 720),

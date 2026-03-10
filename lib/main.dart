@@ -371,21 +371,33 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
 
   Future<void> _maybeAutoConnect() async {
     final autoConnect = ref.read(autoConnectProvider);
-    if (!autoConnect) return;
+    if (!autoConnect) {
+      debugPrint('[AutoConnect] disabled by user setting');
+      return;
+    }
 
     final isMock = ref.read(isMockModeProvider);
     if (isMock) {
+      debugPrint('[AutoConnect] mock mode → starting');
       await ref.read(coreActionsProvider).start('');
       return;
     }
 
     final activeId = ref.read(activeProfileIdProvider);
-    if (activeId == null) return;
+    if (activeId == null) {
+      debugPrint('[AutoConnect] no active profile selected');
+      return;
+    }
 
     final config = await ProfileService.loadConfig(activeId);
-    if (config == null) return;
+    if (config == null) {
+      debugPrint('[AutoConnect] config file not found for profile: $activeId');
+      return;
+    }
 
-    await ref.read(coreActionsProvider).start(config);
+    debugPrint('[AutoConnect] starting with profile: $activeId (${config.length} bytes)');
+    final ok = await ref.read(coreActionsProvider).start(config);
+    debugPrint('[AutoConnect] result: $ok');
   }
 
   void _checkSubscriptionExpiry() {

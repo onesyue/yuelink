@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -47,7 +48,7 @@ final mihomoApiProvider = Provider<MihomoApi>((ref) {
 final routingModeProvider = StateProvider<String>((ref) => 'rule');
 
 /// Connection mode: "tun" | "systemProxy"
-final connectionModeProvider = StateProvider<String>((ref) => 'tun');
+final connectionModeProvider = StateProvider<String>((ref) => 'systemProxy');
 
 /// Log level: "info" | "debug" | "warning" | "error" | "silent"
 final logLevelProvider = StateProvider<String>((ref) => 'info');
@@ -69,44 +70,38 @@ class CoreActions {
   CoreActions(this.ref);
 
   Future<bool> start(String configYaml) async {
+    debugPrint('[CoreActions] start() called, config length: ${configYaml.length}');
     ref.read(coreStatusProvider.notifier).state = CoreStatus.starting;
 
     try {
       final manager = CoreManager.instance;
+      debugPrint('[CoreActions] mode: ${manager.mode}, isMock: ${manager.isMockMode}');
 
-      // 1. Check VPN Permission for TUN mode (Android)
-      if (!manager.isMockMode && ref.read(connectionModeProvider) == 'tun') {
+      // 1. Check VPN Permission (Android only — always needed for VpnService)
+      if (Platform.isAndroid && !manager.isMockMode) {
         final hasPerm = await VpnService.requestPermission();
         if (!hasPerm) {
+          debugPrint('[CoreActions] VPN permission denied');
           ref.read(coreStatusProvider.notifier).state = CoreStatus.stopped;
           AppNotifier.error(S.current.errVpnPermission);
           return false;
         }
       }
 
-      // 2. Start Core
+      // 2. Start Core (CoreManager handles VPN tunnel internally for Android/iOS)
+      debugPrint('[CoreActions] calling CoreManager.start()...');
       final ok = await manager.start(configYaml);
+      debugPrint('[CoreActions] CoreManager.start() returned: $ok');
       if (!ok) {
         ref.read(coreStatusProvider.notifier).state = CoreStatus.stopped;
         AppNotifier.error(S.current.errCoreStartFailed);
         return false;
       }
 
-      // 3. Start VPN Tunnel if needed
-      if (!manager.isMockMode && ref.read(connectionModeProvider) == 'tun') {
-        final vpnOk = await VpnService.startVpn();
-        if (!vpnOk) {
-          await manager.stop();
-          ref.read(coreStatusProvider.notifier).state = CoreStatus.stopped;
-          AppNotifier.error(S.current.errVpnTunnelFailed);
-          return false;
-        }
-      }
-
       ref.read(coreStatusProvider.notifier).state = CoreStatus.running;
       AppNotifier.success(S.current.msgConnected);
 
-      // 4. Apply routing mode from settings to running core
+      // 3. Apply routing mode from settings to running core
       final routingMode = ref.read(routingModeProvider);
       if (routingMode != 'rule') {
         try {
@@ -114,7 +109,7 @@ class CoreActions {
         } catch (_) {}
       }
 
-      // 5. Auto-set system proxy on macOS/Windows
+      // 4. Auto-set system proxy on macOS/Windows
       if ((Platform.isMacOS || Platform.isWindows) &&
           ref.read(systemProxyOnConnectProvider)) {
         await applySystemProxy();
@@ -124,9 +119,11 @@ class CoreActions {
       ref.read(proxyGroupsProvider.notifier).refresh();
 
       return true;
-    } catch (e) {
+    } catch (e, st) {
+      debugPrint('[CoreActions] start() error: $e');
+      debugPrint('[CoreActions] stack trace: $st');
       ref.read(coreStatusProvider.notifier).state = CoreStatus.stopped;
-      
+
       // 真实状态闭环：精准透传底层错误（如 YAML 语法错误及行号）
       String msg = e.toString();
       if (e is FormatException) {
@@ -153,9 +150,6 @@ class CoreActions {
       }
 
       final manager = CoreManager.instance;
-      if (!manager.isMockMode) {
-        await VpnService.stopVpn();
-      }
       await manager.stop();
 
       ref.read(coreStatusProvider.notifier).state = CoreStatus.stopped;

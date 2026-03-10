@@ -106,25 +106,11 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
           // ── Top bar ──────────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.fromLTRB(24, 32, 24, 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  s.navConnections.toUpperCase(),
-                  style: YLText.caption.copyWith(
-                    letterSpacing: 2.0,
-                    fontWeight: FontWeight.w700,
-                    color: isDark ? Colors.white : YLColors.primary,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  s.navConnections,
-                  style: YLText.display.copyWith(
-                    color: isDark ? YLColors.zinc50 : YLColors.zinc900,
-                  ),
-                ),
-              ],
+            child: Text(
+              s.navConnections,
+              style: YLText.display.copyWith(
+                color: isDark ? YLColors.zinc50 : YLColors.zinc900,
+              ),
             ),
           ),
 

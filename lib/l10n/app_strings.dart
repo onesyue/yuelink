@@ -383,6 +383,7 @@ class S {
   String get username => _e ? 'Username' : '用户名';
   String get password => _e ? 'Password' : '密码';
   String get testConnection => _e ? 'Test Connection' : '测试连接';
+  String get themeLabel => _e ? 'Theme' : '主题';
   String get themeSystem => _e ? 'System' : '跟随系统';
   String get themeLight => _e ? 'Light' : '浅色';
   String get themeDark => _e ? 'Dark' : '深色';
