@@ -133,12 +133,17 @@ class _HomePageState extends ConsumerState<HomePage> {
 
               const SizedBox(height: 8),
 
-              // Active node info
-              if (isRunning) _ActiveNodeInfo(),
+              // Active node info (when connected)
               if (isRunning) ...[
+                _ActiveNodeInfo(),
                 const SizedBox(height: 6),
                 _ActiveProfileName(),
               ],
+
+              // Selected profile hint (when disconnected)
+              if (!isRunning && !isTransitioning)
+                _DisconnectedHint(),
+
               const SizedBox(height: 24),
 
               // Traffic stats
@@ -222,8 +227,20 @@ class _HomePageState extends ConsumerState<HomePage> {
     }
 
     final config = await ProfileService.loadConfig(activeId);
-    if (config == null) return;
-    await actions.start(config);
+    if (config == null) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('配置文件不存在，请更新订阅')),
+        );
+      }
+      return;
+    }
+    final ok = await actions.start(config);
+    if (!ok && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('启动失败，请检查配置')),
+      );
+    }
   }
 }
 
@@ -280,6 +297,54 @@ class _ActiveProfileName extends ConsumerWidget {
     return Text(name,
         style: Theme.of(context).textTheme.bodySmall?.copyWith(
             color: Theme.of(context).colorScheme.onSurfaceVariant));
+  }
+}
+
+class _DisconnectedHint extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final profiles = ref.watch(profilesProvider);
+    final activeId = ref.watch(activeProfileIdProvider);
+    final isMock = ref.watch(isMockModeProvider);
+
+    if (isMock) {
+      return Text('点击连接启动模拟模式',
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant));
+    }
+
+    return profiles.when(
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (list) {
+        if (list.isEmpty) {
+          return Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text('请先在「配置」页面添加订阅',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant)),
+          );
+        }
+        final active =
+            list.where((p) => p.id == activeId).firstOrNull ?? list.first;
+        return Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.description_outlined,
+                  size: 14,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant),
+              const SizedBox(width: 4),
+              Text(active.name,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color:
+                          Theme.of(context).colorScheme.onSurfaceVariant)),
+            ],
+          ),
+        );
+      },
+    );
   }
 }
 

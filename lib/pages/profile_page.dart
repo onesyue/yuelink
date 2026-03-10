@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/profile.dart';
 import '../providers/profile_provider.dart';
+import '../services/profile_service.dart';
 import '../services/subscription_parser.dart';
 
 class ProfilePage extends ConsumerWidget {
@@ -55,13 +56,20 @@ class ProfilePage extends ConsumerWidget {
               ),
             );
           }
+          // Sort: active profile first
+          final sorted = List<Profile>.from(profiles)
+            ..sort((a, b) {
+              if (a.id == activeId && b.id != activeId) return -1;
+              if (b.id == activeId && a.id != activeId) return 1;
+              return 0;
+            });
           return RefreshIndicator(
             onRefresh: () => ref.read(profilesProvider.notifier).load(),
             child: ListView.builder(
               padding: const EdgeInsets.all(12),
-              itemCount: profiles.length,
+              itemCount: sorted.length,
               itemBuilder: (context, index) {
-                final profile = profiles[index];
+                final profile = sorted[index];
                 final isActive = profile.id == activeId;
                 return _ProfileCard(
                   profile: profile,
@@ -92,6 +100,7 @@ class ProfilePage extends ConsumerWidget {
                     }
                   },
                   onEdit: () => _showEditDialog(context, ref, profile),
+                  onViewConfig: () => _showConfigViewer(context, profile),
                   onDelete: () => _confirmDelete(context, ref, profile),
                 );
               },
@@ -306,6 +315,44 @@ class ProfilePage extends ConsumerWidget {
       ),
     );
   }
+
+  void _showConfigViewer(BuildContext context, Profile profile) async {
+    final config = await ProfileService.loadConfig(profile.id);
+    if (!context.mounted) return;
+
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (ctx) => Scaffold(
+        appBar: AppBar(
+          title: Text(profile.name),
+          actions: [
+            if (config != null)
+              IconButton(
+                icon: const Icon(Icons.copy),
+                tooltip: '复制配置',
+                onPressed: () {
+                  Clipboard.setData(ClipboardData(text: config));
+                  ScaffoldMessenger.of(ctx).showSnackBar(
+                      const SnackBar(content: Text('已复制配置内容')));
+                },
+              ),
+          ],
+        ),
+        body: config == null
+            ? const Center(child: Text('配置文件不存在'))
+            : SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: SelectableText(
+                  config,
+                  style: const TextStyle(
+                    fontFamily: 'monospace',
+                    fontSize: 12,
+                    height: 1.5,
+                  ),
+                ),
+              ),
+      ),
+    ));
+  }
 }
 
 class _ProfileCard extends StatelessWidget {
@@ -314,6 +361,7 @@ class _ProfileCard extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onUpdate;
   final VoidCallback onEdit;
+  final VoidCallback onViewConfig;
   final VoidCallback onDelete;
 
   const _ProfileCard({
@@ -322,6 +370,7 @@ class _ProfileCard extends StatelessWidget {
     required this.onTap,
     required this.onUpdate,
     required this.onEdit,
+    required this.onViewConfig,
     required this.onDelete,
   });
 
@@ -360,21 +409,30 @@ class _ProfileCard extends StatelessWidget {
                   ),
                   PopupMenuButton<String>(
                     onSelected: (action) {
-                      if (action == 'update') onUpdate();
-                      if (action == 'edit') onEdit();
-                      if (action == 'copy') {
-                        Clipboard.setData(
-                            ClipboardData(text: profile.url));
-                        ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('已复制订阅链接')));
+                      switch (action) {
+                        case 'update':
+                          onUpdate();
+                        case 'edit':
+                          onEdit();
+                        case 'config':
+                          onViewConfig();
+                        case 'copy':
+                          Clipboard.setData(
+                              ClipboardData(text: profile.url));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                  content: Text('已复制订阅链接')));
+                        case 'delete':
+                          onDelete();
                       }
-                      if (action == 'delete') onDelete();
                     },
                     itemBuilder: (_) => [
                       const PopupMenuItem(
                           value: 'update', child: Text('更新订阅')),
                       const PopupMenuItem(
                           value: 'edit', child: Text('编辑')),
+                      const PopupMenuItem(
+                          value: 'config', child: Text('查看配置')),
                       const PopupMenuItem(
                           value: 'copy', child: Text('复制链接')),
                       const PopupMenuItem(
