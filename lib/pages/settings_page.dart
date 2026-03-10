@@ -329,7 +329,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                           YLStatusDot(
                             color: status == CoreStatus.running
                                 ? YLColors.connected
-                                : YLColors.disconnected,
+                                : YLColors.zinc400,
                           ),
                           const SizedBox(width: 6),
                           Text(

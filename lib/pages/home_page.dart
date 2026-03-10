@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:fl_chart/fl_chart.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -50,14 +52,13 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 
   String get _uptimeText {
-    if (_connectedSince == null) return '';
+    if (_connectedSince == null) return '00:00';
     final diff = DateTime.now().difference(_connectedSince!);
     final h = diff.inHours;
     final m = diff.inMinutes % 60;
     final s = diff.inSeconds % 60;
-    if (h > 0) return '${h}h ${m}m ${s}s';
-    if (m > 0) return '${m}m ${s}s';
-    return '${s}s';
+    if (h > 0) return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+    return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
   }
 
   @override
@@ -68,6 +69,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     final isRunning = status == CoreStatus.running;
     final isTransitioning =
         status == CoreStatus.starting || status == CoreStatus.stopping;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     if (isRunning) {
       ref.watch(trafficStreamProvider);
@@ -83,86 +85,70 @@ class _HomePageState extends ConsumerState<HomePage> {
       }
     });
 
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return Scaffold(
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
+      body: CustomScrollView(
+        physics: const BouncingScrollPhysics(
+            parent: AlwaysScrollableScrollPhysics()),
+        slivers: [
           // Mock banner
           if (isMock)
-            Container(
-              color: Colors.amber.withValues(alpha: 0.12),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
-              child: Row(
-                children: [
-                  Icon(Icons.science_outlined,
-                      size: 13, color: Colors.amber.shade700),
-                  const SizedBox(width: 6),
-                  Text(s.mockModeBanner,
-                      style: TextStyle(
-                          fontSize: 12, color: Colors.amber.shade700)),
-                ],
+            SliverToBoxAdapter(
+              child: Container(
+                color: YLColors.connecting.withOpacity(0.08),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.science_outlined,
+                        size: 13, color: YLColors.connecting),
+                    const SizedBox(width: 6),
+                    Text(s.mockModeBanner,
+                        style: YLText.caption.copyWith(
+                          color: YLColors.connecting,
+                          fontWeight: FontWeight.w500,
+                        )),
+                  ],
+                ),
               ),
             ),
 
-          // ── Top bar ──────────────────────────────────────────────
-          _TopBar(
-            status: status,
-            uptimeText: _uptimeText,
-            isTransitioning: isTransitioning,
-            onToggle: () => _toggle(context, ref),
-          ),
-
-          // Divider
-          Container(
-            height: 0.5,
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.06)
-                : Colors.black.withValues(alpha: 0.06),
-          ),
-
-          // ── Main content ─────────────────────────────────────────
-          Expanded(
-            child: isTransitioning
-                ? const Center(child: CircularProgressIndicator())
-                : SingleChildScrollView(
-                    padding: const EdgeInsets.all(24),
-                    child: Center(
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 900),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            // Connection card
-                            _ConnectionCard(
-                              status: status,
-                              uptimeText: _uptimeText,
-                              onToggle: () => _toggle(context, ref),
-                            ),
-                            const SizedBox(height: 16),
-
-                            // Traffic card (only when connected)
-                            if (isRunning) ...[
-                              const _TrafficMetricCard(),
-                              const SizedBox(height: 16),
-                            ],
-
-                            // Stat cards row
-                            if (isRunning) ...[
-                              _StatsRow(),
-                              const SizedBox(height: 16),
-                            ],
-
-                            // Chart card
-                            if (isRunning)
-                              const _ChartCard(),
-                          ],
-                        ),
+          // Content
+          SliverToBoxAdapter(
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 800),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 32, 24, 80),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // ── Hero Section ───────────────────────────────
+                      _HeroSection(
+                        status: status,
+                        uptimeText: _uptimeText,
+                        onToggle: () => _toggle(context, ref),
                       ),
-                    ),
+                      const SizedBox(height: 24),
+
+                      // ── Quick Info Row ─────────────────────────────
+                      if (isRunning) ...[
+                        _QuickInfoRow(),
+                        const SizedBox(height: 16),
+                      ],
+
+                      // ── Traffic Cards ──────────────────────────────
+                      if (isRunning) ...[
+                        const _TrafficCards(),
+                        const SizedBox(height: 16),
+                      ],
+
+                      // ── Chart ──────────────────────────────────────
+                      if (isRunning) const _ChartCard(),
+                    ],
                   ),
+                ),
+              ),
+            ),
           ),
         ],
       ),
@@ -201,7 +187,6 @@ class _HomePageState extends ConsumerState<HomePage> {
   Future<void> _toggle(BuildContext context, WidgetRef ref) async {
     if (_busy) return;
     _busy = true;
-
     final s = S.of(context);
     final actions = ref.read(coreActionsProvider);
     final status = ref.read(coreStatusProvider);
@@ -214,7 +199,6 @@ class _HomePageState extends ConsumerState<HomePage> {
         await actions.stop();
         return;
       }
-
       if (isMock) {
         await actions.start('');
         return;
@@ -246,133 +230,16 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 }
 
-// ── Top Bar ──────────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// Hero Section — Large power button + status
+// ══════════════════════════════════════════════════════════════════════════════
 
-class _TopBar extends ConsumerWidget {
-  final CoreStatus status;
-  final String uptimeText;
-  final bool isTransitioning;
-  final VoidCallback onToggle;
-
-  const _TopBar({
-    required this.status,
-    required this.uptimeText,
-    required this.isTransitioning,
-    required this.onToggle,
-  });
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final s = S.of(context);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final isRunning = status == CoreStatus.running;
-
-    // Get delay for badge
-    final groups = ref.watch(proxyGroupsProvider);
-    final delays = ref.watch(delayResultsProvider);
-    final mainGroup = groups.isEmpty
-        ? null
-        : groups.firstWhere(
-            (g) => g.name == '节点选择' || g.type == 'Selector',
-            orElse: () => groups.first,
-          );
-    final currentDelay = mainGroup != null ? delays[mainGroup.now] : null;
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(32, 24, 32, 20),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          // Left: label + title
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                s.dashboardLabel,
-                style: YLText.caption.copyWith(
-                  letterSpacing: 2.0,
-                  fontWeight: FontWeight.w600,
-                  color: YLColors.zinc400,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                s.dashboardTitle,
-                style: const TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: -0.5,
-                ),
-              ),
-            ],
-          ),
-          const Spacer(),
-          // Right: status badge + switch node
-          if (isRunning) ...[
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: const Color(0xFF34C759).withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: const Color(0xFF34C759).withValues(alpha: 0.25),
-                  width: 0.5,
-                ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 6, height: 6,
-                    decoration: const BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Color(0xFF34C759),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    '${s.statusConnected}${currentDelay != null && currentDelay > 0 ? ' · ${currentDelay}ms' : ''}',
-                    style: YLText.label.copyWith(
-                      color: const Color(0xFF15803D),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            InkWell(
-              onTap: () => MainShell.switchToTab(context, MainShell.tabNodes),
-              borderRadius: BorderRadius.circular(20),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: isDark
-                        ? Colors.white.withValues(alpha: 0.12)
-                        : Colors.black.withValues(alpha: 0.10),
-                    width: 0.5,
-                  ),
-                ),
-                child: Text(s.switchNode, style: YLText.label),
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-// ── Connection Card ──────────────────────────────────────────────────────────
-
-class _ConnectionCard extends ConsumerWidget {
+class _HeroSection extends ConsumerWidget {
   final CoreStatus status;
   final String uptimeText;
   final VoidCallback onToggle;
 
-  const _ConnectionCard({
+  const _HeroSection({
     required this.status,
     required this.uptimeText,
     required this.onToggle,
@@ -386,13 +253,10 @@ class _ConnectionCard extends ConsumerWidget {
     final isTransitioning =
         status == CoreStatus.starting || status == CoreStatus.stopping;
 
-    // Profile name
+    // Profile info
     final profiles = ref.watch(profilesProvider);
     final activeId = ref.watch(activeProfileIdProvider);
     final isMock = ref.watch(isMockModeProvider);
-    final routingMode = ref.watch(routingModeProvider);
-    final systemProxy = ref.watch(systemProxyOnConnectProvider);
-
     String? profileName;
     if (isMock) {
       profileName = s.mockModeLabel;
@@ -403,146 +267,129 @@ class _ConnectionCard extends ConsumerWidget {
       );
     }
 
-    final routeLabel = routingMode == 'rule'
-        ? '${s.routeModeRule} Mode'
-        : routingMode == 'global'
-            ? '${s.routeModeGlobal} Mode'
-            : '${s.routeModeDirect} Mode';
+    // Active node
+    final groups = ref.watch(proxyGroupsProvider);
+    String activeNode = '';
+    if (isRunning && groups.isNotEmpty) {
+      try {
+        final mainGroup = groups.firstWhere(
+          (g) => g.type.toLowerCase() == 'selector',
+          orElse: () => groups.first,
+        );
+        activeNode = mainGroup.now;
+      } catch (_) {}
+    }
 
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: isDark ? YLColors.zinc800 : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.08)
-              : Colors.black.withValues(alpha: 0.08),
-          width: 0.5,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.15 : 0.03),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
+    final statusColor = isRunning
+        ? YLColors.connected
+        : isTransitioning
+            ? YLColors.connecting
+            : YLColors.zinc400;
+
+    return YLSurface(
+      padding: const EdgeInsets.all(28),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ── Power Button ───────────────────────────────────────
+          GestureDetector(
+            onTap: isTransitioning ? null : onToggle,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 400),
+              curve: Curves.easeOutCubic,
+              width: 88,
+              height: 88,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: isRunning
+                    ? YLColors.connected
+                    : (isDark ? YLColors.zinc800 : YLColors.zinc100),
+                boxShadow: isRunning
+                    ? [
+                        BoxShadow(
+                          color: YLColors.connected.withOpacity(0.35),
+                          blurRadius: 28,
+                          spreadRadius: 2,
+                        ),
+                      ]
+                    : [],
+              ),
+              child: Center(
+                child: isTransitioning
+                    ? const CupertinoActivityIndicator(
+                        color: Colors.white, radius: 14)
+                    : Icon(
+                        Icons.power_settings_new_rounded,
+                        size: 36,
+                        color: isRunning
+                            ? Colors.white
+                            : (isDark ? YLColors.zinc500 : YLColors.zinc400),
+                      ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // ── Status ─────────────────────────────────────────────
           Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Left content
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Status label
-                    Row(
-                      children: [
-                        Container(
-                          width: 7, height: 7,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: isRunning
-                                ? const Color(0xFF34C759)
-                                : (isTransitioning
-                                    ? YLColors.connecting
-                                    : YLColors.zinc400),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          isRunning ? s.liveConnection : s.dashDisconnectedTitle,
-                          style: YLText.label.copyWith(
-                            color: YLColors.zinc500,
-                          ),
-                        ),
-                        if (isRunning && uptimeText.isNotEmpty) ...[
-                          const SizedBox(width: 8),
-                          Text(
-                            uptimeText,
-                            style: YLText.caption.copyWith(
-                              color: YLColors.zinc400,
-                              fontFeatures: const [FontFeature.tabularFigures()],
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-
-                    // Big status text
-                    Text(
-                      isRunning ? s.statusConnected : s.statusDisconnected,
-                      style: const TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: -0.5,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-
-                    // Description
-                    Text(
-                      isRunning ? s.dashConnectedDesc : s.dashDisconnectedDesc,
-                      style: YLText.body.copyWith(
-                        color: YLColors.zinc500,
-                        height: 1.5,
-                      ),
-                      maxLines: 3,
-                    ),
-                  ],
+              YLStatusDot(color: statusColor, glow: isRunning, size: 8),
+              const SizedBox(width: 8),
+              Text(
+                isRunning
+                    ? s.statusConnected
+                    : isTransitioning
+                        ? (status == CoreStatus.starting
+                            ? s.statusConnecting
+                            : s.statusDisconnecting)
+                        : s.statusDisconnected,
+                style: YLText.titleMedium.copyWith(
+                  color: statusColor,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
-
-              const SizedBox(width: 16),
-
-              // Toggle button
-              if (isTransitioning)
-                const Padding(
-                  padding: EdgeInsets.only(top: 8),
-                  child: SizedBox(
-                    width: 20, height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                )
-              else
-                GestureDetector(
-                  onTap: onToggle,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 20, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: isRunning
-                          ? (isDark ? Colors.white : YLColors.zinc900)
-                          : YLColors.primary,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      isRunning ? s.btnDisconnect : s.btnConnect,
-                      style: YLText.label.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ),
             ],
           ),
+          const SizedBox(height: 6),
 
-          // Pills
+          // ── Timer / Profile ────────────────────────────────────
           if (isRunning) ...[
-            const SizedBox(height: 20),
+            Text(
+              uptimeText,
+              style: YLText.display.copyWith(
+                fontSize: 36,
+                fontFeatures: const [FontFeature.tabularFigures()],
+                color: isDark ? Colors.white : YLColors.zinc900,
+              ),
+            ),
+            const SizedBox(height: 8),
+            if (activeNode.isNotEmpty)
+              Text(
+                activeNode,
+                style: YLText.body.copyWith(color: YLColors.zinc500),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+          ] else ...[
+            Text(
+              s.dashDisconnectedDesc,
+              style: YLText.body.copyWith(color: YLColors.zinc400),
+              textAlign: TextAlign.center,
+            ),
+          ],
+
+          // ── Profile & Route pills ──────────────────────────────
+          if (isRunning) ...[
+            const SizedBox(height: 16),
             Wrap(
+              alignment: WrapAlignment.center,
               spacing: 8,
               runSpacing: 6,
               children: [
-                _Pill(routeLabel),
-                _Pill(systemProxy ? s.systemProxyOn : s.systemProxyOff),
-                if (profileName != null) _Pill(profileName),
+                if (profileName != null)
+                  _InfoPill(Icons.description_outlined, profileName),
+                _InfoPill(Icons.alt_route_rounded,
+                    ref.watch(routingModeProvider).toUpperCase()),
               ],
             ),
           ],
@@ -552,148 +399,54 @@ class _ConnectionCard extends ConsumerWidget {
   }
 }
 
-class _Pill extends StatelessWidget {
+class _InfoPill extends StatelessWidget {
+  final IconData icon;
   final String label;
-  const _Pill(this.label);
+  const _InfoPill(this.icon, this.label);
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.10)
-              : Colors.black.withValues(alpha: 0.10),
-          width: 0.5,
-        ),
+        borderRadius: BorderRadius.circular(YLRadius.pill),
+        color: isDark
+            ? Colors.white.withOpacity(0.06)
+            : Colors.black.withOpacity(0.04),
       ),
-      child: Text(label,
-          style: YLText.label.copyWith(
-            color: isDark ? YLColors.zinc400 : YLColors.zinc600,
-          )),
-    );
-  }
-}
-
-// ── Traffic Metric Card ──────────────────────────────────────────────────────
-
-class _TrafficMetricCard extends ConsumerWidget {
-  const _TrafficMetricCard();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final s = S.of(context);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final traffic = ref.watch(trafficProvider);
-
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: isDark ? YLColors.zinc800 : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.08)
-              : Colors.black.withValues(alpha: 0.08),
-          width: 0.5,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.15 : 0.03),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Text(s.realtimeTraffic,
-              style: YLText.label.copyWith(color: YLColors.zinc500)),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              _BigMetric(
-                label: s.trafficDownload,
-                value: traffic.downFormatted,
-                color: const Color(0xFF34C759),
-              ),
-              const SizedBox(width: 48),
-              _BigMetric(
-                label: s.trafficUpload,
-                value: traffic.upFormatted,
-                color: YLColors.primary,
-              ),
-            ],
-          ),
+          Icon(icon, size: 13, color: YLColors.zinc400),
+          const SizedBox(width: 5),
+          Text(label,
+              style: YLText.caption.copyWith(
+                color: YLColors.zinc500,
+                fontWeight: FontWeight.w500,
+              )),
         ],
       ),
     );
   }
 }
 
-class _BigMetric extends StatelessWidget {
-  final String label;
-  final String value;
-  final Color color;
+// ══════════════════════════════════════════════════════════════════════════════
+// Quick Info Row
+// ══════════════════════════════════════════════════════════════════════════════
 
-  const _BigMetric({
-    required this.label,
-    required this.value,
-    required this.color,
-  });
-
+class _QuickInfoRow extends ConsumerStatefulWidget {
   @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label,
-            style: YLText.label.copyWith(color: YLColors.zinc500)),
-        const SizedBox(height: 6),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.baseline,
-          textBaseline: TextBaseline.alphabetic,
-          children: [
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.w600,
-                letterSpacing: -0.5,
-                fontFeatures: const [FontFeature.tabularFigures()],
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
+  ConsumerState<_QuickInfoRow> createState() => _QuickInfoRowState();
 }
 
-// ── Stats Row ────────────────────────────────────────────────────────────────
-
-class _StatsRow extends ConsumerStatefulWidget {
-  @override
-  ConsumerState<_StatsRow> createState() => _StatsRowState();
-}
-
-class _StatsRowState extends ConsumerState<_StatsRow> {
+class _QuickInfoRowState extends ConsumerState<_QuickInfoRow> {
   String? _ip;
-  String? _country;
   bool _ipLoading = false;
-  bool _ipQueried = false;
 
   Future<void> _queryIp() async {
     if (_ipLoading) return;
-    setState(() {
-      _ipLoading = true;
-      _ip = null;
-      _country = null;
-    });
+    setState(() => _ipLoading = true);
     try {
       final client = http.Client();
       try {
@@ -701,25 +454,16 @@ class _StatsRowState extends ConsumerState<_StatsRow> {
             .get(Uri.parse('http://ip-api.com/json/?fields=query,country'))
             .timeout(const Duration(seconds: 5));
         if (resp.statusCode == 200) {
-          final body = resp.body;
-          final qm = RegExp(r'"query"\s*:\s*"([^"]+)"').firstMatch(body);
-          final cm =
-              RegExp(r'"country"\s*:\s*"([^"]+)"').firstMatch(body);
-          if (mounted) {
-            setState(() {
-              _ip = qm?.group(1);
-              _country = cm?.group(1);
-              _ipLoading = false;
-              _ipQueried = true;
-            });
-          }
-          return;
+          final qm = RegExp(r'"query"\s*:\s*"([^"]+)"').firstMatch(resp.body);
+          if (mounted) setState(() => _ip = qm?.group(1) ?? '?');
         }
       } finally {
         client.close();
       }
-    } catch (_) {}
-    if (mounted) setState(() { _ipLoading = false; _ipQueried = true; });
+    } catch (_) {
+      if (mounted) setState(() => _ip = 'Error');
+    }
+    if (mounted) setState(() => _ipLoading = false);
   }
 
   @override
@@ -727,67 +471,51 @@ class _StatsRowState extends ConsumerState<_StatsRow> {
     final s = S.of(context);
     final groups = ref.watch(proxyGroupsProvider);
     final delays = ref.watch(delayResultsProvider);
-    final mainGroup = groups.isEmpty
-        ? null
-        : groups.firstWhere(
-            (g) => g.name == '节点选择' || g.type == 'Selector',
-            orElse: () => groups.first,
-          );
-    final routingMode = ref.watch(routingModeProvider);
-    final systemProxy = ref.watch(systemProxyOnConnectProvider);
 
-    final routeLabel = routingMode == 'rule'
-        ? '${s.routeModeRule} Mode'
-        : routingMode == 'global'
-            ? '${s.routeModeGlobal} Mode'
-            : '${s.routeModeDirect} Mode';
-
-    final nodeValue = mainGroup?.now ?? '—';
-    final nodeDelay = mainGroup != null ? delays[mainGroup.now] : null;
-    final nodeMeta = nodeDelay != null && nodeDelay > 0
-        ? '${nodeDelay}ms · Healthy'
-        : 'Unknown delay';
-
-    final ipValue = _ipLoading
-        ? s.exitIpQuerying
-        : _ipQueried && _ip != null
-            ? _ip!
-            : _ipQueried
-                ? s.exitIpFailed
-                : s.exitIpTapToQuery;
-    final ipMeta = _country ?? '';
+    int? nodeDelay;
+    if (groups.isNotEmpty) {
+      try {
+        final mainGroup = groups.firstWhere(
+          (g) => g.type.toLowerCase() == 'selector',
+          orElse: () => groups.first,
+        );
+        nodeDelay = delays[mainGroup.now];
+      } catch (_) {}
+    }
 
     return Row(
       children: [
         Expanded(
-          child: _StatCardCompact(
-            title: s.nodeLabel,
-            value: nodeValue,
-            meta: nodeMeta,
-            icon: Icons.public_rounded,
-            onTap: () => MainShell.switchToTab(context, MainShell.tabNodes),
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _StatCardCompact(
-            title: s.exitIpLabel,
-            value: ipValue,
-            meta: ipMeta,
-            icon: Icons.shield_outlined,
+          child: _MiniCard(
+            icon: Icons.speed_rounded,
+            label: s.exitIpLabel,
+            value: _ipLoading
+                ? '...'
+                : _ip ?? s.exitIpTapToQuery,
             onTap: _queryIp,
           ),
         ),
-        const SizedBox(width: 12),
+        const SizedBox(width: 10),
         Expanded(
-          child: _StatCardCompact(
-            title: s.routingLabel,
-            value: routeLabel,
-            meta: systemProxy ? s.systemProxyOn : s.systemProxyOff,
+          child: _MiniCard(
+            icon: Icons.timer_outlined,
+            label: 'Latency',
+            value: nodeDelay != null && nodeDelay > 0
+                ? '${nodeDelay}ms'
+                : '—',
+            onTap: () => MainShell.switchToTab(context, MainShell.tabNodes),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _MiniCard(
             icon: Icons.alt_route_rounded,
+            label: 'Mode',
+            value: ref.watch(routingModeProvider).toUpperCase(),
             onTap: () async {
+              final mode = ref.read(routingModeProvider);
               const modes = ['rule', 'global', 'direct'];
-              final next = modes[(modes.indexOf(routingMode) + 1) % modes.length];
+              final next = modes[(modes.indexOf(mode) + 1) % modes.length];
               ref.read(routingModeProvider.notifier).state = next;
               await SettingsService.setRoutingMode(next);
               try {
@@ -801,77 +529,132 @@ class _StatsRowState extends ConsumerState<_StatsRow> {
   }
 }
 
-class _StatCardCompact extends StatelessWidget {
-  final String title;
-  final String value;
-  final String meta;
+class _MiniCard extends StatelessWidget {
   final IconData icon;
+  final String label;
+  final String value;
   final VoidCallback? onTap;
 
-  const _StatCardCompact({
-    required this.title,
-    required this.value,
-    required this.meta,
+  const _MiniCard({
     required this.icon,
+    required this.label,
+    required this.value,
     this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return InkWell(
+
+    return YLSurface(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(YLRadius.xl),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: isDark ? YLColors.zinc800 : Colors.white,
-          borderRadius: BorderRadius.circular(YLRadius.xl),
-          border: Border.all(
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.08)
-                : Colors.black.withValues(alpha: 0.08),
-            width: 0.5,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: isDark ? 0.15 : 0.03),
-              blurRadius: 6,
-              offset: const Offset(0, 1),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(title,
-                    style: YLText.label.copyWith(color: YLColors.zinc500)),
-                Icon(icon, size: 16, color: YLColors.zinc400),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Text(
-              value,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 16, color: YLColors.zinc400),
+          const SizedBox(height: 10),
+          Text(value,
               style: YLText.titleMedium,
-            ),
-            if (meta.isNotEmpty) ...[
-              const SizedBox(height: 2),
-              Text(meta,
-                  style: YLText.caption.copyWith(color: YLColors.zinc400)),
-            ],
-          ],
-        ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis),
+          const SizedBox(height: 2),
+          Text(label, style: YLText.caption.copyWith(color: YLColors.zinc400)),
+        ],
       ),
     );
   }
 }
 
-// ── Chart Card ───────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// Traffic Cards
+// ══════════════════════════════════════════════════════════════════════════════
+
+class _TrafficCards extends ConsumerWidget {
+  const _TrafficCards();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = S.of(context);
+    final traffic = ref.watch(trafficProvider);
+
+    return Row(
+      children: [
+        Expanded(
+          child: YLSurface(
+            padding: const EdgeInsets.all(18),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: YLColors.connected.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.arrow_downward_rounded,
+                      size: 18, color: YLColors.connected),
+                ),
+                const SizedBox(width: 14),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(s.trafficDownload,
+                        style: YLText.caption.copyWith(color: YLColors.zinc400)),
+                    const SizedBox(height: 2),
+                    Text(
+                      traffic.downFormatted,
+                      style: YLText.titleMedium.copyWith(
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: YLSurface(
+            padding: const EdgeInsets.all(18),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: YLColors.primary.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.arrow_upward_rounded,
+                      size: 18, color: YLColors.primary),
+                ),
+                const SizedBox(width: 14),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(s.trafficUpload,
+                        style: YLText.caption.copyWith(color: YLColors.zinc400)),
+                    const SizedBox(height: 2),
+                    Text(
+                      traffic.upFormatted,
+                      style: YLText.titleMedium.copyWith(
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Chart Card
+// ══════════════════════════════════════════════════════════════════════════════
 
 class _ChartCard extends ConsumerWidget {
   const _ChartCard();
@@ -879,66 +662,35 @@ class _ChartCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final s = S.of(context);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final history = ref.watch(trafficHistoryProvider);
     final downHistory = history.downHistory;
     final upHistory = history.upHistory;
 
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: isDark ? YLColors.zinc800 : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.08)
-              : Colors.black.withValues(alpha: 0.08),
-          width: 0.5,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.15 : 0.03),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
+    return YLSurface(
+      padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(s.last60s,
-                      style: YLText.label.copyWith(color: YLColors.zinc500)),
-                  const SizedBox(height: 2),
-                  Text(s.trafficActivity,
-                      style: YLText.titleMedium),
-                ],
-              ),
+              Text(s.trafficActivity, style: YLText.titleMedium),
               Row(
                 children: [
+                  _LegendDot(color: YLColors.primary, label: s.trafficDownload),
+                  const SizedBox(width: 14),
                   _LegendDot(
-                      color: YLColors.primary, label: s.trafficDownload),
-                  const SizedBox(width: 16),
-                  _LegendDot(
-                      color: const Color(0xFF34C759), label: s.trafficUpload),
+                      color: YLColors.connected, label: s.trafficUpload),
                 ],
               ),
             ],
           ),
           const SizedBox(height: 20),
-
-          // Chart
           SizedBox(
-            height: 200,
+            height: 180,
             child: downHistory.isEmpty
                 ? Center(
-                    child: Text('—',
+                    child: Text('Waiting for data...',
                         style: YLText.body.copyWith(color: YLColors.zinc400)),
                   )
                 : _buildChart(context, downHistory, upHistory, history.p90),
@@ -968,21 +720,19 @@ class _ChartCard extends ConsumerWidget {
           drawVerticalLine: false,
           horizontalInterval: maxY / 3,
           getDrawingHorizontalLine: (value) => FlLine(
-            color: Theme.of(context)
-                .dividerColor
-                .withValues(alpha: 0.3),
+            color: Theme.of(context).dividerColor.withOpacity(0.2),
             strokeWidth: 0.5,
           ),
         ),
         borderData: FlBorderData(show: false),
         titlesData: FlTitlesData(
           show: true,
-          rightTitles: const AxisTitles(
-              sideTitles: SideTitles(showTitles: false)),
-          topTitles: const AxisTitles(
-              sideTitles: SideTitles(showTitles: false)),
-          bottomTitles: const AxisTitles(
-              sideTitles: SideTitles(showTitles: false)),
+          rightTitles:
+              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          topTitles:
+              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          bottomTitles:
+              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
@@ -991,10 +741,8 @@ class _ChartCard extends ConsumerWidget {
                 if (value == 0) return const SizedBox.shrink();
                 return Text(
                   _formatSpeed(value),
-                  style: YLText.caption.copyWith(
-                    fontSize: 9,
-                    color: YLColors.zinc400,
-                  ),
+                  style: YLText.caption
+                      .copyWith(fontSize: 9, color: YLColors.zinc400),
                 );
               },
             ),
@@ -1003,7 +751,7 @@ class _ChartCard extends ConsumerWidget {
         lineTouchData: const LineTouchData(enabled: false),
         lineBarsData: [
           _buildLine(toSpots(downHistory), YLColors.primary),
-          _buildLine(toSpots(upHistory), const Color(0xFF34C759)),
+          _buildLine(toSpots(upHistory), YLColors.connected),
         ],
       ),
       duration: const Duration(milliseconds: 100),
@@ -1022,8 +770,8 @@ class _ChartCard extends ConsumerWidget {
         show: true,
         gradient: LinearGradient(
           colors: [
-            color.withValues(alpha: 0.12),
-            color.withValues(alpha: 0.0),
+            color.withOpacity(0.15),
+            color.withOpacity(0.0),
           ],
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
@@ -1050,15 +798,15 @@ class _LegendDot extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(
-          width: 6, height: 6,
+          width: 8,
+          height: 8,
           decoration: BoxDecoration(
-            shape: BoxShape.circle,
+            borderRadius: BorderRadius.circular(2),
             color: color,
           ),
         ),
-        const SizedBox(width: 6),
-        Text(label,
-            style: YLText.caption.copyWith(color: YLColors.zinc400)),
+        const SizedBox(width: 5),
+        Text(label, style: YLText.caption.copyWith(color: YLColors.zinc400)),
       ],
     );
   }

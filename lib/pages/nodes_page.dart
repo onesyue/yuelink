@@ -7,7 +7,6 @@ import '../models/proxy.dart';
 import '../providers/core_provider.dart';
 import '../providers/proxy_provider.dart';
 import '../services/app_notifier.dart';
-import '../services/settings_service.dart';
 import '../theme.dart';
 
 class NodesPage extends ConsumerStatefulWidget {
@@ -18,6 +17,8 @@ class NodesPage extends ConsumerStatefulWidget {
 }
 
 class _NodesPageState extends ConsumerState<NodesPage> {
+  String _search = '';
+
   @override
   void initState() {
     super.initState();
@@ -33,19 +34,12 @@ class _NodesPageState extends ConsumerState<NodesPage> {
 
     if (status != CoreStatus.running) {
       return Scaffold(
-        body: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.router_outlined, size: 64, color: YLColors.zinc300),
-              const SizedBox(height: YLSpacing.xl),
-              Text(s.notConnectedHintProxy, style: YLText.titleLarge),
-              const SizedBox(height: YLSpacing.sm),
-              Text(
-                'Connect to the core to view and manage proxies.',
-                style: YLText.body.copyWith(color: YLColors.zinc500),
-              ),
-            ],
+        body: YLEmptyState(
+          icon: Icons.dns_outlined,
+          message: s.notConnectedHintProxy,
+          action: Text(
+            'Start the connection first.',
+            style: YLText.caption.copyWith(color: YLColors.zinc400),
           ),
         ),
       );
@@ -57,65 +51,116 @@ class _NodesPageState extends ConsumerState<NodesPage> {
       );
     }
 
+    // Filter groups by search
+    final filteredGroups = _search.isEmpty
+        ? groups
+        : groups.where((g) {
+            if (g.name.toLowerCase().contains(_search)) return true;
+            return g.all.any((n) => n.toLowerCase().contains(_search));
+          }).toList();
+
     return Scaffold(
       body: CustomScrollView(
-        physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+        physics: const BouncingScrollPhysics(
+            parent: AlwaysScrollableScrollPhysics()),
         slivers: [
-          SliverAppBar(
-            expandedHeight: 100.0,
-            backgroundColor: Colors.transparent,
-            surfaceTintColor: Colors.transparent,
-            pinned: true,
-            flexibleSpace: FlexibleSpaceBar(
-              titlePadding: const EdgeInsets.symmetric(horizontal: YLSpacing.xl, vertical: YLSpacing.lg),
-              title: Text(
-                s.navNodes,
-                style: YLText.display.copyWith(
-                  color: isDark ? Colors.white : Colors.black,
-                  fontSize: 28,
+          // Header
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(24, 32, 24, 0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(s.navNodes, style: YLText.display.copyWith(
+                      fontSize: 28,
+                      color: isDark ? Colors.white : Colors.black,
+                    )),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.refresh_rounded, size: 20),
+                    color: YLColors.zinc400,
+                    onPressed: () =>
+                        ref.read(proxyGroupsProvider.notifier).refresh(),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Search
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
+              child: TextField(
+                onChanged: (v) => setState(() => _search = v.toLowerCase()),
+                style: YLText.body,
+                decoration: InputDecoration(
+                  hintText: 'Search nodes...',
+                  hintStyle: YLText.body.copyWith(color: YLColors.zinc400),
+                  prefixIcon: const Icon(Icons.search, size: 20, color: YLColors.zinc400),
+                  filled: true,
+                  fillColor: isDark ? YLColors.surfaceDark : YLColors.surfaceLight,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(YLRadius.md),
+                    borderSide: BorderSide(
+                      color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.06),
+                      width: 0.5,
+                    ),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(YLRadius.md),
+                    borderSide: BorderSide(
+                      color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.06),
+                      width: 0.5,
+                    ),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(YLRadius.md),
+                    borderSide: const BorderSide(color: YLColors.primary, width: 1),
+                  ),
                 ),
               ),
             ),
-            actions: [
-              IconButton(
-                icon: const Icon(Icons.refresh_rounded),
-                onPressed: () => ref.read(proxyGroupsProvider.notifier).refresh(),
-              ),
-              const SizedBox(width: YLSpacing.sm),
-            ],
           ),
-          
+
+          // Groups
           SliverPadding(
-            padding: const EdgeInsets.symmetric(horizontal: YLSpacing.xl, vertical: YLSpacing.sm),
+            padding: const EdgeInsets.fromLTRB(24, 8, 24, 100),
             sliver: SliverList(
               delegate: SliverChildBuilderDelegate(
                 (context, index) {
                   return Padding(
-                    padding: const EdgeInsets.only(bottom: YLSpacing.lg),
-                    child: _GroupCard(group: groups[index]),
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: _GroupCard(
+                      group: filteredGroups[index],
+                      searchQuery: _search,
+                    ),
                   );
                 },
-                childCount: groups.length,
+                childCount: filteredGroups.length,
               ),
             ),
           ),
-          
-          const SliverToBoxAdapter(child: SizedBox(height: 100)),
         ],
       ),
     );
   }
 }
 
+// ── Group Card ───────────────────────────────────────────────────────────────
+
 class _GroupCard extends ConsumerStatefulWidget {
   final ProxyGroup group;
-  const _GroupCard({required this.group});
+  final String searchQuery;
+  const _GroupCard({required this.group, this.searchQuery = ''});
 
   @override
   ConsumerState<_GroupCard> createState() => _GroupCardState();
 }
 
-class _GroupCardState extends ConsumerState<_GroupCard> with SingleTickerProviderStateMixin {
+class _GroupCardState extends ConsumerState<_GroupCard>
+    with SingleTickerProviderStateMixin {
   bool _expanded = true;
   late AnimationController _animController;
   late Animation<double> _expandAnim;
@@ -129,8 +174,10 @@ class _GroupCardState extends ConsumerState<_GroupCard> with SingleTickerProvide
       duration: const Duration(milliseconds: 250),
       value: 1.0,
     );
-    _expandAnim = CurvedAnimation(parent: _animController, curve: Curves.easeOutCubic);
-    _chevronAnim = Tween<double>(begin: 0, end: 0.5).animate(_expandAnim);
+    _expandAnim = CurvedAnimation(
+        parent: _animController, curve: Curves.easeOutCubic);
+    _chevronAnim =
+        Tween<double>(begin: 0, end: 0.5).animate(_expandAnim);
   }
 
   @override
@@ -141,11 +188,7 @@ class _GroupCardState extends ConsumerState<_GroupCard> with SingleTickerProvide
 
   void _toggle() {
     setState(() => _expanded = !_expanded);
-    if (_expanded) {
-      _animController.forward();
-    } else {
-      _animController.reverse();
-    }
+    _expanded ? _animController.forward() : _animController.reverse();
   }
 
   @override
@@ -155,114 +198,108 @@ class _GroupCardState extends ConsumerState<_GroupCard> with SingleTickerProvide
     final delays = ref.watch(delayResultsProvider);
     final testing = ref.watch(delayTestingProvider);
 
-    return Container(
-      decoration: BoxDecoration(
-        color: isDark ? YLColors.surfaceDark : YLColors.surfaceLight,
-        borderRadius: BorderRadius.circular(YLRadius.xl),
-        border: Border.all(
-          color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.04),
-          width: 0.5,
-        ),
-        boxShadow: isDark ? [] : [
-          BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4)),
-        ],
-      ),
+    // Filter nodes if searching
+    final nodes = widget.searchQuery.isEmpty
+        ? group.all
+        : group.all
+            .where(
+                (n) => n.toLowerCase().contains(widget.searchQuery))
+            .toList();
+
+    return YLSurface(
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Header
           InkWell(
             onTap: _toggle,
             borderRadius: BorderRadius.vertical(
               top: const Radius.circular(YLRadius.xl),
-              bottom: _expanded ? Radius.zero : const Radius.circular(YLRadius.xl),
+              bottom: _expanded
+                  ? Radius.zero
+                  : const Radius.circular(YLRadius.xl),
             ),
             child: Padding(
-              padding: const EdgeInsets.all(YLSpacing.md),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               child: Row(
                 children: [
                   RotationTransition(
                     turns: _chevronAnim,
-                    child: Icon(Icons.expand_more_rounded, size: 20, color: YLColors.zinc400),
+                    child: const Icon(Icons.expand_more_rounded,
+                        size: 20, color: YLColors.zinc400),
                   ),
-                  const SizedBox(width: YLSpacing.sm),
-                  Text(group.name, style: YLText.titleMedium),
-                  const SizedBox(width: YLSpacing.sm),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(group.name, style: YLText.titleMedium),
+                  ),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
-                      color: isDark ? YLColors.zinc800 : YLColors.bgLight,
+                      color: isDark
+                          ? Colors.white.withOpacity(0.06)
+                          : Colors.black.withOpacity(0.04),
                       borderRadius: BorderRadius.circular(YLRadius.sm),
                     ),
                     child: Text(
-                      group.type,
-                      style: YLText.caption.copyWith(fontSize: 10, color: YLColors.zinc500, fontWeight: FontWeight.w600),
+                      '${nodes.length}',
+                      style: YLText.caption.copyWith(
+                          color: YLColors.zinc500,
+                          fontWeight: FontWeight.w600),
                     ),
                   ),
-                  const Spacer(),
-                  Text(
-                    '${group.all.length} Nodes',
-                    style: YLText.caption.copyWith(color: YLColors.zinc500),
-                  ),
-                  const SizedBox(width: YLSpacing.sm),
-                  IconButton(
-                    onPressed: testing.isNotEmpty
-                        ? null
-                        : () {
-                            ref.read(delayTestProvider).testGroup(group.name, group.all);
-                            AppNotifier.info('Testing ${group.name}...');
-                          },
-                    icon: testing.isNotEmpty
-                        ? const CupertinoActivityIndicator(radius: 7)
-                        : const Icon(Icons.bolt_rounded),
-                    iconSize: 18,
-                    color: YLColors.primary,
-                    visualDensity: VisualDensity.compact,
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    width: 32,
+                    height: 32,
+                    child: IconButton(
+                      padding: EdgeInsets.zero,
+                      onPressed: testing.isNotEmpty
+                          ? null
+                          : () {
+                              ref
+                                  .read(delayTestProvider)
+                                  .testGroup(group.name, group.all);
+                            },
+                      icon: testing.isNotEmpty
+                          ? const CupertinoActivityIndicator(radius: 7)
+                          : const Icon(Icons.bolt_rounded, size: 18),
+                      color: YLColors.primary,
+                    ),
                   ),
                 ],
               ),
             ),
           ),
 
-          // List
+          // Node list
           SizeTransition(
             sizeFactor: _expandAnim,
             axisAlignment: -1.0,
             child: Column(
               children: [
-                Divider(height: 0.5),
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: YLSpacing.xs),
-                  child: Column(
-                    children: List.generate(group.all.length, (i) {
-                      final nodeName = group.all[i];
-                      final isSelected = nodeName == group.now;
-                      return Column(
-                        children: [
-                          _NodeTile(
-                            name: nodeName,
-                            isSelected: isSelected,
-                            delay: delays[nodeName],
-                            isTesting: testing.contains(nodeName),
-                            onSelect: () async {
-                              final ok = await ref.read(proxyGroupsProvider.notifier).changeProxy(group.name, nodeName);
-                              if (ok) {
-                                AppNotifier.success('Switched to $nodeName');
-                                ref.read(proxyGroupsProvider.notifier).refresh();
-                              } else {
-                                AppNotifier.error('Failed to switch node');
-                              }
-                              return ok;
-                            },
-                            onTest: () => ref.read(delayTestProvider).testDelay(nodeName),
-                          ),
-                          if (i < group.all.length - 1)
-                            Divider(height: 1, indent: 48),
-                        ],
-                      );
-                    }),
-                  ),
-                ),
+                const Divider(height: 0.5, indent: 16, endIndent: 16),
+                ...List.generate(nodes.length, (i) {
+                  final nodeName = nodes[i];
+                  final isSelected = nodeName == group.now;
+                  return _NodeTile(
+                    name: nodeName,
+                    isSelected: isSelected,
+                    delay: delays[nodeName],
+                    isTesting: testing.contains(nodeName),
+                    showDivider: i < nodes.length - 1,
+                    onSelect: () async {
+                      final ok = await ref
+                          .read(proxyGroupsProvider.notifier)
+                          .changeProxy(group.name, nodeName);
+                      if (ok) {
+                        ref.read(proxyGroupsProvider.notifier).refresh();
+                      }
+                      return ok;
+                    },
+                    onTest: () =>
+                        ref.read(delayTestProvider).testDelay(nodeName),
+                  );
+                }),
               ],
             ),
           ),
@@ -272,11 +309,14 @@ class _GroupCardState extends ConsumerState<_GroupCard> with SingleTickerProvide
   }
 }
 
+// ── Node Tile ────────────────────────────────────────────────────────────────
+
 class _NodeTile extends StatefulWidget {
   final String name;
   final bool isSelected;
   final int? delay;
   final bool isTesting;
+  final bool showDivider;
   final Future<bool> Function() onSelect;
   final VoidCallback onTest;
 
@@ -285,6 +325,7 @@ class _NodeTile extends StatefulWidget {
     required this.isSelected,
     this.delay,
     required this.isTesting,
+    this.showDivider = true,
     required this.onSelect,
     required this.onTest,
   });
@@ -294,65 +335,68 @@ class _NodeTile extends StatefulWidget {
 }
 
 class _NodeTileState extends State<_NodeTile> {
-  bool _isSwitching = false;
+  bool _switching = false;
 
   void _handleSelect() async {
-    if (_isSwitching || widget.isSelected) return;
-    setState(() => _isSwitching = true);
+    if (_switching || widget.isSelected) return;
+    setState(() => _switching = true);
     await widget.onSelect();
-    if (mounted) setState(() => _isSwitching = false);
+    if (mounted) setState(() => _switching = false);
   }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: _handleSelect,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: YLSpacing.md, vertical: YLSpacing.sm),
-          color: widget.isSelected 
-              ? (isDark ? YLColors.primary.withOpacity(0.1) : YLColors.primary.withOpacity(0.05))
-              : Colors.transparent,
-          child: Row(
-            children: [
-              SizedBox(
-                width: 24,
-                child: _isSwitching
-                    ? const CupertinoActivityIndicator(radius: 7)
-                    : (widget.isSelected
-                        ? const Icon(Icons.check_rounded, color: YLColors.primary, size: 18)
-                        : null),
-              ),
-              const SizedBox(width: YLSpacing.xs),
-              Expanded(
-                child: Text(
-                  widget.name,
-                  style: YLText.body.copyWith(
-                    fontWeight: widget.isSelected ? FontWeight.w600 : FontWeight.w400,
-                    color: widget.isSelected 
-                        ? YLColors.primary 
-                        : (isDark ? Colors.white : Colors.black),
+    return Column(
+      children: [
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: _handleSelect,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 22,
+                    child: _switching
+                        ? const CupertinoActivityIndicator(radius: 7)
+                        : widget.isSelected
+                            ? const Icon(Icons.check_rounded,
+                                color: YLColors.primary, size: 18)
+                            : null,
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      widget.name,
+                      style: YLText.body.copyWith(
+                        fontWeight: widget.isSelected
+                            ? FontWeight.w600
+                            : FontWeight.w400,
+                        color: widget.isSelected
+                            ? YLColors.primary
+                            : (isDark ? Colors.white : Colors.black),
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: widget.isTesting ? null : widget.onTest,
+                    child: YLDelayBadge(
+                        delay: widget.delay, testing: widget.isTesting),
+                  ),
+                ],
               ),
-              const SizedBox(width: YLSpacing.sm),
-              InkWell(
-                onTap: widget.isTesting ? null : widget.onTest,
-                borderRadius: BorderRadius.circular(YLRadius.sm),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                  child: YLDelayBadge(delay: widget.delay, testing: widget.isTesting),
-                ),
-              ),
-            ],
+            ),
           ),
         ),
-      ),
+        if (widget.showDivider)
+          Divider(height: 0.5, indent: 48, endIndent: 16),
+      ],
     );
   }
 }
