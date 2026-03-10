@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="vpn_connected">VPN Connected</string>
+    <string name="vpn_whitelist">Proxy selected apps only</string>
+    <string name="vpn_blacklist">Bypass selected apps</string>
+</resources>

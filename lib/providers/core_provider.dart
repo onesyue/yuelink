@@ -8,6 +8,7 @@ import '../ffi/core_controller.dart';
 import '../models/traffic.dart';
 import '../models/traffic_history.dart';
 import '../providers/proxy_provider.dart';
+import '../l10n/app_strings.dart';
 import '../services/app_notifier.dart';
 import '../services/core_manager.dart';
 import '../services/mihomo_api.dart';
@@ -78,7 +79,7 @@ class CoreActions {
         final hasPerm = await VpnService.requestPermission();
         if (!hasPerm) {
           ref.read(coreStatusProvider.notifier).state = CoreStatus.stopped;
-          AppNotifier.error('缺少 VPN 权限，无法开启 TUN 模式');
+          AppNotifier.error(S.current.errVpnPermission);
           return false;
         }
       }
@@ -87,7 +88,7 @@ class CoreActions {
       final ok = await manager.start(configYaml);
       if (!ok) {
         ref.read(coreStatusProvider.notifier).state = CoreStatus.stopped;
-        AppNotifier.error('内核启动失败，请检查配置格式或端口占用');
+        AppNotifier.error(S.current.errCoreStartFailed);
         return false;
       }
 
@@ -97,13 +98,13 @@ class CoreActions {
         if (!vpnOk) {
           await manager.stop();
           ref.read(coreStatusProvider.notifier).state = CoreStatus.stopped;
-          AppNotifier.error('VPN 隧道建立失败');
+          AppNotifier.error(S.current.errVpnTunnelFailed);
           return false;
         }
       }
 
       ref.read(coreStatusProvider.notifier).state = CoreStatus.running;
-      AppNotifier.success('已成功连接');
+      AppNotifier.success(S.current.msgConnected);
 
       // 4. Apply routing mode from settings to running core
       final routingMode = ref.read(routingModeProvider);
@@ -131,12 +132,12 @@ class CoreActions {
       if (e is FormatException) {
         msg = e.message;
       } else if (e is MihomoApiException) {
-        msg = 'API 错误: ${e.statusCode} - ${e.body}';
+        msg = S.current.errApiError(e.statusCode, e.body);
       } else {
         msg = msg.split('\n').first; // 保持提示简短
       }
       
-      AppNotifier.error('启动失败: $msg');
+      AppNotifier.error(S.current.errStartFailed(msg));
       return false;
     }
   }
@@ -159,10 +160,10 @@ class CoreActions {
 
       ref.read(coreStatusProvider.notifier).state = CoreStatus.stopped;
       ref.read(trafficProvider.notifier).state = const Traffic();
-      AppNotifier.info('已断开连接');
+      AppNotifier.info(S.current.msgDisconnected);
     } catch (e) {
       ref.read(coreStatusProvider.notifier).state = CoreStatus.stopped;
-      AppNotifier.error('断开连接时发生错误');
+      AppNotifier.error(S.current.errStopFailed);
     }
   }
 

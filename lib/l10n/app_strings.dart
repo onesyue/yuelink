@@ -484,4 +484,28 @@ class S {
 
   // ── Connection mode display ─────────────────────────────────────
   String get connectionModeLabel => _e ? 'Mode' : '模式';
+
+  // ── Core error messages ───────────────────────────────────────
+  String get errVpnPermission =>
+      _e ? 'VPN permission denied, cannot enable TUN mode' : '缺少 VPN 权限，无法开启 TUN 模式';
+  String get errCoreStartFailed =>
+      _e ? 'Core failed to start, check config or port conflicts' : '内核启动失败，请检查配置格式或端口占用';
+  String get errVpnTunnelFailed =>
+      _e ? 'VPN tunnel setup failed' : 'VPN 隧道建立失败';
+  String get msgConnected => _e ? 'Connected' : '已成功连接';
+  String errApiError(int code, String body) =>
+      _e ? 'API error: $code - $body' : 'API 错误: $code - $body';
+  String errStartFailed(String msg) =>
+      _e ? 'Start failed: $msg' : '启动失败: $msg';
+  String get msgDisconnected => _e ? 'Disconnected' : '已断开连接';
+  String get errStopFailed =>
+      _e ? 'Error while disconnecting' : '断开连接时发生错误';
+
+  // ── Download error messages ───────────────────────────────────
+  String get errDownloadTimeout =>
+      _e ? 'Download timed out, check your network' : '下载超时，请检查网络连接';
+  String errNetworkError(String detail) =>
+      _e ? 'Network error: $detail' : '网络错误: $detail';
+  String errDownloadHttpFailed(int code) =>
+      _e ? 'Download failed: HTTP $code' : '下载失败: HTTP $code';
 }

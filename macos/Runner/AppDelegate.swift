@@ -12,7 +12,7 @@ class AppDelegate: FlutterAppDelegate {
     }
 
     override func applicationDidFinishLaunching(_ notification: Notification) {
-        let controller = mainFlutterWindow?.contentViewController as! FlutterViewController
+        guard let controller = mainFlutterWindow?.contentViewController as? FlutterViewController else { return }
         let channel = FlutterMethodChannel(name: "com.yueto.yuelink/vpn", binaryMessenger: controller.engine.binaryMessenger)
 
         channel.setMethodCallHandler { call, result in

@@ -13,7 +13,9 @@ import NetworkExtension
     ) -> Bool {
         GeneratedPluginRegistrant.register(with: self)
 
-        let controller = window?.rootViewController as! FlutterViewController
+        guard let controller = window?.rootViewController as? FlutterViewController else {
+            return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+        }
         let channel = FlutterMethodChannel(
             name: "com.yueto.yuelink/vpn",
             binaryMessenger: controller.binaryMessenger
@@ -78,8 +80,12 @@ import NetworkExtension
                         return
                     }
 
+                    guard let session = manager.connection as? NETunnelProviderSession else {
+                        result(FlutterError(code: "VPN_CAST_ERROR",
+                                            message: "Failed to get tunnel session", details: nil))
+                        return
+                    }
                     do {
-                        let session = manager.connection as! NETunnelProviderSession
                         try session.startTunnel()
                         result(true)
                     } catch {

@@ -140,49 +140,57 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     // Theme
                     YLInfoRow(
                       label: s.sectionAppearance,
-                      trailing: SegmentedButton<ThemeMode>(
-                        style: SegmentedButton.styleFrom(
-                          visualDensity: VisualDensity.compact,
-                          textStyle: const TextStyle(fontSize: 12),
+                      trailing: SizedBox(
+                        width: 240,
+                        child: SegmentedButton<ThemeMode>(
+                          showSelectedIcon: false,
+                          style: SegmentedButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                            textStyle: const TextStyle(fontSize: 12),
+                          ),
+                          segments: [
+                            ButtonSegment(
+                                value: ThemeMode.system,
+                                label: Text(s.themeSystem)),
+                            ButtonSegment(
+                                value: ThemeMode.light,
+                                label: Text(s.themeLight)),
+                            ButtonSegment(
+                                value: ThemeMode.dark,
+                                label: Text(s.themeDark)),
+                          ],
+                          selected: {theme},
+                          onSelectionChanged: (v) {
+                            ref.read(themeProvider.notifier).state = v.first;
+                            SettingsService.setThemeMode(v.first);
+                          },
                         ),
-                        segments: [
-                          ButtonSegment(
-                              value: ThemeMode.system,
-                              label: Text(s.themeSystem)),
-                          ButtonSegment(
-                              value: ThemeMode.light,
-                              label: Text(s.themeLight)),
-                          ButtonSegment(
-                              value: ThemeMode.dark,
-                              label: Text(s.themeDark)),
-                        ],
-                        selected: {theme},
-                        onSelectionChanged: (v) {
-                          ref.read(themeProvider.notifier).state = v.first;
-                          SettingsService.setThemeMode(v.first);
-                        },
                       ),
                     ),
                     Divider(height: 1, thickness: 0.5, color: dividerColor),
                     // Language
                     YLInfoRow(
                       label: s.sectionLanguage,
-                      trailing: SegmentedButton<String>(
-                        style: SegmentedButton.styleFrom(
-                          visualDensity: VisualDensity.compact,
-                          textStyle: const TextStyle(fontSize: 12),
+                      trailing: SizedBox(
+                        width: 160,
+                        child: SegmentedButton<String>(
+                          showSelectedIcon: false,
+                          style: SegmentedButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                            textStyle: const TextStyle(fontSize: 12),
+                          ),
+                          segments: [
+                            ButtonSegment(
+                                value: 'zh', label: Text(s.languageChinese)),
+                            ButtonSegment(
+                                value: 'en', label: Text(s.languageEnglish)),
+                          ],
+                          selected: {language},
+                          onSelectionChanged: (v) async {
+                            ref.read(languageProvider.notifier).state = v.first;
+                            await SettingsService.setLanguage(v.first);
+                          },
                         ),
-                        segments: [
-                          ButtonSegment(
-                              value: 'zh', label: Text(s.languageChinese)),
-                          ButtonSegment(
-                              value: 'en', label: Text(s.languageEnglish)),
-                        ],
-                        selected: {language},
-                        onSelectionChanged: (v) async {
-                          ref.read(languageProvider.notifier).state = v.first;
-                          await SettingsService.setLanguage(v.first);
-                        },
                       ),
                     ),
                     Divider(height: 1, thickness: 0.5, color: dividerColor),

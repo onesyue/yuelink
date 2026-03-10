@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
 import '../constants.dart';
+import '../l10n/app_strings.dart';
 import '../models/profile.dart';
 import 'config_template.dart';
 import 'subscription_parser.dart';
@@ -188,13 +189,14 @@ class ProfileService {
           )
           .timeout(const Duration(seconds: 30));
     } on TimeoutException {
-      throw Exception('下载超时，请检查网络连接');
+      throw Exception(S.current.errDownloadTimeout);
     } on SocketException catch (e) {
-      throw Exception('网络错误: ${e.message.isNotEmpty ? e.message : e.address?.host ?? "无法连接"}');
+      final detail = e.message.isNotEmpty ? e.message : (e.address?.host ?? 'unknown');
+      throw Exception(S.current.errNetworkError(detail));
     }
 
     if (response.statusCode != 200) {
-      throw Exception('下载失败: HTTP ${response.statusCode}');
+      throw Exception(S.current.errDownloadHttpFailed(response.statusCode));
     }
 
     final subInfo = SubscriptionInfo.fromHeaders(response.headers);

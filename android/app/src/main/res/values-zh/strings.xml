@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="vpn_connected">VPN 已连接</string>
+    <string name="vpn_whitelist">仅代理选定应用</string>
+    <string name="vpn_blacklist">跳过选定应用</string>
+</resources>

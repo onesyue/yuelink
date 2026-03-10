@@ -137,9 +137,9 @@ class YueLinkVpnService : VpnService() {
             PendingIntent.FLAG_IMMUTABLE
         )
         val modeText = when (splitMode) {
-            "whitelist" -> "仅代理选定应用"
-            "blacklist" -> "跳过选定应用"
-            else        -> "VPN 已连接"
+            "whitelist" -> getString(R.string.vpn_whitelist)
+            "blacklist" -> getString(R.string.vpn_blacklist)
+            else        -> getString(R.string.vpn_connected)
         }
         return Notification.Builder(this, CHANNEL_ID)
             .setContentTitle("YueLink")
