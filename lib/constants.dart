@@ -8,7 +8,7 @@ class AppConstants {
   static const packageName = 'com.yueto.yuelink';
 
   static const configFileName = 'yuelink.yaml';
-  static const userAgent = 'YueLink/$appVersion (Clash)';
+  static const userAgent = 'clash.meta';
 
   /// Default test URL for latency testing.
   static const defaultTestUrl = 'https://www.gstatic.com/generate_204';

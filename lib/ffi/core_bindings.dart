@@ -18,13 +18,20 @@ class CoreBindings {
     if (Platform.isAndroid) {
       return DynamicLibrary.open('libclash.so');
     } else if (Platform.isMacOS) {
-      // Try universal binary first, then arch-specific
-      for (final name in [
+      // Search order:
+      // 1. App bundle Frameworks (production + flutter run)
+      // 2. Bare name via @rpath (when properly embedded)
+      // 3. Arch-specific fallback
+      final exe = Platform.resolvedExecutable;
+      final bundleFrameworks = '${File(exe).parent.parent.path}/Frameworks';
+      for (final path in [
+        '$bundleFrameworks/libclash.dylib',
+        '$bundleFrameworks/libclash-${_getMacArch()}.dylib',
         'libclash.dylib',
         'libclash-${_getMacArch()}.dylib',
       ]) {
         try {
-          return DynamicLibrary.open(name);
+          return DynamicLibrary.open(path);
         } catch (_) {}
       }
       throw Exception('Cannot load libclash.dylib — run: dart setup.dart build -p macos');

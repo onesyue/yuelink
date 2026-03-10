@@ -41,18 +41,31 @@ class ProxyGroupsNotifier extends StateNotifier<List<ProxyGroup>> {
 
     final proxiesMap = data['proxies'] as Map<String, dynamic>? ?? {};
 
-    final groups = <ProxyGroup>[];
+    // Build groups map first
+    final groupsMap = <String, ProxyGroup>{};
     for (final entry in proxiesMap.entries) {
       final info = entry.value as Map<String, dynamic>;
       if (info.containsKey('all')) {
-        groups.add(ProxyGroup(
+        groupsMap[entry.key] = ProxyGroup(
           name: entry.key,
           type: info['type'] as String? ?? '',
           all: (info['all'] as List?)?.cast<String>() ?? [],
           now: info['now'] as String? ?? '',
-        ));
+        );
       }
     }
+
+    // Use GLOBAL group's order to sort; exclude GLOBAL itself
+    final globalAll = (proxiesMap['GLOBAL']?['all'] as List?)?.cast<String>();
+    final groups = <ProxyGroup>[];
+    if (globalAll != null) {
+      for (final name in globalAll) {
+        final g = groupsMap.remove(name);
+        if (g != null) groups.add(g);
+      }
+    }
+    // Append any remaining groups not in GLOBAL
+    groups.addAll(groupsMap.values.where((g) => g.name != 'GLOBAL'));
     state = groups;
   }
 

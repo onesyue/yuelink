@@ -7,6 +7,7 @@ import '../l10n/app_strings.dart';
 import '../models/connection.dart';
 import '../providers/connection_provider.dart';
 import '../providers/core_provider.dart';
+import '../theme.dart';
 
 class ConnectionsPage extends ConsumerStatefulWidget {
   const ConnectionsPage({super.key});
@@ -62,21 +63,9 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
 
     if (status != CoreStatus.running) {
       return Scaffold(
-        body: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.cable_outlined,
-                  size: 64,
-                  color: Theme.of(context)
-                      .colorScheme
-                      .onSurfaceVariant
-                      .withValues(alpha: 0.4)),
-              const SizedBox(height: 16),
-              Text(s.notConnectedHintConnections,
-                  style: Theme.of(context).textTheme.bodyLarge),
-            ],
-          ),
+        body: YLEmptyState(
+          icon: Icons.cable_outlined,
+          message: s.notConnectedHintConnections,
         ),
       );
     }
@@ -87,9 +76,44 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
     final filtered = ref.watch(filteredConnectionsProvider);
     final actions = ref.read(connectionActionsProvider);
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
       body: Column(
         children: [
+          // ── Top bar ──────────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(32, 24, 32, 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  s.navConnection.toUpperCase(),
+                  style: YLText.caption.copyWith(
+                    letterSpacing: 2.0,
+                    fontWeight: FontWeight.w600,
+                    color: YLColors.zinc400,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  s.navConnection,
+                  style: const TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            height: 0.5,
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.06)
+                : Colors.black.withValues(alpha: 0.06),
+          ),
+
           // Summary bar
           _SummaryBar(snapshot: snapshot),
 
@@ -119,8 +143,6 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
                             )
                           : null,
                       isDense: true,
-                      border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8)),
                       contentPadding:
                           const EdgeInsets.symmetric(vertical: 8),
                     ),
@@ -150,10 +172,8 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
                 filtered.length != snapshot.connections.length
                     ? s.connectionsCountFiltered(filtered.length)
                     : s.connectionsCount(filtered.length),
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .onSurfaceVariant),
+                style: YLText.caption.copyWith(
+                    color: YLColors.zinc500),
               ),
             ),
           ),
@@ -161,19 +181,11 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
           // Connections list — DataTable on desktop, cards on mobile
           Expanded(
             child: filtered.isEmpty
-                ? Center(
-                    child: Text(
-                      snapshot.connections.isEmpty
-                          ? s.noActiveConnections
-                          : s.noMatchingConnections,
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodyMedium
-                          ?.copyWith(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSurfaceVariant),
-                    ),
+                ? YLEmptyState(
+                    icon: Icons.cable_outlined,
+                    message: snapshot.connections.isEmpty
+                        ? s.noActiveConnections
+                        : s.noMatchingConnections,
                   )
                 : (Platform.isMacOS ||
                         Platform.isWindows ||
@@ -237,17 +249,34 @@ class _SummaryBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       padding:
           const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: isDark ? YLColors.zinc800 : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.08),
+          width: 0.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.15 : 0.03),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
       child: Row(
         children: [
           _StatItem(
             icon: Icons.cable_outlined,
             label: s.statConnections,
             value: '${snapshot.connections.length}',
-            color: Theme.of(context).colorScheme.primary,
+            color: YLColors.primary,
           ),
           const SizedBox(width: 24),
           _StatItem(
@@ -304,15 +333,12 @@ class _StatItem extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(value,
-                style: TextStyle(
-                    fontSize: 13,
+                style: YLText.body.copyWith(
                     fontWeight: FontWeight.w600,
                     color: color)),
             Text(label,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .onSurfaceVariant)),
+                style: YLText.caption.copyWith(
+                    color: YLColors.zinc500)),
           ],
         ),
       ],
@@ -333,13 +359,30 @@ class _ConnectionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final hasSpeed = connection.curDownloadSpeed > 0 ||
         connection.curUploadSpeed > 0;
 
-    return Card(
+    return Container(
       margin: const EdgeInsets.symmetric(vertical: 3),
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: isDark ? YLColors.zinc800 : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.08),
+          width: 0.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.15 : 0.03),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         onTap: () => _showDetail(context),
         child: Padding(
           padding: const EdgeInsets.symmetric(
@@ -355,8 +398,7 @@ class _ConnectionTile extends StatelessWidget {
                   children: [
                     Text(
                       connection.target,
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w500, fontSize: 13),
+                      style: YLText.titleMedium.copyWith(fontSize: 13),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -368,26 +410,17 @@ class _ConnectionTile extends StatelessWidget {
                             connection.chains.isNotEmpty
                                 ? connection.chains.join(' → ')
                                 : connection.rule,
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodySmall
-                                ?.copyWith(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .primary),
+                            style: YLText.caption.copyWith(
+                                color: YLColors.primary),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
                         if (connection.processName.isNotEmpty) ...[
                           Text(' · ',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodySmall),
+                              style: YLText.caption),
                           Text(connection.processName,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodySmall),
+                              style: YLText.caption),
                         ],
                       ],
                     ),
@@ -424,13 +457,8 @@ class _ConnectionTile extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(connection.durationText,
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodySmall
-                          ?.copyWith(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSurfaceVariant)),
+                      style: YLText.caption.copyWith(
+                          color: YLColors.zinc500)),
                   const SizedBox(height: 4),
                   InkWell(
                     borderRadius: BorderRadius.circular(12),
@@ -481,7 +509,7 @@ class _NetworkBadge extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 4),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(YLRadius.md),
       ),
       alignment: Alignment.center,
       child: Text(
@@ -518,17 +546,14 @@ class _ConnectionDetailSheet extends StatelessWidget {
               width: 36,
               height: 4,
               decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.outlineVariant,
+                color: YLColors.zinc400,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
           ),
           const SizedBox(height: 16),
           Text(s.connectionDetailTitle,
-              style: Theme.of(context)
-                  .textTheme
-                  .titleMedium
-                  ?.copyWith(fontWeight: FontWeight.w600)),
+              style: YLText.titleLarge),
           const SizedBox(height: 16),
           _DetailRow(s.detailTarget, connection.target),
           _DetailRow(s.detailProtocol,
@@ -589,10 +614,8 @@ class _DetailRow extends StatelessWidget {
           SizedBox(
             width: 90,
             child: Text(label,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .onSurfaceVariant)),
+                style: YLText.caption.copyWith(
+                    color: YLColors.zinc500)),
           ),
           Expanded(
             child: SelectableText(value,
@@ -630,6 +653,7 @@ class _ConnectionsDataTable extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     int sortIndex = _SortColumn.values.indexOf(sortColumn);
     return SingleChildScrollView(
       scrollDirection: Axis.vertical,
@@ -643,12 +667,12 @@ class _ConnectionsDataTable extends StatelessWidget {
           dataRowMinHeight: 32,
           dataRowMaxHeight: 40,
           columns: [
-            _col('目标 / Host', _SortColumn.target),
-            _col('进程', _SortColumn.process),
-            _col('规则', _SortColumn.rule),
-            _col('下载', _SortColumn.download),
-            _col('上传', _SortColumn.upload),
-            _col('时长', _SortColumn.duration),
+            _col(s.detailTarget, _SortColumn.target),
+            _col(s.detailProcess, _SortColumn.process),
+            _col(s.detailRule, _SortColumn.rule),
+            _col(s.detailDownload, _SortColumn.download),
+            _col(s.detailUpload, _SortColumn.upload),
+            _col(s.detailDuration, _SortColumn.duration),
             const DataColumn(label: Text('')), // close button
           ],
           rows: connections.map((c) => DataRow(cells: [

@@ -1,3 +1,5 @@
+import 'dart:math' show max;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -5,15 +7,7 @@ import '../l10n/app_strings.dart';
 import '../models/proxy.dart';
 import '../providers/core_provider.dart';
 import '../providers/proxy_provider.dart';
-
-const _kPresetTestUrls = [
-  'https://www.gstatic.com/generate_204',
-  'https://cp.cloudflare.com/generate_204',
-  'http://www.google.com/generate_204',
-  'https://www.apple.com/library/test/success.html',
-];
-
-enum _SortMode { none, delay }
+import '../services/settings_service.dart';
 
 class ProxyPage extends ConsumerStatefulWidget {
   const ProxyPage({super.key});
@@ -23,21 +17,11 @@ class ProxyPage extends ConsumerStatefulWidget {
 }
 
 class _ProxyPageState extends ConsumerState<ProxyPage> {
-  String _searchQuery = '';
-  _SortMode _sortMode = _SortMode.none;
-  String? _typeFilter; // null = all types
-  final _searchController = TextEditingController();
-
   @override
   void initState() {
     super.initState();
-    Future.microtask(() => ref.read(proxyGroupsProvider.notifier).refresh());
-  }
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
+    Future.microtask(
+        () => ref.read(proxyGroupsProvider.notifier).refresh());
   }
 
   @override
@@ -53,11 +37,17 @@ class _ProxyPageState extends ConsumerState<ProxyPage> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(Icons.dns_outlined,
-                  size: 64,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant),
-              const SizedBox(height: 16),
+                  size: 48,
+                  color: Theme.of(context)
+                      .colorScheme
+                      .onSurfaceVariant
+                      .withValues(alpha: 0.4)),
+              const SizedBox(height: 12),
               Text(s.notConnectedHintProxy,
-                  style: Theme.of(context).textTheme.bodyLarge),
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .onSurfaceVariant)),
             ],
           ),
         ),
@@ -68,353 +58,236 @@ class _ProxyPageState extends ConsumerState<ProxyPage> {
       return Scaffold(
         body: const Center(child: CircularProgressIndicator()),
         floatingActionButton: FloatingActionButton.small(
-          onPressed: () => ref.read(proxyGroupsProvider.notifier).refresh(),
+          onPressed: () =>
+              ref.read(proxyGroupsProvider.notifier).refresh(),
           child: const Icon(Icons.refresh),
         ),
       );
     }
 
-    final filteredGroups = _filterGroups(groups);
-    final availableTypes = groups.map((g) => g.type).toSet().toList()..sort();
-
     return Scaffold(
       body: Column(
         children: [
-          // Type filter chips
-          if (availableTypes.length > 1)
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
-              child: Row(
-                children: [
-                  FilterChip(
-                    label: Text(s.proxyTypeAll),
-                    selected: _typeFilter == null,
-                    onSelected: (_) => setState(() => _typeFilter = null),
-                  ),
-                  for (final type in availableTypes) ...[
-                    const SizedBox(width: 6),
-                    FilterChip(
-                      label: Text(type),
-                      selected: _typeFilter == type,
-                      onSelected: (_) => setState(
-                          () => _typeFilter = _typeFilter == type ? null : type),
-                    ),
-                  ],
-                ],
-              ),
-            ),
+          // Routing mode bar
+          _RoutingModeBar(),
 
-          // Search bar + sort toggle
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 4, 4),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _searchController,
-                    decoration: InputDecoration(
-                      hintText: s.searchNodesHint,
-                      prefixIcon: const Icon(Icons.search, size: 20),
-                      suffixIcon: _searchQuery.isNotEmpty
-                          ? IconButton(
-                              icon: const Icon(Icons.clear, size: 18),
-                              onPressed: () {
-                                _searchController.clear();
-                                setState(() => _searchQuery = '');
-                              },
-                            )
-                          : null,
-                      isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 10),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide.none,
-                      ),
-                      filled: true,
-                      fillColor: Theme.of(context)
-                          .colorScheme
-                          .surfaceContainerHighest,
-                    ),
-                    onChanged: (v) =>
-                        setState(() => _searchQuery = v.trim()),
-                  ),
-                ),
-                IconButton(
-                  onPressed: () => setState(() {
-                    _sortMode = _sortMode == _SortMode.none
-                        ? _SortMode.delay
-                        : _SortMode.none;
-                  }),
-                  icon: Icon(
-                    Icons.sort,
-                    size: 20,
-                    color: _sortMode == _SortMode.delay
-                        ? Theme.of(context).colorScheme.primary
-                        : null,
-                  ),
-                  tooltip: _sortMode == _SortMode.delay
-                      ? s.cancelSort
-                      : s.sortByDelay,
-                ),
-                IconButton(
-                  onPressed: () => _showTestUrlDialog(context, ref),
-                  icon: const Icon(Icons.tune, size: 20),
-                  tooltip: s.testUrlSettings,
-                ),
-              ],
-            ),
+          Divider(
+            height: 1,
+            thickness: 0.5,
+            color: Theme.of(context).dividerColor,
           ),
 
           // Group list
           Expanded(
             child: RefreshIndicator(
-              onRefresh: () async {
-                ref.read(proxyGroupsProvider.notifier).refresh();
-              },
-              child: filteredGroups.isEmpty
-                  ? Center(
-                      child: Text(s.noMatchingNodes,
-                          style: Theme.of(context).textTheme.bodyMedium))
-                  : ListView.builder(
-                      padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
-                      itemCount: filteredGroups.length,
-                      itemBuilder: (context, index) {
-                        return _ProxyGroupCard(
-                          group: filteredGroups[index],
-                          searchQuery: _searchQuery,
-                          sortMode: _sortMode,
-                        );
-                      },
-                    ),
+              onRefresh: () async =>
+                  ref.read(proxyGroupsProvider.notifier).refresh(),
+              child: ListView.separated(
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+                itemCount: groups.length,
+                separatorBuilder: (_, __) =>
+                    const SizedBox(height: 8),
+                itemBuilder: (context, index) =>
+                    _ProxyGroupCard(group: groups[index]),
+              ),
             ),
           ),
         ],
       ),
     );
   }
+}
 
-  void _showTestUrlDialog(BuildContext context, WidgetRef ref) {
+// ── Routing Mode Bar ──────────────────────────────────────────────────────────
+
+class _RoutingModeBar extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
     final s = S.of(context);
-    final currentUrl = ref.read(testUrlProvider);
-    final ctrl = TextEditingController(text: currentUrl);
+    final mode = ref.watch(routingModeProvider);
+    final isRunning =
+        ref.watch(coreStatusProvider) == CoreStatus.running;
 
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(s.testUrlDialogTitle),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            TextField(
-              controller: ctrl,
-              decoration: InputDecoration(
-                labelText: s.customUrlLabel,
-                border: const OutlineInputBorder(),
-                isDense: true,
-              ),
-            ),
-            const SizedBox(height: 12),
-            ...(_kPresetTestUrls.map((url) => InkWell(
-                  onTap: () => ctrl.text = url,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Row(
-                      children: [
-                        Icon(Icons.link,
-                            size: 14,
-                            color: Theme.of(ctx).colorScheme.primary),
-                        const SizedBox(width: 6),
-                        Flexible(
-                          child: Text(url,
-                              style: const TextStyle(fontSize: 12),
-                              overflow: TextOverflow.ellipsis),
-                        ),
-                      ],
-                    ),
-                  ),
-                ))),
-          ],
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: SegmentedButton<String>(
+        style: SegmentedButton.styleFrom(
+          padding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          textStyle:
+              const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
         ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: Text(s.cancel)),
-          FilledButton(
-            onPressed: () {
-              final url = ctrl.text.trim();
-              if (url.isNotEmpty) {
-                ref.read(testUrlProvider.notifier).state = url;
-              }
-              Navigator.pop(ctx);
-            },
-            child: Text(s.confirm),
-          ),
+        segments: [
+          ButtonSegment(
+              value: 'rule',
+              label: Text(s.routeModeRule),
+              icon: const Icon(Icons.rule_rounded, size: 14)),
+          ButtonSegment(
+              value: 'global',
+              label: Text(s.routeModeGlobal),
+              icon: const Icon(Icons.public_rounded, size: 14)),
+          ButtonSegment(
+              value: 'direct',
+              label: Text(s.routeModeDirect),
+              icon: const Icon(Icons.wifi_tethering_rounded, size: 14)),
         ],
+        selected: {mode},
+        onSelectionChanged: (set) async {
+          final newMode = set.first;
+          ref.read(routingModeProvider.notifier).state = newMode;
+          await SettingsService.setRoutingMode(newMode);
+          if (isRunning) {
+            try {
+              await ref
+                  .read(mihomoApiProvider)
+                  .setRoutingMode(newMode);
+            } catch (_) {}
+          }
+        },
       ),
-    ).whenComplete(ctrl.dispose);
-  }
-
-  List<ProxyGroup> _filterGroups(List<ProxyGroup> groups) {
-    var result = groups;
-    if (_typeFilter != null) {
-      result = result.where((g) => g.type == _typeFilter).toList();
-    }
-    if (_searchQuery.isNotEmpty) {
-      final q = _searchQuery.toLowerCase();
-      result = result
-          .where((g) =>
-              g.name.toLowerCase().contains(q) ||
-              g.all.any((n) => n.toLowerCase().contains(q)))
-          .toList();
-    }
-    return result;
+    );
   }
 }
 
+// ── Proxy Group Card ──────────────────────────────────────────────────────────
+
 class _ProxyGroupCard extends ConsumerWidget {
   final ProxyGroup group;
-  final String searchQuery;
-  final _SortMode sortMode;
-
-  const _ProxyGroupCard({
-    required this.group,
-    required this.searchQuery,
-    required this.sortMode,
-  });
+  const _ProxyGroupCard({required this.group});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final s = S.of(context);
     final delays = ref.watch(delayResultsProvider);
     final testing = ref.watch(delayTestingProvider);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    var visibleNodes = searchQuery.isEmpty
-        ? List<String>.from(group.all)
-        : group.all
-            .where((n) =>
-                n.toLowerCase().contains(searchQuery.toLowerCase()))
-            .toList();
-
-    if (sortMode == _SortMode.delay) {
-      visibleNodes.sort((a, b) {
-        final da = delays[a];
-        final db = delays[b];
-        if (da == null && db == null) return 0;
-        if (da == null) return 1;
-        if (db == null) return -1;
-        if (da <= 0 && db <= 0) return 0;
-        if (da <= 0) return 1;
-        if (db <= 0) return -1;
-        return da.compareTo(db);
-      });
-    }
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: ExpansionTile(
-        initiallyExpanded: searchQuery.isNotEmpty,
-        leading: Icon(_groupIcon(group.name),
-            size: 20, color: Theme.of(context).colorScheme.primary),
-        title: Text(group.name,
-            style: const TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: Row(
-          children: [
-            _TypeChip(type: group.type),
-            const SizedBox(width: 8),
-            Flexible(
-              child: Text(group.now,
-                  style: Theme.of(context).textTheme.bodySmall,
-                  overflow: TextOverflow.ellipsis),
-            ),
-          ],
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark
+            ? const Color(0xFF2C2C2E)
+            : Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.10)
+              : Colors.black.withValues(alpha: 0.08),
+          width: 0.5,
         ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ── Group header ───────────────────────────────────────
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-            child: Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: visibleNodes.map((name) {
-                final isSelected = name == group.now;
-                final delay = delays[name];
-                final isTesting = testing.contains(name);
-
-                return GestureDetector(
-                  onLongPress: isTesting
-                      ? null
-                      : () =>
-                          ref.read(delayTestProvider).testDelay(name),
-                  child: ChoiceChip(
-                    label: SizedBox(
-                      width: 100,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(name,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontSize: 12)),
-                          const SizedBox(height: 2),
-                          if (isTesting)
-                            const SizedBox(
-                              width: 12,
-                              height: 12,
-                              child: CircularProgressIndicator(
-                                  strokeWidth: 1.5),
-                            )
-                          else if (delay != null) ...[
-                            Text(
-                              delay > 0 ? '${delay}ms' : 'timeout',
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w600,
-                                color: _delayColor(delay),
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            _DelayBar(delay: delay),
-                          ] else
-                            Text('--',
-                                style: TextStyle(
-                                    fontSize: 10,
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSurfaceVariant)),
-                        ],
-                      ),
-                    ),
-                    selected: isSelected,
-                    onSelected: (_) {
-                      ref
-                          .read(proxyGroupsProvider.notifier)
-                          .changeProxy(group.name, name);
-                    },
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+            padding:
+                const EdgeInsets.fromLTRB(12, 10, 8, 8),
             child: Row(
               children: [
-                OutlinedButton.icon(
-                  onPressed: testing.isEmpty
-                      ? () => ref
-                          .read(delayTestProvider)
-                          .testGroup(group.name, visibleNodes)
-                      : null,
-                  icon: const Icon(Icons.speed, size: 16),
-                  label: Text(testing.isEmpty
-                      ? s.testAll
-                      : s.testingCount(testing.length)),
+                Icon(_groupIcon(group.name),
+                    size: 14,
+                    color: Theme.of(context).colorScheme.primary),
+                const SizedBox(width: 6),
+                Text(group.name,
+                    style: const TextStyle(
+                        fontSize: 13, fontWeight: FontWeight.w600)),
+                const SizedBox(width: 6),
+                _TypeChip(type: group.type),
+                const SizedBox(width: 4),
+                Text(
+                  group.now,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        fontSize: 11,
+                        color: Theme.of(context)
+                            .colorScheme
+                            .onSurfaceVariant,
+                      ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
                 ),
                 const Spacer(),
-                Text(s.nodesCount(visibleNodes.length, group.all.length),
-                    style: Theme.of(context).textTheme.bodySmall),
+                // Test all button
+                InkWell(
+                  onTap: testing.isNotEmpty
+                      ? null
+                      : () => ref
+                          .read(delayTestProvider)
+                          .testGroup(group.name, group.all),
+                  borderRadius: BorderRadius.circular(6),
+                  child: Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                    child: testing.isNotEmpty
+                        ? const SizedBox(
+                            width: 12,
+                            height: 12,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 1.5))
+                        : Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.bolt_rounded, size: 13),
+                              const SizedBox(width: 2),
+                              Text(s.testAll,
+                                  style: const TextStyle(fontSize: 11)),
+                            ],
+                          ),
+                  ),
+                ),
               ],
+            ),
+          ),
+
+          // ── Node grid ──────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final crossCount =
+                    max(2, (constraints.maxWidth / 130).floor());
+                return GridView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  gridDelegate:
+                      SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: crossCount,
+                    crossAxisSpacing: 6,
+                    mainAxisSpacing: 6,
+                    childAspectRatio: 2.4,
+                  ),
+                  itemCount: group.all.length,
+                  itemBuilder: (context, index) {
+                    final name = group.all[index];
+                    return _NodeCard(
+                      name: name,
+                      isSelected: name == group.now,
+                      delay: delays[name],
+                      isTesting: testing.contains(name),
+                      onSelect: () => ref
+                          .read(proxyGroupsProvider.notifier)
+                          .changeProxy(group.name, name),
+                      onTest: () => ref
+                          .read(delayTestProvider)
+                          .testDelay(name),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+
+          // Node count row
+          Padding(
+            padding:
+                const EdgeInsets.fromLTRB(12, 0, 12, 8),
+            child: Text(
+              s.nodesCount(group.all.length, group.all.length),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    fontSize: 11,
+                    color: Theme.of(context)
+                        .colorScheme
+                        .onSurfaceVariant,
+                  ),
             ),
           ),
         ],
@@ -422,21 +295,11 @@ class _ProxyGroupCard extends ConsumerWidget {
     );
   }
 
-  Color _delayColor(int delay) {
-    if (delay <= 0) return Colors.red;
-    if (delay < 100) return Colors.green;
-    if (delay < 300) return Colors.lightGreen;
-    if (delay < 500) return Colors.orange;
-    return Colors.red;
-  }
-
   IconData _groupIcon(String name) {
     final n = name.toLowerCase();
     if (n.contains('youtube')) return Icons.play_circle_outline;
     if (n.contains('tiktok')) return Icons.music_note;
-    if (n.contains('ai') ||
-        n.contains('openai') ||
-        n.contains('claude')) {
+    if (n.contains('ai') || n.contains('openai') || n.contains('claude')) {
       return Icons.auto_awesome;
     }
     if (n.contains('google')) return Icons.search;
@@ -452,9 +315,7 @@ class _ProxyGroupCard extends ConsumerWidget {
         n.contains('facebook')) {
       return Icons.people_outline;
     }
-    if (n.contains('游戏') ||
-        n.contains('game') ||
-        n.contains('steam')) {
+    if (n.contains('游戏') || n.contains('game') || n.contains('steam')) {
       return Icons.sports_esports;
     }
     if (n.contains('兜底') ||
@@ -475,6 +336,113 @@ class _ProxyGroupCard extends ConsumerWidget {
   }
 }
 
+// ── Node Card ─────────────────────────────────────────────────────────────────
+
+class _NodeCard extends StatelessWidget {
+  final String name;
+  final bool isSelected;
+  final int? delay;
+  final bool isTesting;
+  final VoidCallback onSelect;
+  final VoidCallback onTest;
+
+  const _NodeCard({
+    required this.name,
+    required this.isSelected,
+    required this.delay,
+    required this.isTesting,
+    required this.onSelect,
+    required this.onTest,
+  });
+
+  Color _delayColor(int d) {
+    if (d <= 0) return Colors.red;
+    if (d < 100) return const Color(0xFF34C759);
+    if (d < 300) return Colors.orange;
+    return Colors.red;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primary = Theme.of(context).colorScheme.primary;
+
+    return GestureDetector(
+      onTap: onSelect,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding:
+            const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? primary.withValues(alpha: 0.07)
+              : (isDark
+                  ? Colors.white.withValues(alpha: 0.04)
+                  : Colors.grey.withValues(alpha: 0.04)),
+          borderRadius: BorderRadius.circular(7),
+          border: Border.all(
+            color: isSelected
+                ? primary.withValues(alpha: 0.65)
+                : (isDark
+                    ? Colors.white.withValues(alpha: 0.10)
+                    : Colors.black.withValues(alpha: 0.08)),
+            width: isSelected ? 1.5 : 0.5,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            // Node name
+            Text(
+              name,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight:
+                    isSelected ? FontWeight.w600 : FontWeight.w400,
+                color: isSelected
+                    ? primary
+                    : Theme.of(context).colorScheme.onSurface,
+                height: 1.3,
+              ),
+            ),
+
+            // Delay
+            GestureDetector(
+              onTap: onTest,
+              child: isTesting
+                  ? const SizedBox(
+                      width: 10,
+                      height: 10,
+                      child:
+                          CircularProgressIndicator(strokeWidth: 1.5))
+                  : delay != null
+                      ? Text(
+                          delay! <= 0 ? 'timeout' : '${delay}ms',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: _delayColor(delay!),
+                          ),
+                        )
+                      : Icon(Icons.speed_outlined,
+                          size: 11,
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onSurfaceVariant
+                              .withValues(alpha: 0.5)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Type Chip ─────────────────────────────────────────────────────────────────
+
 class _TypeChip extends StatelessWidget {
   final String type;
   const _TypeChip({required this.type});
@@ -483,18 +451,17 @@ class _TypeChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = S.of(context);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
       decoration: BoxDecoration(
-        color: _typeColor(type).withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(4),
+        color: _typeColor(type).withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(3),
       ),
       child: Text(
         _typeLabel(type, s),
         style: TextStyle(
-          fontSize: 10,
-          fontWeight: FontWeight.w600,
-          color: _typeColor(type),
-        ),
+            fontSize: 9,
+            fontWeight: FontWeight.w700,
+            color: _typeColor(type)),
       ),
     );
   }
@@ -527,42 +494,5 @@ class _TypeChip extends StatelessWidget {
       default:
         return Colors.grey;
     }
-  }
-}
-
-// ── Delay heatmap bar ─────────────────────────────────────────────────────────
-
-class _DelayBar extends StatelessWidget {
-  final int delay;
-  const _DelayBar({required this.delay});
-
-  Color get _color {
-    if (delay <= 0) return Colors.grey;
-    if (delay < 100) return Colors.green;
-    if (delay < 300) return Colors.orange;
-    return Colors.red;
-  }
-
-  double get _fill {
-    if (delay <= 0) return 1.0;
-    // Map 0–1000ms to 0.1–1.0 fill
-    return (delay.clamp(50, 1000) / 1000.0).clamp(0.1, 1.0);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 44,
-      height: 3,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(2),
-        child: LinearProgressIndicator(
-          value: _fill,
-          backgroundColor: _color.withValues(alpha: 0.18),
-          color: _color,
-          minHeight: 3,
-        ),
-      ),
-    );
   }
 }

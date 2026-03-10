@@ -4,8 +4,10 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:http/http.dart' as http;
 
 import '../l10n/app_strings.dart';
+import '../main.dart';
 import '../providers/core_provider.dart';
 import '../providers/profile_provider.dart';
 import '../providers/proxy_provider.dart';
@@ -13,6 +15,7 @@ import '../services/app_notifier.dart';
 import '../services/core_manager.dart';
 import '../services/profile_service.dart';
 import '../services/settings_service.dart';
+import '../theme.dart';
 
 class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
@@ -80,133 +83,88 @@ class _HomePageState extends ConsumerState<HomePage> {
       }
     });
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            children: [
-              if (isMock)
-                Container(
-                  width: double.infinity,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.amber.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.science_outlined,
-                          size: 16, color: Colors.amber.shade700),
-                      const SizedBox(width: 6),
-                      Text(s.mockModeBanner,
-                          style: TextStyle(
-                              fontSize: 12, color: Colors.amber.shade700)),
-                    ],
-                  ),
-                ),
-
-              const Spacer(),
-
-              _StatusOrb(
-                  isRunning: isRunning, isTransitioning: isTransitioning),
-              const SizedBox(height: 24),
-
-              Text(
-                isTransitioning
-                    ? (status == CoreStatus.starting
-                        ? s.statusConnecting
-                        : s.statusDisconnecting)
-                    : (isRunning ? s.statusConnected : s.statusDisconnected),
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: isRunning
-                          ? Colors.green
-                          : Theme.of(context).colorScheme.onSurface,
-                    ),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Mock banner
+          if (isMock)
+            Container(
+              color: Colors.amber.withValues(alpha: 0.12),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
+              child: Row(
+                children: [
+                  Icon(Icons.science_outlined,
+                      size: 13, color: Colors.amber.shade700),
+                  const SizedBox(width: 6),
+                  Text(s.mockModeBanner,
+                      style: TextStyle(
+                          fontSize: 12, color: Colors.amber.shade700)),
+                ],
               ),
+            ),
 
-              if (isRunning && _connectedSince != null) ...[
-                const SizedBox(height: 4),
-                Text(_uptimeText,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .onSurfaceVariant)),
-              ],
-
-              const SizedBox(height: 8),
-
-              if (isRunning) ...[
-                _ActiveNodeInfo(),
-                const SizedBox(height: 6),
-                _ActiveProfileName(),
-              ],
-
-              if (!isRunning && !isTransitioning) _DisconnectedHint(),
-
-              const SizedBox(height: 16),
-
-              // Routing mode switcher
-              _RoutingModeSwitcher(isRunning: isRunning),
-
-              const SizedBox(height: 16),
-
-              if (isRunning) ...[
-                const RepaintBoundary(child: _TrafficChart()),
-                const SizedBox(height: 8),
-                const _TrafficCard(),
-                const SizedBox(height: 8),
-              ],
-              const _DailyTrafficCard(),
-
-              const Spacer(),
-
-              SizedBox(
-                width: 200,
-                height: 56,
-                child: FilledButton(
-                  onPressed:
-                      isTransitioning ? null : () => _toggle(context, ref),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: isRunning
-                        ? Colors.red.shade400
-                        : Theme.of(context).colorScheme.primary,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(28),
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      if (isTransitioning)
-                        const Padding(
-                          padding: EdgeInsets.only(right: 8),
-                          child: SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2, color: Colors.white),
-                          ),
-                        ),
-                      Text(
-                        isTransitioning
-                            ? (status == CoreStatus.starting
-                                ? s.btnConnecting
-                                : s.btnDisconnecting)
-                            : (isRunning ? s.btnDisconnect : s.btnConnect),
-                        style: const TextStyle(fontSize: 18),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 48),
-            ],
+          // ── Top bar ──────────────────────────────────────────────
+          _TopBar(
+            status: status,
+            uptimeText: _uptimeText,
+            isTransitioning: isTransitioning,
+            onToggle: () => _toggle(context, ref),
           ),
-        ),
+
+          // Divider
+          Container(
+            height: 0.5,
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.06)
+                : Colors.black.withValues(alpha: 0.06),
+          ),
+
+          // ── Main content ─────────────────────────────────────────
+          Expanded(
+            child: isTransitioning
+                ? const Center(child: CircularProgressIndicator())
+                : SingleChildScrollView(
+                    padding: const EdgeInsets.all(24),
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 900),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            // Connection card
+                            _ConnectionCard(
+                              status: status,
+                              uptimeText: _uptimeText,
+                              onToggle: () => _toggle(context, ref),
+                            ),
+                            const SizedBox(height: 16),
+
+                            // Traffic card (only when connected)
+                            if (isRunning) ...[
+                              const _TrafficMetricCard(),
+                              const SizedBox(height: 16),
+                            ],
+
+                            // Stat cards row
+                            if (isRunning) ...[
+                              _StatsRow(),
+                              const SizedBox(height: 16),
+                            ],
+
+                            // Chart card
+                            if (isRunning)
+                              const _ChartCard(),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+          ),
+        ],
       ),
     );
   }
@@ -225,9 +183,8 @@ class _HomePageState extends ConsumerState<HomePage> {
           FilledButton(
             onPressed: () async {
               Navigator.pop(ctx);
-              final ok = await ref
-                  .read(coreActionsProvider)
-                  .start(lastGoodConfig);
+              final ok =
+                  await ref.read(coreActionsProvider).start(lastGoodConfig);
               if (ok) {
                 AppNotifier.success(s.rollbackSuccess);
               } else {
@@ -278,9 +235,7 @@ class _HomePageState extends ConsumerState<HomePage> {
       final ok = await actions.start(config);
       if (!ok && mounted) {
         AppNotifier.error(s.snackStartFailed);
-        // Offer rollback to last known-good config
-        final lastGood =
-            await CoreManager.instance.loadLastWorkingConfig();
+        final lastGood = await CoreManager.instance.loadLastWorkingConfig();
         if (lastGood != null && lastGood != config && mounted) {
           _showRollbackDialog(s, lastGood);
         }
@@ -291,63 +246,711 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 }
 
-// ── Routing Mode Switcher ─────────────────────────────────────────────────────
+// ── Top Bar ──────────────────────────────────────────────────────────────────
 
-class _RoutingModeSwitcher extends ConsumerWidget {
-  final bool isRunning;
-  const _RoutingModeSwitcher({required this.isRunning});
+class _TopBar extends ConsumerWidget {
+  final CoreStatus status;
+  final String uptimeText;
+  final bool isTransitioning;
+  final VoidCallback onToggle;
+
+  const _TopBar({
+    required this.status,
+    required this.uptimeText,
+    required this.isTransitioning,
+    required this.onToggle,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final s = S.of(context);
-    final mode = ref.watch(routingModeProvider);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isRunning = status == CoreStatus.running;
 
-    return SegmentedButton<String>(
-      segments: [
-        ButtonSegment(
-            value: 'rule',
-            label: Text(s.routeModeRule),
-            icon: const Icon(Icons.rule, size: 16)),
-        ButtonSegment(
-            value: 'global',
-            label: Text(s.routeModeGlobal),
-            icon: const Icon(Icons.public, size: 16)),
-        ButtonSegment(
-            value: 'direct',
-            label: Text(s.routeModeDirect),
-            icon: const Icon(Icons.wifi_tethering, size: 16)),
-      ],
-      selected: {mode},
-      onSelectionChanged: (set) async {
-        final newMode = set.first;
-        ref.read(routingModeProvider.notifier).state = newMode;
-        await SettingsService.setRoutingMode(newMode);
-        if (isRunning) {
-          try {
-            await ref.read(mihomoApiProvider).setRoutingMode(newMode);
-          } catch (_) {}
-        }
-      },
+    // Get delay for badge
+    final groups = ref.watch(proxyGroupsProvider);
+    final delays = ref.watch(delayResultsProvider);
+    final mainGroup = groups.isEmpty
+        ? null
+        : groups.firstWhere(
+            (g) => g.name == '节点选择' || g.type == 'Selector',
+            orElse: () => groups.first,
+          );
+    final currentDelay = mainGroup != null ? delays[mainGroup.now] : null;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(32, 24, 32, 20),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          // Left: label + title
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                s.dashboardLabel,
+                style: YLText.caption.copyWith(
+                  letterSpacing: 2.0,
+                  fontWeight: FontWeight.w600,
+                  color: YLColors.zinc400,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                s.dashboardTitle,
+                style: const TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: -0.5,
+                ),
+              ),
+            ],
+          ),
+          const Spacer(),
+          // Right: status badge + switch node
+          if (isRunning) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xFF34C759).withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: const Color(0xFF34C759).withValues(alpha: 0.25),
+                  width: 0.5,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 6, height: 6,
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Color(0xFF34C759),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    '${s.statusConnected}${currentDelay != null && currentDelay > 0 ? ' · ${currentDelay}ms' : ''}',
+                    style: YLText.label.copyWith(
+                      color: const Color(0xFF15803D),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            InkWell(
+              onTap: () => MainShell.switchToTab(context, MainShell.tabNodes),
+              borderRadius: BorderRadius.circular(20),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.12)
+                        : Colors.black.withValues(alpha: 0.10),
+                    width: 0.5,
+                  ),
+                ),
+                child: Text(s.switchNode, style: YLText.label),
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }
 
-// ── Traffic Chart ─────────────────────────────────────────────────────────────
+// ── Connection Card ──────────────────────────────────────────────────────────
 
-class _TrafficChart extends ConsumerWidget {
-  const _TrafficChart();
+class _ConnectionCard extends ConsumerWidget {
+  final CoreStatus status;
+  final String uptimeText;
+  final VoidCallback onToggle;
+
+  const _ConnectionCard({
+    required this.status,
+    required this.uptimeText,
+    required this.onToggle,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final s = S.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isRunning = status == CoreStatus.running;
+    final isTransitioning =
+        status == CoreStatus.starting || status == CoreStatus.stopping;
+
+    // Profile name
+    final profiles = ref.watch(profilesProvider);
+    final activeId = ref.watch(activeProfileIdProvider);
+    final isMock = ref.watch(isMockModeProvider);
+    final routingMode = ref.watch(routingModeProvider);
+    final systemProxy = ref.watch(systemProxyOnConnectProvider);
+
+    String? profileName;
+    if (isMock) {
+      profileName = s.mockModeLabel;
+    } else {
+      profileName = profiles.whenOrNull(
+        data: (list) =>
+            list.where((p) => p.id == activeId).firstOrNull?.name,
+      );
+    }
+
+    final routeLabel = routingMode == 'rule'
+        ? '${s.routeModeRule} Mode'
+        : routingMode == 'global'
+            ? '${s.routeModeGlobal} Mode'
+            : '${s.routeModeDirect} Mode';
+
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: isDark ? YLColors.zinc800 : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.black.withValues(alpha: 0.08),
+          width: 0.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.15 : 0.03),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Left content
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Status label
+                    Row(
+                      children: [
+                        Container(
+                          width: 7, height: 7,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: isRunning
+                                ? const Color(0xFF34C759)
+                                : (isTransitioning
+                                    ? YLColors.connecting
+                                    : YLColors.zinc400),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          isRunning ? s.liveConnection : s.dashDisconnectedTitle,
+                          style: YLText.label.copyWith(
+                            color: YLColors.zinc500,
+                          ),
+                        ),
+                        if (isRunning && uptimeText.isNotEmpty) ...[
+                          const SizedBox(width: 8),
+                          Text(
+                            uptimeText,
+                            style: YLText.caption.copyWith(
+                              color: YLColors.zinc400,
+                              fontFeatures: const [FontFeature.tabularFigures()],
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Big status text
+                    Text(
+                      isRunning ? s.statusConnected : s.statusDisconnected,
+                      style: const TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: -0.5,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+
+                    // Description
+                    Text(
+                      isRunning ? s.dashConnectedDesc : s.dashDisconnectedDesc,
+                      style: YLText.body.copyWith(
+                        color: YLColors.zinc500,
+                        height: 1.5,
+                      ),
+                      maxLines: 3,
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(width: 16),
+
+              // Toggle button
+              if (isTransitioning)
+                const Padding(
+                  padding: EdgeInsets.only(top: 8),
+                  child: SizedBox(
+                    width: 20, height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                )
+              else
+                GestureDetector(
+                  onTap: onToggle,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: isRunning
+                          ? (isDark ? Colors.white : YLColors.zinc900)
+                          : YLColors.primary,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      isRunning ? s.btnDisconnect : s.btnConnect,
+                      style: YLText.label.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+
+          // Pills
+          if (isRunning) ...[
+            const SizedBox(height: 20),
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              children: [
+                _Pill(routeLabel),
+                _Pill(systemProxy ? s.systemProxyOn : s.systemProxyOff),
+                if (profileName != null) _Pill(profileName),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _Pill extends StatelessWidget {
+  final String label;
+  const _Pill(this.label);
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.10)
+              : Colors.black.withValues(alpha: 0.10),
+          width: 0.5,
+        ),
+      ),
+      child: Text(label,
+          style: YLText.label.copyWith(
+            color: isDark ? YLColors.zinc400 : YLColors.zinc600,
+          )),
+    );
+  }
+}
+
+// ── Traffic Metric Card ──────────────────────────────────────────────────────
+
+class _TrafficMetricCard extends ConsumerWidget {
+  const _TrafficMetricCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = S.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final traffic = ref.watch(trafficProvider);
+
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: isDark ? YLColors.zinc800 : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.black.withValues(alpha: 0.08),
+          width: 0.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.15 : 0.03),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(s.realtimeTraffic,
+              style: YLText.label.copyWith(color: YLColors.zinc500)),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              _BigMetric(
+                label: s.trafficDownload,
+                value: traffic.downFormatted,
+                color: const Color(0xFF34C759),
+              ),
+              const SizedBox(width: 48),
+              _BigMetric(
+                label: s.trafficUpload,
+                value: traffic.upFormatted,
+                color: YLColors.primary,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BigMetric extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color color;
+
+  const _BigMetric({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label,
+            style: YLText.label.copyWith(color: YLColors.zinc500)),
+        const SizedBox(height: 6),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
+          children: [
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.w600,
+                letterSpacing: -0.5,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+// ── Stats Row ────────────────────────────────────────────────────────────────
+
+class _StatsRow extends ConsumerStatefulWidget {
+  @override
+  ConsumerState<_StatsRow> createState() => _StatsRowState();
+}
+
+class _StatsRowState extends ConsumerState<_StatsRow> {
+  String? _ip;
+  String? _country;
+  bool _ipLoading = false;
+  bool _ipQueried = false;
+
+  Future<void> _queryIp() async {
+    if (_ipLoading) return;
+    setState(() {
+      _ipLoading = true;
+      _ip = null;
+      _country = null;
+    });
+    try {
+      final client = http.Client();
+      try {
+        final resp = await client
+            .get(Uri.parse('http://ip-api.com/json/?fields=query,country'))
+            .timeout(const Duration(seconds: 5));
+        if (resp.statusCode == 200) {
+          final body = resp.body;
+          final qm = RegExp(r'"query"\s*:\s*"([^"]+)"').firstMatch(body);
+          final cm =
+              RegExp(r'"country"\s*:\s*"([^"]+)"').firstMatch(body);
+          if (mounted) {
+            setState(() {
+              _ip = qm?.group(1);
+              _country = cm?.group(1);
+              _ipLoading = false;
+              _ipQueried = true;
+            });
+          }
+          return;
+        }
+      } finally {
+        client.close();
+      }
+    } catch (_) {}
+    if (mounted) setState(() { _ipLoading = false; _ipQueried = true; });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = S.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final groups = ref.watch(proxyGroupsProvider);
+    final delays = ref.watch(delayResultsProvider);
+    final mainGroup = groups.isEmpty
+        ? null
+        : groups.firstWhere(
+            (g) => g.name == '节点选择' || g.type == 'Selector',
+            orElse: () => groups.first,
+          );
+    final routingMode = ref.watch(routingModeProvider);
+    final systemProxy = ref.watch(systemProxyOnConnectProvider);
+
+    final routeLabel = routingMode == 'rule'
+        ? '${s.routeModeRule} Mode'
+        : routingMode == 'global'
+            ? '${s.routeModeGlobal} Mode'
+            : '${s.routeModeDirect} Mode';
+
+    final nodeValue = mainGroup?.now ?? '—';
+    final nodeDelay = mainGroup != null ? delays[mainGroup.now] : null;
+    final nodeMeta = nodeDelay != null && nodeDelay > 0
+        ? '${nodeDelay}ms · Healthy'
+        : 'Unknown delay';
+
+    final ipValue = _ipLoading
+        ? s.exitIpQuerying
+        : _ipQueried && _ip != null
+            ? _ip!
+            : _ipQueried
+                ? s.exitIpFailed
+                : s.exitIpTapToQuery;
+    final ipMeta = _country ?? '';
+
+    return Row(
+      children: [
+        Expanded(
+          child: _StatCardCompact(
+            title: s.nodeLabel,
+            value: nodeValue,
+            meta: nodeMeta,
+            icon: Icons.public_rounded,
+            onTap: () => MainShell.switchToTab(context, MainShell.tabNodes),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _StatCardCompact(
+            title: s.exitIpLabel,
+            value: ipValue,
+            meta: ipMeta,
+            icon: Icons.shield_outlined,
+            onTap: _queryIp,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _StatCardCompact(
+            title: s.routingLabel,
+            value: routeLabel,
+            meta: systemProxy ? s.systemProxyOn : s.systemProxyOff,
+            icon: Icons.alt_route_rounded,
+            onTap: () async {
+              const modes = ['rule', 'global', 'direct'];
+              final next = modes[(modes.indexOf(routingMode) + 1) % modes.length];
+              ref.read(routingModeProvider.notifier).state = next;
+              await SettingsService.setRoutingMode(next);
+              try {
+                await ref.read(mihomoApiProvider).setRoutingMode(next);
+              } catch (_) {}
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _StatCardCompact extends StatelessWidget {
+  final String title;
+  final String value;
+  final String meta;
+  final IconData icon;
+  final VoidCallback? onTap;
+
+  const _StatCardCompact({
+    required this.title,
+    required this.value,
+    required this.meta,
+    required this.icon,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(YLRadius.xl),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isDark ? YLColors.zinc800 : Colors.white,
+          borderRadius: BorderRadius.circular(YLRadius.xl),
+          border: Border.all(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.08)
+                : Colors.black.withValues(alpha: 0.08),
+            width: 0.5,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.15 : 0.03),
+              blurRadius: 6,
+              offset: const Offset(0, 1),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(title,
+                    style: YLText.label.copyWith(color: YLColors.zinc500)),
+                Icon(icon, size: 16, color: YLColors.zinc400),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: YLText.titleMedium,
+            ),
+            if (meta.isNotEmpty) ...[
+              const SizedBox(height: 2),
+              Text(meta,
+                  style: YLText.caption.copyWith(color: YLColors.zinc400)),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Chart Card ───────────────────────────────────────────────────────────────
+
+class _ChartCard extends ConsumerWidget {
+  const _ChartCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = S.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final history = ref.watch(trafficHistoryProvider);
     final downHistory = history.downHistory;
     final upHistory = history.upHistory;
 
-    if (downHistory.isEmpty) return const SizedBox.shrink();
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: isDark ? YLColors.zinc800 : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.black.withValues(alpha: 0.08),
+          width: 0.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.15 : 0.03),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(s.last60s,
+                      style: YLText.label.copyWith(color: YLColors.zinc500)),
+                  const SizedBox(height: 2),
+                  Text(s.trafficActivity,
+                      style: YLText.titleMedium),
+                ],
+              ),
+              Row(
+                children: [
+                  _LegendDot(
+                      color: YLColors.primary, label: s.trafficDownload),
+                  const SizedBox(width: 16),
+                  _LegendDot(
+                      color: const Color(0xFF34C759), label: s.trafficUpload),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
 
-    // Use 90th-percentile as Y-axis ceiling to prevent a single traffic spike
-    // from compressing all other data into a flat line.
-    final p90 = history.p90;
+          // Chart
+          SizedBox(
+            height: 200,
+            child: downHistory.isEmpty
+                ? Center(
+                    child: Text('—',
+                        style: YLText.body.copyWith(color: YLColors.zinc400)),
+                  )
+                : _buildChart(context, downHistory, upHistory, history.p90),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildChart(BuildContext context, List<double> downHistory,
+      List<double> upHistory, double p90) {
     final maxY = p90 > 0 ? p90 * 1.5 : 1024 * 1024.0;
 
     List<FlSpot> toSpots(List<double> data) => data
@@ -356,328 +959,108 @@ class _TrafficChart extends ConsumerWidget {
         .map((e) => FlSpot(e.key.toDouble(), e.value))
         .toList();
 
-    return SizedBox(
-      height: 80,
-      child: LineChart(
-        LineChartData(
-          minY: 0,
-          maxY: maxY,
-          gridData: const FlGridData(show: false),
-          borderData: FlBorderData(show: false),
-          titlesData: const FlTitlesData(show: false),
-          lineTouchData: const LineTouchData(enabled: false),
-          lineBarsData: [
-            LineChartBarData(
-              spots: toSpots(downHistory),
-              isCurved: true,
-              color: Colors.green,
-              barWidth: 2,
-              dotData: const FlDotData(show: false),
-              belowBarData: BarAreaData(
-                show: true,
-                color: Colors.green.withValues(alpha: 0.1),
-              ),
-            ),
-            LineChartBarData(
-              spots: toSpots(upHistory),
-              isCurved: true,
-              color: Colors.blue,
-              barWidth: 2,
-              dotData: const FlDotData(show: false),
-              belowBarData: BarAreaData(
-                show: true,
-                color: Colors.blue.withValues(alpha: 0.1),
-              ),
-            ),
-          ],
+    return LineChart(
+      LineChartData(
+        minY: 0,
+        maxY: maxY,
+        gridData: FlGridData(
+          show: true,
+          drawHorizontalLine: true,
+          drawVerticalLine: false,
+          horizontalInterval: maxY / 3,
+          getDrawingHorizontalLine: (value) => FlLine(
+            color: Theme.of(context)
+                .dividerColor
+                .withValues(alpha: 0.3),
+            strokeWidth: 0.5,
+          ),
         ),
-        duration: const Duration(milliseconds: 100),
-      ),
-    );
-  }
-}
-
-// ── Other widgets ─────────────────────────────────────────────────────────────
-
-class _ActiveNodeInfo extends ConsumerWidget {
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final groups = ref.watch(proxyGroupsProvider);
-    final mainGroup = groups.isEmpty
-        ? null
-        : groups.firstWhere(
-            (g) => g.name == '节点选择' || g.type == 'Selector',
-            orElse: () => groups.first,
-          );
-
-    if (mainGroup == null) return const SizedBox.shrink();
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: Theme.of(context)
-            .colorScheme
-            .surfaceContainerHighest
-            .withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.near_me,
-              size: 14, color: Theme.of(context).colorScheme.primary),
-          const SizedBox(width: 6),
-          Text(mainGroup.now,
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
-                  ?.copyWith(fontWeight: FontWeight.w500)),
+        borderData: FlBorderData(show: false),
+        titlesData: FlTitlesData(
+          show: true,
+          rightTitles: const AxisTitles(
+              sideTitles: SideTitles(showTitles: false)),
+          topTitles: const AxisTitles(
+              sideTitles: SideTitles(showTitles: false)),
+          bottomTitles: const AxisTitles(
+              sideTitles: SideTitles(showTitles: false)),
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 40,
+              getTitlesWidget: (value, meta) {
+                if (value == 0) return const SizedBox.shrink();
+                return Text(
+                  _formatSpeed(value),
+                  style: YLText.caption.copyWith(
+                    fontSize: 9,
+                    color: YLColors.zinc400,
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+        lineTouchData: const LineTouchData(enabled: false),
+        lineBarsData: [
+          _buildLine(toSpots(downHistory), YLColors.primary),
+          _buildLine(toSpots(upHistory), const Color(0xFF34C759)),
         ],
       ),
+      duration: const Duration(milliseconds: 100),
     );
   }
-}
 
-class _ActiveProfileName extends ConsumerWidget {
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final s = S.of(context);
-    final isMock = ref.watch(isMockModeProvider);
-    if (isMock) {
-      return Text(s.mockModeLabel,
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant));
-    }
-    final profiles = ref.watch(profilesProvider);
-    final activeId = ref.watch(activeProfileIdProvider);
-    final name = profiles.whenOrNull(
-      data: (list) =>
-          list.where((p) => p.id == activeId).firstOrNull?.name,
-    );
-    if (name == null) return const SizedBox.shrink();
-    return Text(name,
-        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-            color: Theme.of(context).colorScheme.onSurfaceVariant));
-  }
-}
-
-class _DisconnectedHint extends ConsumerWidget {
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final s = S.of(context);
-    final profiles = ref.watch(profilesProvider);
-    final activeId = ref.watch(activeProfileIdProvider);
-    final isMock = ref.watch(isMockModeProvider);
-
-    if (isMock) {
-      return Text(s.mockHint,
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant));
-    }
-
-    return profiles.when(
-      loading: () => const SizedBox.shrink(),
-      error: (_, __) => const SizedBox.shrink(),
-      data: (list) {
-        if (list.isEmpty) {
-          return Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: Text(s.noProfileHint,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color:
-                        Theme.of(context).colorScheme.onSurfaceVariant)),
-          );
-        }
-        final active =
-            list.where((p) => p.id == activeId).firstOrNull ?? list.first;
-        return Padding(
-          padding: const EdgeInsets.only(top: 4),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.description_outlined,
-                  size: 14,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant),
-              const SizedBox(width: 4),
-              Text(active.name,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .onSurfaceVariant)),
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _StatusOrb extends StatelessWidget {
-  final bool isRunning;
-  final bool isTransitioning;
-
-  const _StatusOrb({required this.isRunning, required this.isTransitioning});
-
-  @override
-  Widget build(BuildContext context) {
-    final color = isTransitioning
-        ? Colors.orange
-        : isRunning
-            ? Colors.green
-            : Theme.of(context).colorScheme.outline;
-
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 400),
-      width: 120,
-      height: 120,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: color.withValues(alpha: 0.15),
-        border: Border.all(color: color, width: 3),
-        boxShadow: isRunning
-            ? [
-                BoxShadow(
-                  color: Colors.green.withValues(alpha: 0.3),
-                  blurRadius: 24,
-                  spreadRadius: 4,
-                )
-              ]
-            : null,
-      ),
-      child: Icon(
-        isRunning ? Icons.power_settings_new : Icons.power_off_outlined,
-        size: 48,
-        color: color,
-      ),
-    );
-  }
-}
-
-class _TrafficCard extends ConsumerWidget {
-  const _TrafficCard();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final s = S.of(context);
-    final traffic = ref.watch(trafficProvider);
-    final memoryBytes = ref.watch(memoryUsageProvider);
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _TrafficColumn(
-              icon: Icons.arrow_upward,
-              iconColor: Colors.blue,
-              value: traffic.upFormatted,
-              label: s.trafficUpload,
-            ),
-            const SizedBox(width: 36),
-            _TrafficColumn(
-              icon: Icons.arrow_downward,
-              iconColor: Colors.green,
-              value: traffic.downFormatted,
-              label: s.trafficDownload,
-            ),
-            if (memoryBytes > 0) ...[
-              const SizedBox(width: 36),
-              _TrafficColumn(
-                icon: Icons.memory,
-                iconColor: Colors.orange,
-                value: _formatMemory(memoryBytes),
-                label: s.trafficMemory,
-              ),
-            ],
+  LineChartBarData _buildLine(List<FlSpot> spots, Color color) {
+    return LineChartBarData(
+      spots: spots,
+      isCurved: true,
+      curveSmoothness: 0.25,
+      color: color,
+      barWidth: 2,
+      dotData: const FlDotData(show: false),
+      belowBarData: BarAreaData(
+        show: true,
+        gradient: LinearGradient(
+          colors: [
+            color.withValues(alpha: 0.12),
+            color.withValues(alpha: 0.0),
           ],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
         ),
       ),
     );
   }
 
-  String _formatMemory(int bytes) {
-    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    if (bytes < 1024 * 1024 * 1024) {
-      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-    }
-    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
+  String _formatSpeed(double bps) {
+    if (bps < 1024) return '${bps.toStringAsFixed(0)}B';
+    if (bps < 1024 * 1024) return '${(bps / 1024).toStringAsFixed(0)}K';
+    return '${(bps / (1024 * 1024)).toStringAsFixed(1)}M';
   }
 }
 
-class _TrafficColumn extends StatelessWidget {
-  final IconData icon;
-  final Color iconColor;
-  final String value;
+class _LegendDot extends StatelessWidget {
+  final Color color;
   final String label;
-
-  const _TrafficColumn({
-    required this.icon,
-    required this.iconColor,
-    required this.value,
-    required this.label,
-  });
+  const _LegendDot({required this.color, required this.label});
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 20, color: iconColor),
-        const SizedBox(height: 4),
-        Text(value, style: Theme.of(context).textTheme.bodyMedium),
-        Text(label, style: Theme.of(context).textTheme.bodySmall),
+        Container(
+          width: 6, height: 6,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: color,
+          ),
+        ),
+        const SizedBox(width: 6),
+        Text(label,
+            style: YLText.caption.copyWith(color: YLColors.zinc400)),
       ],
     );
-  }
-}
-
-// ── Daily traffic summary ─────────────────────────────────────────────────────
-
-class _DailyTrafficCard extends ConsumerWidget {
-  const _DailyTrafficCard();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final s = S.of(context);
-    final (upTotal, downTotal) = ref.watch(dailyTrafficProvider);
-
-    if (upTotal == 0 && downTotal == 0) return const SizedBox.shrink();
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          Text(
-            s.todayUsage,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant),
-          ),
-          const Spacer(),
-          const Icon(Icons.arrow_upward, size: 12, color: Colors.blue),
-          const SizedBox(width: 3),
-          Text(_fmt(upTotal),
-              style: const TextStyle(fontSize: 12, color: Colors.blue)),
-          const SizedBox(width: 14),
-          const Icon(Icons.arrow_downward, size: 12, color: Colors.green),
-          const SizedBox(width: 3),
-          Text(_fmt(downTotal),
-              style: const TextStyle(fontSize: 12, color: Colors.green)),
-        ],
-      ),
-    );
-  }
-
-  String _fmt(int bytes) {
-    if (bytes < 1024 * 1024) {
-      return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    }
-    if (bytes < 1024 * 1024 * 1024) {
-      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-    }
-    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
   }
 }

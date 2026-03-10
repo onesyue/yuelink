@@ -14,11 +14,10 @@ import 'package:window_manager/window_manager.dart';
 
 import 'constants.dart';
 import 'l10n/app_strings.dart';
-import 'pages/connections_page.dart';
 import 'pages/home_page.dart';
-import 'pages/log_page.dart';
-import 'pages/profile_page.dart';
-import 'pages/proxy_page.dart';
+import 'pages/nodes_page.dart';
+import 'pages/connection_page.dart';
+import 'pages/configurations_page.dart';
 import 'pages/settings_page.dart';
 import 'models/proxy.dart';
 import 'providers/core_provider.dart';
@@ -29,6 +28,7 @@ import 'services/auto_update_service.dart';
 import 'services/core_manager.dart';
 import 'services/profile_service.dart';
 import 'services/settings_service.dart';
+import 'theme.dart';
 
 /// Global navigator key for deep-link navigation outside widget tree.
 final navigatorKey = GlobalKey<NavigatorState>();
@@ -50,7 +50,6 @@ void main() async {
   final savedLogLevel = await SettingsService.getLogLevel();
   final savedAutoConnect = await SettingsService.getAutoConnect();
   final savedSystemProxy = await SettingsService.getSystemProxyOnConnect();
-  final savedGuardMode = await SettingsService.getGuardMode();
   final savedLanguage = await SettingsService.getLanguage();
 
   // Apply global strings language before runApp (for tray etc.)
@@ -102,7 +101,6 @@ void main() async {
       logLevelProvider.overrideWith((ref) => savedLogLevel),
       autoConnectProvider.overrideWith((ref) => savedAutoConnect),
       systemProxyOnConnectProvider.overrideWith((ref) => savedSystemProxy),
-      guardModeProvider.overrideWith((ref) => savedGuardMode),
     ],
     child: const YueLinkApp(),
   ));
@@ -468,23 +466,26 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
       ],
 
       themeMode: themeMode,
-      theme: ThemeData(
-        colorSchemeSeed: const Color(0xFF6366F1),
-        useMaterial3: true,
-        brightness: Brightness.light,
-      ),
-      darkTheme: ThemeData(
-        colorSchemeSeed: const Color(0xFF6366F1),
-        useMaterial3: true,
-        brightness: Brightness.dark,
-      ),
+      theme: buildTheme(Brightness.light),
+      darkTheme: buildTheme(Brightness.dark),
       home: const MainShell(),
     );
   }
 }
 
 class MainShell extends ConsumerStatefulWidget {
-  const MainShell({super.key});
+  const MainShell({super.key = const ValueKey('mainShell')});
+
+  /// Tab indices for programmatic navigation.
+  static const tabHome           = 0;
+  static const tabNodes          = 1;
+  static const tabConnection     = 2;
+  static const tabConfigurations = 3;
+  static const tabSettings       = 4;
+
+  static void switchToTab(BuildContext context, int index) {
+    context.findAncestorStateOfType<_MainShellState>()?.switchTab(index);
+  }
 
   @override
   ConsumerState<MainShell> createState() => _MainShellState();
@@ -493,44 +494,17 @@ class MainShell extends ConsumerStatefulWidget {
 class _MainShellState extends ConsumerState<MainShell> {
   int _currentIndex = 0;
 
+  void switchTab(int index) {
+    setState(() => _currentIndex = index);
+  }
+
   static const _pages = [
     HomePage(),
-    ProxyPage(),
-    ConnectionsPage(),
-    ProfilePage(),
-    LogPage(),
+    NodesPage(),
+    ConnectionPage(),
+    ConfigurationsPage(),
     SettingsPage(),
   ];
-
-  List<NavigationDestination> _destinations(BuildContext context) {
-    final s = S.of(context);
-    return [
-      NavigationDestination(
-          icon: const Icon(Icons.home_outlined),
-          selectedIcon: const Icon(Icons.home),
-          label: s.navHome),
-      NavigationDestination(
-          icon: const Icon(Icons.dns_outlined),
-          selectedIcon: const Icon(Icons.dns),
-          label: s.navProxy),
-      NavigationDestination(
-          icon: const Icon(Icons.cable_outlined),
-          selectedIcon: const Icon(Icons.cable),
-          label: s.navConnections),
-      NavigationDestination(
-          icon: const Icon(Icons.description_outlined),
-          selectedIcon: const Icon(Icons.description),
-          label: s.navProfile),
-      NavigationDestination(
-          icon: const Icon(Icons.list_alt_outlined),
-          selectedIcon: const Icon(Icons.list_alt),
-          label: s.navLog),
-      NavigationDestination(
-          icon: const Icon(Icons.settings_outlined),
-          selectedIcon: const Icon(Icons.settings),
-          label: s.navSettings),
-    ];
-  }
 
   @override
   void initState() {
@@ -539,7 +513,7 @@ class _MainShellState extends ConsumerState<MainShell> {
       final profiles = ref.read(profilesProvider);
       profiles.whenData((list) {
         if (list.isEmpty && mounted) {
-          setState(() => _currentIndex = 3); // jump to Profiles
+          setState(() => _currentIndex = MainShell.tabConfigurations);
         }
       });
     });
@@ -547,74 +521,234 @@ class _MainShellState extends ConsumerState<MainShell> {
 
   @override
   Widget build(BuildContext context) {
-    final isWide = MediaQuery.sizeOf(context).width > 600;
-    final destinations = _destinations(context);
+    final isWide = MediaQuery.sizeOf(context).width > 640;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     if (isWide) {
       return Scaffold(
         body: Row(
           children: [
-            NavigationRail(
-              selectedIndex: _currentIndex,
-              onDestinationSelected: (i) => setState(() => _currentIndex = i),
-              labelType: NavigationRailLabelType.all,
-              leading: const Padding(
-                padding: EdgeInsets.symmetric(vertical: 16),
-                child: _AppLogo(),
-              ),
-              destinations: destinations
-                  .map((d) => NavigationRailDestination(
-                        icon: d.icon,
-                        selectedIcon: d.selectedIcon,
-                        label: Text(d.label),
-                      ))
-                  .toList(),
+            // ── Sidebar ────────────────────────────────────────
+            _Sidebar(
+              currentIndex: _currentIndex,
+              onSelect: (i) => setState(() => _currentIndex = i),
             ),
-            const VerticalDivider(width: 1),
+
+            // ── Sidebar / content divider ──────────────────────
+            Container(
+              width: 0.5,
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.06)
+                  : Colors.black.withValues(alpha: 0.06),
+            ),
+
+            // ── Content ────────────────────────────────────────
             Expanded(child: _pages[_currentIndex]),
           ],
         ),
       );
     }
 
+    // ── Mobile bottom navigation ─────────────────────────────────
+    final s = S.of(context);
+    final mobileItems = [
+      (const Icon(Icons.home_outlined, size: 20),
+       const Icon(Icons.home_filled, size: 20), s.navHome),
+      (const Icon(Icons.router_outlined, size: 20),
+       const Icon(Icons.router, size: 20), s.navNodes),
+      (const Icon(Icons.wifi_tethering_outlined, size: 20),
+       const Icon(Icons.wifi_tethering, size: 20), s.navConnection),
+      (const Icon(Icons.folder_outlined, size: 20),
+       const Icon(Icons.folder, size: 20), s.navConfigurations),
+      (const Icon(Icons.settings_outlined, size: 20),
+       const Icon(Icons.settings, size: 20), s.navSettings),
+    ];
+
     return Scaffold(
       body: _pages[_currentIndex],
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
-        onDestinationSelected: (i) => setState(() => _currentIndex = i),
-        destinations: destinations,
+        onDestinationSelected: (i) =>
+            setState(() => _currentIndex = i),
+        destinations: mobileItems
+            .map((item) => NavigationDestination(
+                  icon: item.$1,
+                  selectedIcon: item.$2,
+                  label: item.$3,
+                ))
+            .toList(),
+        height: 60,
+        labelBehavior:
+            NavigationDestinationLabelBehavior.onlyShowSelected,
       ),
     );
   }
 }
 
-class _AppLogo extends StatelessWidget {
-  const _AppLogo();
+// ── Sidebar ────────────────────────────────────────────────────────────────────
+
+class _Sidebar extends StatelessWidget {
+  final int currentIndex;
+  final ValueChanged<int> onSelect;
+
+  const _Sidebar({required this.currentIndex, required this.onSelect});
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Container(
-          width: 36,
-          height: 36,
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.primaryContainer,
-            borderRadius: BorderRadius.circular(8),
+    final s = S.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final navItems = [
+      (Icons.home_outlined, Icons.home_filled, s.navHome),
+      (Icons.public_outlined, Icons.public, s.navNodes),
+      (Icons.show_chart_rounded, Icons.show_chart_rounded, s.navConnection),
+      (Icons.folder_outlined, Icons.folder, s.navConfigurations),
+    ];
+
+    return Container(
+      width: 230,
+      color: isDark ? YLColors.zinc900 : YLColors.zinc50,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Brand ────────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+            child: Row(
+              children: [
+                Container(
+                  width: 40, height: 40,
+                  decoration: BoxDecoration(
+                    color: YLColors.primary,
+                    borderRadius: BorderRadius.circular(YLRadius.xl),
+                  ),
+                  child: const Icon(Icons.link_rounded, size: 20, color: Colors.white),
+                ),
+                const SizedBox(width: 12),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('YueLink',
+                        style: YLText.titleMedium.copyWith(
+                          fontWeight: FontWeight.w700,
+                        )),
+                    Text('Proxy Client',
+                        style: YLText.caption.copyWith(
+                          color: YLColors.zinc400,
+                        )),
+                  ],
+                ),
+              ],
+            ),
           ),
-          child: Icon(
-            Icons.link_rounded,
-            size: 20,
-            color: Theme.of(context).colorScheme.primary,
+
+          // ── Navigation items ─────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Column(
+              children: [
+                for (int i = 0; i < navItems.length; i++)
+                  _SidebarItem(
+                    icon: currentIndex == i ? navItems[i].$2 : navItems[i].$1,
+                    label: navItems[i].$3,
+                    isActive: currentIndex == i,
+                    onTap: () => onSelect(i),
+                  ),
+              ],
+            ),
+          ),
+
+          const Spacer(),
+
+          // ── Settings at bottom ────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
+            child: _SidebarItem(
+              icon: currentIndex == MainShell.tabSettings
+                  ? Icons.settings
+                  : Icons.settings_outlined,
+              label: s.navSettings,
+              isActive: currentIndex == MainShell.tabSettings,
+              onTap: () => onSelect(MainShell.tabSettings),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SidebarItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool isActive;
+  final VoidCallback onTap;
+
+  const _SidebarItem({
+    required this.icon,
+    required this.label,
+    required this.isActive,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(YLRadius.xl),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+            decoration: BoxDecoration(
+              color: isActive
+                  ? (isDark ? YLColors.zinc800 : Colors.white)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(YLRadius.xl),
+              border: isActive
+                  ? Border.all(
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.08)
+                          : Colors.black.withValues(alpha: 0.08),
+                      width: 0.5,
+                    )
+                  : null,
+              boxShadow: isActive
+                  ? [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: isDark ? 0.1 : 0.03),
+                        blurRadius: 4,
+                        offset: const Offset(0, 1),
+                      ),
+                    ]
+                  : null,
+            ),
+            child: Row(
+              children: [
+                Icon(icon,
+                    size: 16,
+                    color: isActive
+                        ? (isDark ? Colors.white : YLColors.zinc900)
+                        : YLColors.zinc500),
+                const SizedBox(width: 10),
+                Text(label,
+                    style: YLText.body.copyWith(
+                      fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
+                      color: isActive
+                          ? (isDark ? Colors.white : YLColors.zinc900)
+                          : YLColors.zinc500,
+                    )),
+              ],
+            ),
           ),
         ),
-        const SizedBox(height: 4),
-        Text('YueLink',
-            style: Theme.of(context)
-                .textTheme
-                .labelSmall
-                ?.copyWith(fontWeight: FontWeight.bold)),
-      ],
+      ),
     );
   }
 }

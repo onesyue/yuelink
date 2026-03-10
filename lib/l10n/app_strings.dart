@@ -28,12 +28,15 @@ class S {
   }
 
   // ── Navigation ──────────────────────────────────────────────────
-  String get navHome => _e ? 'Home' : '首页';
+  String get navHome => _e ? 'Dashboard' : '仪表盘';
   String get navProxy => _e ? 'Proxy' : '代理';
   String get navConnections => _e ? 'Connections' : '连接';
   String get navProfile => _e ? 'Profiles' : '配置';
   String get navLog => _e ? 'Logs' : '日志';
   String get navSettings => _e ? 'Settings' : '设置';
+  String get navNodes => _e ? 'Nodes' : '节点';
+  String get navConnection => _e ? 'Connection' : '连接';
+  String get navConfigurations => _e ? 'Configs' : '配置';
 
   // ── Tray ─────────────────────────────────────────────────────────
   String get trayConnect => _e ? 'Connect' : '连接';
@@ -95,7 +98,29 @@ class S {
   String get mockModeLabel => _e ? 'Mock Mode' : '模拟模式';
   String get mockHint => _e ? 'Click Connect to start mock mode' : '点击连接启动模拟模式';
 
-  // ── Home ──────────────────────────────────────────────────────────
+  // ── Home / Dashboard ──────────────────────────────────────────────
+  String get dashboardLabel => _e ? 'DASHBOARD' : '仪表盘';
+  String get dashboardTitle => _e ? 'Calm network control.' : '从容掌控网络。';
+  String get switchNode => _e ? 'Switch node' : '切换节点';
+  String get liveConnection => _e ? 'Live connection' : '实时连接';
+  String get dashConnectedDesc => _e
+      ? 'Your traffic is routed through a healthy node with low latency. System proxy is active and traffic is flowing normally.'
+      : '流量正通过低延迟节点转发，系统代理已启用，流量正常运行。';
+  String get dashDisconnectedTitle => _e ? 'Not connected' : '未连接';
+  String get dashDisconnectedDesc => _e
+      ? 'Click Connect to start routing traffic through a proxy node.'
+      : '点击连接以开始通过代理节点转发流量。';
+  String get realtimeTraffic => _e ? 'Realtime traffic' : '实时流量';
+  String get nodeLabel => _e ? 'Current Node' : '当前节点';
+  String get exitIpLabel => _e ? 'Outbound IP' : '出口 IP';
+  String get routingLabel => _e ? 'Routing Mode' : '路由模式';
+  String get exitIpTapToQuery => _e ? 'Tap to query' : '点击查询';
+  String get exitIpQuerying => _e ? 'Querying...' : '查询中...';
+  String get exitIpFailed => _e ? 'Query failed' : '查询失败';
+  String get systemProxyOn => _e ? 'System proxy enabled' : '系统代理已启用';
+  String get systemProxyOff => _e ? 'System proxy off' : '系统代理未启用';
+  String get trafficActivity => _e ? 'Traffic activity' : '流量活动';
+  String get last60s => _e ? 'Last 60 seconds' : '最近 60 秒';
   String get noProfileHint =>
       _e ? 'Add a subscription in the Profiles page first' : '请先在「配置」页面添加订阅';
   String get snackNoProfile =>
@@ -220,20 +245,6 @@ class S {
   String get rollbackSuccess => _e ? 'Rolled back successfully' : '已回退到上次可用配置';
   String get rollbackFailed => _e ? 'Rollback failed' : '回退也失败了，请检查配置';
 
-  // ── Node filter ───────────────────────────────────────────────────
-  String get sectionNodeFilter => _e ? 'Node Filter' : '节点过滤器';
-  String get nodeFilterHint =>
-      _e ? 'Regex-based keep / exclude / rename rules applied after download'
-         : '订阅下载后自动执行正则过滤/重命名';
-  String get nodeFilterAdd => _e ? 'Add rule' : '添加规则';
-  String get nodeFilterTypeKeep => _e ? 'Keep matching' : '保留匹配';
-  String get nodeFilterTypeExclude => _e ? 'Exclude matching' : '排除匹配';
-  String get nodeFilterTypeRename => _e ? 'Rename' : '重命名';
-  String get nodeFilterPattern => _e ? 'Regex pattern' : '正则表达式';
-  String get nodeFilterReplacement => _e ? 'Replacement (rename only)' : '替换文本（仅重命名）';
-  String get nodeFilterEffectHint =>
-      _e ? 'Applied on next subscription update' : '下次更新订阅时生效';
-
   // ── Update checker ────────────────────────────────────────────────
   String get checkUpdate => _e ? 'Check for Updates' : '检查更新';
   String get updateAvailable => _e ? 'New version available' : '发现新版本';
@@ -307,16 +318,6 @@ class S {
   String get noMatchingRules =>
       _e ? 'No matching rules' : '未找到匹配的规则';
 
-  // ── Unlock test ───────────────────────────────────────────────────
-  String get unlockTestTitle => _e ? 'Unlock Test' : '节点解锁检测';
-  String get startDetect => _e ? 'Start Detection' : '开始检测';
-  String get clickToStart =>
-      _e ? 'Click the top-right button to start' : '点击右上角按钮开始检测';
-  String get unlockAvailable => _e ? 'Available' : '可用';
-  String get unlockBlocked => _e ? 'Blocked' : '被封锁';
-  String get unlockTimeout => _e ? 'Timeout' : '超时';
-  String get unlockError => _e ? 'Error' : '错误';
-
   // ── Overwrite page ────────────────────────────────────────────────
   String get overwriteTitle => _e ? 'Config Overwrite' : '配置覆写';
   String get overwriteRulesTitle => _e ? 'Overwrite Rules' : '覆写规则';
@@ -358,9 +359,6 @@ class S {
   String get configOverwrite => _e ? 'Config Overwrite' : '配置覆写';
   String get configOverwriteSub =>
       _e ? 'Add custom rules on top of subscription config' : '在订阅配置之上叠加自定义规则';
-  String get unlockTestLabel => _e ? 'Unlock Test' : '节点解锁检测';
-  String get unlockTestSub =>
-      _e ? 'Test streaming and AI service availability' : '检测流媒体与 AI 服务可用性';
   String get autoUpdateInterval =>
       _e ? 'Auto Update Interval' : '自动更新间隔';
   String get disabled => _e ? 'Disabled' : '关闭';
@@ -418,14 +416,6 @@ class S {
   String get overwritePortInvalid => _e ? 'Port must be between 1 and 65535' : '端口号必须在 1 到 65535 之间';
   String get proxyTypeAll => _e ? 'All' : '全部';
 
-  // ── Guard 模式 ────────────────────────────────────────────────────
-  String get guardModeLabel =>
-      _e ? 'Proxy Guard Mode' : '代理守护模式';
-  String get guardModeSub =>
-      _e ? 'Auto-restore system proxy if disabled externally' : '若系统代理被外部关闭，自动恢复';
-  String get guardProxyRestored =>
-      _e ? 'System proxy was restored by Guard' : '系统代理已被守护模式自动恢复';
-
   // ── Sub-Store ─────────────────────────────────────────────────────
   String get sectionSubStore => _e ? 'Sub-Store Conversion' : 'Sub-Store 订阅转换';
   String get subStoreUrlLabel => _e ? 'Sub-Store Server URL' : 'Sub-Store 服务地址';
@@ -460,17 +450,23 @@ class S {
   String get query => _e ? 'Query' : '查询';
   String get noRecords => _e ? 'No records' : '无记录';
 
-  // ── Node Filter ────────────────────────────────────────────────────────────
-  String get sectionNodeFilterNew => _e ? 'Node Filter' : '节点筛选';
-  String get nodeFilterEmpty => _e ? 'No filter rules. Nodes will pass through unchanged.' : '暂无筛选规则，节点将原样通过';
-  String get nodeFilterAddRule => _e ? 'Add Rule' : '添加规则';
-  String get nodeFilterAction => _e ? 'Action' : '操作';
-  String get nodeFilterActionKeep => _e ? 'Keep (whitelist)' : '保留（白名单）';
-  String get nodeFilterActionExclude => _e ? 'Exclude (blacklist)' : '排除（黑名单）';
-  String get nodeFilterActionRename => _e ? 'Rename' : '重命名';
-  String get nodeFilterRenameTo => _e ? r'Rename to (use $0 $1 for groups)' : r'重命名为（$0 $1 引用分组）';
-  String get nodeFilterInvalidRegex => _e ? 'Invalid regex pattern' : '正则表达式无效';
-  String get nodeFilterRuleAdded => _e ? 'Rule added' : '规则已添加';
-
   String updateAvailableV(String v) => _e ? 'v$v available' : '发现新版本 v$v';
+
+  // ── Proxy Provider ──────────────────────────────────────────────
+  String get proxyProviderTitle => _e ? 'Proxy Providers' : '代理提供者';
+  String get proxyProviderEmpty =>
+      _e ? 'No proxy providers' : '无代理提供者';
+  String providerNodeCount(int count) =>
+      _e ? '$count nodes' : '$count 个节点';
+  String get providerUpdate => _e ? 'Update' : '更新';
+  String get providerHealthCheck => _e ? 'Health Check' : '健康检查';
+  String get providerUpdateSuccess =>
+      _e ? 'Provider updated' : '提供者已更新';
+  String get providerUpdateFailed =>
+      _e ? 'Provider update failed' : '提供者更新失败';
+  String get providerHealthCheckDone =>
+      _e ? 'Health check complete' : '健康检查完成';
+
+  // ── Connection mode display ─────────────────────────────────────
+  String get connectionModeLabel => _e ? 'Mode' : '模式';
 }

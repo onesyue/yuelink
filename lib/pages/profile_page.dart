@@ -12,6 +12,7 @@ import '../providers/profile_provider.dart';
 import '../services/app_notifier.dart';
 import '../services/profile_service.dart';
 import '../services/subscription_parser.dart';
+import '../theme.dart';
 
 /// Strip "Exception: " prefix from error strings for user-facing display.
 String _friendlyError(Object e) {
@@ -45,119 +46,142 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final profilesAsync = ref.watch(profilesProvider);
     final activeId = ref.watch(activeProfileIdProvider);
 
     return Scaffold(
-      body: profilesAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.error_outline,
-                  size: 48,
-                  color: Theme.of(context).colorScheme.error),
-              const SizedBox(height: 12),
-              Text(s.loadFailed(e.toString()),
-                  style: Theme.of(context).textTheme.bodyMedium),
-              const SizedBox(height: 12),
-              FilledButton.icon(
-                onPressed: () =>
-                    ref.read(profilesProvider.notifier).load(),
-                icon: const Icon(Icons.refresh, size: 16),
-                label: Text(s.retry),
-              ),
-            ],
+      body: Column(
+        children: [
+          // ── Top bar ──────────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(32, 24, 32, 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        s.navConfigurations.toUpperCase(),
+                        style: YLText.caption.copyWith(
+                          letterSpacing: 2.0,
+                          fontWeight: FontWeight.w600,
+                          color: YLColors.zinc400,
+                        ),
+                      ),
+                    ),
+                    // Action buttons (moved from FABs)
+                    IconButton(
+                      icon: const Icon(Icons.content_paste, size: 18),
+                      tooltip: s.pasteFromClipboard,
+                      onPressed: () => _pasteFromClipboard(context, ref),
+                      style: IconButton.styleFrom(
+                        foregroundColor: YLColors.zinc500,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.folder_open, size: 18),
+                      tooltip: s.importLocalFile,
+                      onPressed: () => _importLocalFile(context, ref),
+                      style: IconButton.styleFrom(
+                        foregroundColor: YLColors.zinc500,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.add, size: 20),
+                      tooltip: s.addSubscription,
+                      onPressed: () => _showAddDialog(context, ref),
+                      style: IconButton.styleFrom(
+                        foregroundColor: YLColors.primary,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  s.navConfigurations,
+                  style: const TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
-        data: (profiles) {
-          if (profiles.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.description_outlined,
-                      size: 64,
-                      color: Theme.of(context)
-                          .colorScheme
-                          .onSurfaceVariant),
-                  const SizedBox(height: 16),
-                  Text(s.noProfiles,
-                      style: Theme.of(context).textTheme.bodyLarge),
-                  const SizedBox(height: 8),
-                  Text(s.addSubscriptionHint,
-                      style: Theme.of(context).textTheme.bodySmall),
-                ],
+          Container(
+            height: 0.5,
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.06)
+                : Colors.black.withValues(alpha: 0.06),
+          ),
+
+          // ── Content ──────────────────────────────────────────────
+          Expanded(
+            child: profilesAsync.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (e, _) => YLEmptyState(
+                icon: Icons.error_outline,
+                message: s.loadFailed(e.toString()),
+                action: FilledButton.icon(
+                  onPressed: () =>
+                      ref.read(profilesProvider.notifier).load(),
+                  icon: const Icon(Icons.refresh, size: 16),
+                  label: Text(s.retry),
+                ),
               ),
-            );
-          }
-          final sorted = List<Profile>.from(profiles)
-            ..sort((a, b) {
-              if (a.id == activeId && b.id != activeId) return -1;
-              if (b.id == activeId && a.id != activeId) return 1;
-              return 0;
-            });
-          return RefreshIndicator(
-            onRefresh: () => ref.read(profilesProvider.notifier).load(),
-            child: ListView.builder(
-              padding: const EdgeInsets.all(12),
-              itemCount: sorted.length,
-              itemBuilder: (context, index) {
-                final profile = sorted[index];
-                final isActive = profile.id == activeId;
-                return _ProfileCard(
-                  profile: profile,
-                  isActive: isActive,
-                  onTap: () {
-                    ref
-                        .read(activeProfileIdProvider.notifier)
-                        .select(profile.id);
-                  },
-                  onUpdate: () async {
-                    AppNotifier.info(s.updatingSubscription);
-                    try {
-                      await ref
-                          .read(profilesProvider.notifier)
-                          .update(profile);
-                      AppNotifier.success(s.updateSuccess);
-                    } catch (e) {
-                      AppNotifier.error(s.updateFailed(_friendlyError(e)));
-                    }
-                  },
-                  onEdit: () => _showEditDialog(context, ref, profile),
-                  onViewConfig: () =>
-                      _showConfigViewer(context, profile),
-                  onDelete: () =>
-                      _confirmDelete(context, ref, profile),
+              data: (profiles) {
+                if (profiles.isEmpty) {
+                  return YLEmptyState(
+                    icon: Icons.description_outlined,
+                    message: '${s.noProfiles}\n${s.addSubscriptionHint}',
+                  );
+                }
+                final sorted = List<Profile>.from(profiles)
+                  ..sort((a, b) {
+                    if (a.id == activeId && b.id != activeId) return -1;
+                    if (b.id == activeId && a.id != activeId) return 1;
+                    return 0;
+                  });
+                return RefreshIndicator(
+                  onRefresh: () => ref.read(profilesProvider.notifier).load(),
+                  child: ListView.builder(
+                    padding: const EdgeInsets.all(12),
+                    itemCount: sorted.length,
+                    itemBuilder: (context, index) {
+                      final profile = sorted[index];
+                      final isActive = profile.id == activeId;
+                      return _ProfileCard(
+                        profile: profile,
+                        isActive: isActive,
+                        onTap: () {
+                          ref
+                              .read(activeProfileIdProvider.notifier)
+                              .select(profile.id);
+                        },
+                        onUpdate: () async {
+                          AppNotifier.info(s.updatingSubscription);
+                          try {
+                            await ref
+                                .read(profilesProvider.notifier)
+                                .update(profile);
+                            AppNotifier.success(s.updateSuccess);
+                          } catch (e) {
+                            AppNotifier.error(s.updateFailed(_friendlyError(e)));
+                          }
+                        },
+                        onEdit: () => _showEditDialog(context, ref, profile),
+                        onViewConfig: () =>
+                            _showConfigViewer(context, profile),
+                        onDelete: () =>
+                            _confirmDelete(context, ref, profile),
+                      );
+                    },
+                  ),
                 );
               },
             ),
-          );
-        },
-      ),
-      floatingActionButton: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          FloatingActionButton.small(
-            heroTag: 'paste',
-            onPressed: () => _pasteFromClipboard(context, ref),
-            tooltip: S.of(context).pasteFromClipboard,
-            child: const Icon(Icons.content_paste),
-          ),
-          const SizedBox(height: 8),
-          FloatingActionButton.small(
-            heroTag: 'import',
-            onPressed: () => _importLocalFile(context, ref),
-            tooltip: S.of(context).importLocalFile,
-            child: const Icon(Icons.folder_open),
-          ),
-          const SizedBox(height: 8),
-          FloatingActionButton(
-            heroTag: 'add',
-            onPressed: () => _showAddDialog(context, ref),
-            tooltip: S.of(context).addSubscription,
-            child: const Icon(Icons.add),
           ),
         ],
       ),
@@ -535,16 +559,36 @@ class _ProfileCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final sub = profile.subInfo;
 
-    return Card(
+    return Container(
       margin: const EdgeInsets.only(bottom: 8),
-      color: isActive
-          ? Theme.of(context).colorScheme.primaryContainer
-          : null,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: isActive
+            ? (isDark
+                ? YLColors.primary.withValues(alpha: 0.10)
+                : YLColors.primaryLight)
+            : (isDark ? YLColors.zinc800 : Colors.white),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isActive
+              ? YLColors.primary.withValues(alpha: 0.20)
+              : (isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.08)),
+          width: 0.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.15 : 0.03),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Column(
@@ -558,15 +602,14 @@ class _ProfileCard extends StatelessWidget {
                         ? Icons.check_circle
                         : Icons.circle_outlined,
                     color: isActive
-                        ? Theme.of(context).colorScheme.primary
-                        : null,
+                        ? YLColors.primary
+                        : YLColors.zinc400,
                     size: 20,
                   ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(profile.name,
-                        style: const TextStyle(
-                            fontWeight: FontWeight.w600)),
+                        style: YLText.titleMedium),
                   ),
                   PopupMenuButton<String>(
                     onSelected: (action) {
@@ -608,13 +651,13 @@ class _ProfileCard extends StatelessWidget {
               if (profile.hasSubInfo && sub != null) ...[
                 const SizedBox(height: 8),
                 ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
+                  borderRadius: BorderRadius.circular(YLRadius.sm),
                   child: LinearProgressIndicator(
                     value: sub.usagePercent ?? 0,
                     minHeight: 6,
-                    backgroundColor: Theme.of(context)
-                        .colorScheme
-                        .surfaceContainerHighest,
+                    backgroundColor: isDark
+                        ? YLColors.zinc700
+                        : YLColors.zinc200,
                     color: _usageColor(sub.usagePercent ?? 0),
                   ),
                 ),
@@ -627,7 +670,7 @@ class _ProfileCard extends StatelessWidget {
                             (sub.upload ?? 0) + (sub.download ?? 0)),
                         formatBytes(sub.total ?? 0),
                       ),
-                      style: Theme.of(context).textTheme.bodySmall,
+                      style: YLText.caption,
                     ),
                     const Spacer(),
                     if (sub.expire != null)
@@ -636,16 +679,13 @@ class _ProfileCard extends StatelessWidget {
                             ? s.expired
                             : s.daysRemaining(
                                 sub.daysRemaining ?? 0),
-                        style: TextStyle(
-                          fontSize: 11,
+                        style: YLText.caption.copyWith(
                           color: sub.isExpired
-                              ? Colors.red
+                              ? YLColors.error
                               : (sub.daysRemaining != null &&
                                       sub.daysRemaining! < 7)
                                   ? Colors.orange
-                                  : Theme.of(context)
-                                      .colorScheme
-                                      .onSurfaceVariant,
+                                  : YLColors.zinc500,
                         ),
                       ),
                   ],
@@ -659,11 +699,8 @@ class _ProfileCard extends StatelessWidget {
                   children: [
                     Text(
                       s.updatedAt(_formatTime(profile.lastUpdated!)),
-                      style: TextStyle(
-                          fontSize: 11,
-                          color: Theme.of(context)
-                              .colorScheme
-                              .onSurfaceVariant),
+                      style: YLText.caption.copyWith(
+                          color: YLColors.zinc500),
                     ),
                     if (_isStale(profile)) ...[
                       const SizedBox(width: 6),
@@ -672,8 +709,7 @@ class _ProfileCard extends StatelessWidget {
                           color: Colors.orange.shade700),
                       const SizedBox(width: 2),
                       Text(s.needsUpdate,
-                          style: TextStyle(
-                              fontSize: 11,
+                          style: YLText.caption.copyWith(
                               color: Colors.orange.shade700)),
                     ],
                   ],

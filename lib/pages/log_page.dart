@@ -569,25 +569,38 @@ class _RulesTabState extends ConsumerState<_RulesTab> {
 
     return Column(
       children: [
-        // Summary
+        // Summary with type breakdown
         Container(
           padding: const EdgeInsets.symmetric(
               horizontal: 16, vertical: 10),
           color:
               Theme.of(context).colorScheme.surfaceContainerLow,
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(Icons.rule_folder_outlined,
-                  size: 18,
-                  color: Theme.of(context).colorScheme.primary),
-              const SizedBox(width: 8),
-              Text(s.rulesCount(rules.length),
-                  style:
-                      Theme.of(context).textTheme.titleSmall),
-              const Spacer(),
-              if (_searchQuery.isNotEmpty)
-                Text(s.matchedRulesCount(filtered.length),
-                    style: Theme.of(context).textTheme.bodySmall),
+              Row(
+                children: [
+                  Icon(Icons.rule_folder_outlined,
+                      size: 18,
+                      color: Theme.of(context).colorScheme.primary),
+                  const SizedBox(width: 8),
+                  Text(s.rulesCount(rules.length),
+                      style:
+                          Theme.of(context).textTheme.titleSmall),
+                  const Spacer(),
+                  if (_searchQuery.isNotEmpty)
+                    Text(s.matchedRulesCount(filtered.length),
+                        style: Theme.of(context).textTheme.bodySmall),
+                ],
+              ),
+              if (rules.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: _buildTypeSummary(rules, context),
+                ),
+              ],
             ],
           ),
         ),
@@ -669,6 +682,41 @@ class _RulesTabState extends ConsumerState<_RulesTab> {
         ),
       ],
     );
+  }
+
+  List<Widget> _buildTypeSummary(
+      List<RuleInfo> rules, BuildContext context) {
+    final counts = <String, int>{};
+    for (final r in rules) {
+      counts[r.type] = (counts[r.type] ?? 0) + 1;
+    }
+    final sorted = counts.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    return sorted.map((e) {
+      return GestureDetector(
+        onTap: () {
+          _searchController.text = e.key;
+          setState(() => _searchQuery = e.key);
+        },
+        child: Container(
+          padding:
+              const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            color: Theme.of(context)
+                .colorScheme
+                .surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Text(
+            '${e.key} (${e.value})',
+            style: TextStyle(
+              fontSize: 10,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+      );
+    }).toList();
   }
 
   List<RuleInfo> _filterRules(List<RuleInfo> rules) {

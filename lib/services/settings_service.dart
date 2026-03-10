@@ -184,16 +184,6 @@ class SettingsService {
     await save(settings);
   }
 
-  // ── Guard 模式（系统代理守护）────────────────────────────────────────────
-
-  static Future<bool> getGuardMode() async {
-    return (await get<bool>('guardMode')) ?? false;
-  }
-
-  static Future<void> setGuardMode(bool value) async {
-    await set('guardMode', value);
-  }
-
   // ── Sub-Store 订阅转换服务 ────────────────────────────────────────────────
 
   static Future<String> getSubStoreUrl() async {

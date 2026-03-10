@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../constants.dart';
@@ -48,6 +49,7 @@ class CoreManager {
   MihomoApi? _api;
   MihomoStream? _stream;
   bool _running = false;
+  bool _initialized = false;
 
   /// The REST API client for the running mihomo instance.
   MihomoApi get api => _api ??= MihomoApi(
@@ -82,6 +84,15 @@ class CoreManager {
     _stream = null;
   }
 
+  /// Ensure the Go core is initialized (homeDir set).
+  Future<void> _ensureInit() async {
+    if (_initialized || _mode == CoreMode.mock) return;
+    final appDir = await getApplicationSupportDirectory();
+    final ok = _core.init(appDir.path);
+    if (!ok) throw Exception('InitCore failed');
+    _initialized = true;
+  }
+
   /// Start the mihomo core with the given config.
   ///
   /// Automatically processes the config template (replaces `$app_name`,
@@ -91,6 +102,7 @@ class CoreManager {
   /// it into the config so mihomo uses the OS-managed TUN interface.
   Future<bool> start(String configYaml) async {
     if (_running) return true;
+    await _ensureInit();
 
     // Apply overwrite layer on top of base config
     final overwrite = await OverwriteService.load();
@@ -207,9 +219,12 @@ class CoreManager {
     if (!ok) return false;
 
     _running = true;
-    final apiOk = await _waitForApi();
-    if (apiOk) await _saveLastWorkingConfig(configYaml);
-    return apiOk;
+    // Save config and wait for API in background — don't block UI
+    _saveLastWorkingConfig(configYaml);
+    _waitForApi().then((apiOk) {
+      if (apiOk) debugPrint('[CoreManager] API ready');
+    });
+    return true;
   }
 
   // ------------------------------------------------------------------
@@ -240,9 +255,13 @@ class CoreManager {
   /// and complex configs that take longer to initialize.
   Future<bool> _waitForApi({int maxRetries = 30}) async {
     for (var i = 0; i < maxRetries; i++) {
-      if (await api.isAvailable()) return true;
-      await Future.delayed(const Duration(milliseconds: 300));
+      if (await api.isAvailable()) {
+        debugPrint('[CoreManager] API available after ${i + 1} attempts');
+        return true;
+      }
+      await Future.delayed(const Duration(milliseconds: 100));
     }
+    debugPrint('[CoreManager] API not available after $maxRetries attempts');
     return false;
   }
 }

@@ -16,13 +16,13 @@ import '../services/geo_resource_service.dart';
 import '../services/settings_service.dart';
 import '../services/vpn_service.dart';
 import '../services/webdav_service.dart';
-import '../providers/node_filter_provider.dart';
-import '../services/node_filter_service.dart';
 import '../services/update_checker.dart';
+import '../theme.dart';
+import 'log_page.dart';
 import 'overwrite_page.dart';
+import 'proxy_provider_page.dart';
 import 'settings/dns_query_page.dart';
 import 'settings/running_config_page.dart';
-import 'unlock_test_page.dart';
 
 // ── Settings-level providers ─────────────────────────────────────────────────
 
@@ -78,473 +78,521 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final connectionMode = ref.watch(connectionModeProvider);
     final logLevel = ref.watch(logLevelProvider);
     final systemProxyOnConnect = ref.watch(systemProxyOnConnectProvider);
-    final guardMode = ref.watch(guardModeProvider);
     final status = ref.watch(coreStatusProvider);
     final isDesktop = Platform.isMacOS || Platform.isWindows;
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final dividerColor = isDark
+        ? Colors.white.withValues(alpha: 0.06)
+        : Colors.black.withValues(alpha: 0.06);
+
     return Scaffold(
-      body: ListView(
-        padding: const EdgeInsets.all(16),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // ── 连接 ──────────────────────────────────────────────────
-          _SectionHeader(title: s.sectionConnection),
-          Card(
+          // ── Top bar ──────────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(32, 24, 32, 20),
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                ListTile(
-                  title: Text(s.connectionMode),
-                  trailing: DropdownButton<String>(
-                    value: connectionMode,
-                    underline: const SizedBox.shrink(),
-                    items: [
-                      DropdownMenuItem(value: 'tun', child: Text(s.modeTun)),
-                      DropdownMenuItem(
-                          value: 'systemProxy', child: Text(s.modeSystemProxy)),
-                    ],
-                    onChanged: (v) async {
-                      if (v == null) return;
-                      ref.read(connectionModeProvider.notifier).state = v;
-                      await SettingsService.setConnectionMode(v);
-                    },
+                Text(
+                  s.navSettings.toUpperCase(),
+                  style: YLText.caption.copyWith(
+                    letterSpacing: 2.0,
+                    fontWeight: FontWeight.w600,
+                    color: YLColors.zinc400,
                   ),
                 ),
-                if (isDesktop)
-                  SwitchListTile(
-                    title: Text(s.setSystemProxyOnConnect),
-                    subtitle: Text(s.setSystemProxyOnConnectSub),
-                    value: systemProxyOnConnect,
-                    onChanged: (v) async {
-                      ref.read(systemProxyOnConnectProvider.notifier).state = v;
-                      await SettingsService.setSystemProxyOnConnect(v);
-                    },
-                  ),
-                if (isDesktop && systemProxyOnConnect)
-                  SwitchListTile(
-                    title: Text(s.guardModeLabel),
-                    subtitle: Text(s.guardModeSub),
-                    value: guardMode,
-                    onChanged: (v) async {
-                      ref.read(guardModeProvider.notifier).state = v;
-                      await SettingsService.setGuardMode(v);
-                    },
-                  ),
-                SwitchListTile(
-                  title: Text(s.autoConnect),
-                  value: autoConnect,
-                  onChanged: (v) async {
-                    ref.read(autoConnectProvider.notifier).state = v;
-                    await SettingsService.setAutoConnect(v);
-                  },
-                ),
-                if (isDesktop)
-                  SwitchListTile(
-                    title: Text(s.launchAtStartupLabel),
-                    subtitle: Text(s.launchAtStartupSub),
-                    value: _launchAtStartup,
-                    onChanged: (v) async {
-                      setState(() => _launchAtStartup = v);
-                      await SettingsService.setLaunchAtStartup(v);
-                      if (v) {
-                        await launchAtStartup.enable();
-                      } else {
-                        await launchAtStartup.disable();
-                      }
-                    },
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // ── 内核 ──────────────────────────────────────────────────
-          _SectionHeader(title: s.sectionCore),
-          Card(
-            child: Column(
-              children: [
-                ListTile(
-                  title: Text(s.logLevelSetting),
-                  trailing: DropdownButton<String>(
-                    value: logLevel,
-                    underline: const SizedBox.shrink(),
-                    items: const [
-                      DropdownMenuItem(value: 'debug', child: Text('Debug')),
-                      DropdownMenuItem(value: 'info', child: Text('Info')),
-                      DropdownMenuItem(value: 'warning', child: Text('Warning')),
-                      DropdownMenuItem(value: 'error', child: Text('Error')),
-                      DropdownMenuItem(value: 'silent', child: Text('Silent')),
-                    ],
-                    onChanged: (v) async {
-                      if (v == null) return;
-                      ref.read(logLevelProvider.notifier).state = v;
-                      await SettingsService.setLogLevel(v);
-                      if (status == CoreStatus.running) {
-                        try {
-                          await CoreManager.instance.api.setLogLevel(v);
-                        } catch (_) {}
-                      }
-                    },
-                  ),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.edit_note_outlined),
-                  title: Text(s.configOverwrite),
-                  subtitle: Text(s.configOverwriteSub),
-                  trailing: const Icon(Icons.chevron_right, size: 20),
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const OverwritePage()),
-                  ),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.lock_open_outlined),
-                  title: Text(s.unlockTestLabel),
-                  subtitle: Text(s.unlockTestSub),
-                  trailing: const Icon(Icons.chevron_right, size: 20),
-                  enabled: status == CoreStatus.running,
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const UnlockTestPage()),
+                const SizedBox(height: 8),
+                Text(
+                  s.navSettings,
+                  style: const TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: -0.5,
                   ),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 16),
-
-          // ── 订阅 ──────────────────────────────────────────────────
-          _SectionHeader(title: s.sectionSubscription),
-          Card(
-            child: Column(
-              children: [
-                ListTile(
-                  title: Text(s.autoUpdateInterval),
-                  trailing: DropdownButton<int>(
-                    value: _autoUpdateInterval,
-                    underline: const SizedBox.shrink(),
-                    items: [
-                      DropdownMenuItem(value: 0, child: Text(s.disabled)),
-                      DropdownMenuItem(value: 6, child: Text(s.hours6)),
-                      DropdownMenuItem(value: 12, child: Text(s.hours12)),
-                      DropdownMenuItem(value: 24, child: Text(s.hours24)),
-                      DropdownMenuItem(value: 48, child: Text(s.hours48)),
-                    ],
-                    onChanged: (v) async {
-                      if (v == null) return;
-                      setState(() => _autoUpdateInterval = v);
-                      await SettingsService.setAutoUpdateInterval(v);
-                    },
-                  ),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.refresh_outlined),
-                  title: Text(s.updateAllNow),
-                  onTap: () => _updateAllProfiles(context),
-                ),
-              ],
-            ),
+          Container(
+            height: 0.5,
+            color: dividerColor,
           ),
-          const SizedBox(height: 16),
 
-          // ── Sub-Store ─────────────────────────────────────────────
-          _SectionHeader(title: s.sectionSubStore),
-          const _SubStoreSection(),
-          const SizedBox(height: 16),
+          // ── Content ──────────────────────────────────────────────
+          Expanded(
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 560),
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
+                  children: [
 
-          // ── WebDAV ────────────────────────────────────────────────
-          _SectionHeader(title: s.sectionWebDav),
-          const _WebDavSection(),
-          const SizedBox(height: 16),
-
-          // ── 外观 ──────────────────────────────────────────────────
-          _SectionHeader(title: s.sectionAppearance),
-          Card(
-            child: Column(
-              children: [
-                RadioListTile<ThemeMode>(
-                  title: Text(s.themeSystem),
-                  value: ThemeMode.system,
-                  groupValue: theme,
-                  onChanged: (v) {
-                    ref.read(themeProvider.notifier).state = v!;
-                    SettingsService.setThemeMode(v);
-                  },
-                ),
-                RadioListTile<ThemeMode>(
-                  title: Text(s.themeLight),
-                  value: ThemeMode.light,
-                  groupValue: theme,
-                  onChanged: (v) {
-                    ref.read(themeProvider.notifier).state = v!;
-                    SettingsService.setThemeMode(v);
-                  },
-                ),
-                RadioListTile<ThemeMode>(
-                  title: Text(s.themeDark),
-                  value: ThemeMode.dark,
-                  groupValue: theme,
-                  onChanged: (v) {
-                    ref.read(themeProvider.notifier).state = v!;
-                    SettingsService.setThemeMode(v);
-                  },
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // ── 语言 ──────────────────────────────────────────────────
-          _SectionHeader(title: s.sectionLanguage),
-          Card(
-            child: Column(
-              children: [
-                RadioListTile<String>(
-                  title: Text(s.languageChinese),
-                  value: 'zh',
-                  groupValue: language,
-                  onChanged: (v) async {
-                    if (v == null) return;
-                    ref.read(languageProvider.notifier).state = v;
-                    await SettingsService.setLanguage(v);
-                  },
-                ),
-                RadioListTile<String>(
-                  title: Text(s.languageEnglish),
-                  value: 'en',
-                  groupValue: language,
-                  onChanged: (v) async {
-                    if (v == null) return;
-                    ref.read(languageProvider.notifier).state = v;
-                    await SettingsService.setLanguage(v);
-                  },
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // ── 状态 ──────────────────────────────────────────────────
-          _SectionHeader(title: s.sectionStatus),
-          Card(
-            child: Column(
-              children: [
-                ListTile(
-                  title: Text(s.coreStatus),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 8,
-                        height: 8,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: status == CoreStatus.running
-                              ? Colors.green
-                              : Colors.grey,
+              // ══ 1. General ════════════════════════════════════════
+              _SectionTitle(s.sectionAppearance),
+              _SettingsCard(
+                child: Column(
+                  children: [
+                    // Theme
+                    YLInfoRow(
+                      label: s.sectionAppearance,
+                      trailing: SegmentedButton<ThemeMode>(
+                        style: SegmentedButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          textStyle: const TextStyle(fontSize: 12),
                         ),
+                        segments: [
+                          ButtonSegment(
+                              value: ThemeMode.system,
+                              label: Text(s.themeSystem)),
+                          ButtonSegment(
+                              value: ThemeMode.light,
+                              label: Text(s.themeLight)),
+                          ButtonSegment(
+                              value: ThemeMode.dark,
+                              label: Text(s.themeDark)),
+                        ],
+                        selected: {theme},
+                        onSelectionChanged: (v) {
+                          ref.read(themeProvider.notifier).state = v.first;
+                          SettingsService.setThemeMode(v.first);
+                        },
                       ),
-                      const SizedBox(width: 6),
-                      Text(
-                        status == CoreStatus.running
-                            ? s.coreRunning
-                            : s.coreStopped,
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ],
-                  ),
-                ),
-                ListTile(
-                  title: Text(s.runMode),
-                  trailing: _ModeChip(mode: CoreManager.instance.mode),
-                ),
-                ListTile(
-                  title: Text(s.mixedPort),
-                  trailing: Text('${AppConstants.defaultMixedPort}',
-                      style: Theme.of(context).textTheme.bodyMedium),
-                ),
-                ListTile(
-                  title: Text(s.apiPort),
-                  trailing: Text('${AppConstants.defaultApiPort}',
-                      style: Theme.of(context).textTheme.bodyMedium),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // ── 工具 ──────────────────────────────────────────────────
-          _SectionHeader(title: s.sectionTools),
-          Card(
-            child: Column(
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.dns_outlined),
-                  title: Text(s.dnsQuery),
-                  trailing: const Icon(Icons.chevron_right, size: 20),
-                  enabled: status == CoreStatus.running,
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const DnsQueryPage()),
-                  ),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.settings_applications_outlined),
-                  title: Text(s.runningConfig),
-                  trailing: const Icon(Icons.chevron_right, size: 20),
-                  enabled: status == CoreStatus.running,
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => const RunningConfigPage()),
-                  ),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.cleaning_services_outlined),
-                  title: Text(s.flushDnsCache),
-                  enabled: status == CoreStatus.running,
-                  onTap: () => _flushDns(context),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.delete_sweep_outlined),
-                  title: Text(s.flushFakeIpCache),
-                  enabled: status == CoreStatus.running,
-                  onTap: () => _flushFakeIp(context),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // ── 节点筛选 ──────────────────────────────────────────────
-          _SectionHeader(title: s.sectionNodeFilterNew),
-          const _NodeFilterSection(),
-          const SizedBox(height: 16),
-
-          // ── Geo 资源 ──────────────────────────────────────────────
-          _SectionHeader(title: s.sectionGeoResources),
-          const _GeoResourceSection(),
-          const SizedBox(height: 16),
-
-          // ── 分应用代理 (Android only) ──────────────────────────────
-          if (Platform.isAndroid) ...[
-            _SectionHeader(title: s.sectionSplitTunnel),
-            const _SplitTunnelSection(),
-            const SizedBox(height: 16),
-          ],
-
-          // ── 全局热键 (桌面 only) ──────────────────────────────────
-          if (isDesktop) ...[
-            _SectionHeader(title: s.sectionHotkeys),
-            Card(
-              child: ListTile(
-                leading: const Icon(Icons.keyboard_alt_outlined),
-                title: Text(s.hotkeyToggle),
-                subtitle: Text(s.hotkeyHint),
-              ),
-            ),
-            const SizedBox(height: 16),
-          ],
-
-          // ── 关于 ──────────────────────────────────────────────────
-          _SectionHeader(title: s.sectionAbout),
-          Card(
-            child: Column(
-              children: [
-                ListTile(
-                  title: const Text(AppConstants.appName),
-                  subtitle: const Text('by ${AppConstants.appBrand}'),
-                  leading: Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.primaryContainer,
-                      borderRadius: BorderRadius.circular(8),
                     ),
-                    child: Icon(Icons.link_rounded,
-                        size: 22,
-                        color: Theme.of(context).colorScheme.primary),
-                  ),
-                ),
-                ListTile(
-                  title: Text(s.versionLabel),
-                  trailing: Text(AppConstants.appVersion,
-                      style: Theme.of(context).textTheme.bodyMedium),
-                ),
-                ListTile(
-                  title: Text(s.coreLabel),
-                  trailing: Text('mihomo (Clash.Meta)',
-                      style: Theme.of(context).textTheme.bodyMedium),
-                ),
-                ListTile(
-                  title: Text(s.projectHome),
-                  trailing: const Icon(Icons.open_in_new, size: 16),
-                  onTap: () =>
-                      _launchUrl('https://github.com/onesyue/yuelink'),
-                ),
-                ListTile(
-                  leading: _checkingUpdate
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : Icon(
-                          _pendingUpdate != null
-                              ? Icons.new_releases_outlined
-                              : Icons.system_update_alt_outlined,
-                          color: _pendingUpdate != null
-                              ? Theme.of(context).colorScheme.primary
-                              : null,
-                          size: 22,
+                    Divider(height: 1, thickness: 0.5, color: dividerColor),
+                    // Language
+                    YLInfoRow(
+                      label: s.sectionLanguage,
+                      trailing: SegmentedButton<String>(
+                        style: SegmentedButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          textStyle: const TextStyle(fontSize: 12),
                         ),
-                  title: Text(s.checkUpdate),
-                  subtitle: _pendingUpdate != null
-                      ? Text(
-                          s.updateAvailableV(_pendingUpdate!.latestVersion),
-                          style: TextStyle(
-                              color: Theme.of(context).colorScheme.primary,
-                              fontWeight: FontWeight.w500),
-                        )
-                      : null,
-                  trailing: _pendingUpdate != null
-                      ? FilledButton.tonal(
-                          onPressed: () async {
-                            final uri = Uri.parse(_pendingUpdate!.releaseUrl);
-                            if (await canLaunchUrl(uri)) {
-                              await launchUrl(uri, mode: LaunchMode.externalApplication);
+                        segments: [
+                          ButtonSegment(
+                              value: 'zh', label: Text(s.languageChinese)),
+                          ButtonSegment(
+                              value: 'en', label: Text(s.languageEnglish)),
+                        ],
+                        selected: {language},
+                        onSelectionChanged: (v) async {
+                          ref.read(languageProvider.notifier).state = v.first;
+                          await SettingsService.setLanguage(v.first);
+                        },
+                      ),
+                    ),
+                    Divider(height: 1, thickness: 0.5, color: dividerColor),
+                    // Auto connect
+                    YLSettingsRow(
+                      title: s.autoConnect,
+                      trailing: Switch(
+                        value: autoConnect,
+                        onChanged: (v) async {
+                          ref.read(autoConnectProvider.notifier).state = v;
+                          await SettingsService.setAutoConnect(v);
+                        },
+                      ),
+                    ),
+                    if (isDesktop) ...[
+                      Divider(height: 1, thickness: 0.5, color: dividerColor),
+                      YLSettingsRow(
+                        title: s.launchAtStartupLabel,
+                        description: s.launchAtStartupSub,
+                        trailing: Switch(
+                          value: _launchAtStartup,
+                          onChanged: (v) async {
+                            setState(() => _launchAtStartup = v);
+                            await SettingsService.setLaunchAtStartup(v);
+                            if (v) {
+                              await launchAtStartup.enable();
+                            } else {
+                              await launchAtStartup.disable();
                             }
                           },
-                          child: Text(s.updateDownload),
-                        )
-                      : null,
-                  onTap: _pendingUpdate == null && !_checkingUpdate
-                      ? () async {
-                          setState(() => _checkingUpdate = true);
-                          final info = await UpdateChecker.instance.check();
-                          if (mounted) {
-                            setState(() {
-                              _pendingUpdate = info;
-                              _checkingUpdate = false;
-                            });
-                            if (info == null) {
-                              AppNotifier.info(s.alreadyLatest);
-                            }
+                        ),
+                      ),
+                    ],
+                    if (isDesktop) ...[
+                      Divider(height: 1, thickness: 0.5, color: dividerColor),
+                      YLInfoRow(
+                        label: s.sectionHotkeys,
+                        value: 'Ctrl+Alt+C',
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+
+              // ══ 2. Proxy ══════════════════════════════════════════
+              _SectionTitle(s.sectionConnection),
+              _SettingsCard(
+                child: Column(
+                  children: [
+                    YLInfoRow(
+                      label: s.connectionMode,
+                      trailing: DropdownButton<String>(
+                        value: connectionMode,
+                        underline: const SizedBox.shrink(),
+                        style: YLText.body,
+                        items: [
+                          DropdownMenuItem(
+                              value: 'tun', child: Text(s.modeTun)),
+                          DropdownMenuItem(
+                              value: 'systemProxy',
+                              child: Text(s.modeSystemProxy)),
+                        ],
+                        onChanged: (v) async {
+                          if (v == null) return;
+                          ref.read(connectionModeProvider.notifier).state = v;
+                          await SettingsService.setConnectionMode(v);
+                        },
+                      ),
+                    ),
+                    if (isDesktop) ...[
+                      Divider(height: 1, thickness: 0.5, color: dividerColor),
+                      YLSettingsRow(
+                        title: s.setSystemProxyOnConnect,
+                        description: s.setSystemProxyOnConnectSub,
+                        trailing: Switch(
+                          value: systemProxyOnConnect,
+                          onChanged: (v) async {
+                            ref
+                                .read(systemProxyOnConnectProvider.notifier)
+                                .state = v;
+                            await SettingsService.setSystemProxyOnConnect(v);
+                          },
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+
+              // ══ 3. Subscription & Sync ════════════════════════════
+              _SectionTitle(s.sectionSubscription),
+              _SettingsCard(
+                child: Column(
+                  children: [
+                    YLInfoRow(
+                      label: s.autoUpdateInterval,
+                      trailing: DropdownButton<int>(
+                        value: _autoUpdateInterval,
+                        underline: const SizedBox.shrink(),
+                        style: YLText.body,
+                        items: [
+                          DropdownMenuItem(
+                              value: 0, child: Text(s.disabled)),
+                          DropdownMenuItem(
+                              value: 6, child: Text(s.hours6)),
+                          DropdownMenuItem(
+                              value: 12, child: Text(s.hours12)),
+                          DropdownMenuItem(
+                              value: 24, child: Text(s.hours24)),
+                          DropdownMenuItem(
+                              value: 48, child: Text(s.hours48)),
+                        ],
+                        onChanged: (v) async {
+                          if (v == null) return;
+                          setState(() => _autoUpdateInterval = v);
+                          await SettingsService.setAutoUpdateInterval(v);
+                        },
+                      ),
+                    ),
+                    Divider(height: 1, thickness: 0.5, color: dividerColor),
+                    YLInfoRow(
+                      label: s.updateAllNow,
+                      trailing: const Icon(Icons.chevron_right, size: 18,
+                          color: YLColors.zinc400),
+                      onTap: () => _updateAllProfiles(context),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              const _SubStoreSection(),
+              const SizedBox(height: 8),
+              const _WebDavSection(),
+
+              // ══ 4. Core ═══════════════════════════════════════════
+              _SectionTitle(s.sectionCore),
+              _SettingsCard(
+                child: Column(
+                  children: [
+                    // Status info
+                    YLInfoRow(
+                      label: s.coreStatus,
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          YLStatusDot(
+                            color: status == CoreStatus.running
+                                ? YLColors.connected
+                                : YLColors.disconnected,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            status == CoreStatus.running
+                                ? s.coreRunning
+                                : s.coreStopped,
+                            style: YLText.body.copyWith(
+                              color: status == CoreStatus.running
+                                  ? YLColors.connected
+                                  : YLColors.zinc500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Divider(height: 1, thickness: 0.5, color: dividerColor),
+                    YLInfoRow(
+                      label: s.runMode,
+                      trailing: _ModeChip(mode: CoreManager.instance.mode),
+                    ),
+                    Divider(height: 1, thickness: 0.5, color: dividerColor),
+                    YLInfoRow(
+                      label: s.mixedPort,
+                      value: '${AppConstants.defaultMixedPort}',
+                    ),
+                    Divider(height: 1, thickness: 0.5, color: dividerColor),
+                    YLInfoRow(
+                      label: s.apiPort,
+                      value: '${AppConstants.defaultApiPort}',
+                    ),
+                    Divider(height: 1, thickness: 0.5, color: dividerColor),
+                    // Log level
+                    YLInfoRow(
+                      label: s.logLevelSetting,
+                      trailing: DropdownButton<String>(
+                        value: logLevel,
+                        underline: const SizedBox.shrink(),
+                        style: YLText.body,
+                        items: const [
+                          DropdownMenuItem(
+                              value: 'debug', child: Text('Debug')),
+                          DropdownMenuItem(
+                              value: 'info', child: Text('Info')),
+                          DropdownMenuItem(
+                              value: 'warning', child: Text('Warning')),
+                          DropdownMenuItem(
+                              value: 'error', child: Text('Error')),
+                          DropdownMenuItem(
+                              value: 'silent', child: Text('Silent')),
+                        ],
+                        onChanged: (v) async {
+                          if (v == null) return;
+                          ref.read(logLevelProvider.notifier).state = v;
+                          await SettingsService.setLogLevel(v);
+                          if (status == CoreStatus.running) {
+                            try {
+                              await CoreManager.instance.api.setLogLevel(v);
+                            } catch (_) {}
                           }
-                        }
-                      : null,
+                        },
+                      ),
+                    ),
+                    Divider(height: 1, thickness: 0.5, color: dividerColor),
+                    YLInfoRow(
+                      label: s.configOverwrite,
+                      trailing: const Icon(Icons.chevron_right, size: 18,
+                          color: YLColors.zinc400),
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => const OverwritePage()),
+                      ),
+                    ),
+                  ],
                 ),
-                ListTile(
-                  title: Text(s.openSourceLicense),
-                  trailing: const Icon(Icons.chevron_right, size: 20),
-                  onTap: () => showLicensePage(
-                    context: context,
-                    applicationName: AppConstants.appName,
-                    applicationVersion: AppConstants.appVersion,
-                  ),
+              ),
+
+              // ══ 5. Diagnostics ════════════════════════════════════
+              _SectionTitle(s.sectionTools),
+              _SettingsCard(
+                child: Column(
+                  children: [
+                    // Logs
+                    YLInfoRow(
+                      label: s.tabLogs,
+                      trailing: const Icon(Icons.chevron_right, size: 18,
+                          color: YLColors.zinc400),
+                      enabled: status == CoreStatus.running,
+                      onTap: status == CoreStatus.running
+                          ? () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                    builder: (_) => const LogPage()),
+                              )
+                          : null,
+                    ),
+                    Divider(height: 1, thickness: 0.5, color: dividerColor),
+                    // Proxy providers
+                    YLInfoRow(
+                      label: s.proxyProviderTitle,
+                      trailing: const Icon(Icons.chevron_right, size: 18,
+                          color: YLColors.zinc400),
+                      enabled: status == CoreStatus.running,
+                      onTap: status == CoreStatus.running
+                          ? () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                    builder: (_) =>
+                                        const ProxyProviderPage()),
+                              )
+                          : null,
+                    ),
+                    Divider(height: 1, thickness: 0.5, color: dividerColor),
+                    // DNS query
+                    YLInfoRow(
+                      label: s.dnsQuery,
+                      trailing: const Icon(Icons.chevron_right, size: 18,
+                          color: YLColors.zinc400),
+                      enabled: status == CoreStatus.running,
+                      onTap: status == CoreStatus.running
+                          ? () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                    builder: (_) => const DnsQueryPage()),
+                              )
+                          : null,
+                    ),
+                    Divider(height: 1, thickness: 0.5, color: dividerColor),
+                    // Running config
+                    YLInfoRow(
+                      label: s.runningConfig,
+                      trailing: const Icon(Icons.chevron_right, size: 18,
+                          color: YLColors.zinc400),
+                      enabled: status == CoreStatus.running,
+                      onTap: status == CoreStatus.running
+                          ? () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                    builder: (_) =>
+                                        const RunningConfigPage()),
+                              )
+                          : null,
+                    ),
+                    Divider(height: 1, thickness: 0.5, color: dividerColor),
+                    // Flush DNS cache
+                    YLInfoRow(
+                      label: s.flushDnsCache,
+                      trailing: const Icon(Icons.chevron_right, size: 18,
+                          color: YLColors.zinc400),
+                      enabled: status == CoreStatus.running,
+                      onTap: status == CoreStatus.running
+                          ? () => _flushDns(context)
+                          : null,
+                    ),
+                    Divider(height: 1, thickness: 0.5, color: dividerColor),
+                    // Flush Fake-IP cache
+                    YLInfoRow(
+                      label: s.flushFakeIpCache,
+                      trailing: const Icon(Icons.chevron_right, size: 18,
+                          color: YLColors.zinc400),
+                      enabled: status == CoreStatus.running,
+                      onTap: status == CoreStatus.running
+                          ? () => _flushFakeIp(context)
+                          : null,
+                    ),
+                  ],
                 ),
+              ),
+              const SizedBox(height: 8),
+
+              // Geo resources (inline)
+              const _GeoResourceSection(),
+              const SizedBox(height: 8),
+
+              // Split tunnel (Android only)
+              if (Platform.isAndroid) ...[
+                const _SplitTunnelSection(),
+                const SizedBox(height: 8),
               ],
+
+              // ══ About ═════════════════════════════════════════════
+              _SectionTitle(s.sectionAbout),
+              _SettingsCard(
+                child: Column(
+                  children: [
+                    YLInfoRow(
+                      label: s.versionLabel,
+                      value: AppConstants.appVersion,
+                    ),
+                    Divider(height: 1, thickness: 0.5, color: dividerColor),
+                    YLInfoRow(
+                      label: s.coreLabel,
+                      value: 'mihomo (Clash.Meta)',
+                    ),
+                    Divider(height: 1, thickness: 0.5, color: dividerColor),
+                    YLInfoRow(
+                      label: s.projectHome,
+                      trailing: const Icon(Icons.open_in_new,
+                          size: 14, color: YLColors.zinc400),
+                      onTap: () =>
+                          _launchUrl('https://github.com/onesyue/yuelink'),
+                    ),
+                    Divider(height: 1, thickness: 0.5, color: dividerColor),
+                    YLInfoRow(
+                      label: s.checkUpdate,
+                      trailing: _checkingUpdate
+                          ? const SizedBox(
+                              width: 14, height: 14,
+                              child:
+                                  CircularProgressIndicator(strokeWidth: 2))
+                          : _pendingUpdate != null
+                              ? YLChip(
+                                  s.updateAvailableV(
+                                      _pendingUpdate!.latestVersion),
+                                  color: YLColors.primary)
+                              : const Icon(Icons.chevron_right,
+                                  size: 18, color: YLColors.zinc400),
+                      onTap: _checkingUpdate
+                          ? null
+                          : _pendingUpdate != null
+                              ? () async {
+                                  final uri = Uri.parse(
+                                      _pendingUpdate!.releaseUrl);
+                                  if (await canLaunchUrl(uri)) {
+                                    await launchUrl(uri,
+                                        mode: LaunchMode.externalApplication);
+                                  }
+                                }
+                              : () async {
+                                  setState(() => _checkingUpdate = true);
+                                  final info =
+                                      await UpdateChecker.instance.check();
+                                  if (mounted) {
+                                    setState(() {
+                                      _pendingUpdate = info;
+                                      _checkingUpdate = false;
+                                    });
+                                    if (info == null) {
+                                      AppNotifier.info(s.alreadyLatest);
+                                    }
+                                  }
+                                },
+                    ),
+                    Divider(height: 1, thickness: 0.5, color: dividerColor),
+                    YLInfoRow(
+                      label: s.openSourceLicense,
+                      trailing: const Icon(Icons.chevron_right,
+                          size: 18, color: YLColors.zinc400),
+                      onTap: () => showLicensePage(
+                        context: context,
+                        applicationName: AppConstants.appName,
+                        applicationVersion: AppConstants.appVersion,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 32),
+                  ],
+                ),
+              ),
             ),
           ),
-          const SizedBox(height: 32),
         ],
       ),
     );
@@ -614,22 +662,22 @@ class _SubStoreSectionState extends State<_SubStoreSection> {
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
-    return Card(
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return _SettingsCard(
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(s.subStoreUrlSub,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                style: YLText.caption.copyWith(
+                    color: isDark ? YLColors.zinc500 : YLColors.zinc400)),
             const SizedBox(height: 12),
             TextField(
               controller: _ctrl,
               decoration: InputDecoration(
                 labelText: s.subStoreUrlLabel,
                 hintText: s.subStoreUrlHint,
-                border: const OutlineInputBorder(),
                 isDense: true,
                 suffixIcon: IconButton(
                   icon: const Icon(Icons.save_outlined, size: 18),
@@ -693,7 +741,7 @@ class _WebDavSectionState extends State<_WebDavSection> {
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
-    return Card(
+    return _SettingsCard(
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -704,7 +752,6 @@ class _WebDavSectionState extends State<_WebDavSection> {
               decoration: InputDecoration(
                 labelText: s.webdavUrl,
                 hintText: 'https://example.com/dav',
-                border: const OutlineInputBorder(),
                 isDense: true,
               ),
             ),
@@ -713,7 +760,6 @@ class _WebDavSectionState extends State<_WebDavSection> {
               controller: _userCtrl,
               decoration: InputDecoration(
                 labelText: s.username,
-                border: const OutlineInputBorder(),
                 isDense: true,
               ),
             ),
@@ -723,7 +769,6 @@ class _WebDavSectionState extends State<_WebDavSection> {
               obscureText: _obscure,
               decoration: InputDecoration(
                 labelText: s.password,
-                border: const OutlineInputBorder(),
                 isDense: true,
                 suffixIcon: IconButton(
                   icon: Icon(
@@ -738,7 +783,7 @@ class _WebDavSectionState extends State<_WebDavSection> {
               children: [
                 Expanded(
                   child: OutlinedButton.icon(
-                    icon: const Icon(Icons.check_circle_outline, size: 18),
+                    icon: const Icon(Icons.check_circle_outline, size: 16),
                     label: Text(s.testConnection),
                     onPressed: _loading ? null : _testConnection,
                   ),
@@ -746,7 +791,7 @@ class _WebDavSectionState extends State<_WebDavSection> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: OutlinedButton.icon(
-                    icon: const Icon(Icons.cloud_upload_outlined, size: 18),
+                    icon: const Icon(Icons.cloud_upload_outlined, size: 16),
                     label: Text(s.upload),
                     onPressed: _loading ? null : _upload,
                   ),
@@ -754,7 +799,7 @@ class _WebDavSectionState extends State<_WebDavSection> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: FilledButton.icon(
-                    icon: const Icon(Icons.cloud_download_outlined, size: 18),
+                    icon: const Icon(Icons.cloud_download_outlined, size: 16),
                     label: Text(s.download),
                     onPressed: _loading ? null : _download,
                   ),
@@ -837,10 +882,67 @@ class _ModeChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(4),
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(YLRadius.sm),
       ),
-      child: Text(name, style: TextStyle(fontSize: 12, color: color)),
+      child: Text(name,
+          style: TextStyle(
+              fontSize: 11, fontWeight: FontWeight.w600, color: color)),
+    );
+  }
+}
+
+// ── Settings page helper widgets ─────────────────────────────────────────────
+
+/// Section title — matches the dashboard top bar label style.
+class _SectionTitle extends StatelessWidget {
+  final String text;
+  const _SectionTitle(this.text);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 24, 4, 8),
+      child: Text(
+        text.toUpperCase(),
+        style: YLText.caption.copyWith(
+          letterSpacing: 1.5,
+          fontWeight: FontWeight.w600,
+          color: YLColors.zinc400,
+        ),
+      ),
+    );
+  }
+}
+
+/// Card container matching the dashboard card style.
+class _SettingsCard extends StatelessWidget {
+  final Widget child;
+  const _SettingsCard({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: isDark ? YLColors.zinc800 : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.black.withValues(alpha: 0.08),
+          width: 0.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.15 : 0.03),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: child,
     );
   }
 }
@@ -889,53 +991,86 @@ class _GeoResourceSectionState extends State<_GeoResourceSection> {
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final infos = _infos;
-    return Card(
+    final dividerColor = isDark
+        ? Colors.white.withValues(alpha: 0.06)
+        : Colors.black.withValues(alpha: 0.06);
+
+    return _SettingsCard(
       child: Column(
         children: [
-          ListTile(
-            leading: const Icon(Icons.public),
-            title: Text(s.sectionGeoResources),
-            subtitle: Text(s.geoResourcesHint),
-            trailing: _updating
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2))
-                : IconButton(
-                    icon: const Icon(Icons.download_for_offline_outlined),
-                    tooltip: s.geoUpdateAll,
-                    onPressed: _updateAll,
+          // Header
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 8, 10),
+            child: Row(
+              children: [
+                Icon(Icons.public_rounded, size: 16,
+                    color: isDark ? YLColors.zinc400 : YLColors.zinc500),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(s.sectionGeoResources, style: YLText.titleMedium),
+                      const SizedBox(height: 2),
+                      Text(s.geoResourcesHint,
+                          style: YLText.caption.copyWith(
+                              color: isDark ? YLColors.zinc500 : YLColors.zinc400)),
+                    ],
                   ),
+                ),
+                _updating
+                    ? const Padding(
+                        padding: EdgeInsets.all(12),
+                        child: SizedBox(
+                            width: 16, height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2)),
+                      )
+                    : IconButton(
+                        icon: Icon(Icons.download_for_offline_outlined,
+                            size: 18,
+                            color: isDark ? YLColors.zinc400 : YLColors.zinc500),
+                        tooltip: s.geoUpdateAll,
+                        onPressed: _updateAll,
+                      ),
+              ],
+            ),
           ),
           if (infos != null)
-            for (final info in infos)
-              ListTile(
-                dense: true,
-                leading: Icon(
-                  info.exists ? Icons.check_circle_outline : Icons.error_outline,
-                  size: 18,
-                  color: info.exists ? Colors.green : Colors.grey,
-                ),
-                title: Text(info.name,
-                    style: const TextStyle(fontFamily: 'monospace', fontSize: 13)),
-                subtitle: info.exists
-                    ? Text('${info.sizeFormatted}  •  '
-                        '${info.modified?.toLocal().toString().substring(0, 16) ?? ""}')
-                    : Text(s.geoNotFound,
-                        style: const TextStyle(color: Colors.grey)),
-                trailing: IconButton(
-                  icon: const Icon(Icons.refresh, size: 18),
-                  onPressed: _updating
-                      ? null
-                      : () async {
-                          setState(() => _updating = true);
-                          await GeoResourceService.instance.update(info.name);
-                          await _refresh();
-                          if (mounted) setState(() => _updating = false);
-                        },
+            for (final info in infos) ...[
+              Divider(height: 1, thickness: 0.5, color: dividerColor),
+              YLInfoRow(
+                label: info.name,
+                value: info.exists
+                    ? '${info.sizeFormatted}  ·  '
+                        '${info.modified?.toLocal().toString().substring(0, 16) ?? ""}'
+                    : s.geoNotFound,
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      info.exists ? Icons.check_circle_outline : Icons.error_outline,
+                      size: 14,
+                      color: info.exists ? YLColors.connected : YLColors.zinc400,
+                    ),
+                    const SizedBox(width: 4),
+                    InkWell(
+                      onTap: _updating
+                          ? null
+                          : () async {
+                              setState(() => _updating = true);
+                              await GeoResourceService.instance.update(info.name);
+                              await _refresh();
+                              if (mounted) setState(() => _updating = false);
+                            },
+                      child: Icon(Icons.refresh_rounded, size: 16,
+                          color: isDark ? YLColors.zinc400 : YLColors.zinc500),
+                    ),
+                  ],
                 ),
               ),
+            ],
         ],
       ),
     );
@@ -966,18 +1101,23 @@ class _SplitTunnelSectionState extends ConsumerState<_SplitTunnelSection> {
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final mode = ref.watch(splitTunnelModeProvider);
     final selectedPkgs = ref.watch(splitTunnelAppsProvider);
+    final dividerColor = isDark
+        ? Colors.white.withValues(alpha: 0.06)
+        : Colors.black.withValues(alpha: 0.06);
 
-    return Card(
+    return _SettingsCard(
       child: Column(
         children: [
           // Mode selector
-          ListTile(
-            title: Text(s.splitTunnelMode),
+          YLInfoRow(
+            label: s.splitTunnelMode,
             trailing: DropdownButton<SplitTunnelMode>(
               value: mode,
               underline: const SizedBox.shrink(),
+              style: YLText.body,
               items: [
                 DropdownMenuItem(
                     value: SplitTunnelMode.all,
@@ -995,11 +1135,12 @@ class _SplitTunnelSectionState extends ConsumerState<_SplitTunnelSection> {
             ),
           ),
           if (mode != SplitTunnelMode.all) ...[
-            ListTile(
-              title: Text(s.splitTunnelApps),
-              subtitle: Text(s.splitTunnelEffectHint),
+            Divider(height: 1, thickness: 0.5, color: dividerColor),
+            YLSettingsRow(
+              title: s.splitTunnelApps,
+              description: s.splitTunnelEffectHint,
               trailing: TextButton.icon(
-                icon: const Icon(Icons.apps, size: 16),
+                icon: const Icon(Icons.apps, size: 14),
                 label: Text(s.splitTunnelManage),
                 onPressed: () {
                   if (_apps == null) _loadApps();
@@ -1108,221 +1249,3 @@ class _SplitTunnelSectionState extends ConsumerState<_SplitTunnelSection> {
   }
 }
 
-// ── Node Filter Section ───────────────────────────────────────────────────────
-
-class _NodeFilterSection extends ConsumerStatefulWidget {
-  const _NodeFilterSection();
-
-  @override
-  ConsumerState<_NodeFilterSection> createState() => _NodeFilterSectionState();
-}
-
-class _NodeFilterSectionState extends ConsumerState<_NodeFilterSection> {
-  void _showAddDialog() {
-    final s = S.of(context);
-    final patternCtrl = TextEditingController();
-    final renameCtrl = TextEditingController();
-    var action = NodeFilterAction.keep;
-    String? patternError;
-
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialog) => AlertDialog(
-          title: Text(s.nodeFilterAddRule),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Action dropdown
-              DropdownButtonFormField<NodeFilterAction>(
-                value: action,
-                decoration: InputDecoration(
-                    labelText: s.nodeFilterAction,
-                    border: const OutlineInputBorder(),
-                    isDense: true),
-                items: [
-                  DropdownMenuItem(
-                      value: NodeFilterAction.keep,
-                      child: Text(s.nodeFilterActionKeep)),
-                  DropdownMenuItem(
-                      value: NodeFilterAction.exclude,
-                      child: Text(s.nodeFilterActionExclude)),
-                  DropdownMenuItem(
-                      value: NodeFilterAction.rename,
-                      child: Text(s.nodeFilterActionRename)),
-                ],
-                onChanged: (v) {
-                  if (v != null) setDialog(() => action = v);
-                },
-              ),
-              const SizedBox(height: 12),
-              // Pattern input
-              TextField(
-                controller: patternCtrl,
-                decoration: InputDecoration(
-                  labelText: s.nodeFilterPattern,
-                  border: const OutlineInputBorder(),
-                  isDense: true,
-                  errorText: patternError,
-                ),
-                onChanged: (_) {
-                  final p = patternCtrl.text.trim();
-                  String? err;
-                  if (p.isNotEmpty) {
-                    try {
-                      RegExp(p);
-                    } catch (_) {
-                      err = s.nodeFilterInvalidRegex;
-                    }
-                  }
-                  setDialog(() => patternError = err);
-                },
-              ),
-              // Rename target (only for rename action)
-              if (action == NodeFilterAction.rename) ...[
-                const SizedBox(height: 12),
-                TextField(
-                  controller: renameCtrl,
-                  decoration: InputDecoration(
-                    labelText: s.nodeFilterRenameTo,
-                    border: const OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                ),
-              ],
-            ],
-          ),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(ctx), child: Text(s.cancel)),
-            FilledButton(
-              onPressed: patternError != null
-                  ? null
-                  : () async {
-                      final pattern = patternCtrl.text.trim();
-                      if (pattern.isEmpty) return;
-                      await ref.read(nodeFilterRulesProvider.notifier).add(
-                            NodeFilterRule(
-                              action: action,
-                              pattern: pattern,
-                              renameTo: action == NodeFilterAction.rename
-                                  ? renameCtrl.text.trim()
-                                  : null,
-                            ),
-                          );
-                      if (ctx.mounted) Navigator.pop(ctx);
-                      AppNotifier.success(s.nodeFilterRuleAdded);
-                    },
-              child: Text(s.confirm),
-            ),
-          ],
-        ),
-      ),
-    ).whenComplete(() {
-      patternCtrl.dispose();
-      renameCtrl.dispose();
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final s = S.of(context);
-    final rulesAsync = ref.watch(nodeFilterRulesProvider);
-
-    return Card(
-      child: Column(
-        children: [
-          ListTile(
-            leading: const Icon(Icons.filter_alt_outlined),
-            title: Text(s.sectionNodeFilterNew),
-            subtitle: Text(s.nodeFilterEmpty,
-                style: Theme.of(context).textTheme.bodySmall),
-            trailing: IconButton(
-              icon: const Icon(Icons.add),
-              tooltip: s.nodeFilterAddRule,
-              onPressed: _showAddDialog,
-            ),
-          ),
-          rulesAsync.when(
-            loading: () => const SizedBox.shrink(),
-            error: (_, __) => const SizedBox.shrink(),
-            data: (rules) {
-              if (rules.isEmpty) return const SizedBox.shrink();
-              return ReorderableListView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: rules.length,
-                onReorder: (o, n) => ref
-                    .read(nodeFilterRulesProvider.notifier)
-                    .reorder(o, n),
-                itemBuilder: (ctx, i) {
-                  final rule = rules[i];
-                  final actionLabel = switch (rule.action) {
-                    NodeFilterAction.keep => s.nodeFilterActionKeep,
-                    NodeFilterAction.exclude => s.nodeFilterActionExclude,
-                    NodeFilterAction.rename => s.nodeFilterActionRename,
-                  };
-                  final actionColor = switch (rule.action) {
-                    NodeFilterAction.keep => Colors.green,
-                    NodeFilterAction.exclude => Colors.red,
-                    NodeFilterAction.rename => Colors.blue,
-                  };
-                  return ListTile(
-                    key: ValueKey(i),
-                    dense: true,
-                    leading: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: actionColor.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(actionLabel,
-                          style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              color: actionColor)),
-                    ),
-                    title: Text(rule.pattern,
-                        style: const TextStyle(
-                            fontFamily: 'monospace', fontSize: 12)),
-                    subtitle: rule.renameTo != null
-                        ? Text('→ ${rule.renameTo}',
-                            style: const TextStyle(fontSize: 11))
-                        : null,
-                    trailing: IconButton(
-                      icon: const Icon(Icons.delete_outline, size: 18),
-                      onPressed: () => ref
-                          .read(nodeFilterRulesProvider.notifier)
-                          .remove(i),
-                    ),
-                  );
-                },
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-
-class _SectionHeader extends StatelessWidget {
-  final String title;
-  const _SectionHeader({required this.title});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 4, bottom: 8),
-      child: Text(title,
-          style: Theme.of(context)
-              .textTheme
-              .titleSmall
-              ?.copyWith(color: Theme.of(context).colorScheme.primary)),
-    );
-  }
-}

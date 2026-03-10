@@ -9,7 +9,6 @@ import 'package:path_provider/path_provider.dart';
 import '../constants.dart';
 import '../models/profile.dart';
 import 'config_template.dart';
-import 'node_filter_service.dart';
 import 'settings_service.dart';
 import 'subscription_parser.dart';
 
@@ -73,9 +72,6 @@ class ProfileService {
       finalContent = ConfigTemplate.mergeIfNeeded(fallback, result.content);
     }
 
-    // Apply node filter rules (regex keep/exclude/rename)
-    finalContent = await NodeFilterService.instance.apply(finalContent);
-
     final profile = Profile(
       id: id,
       name: name,
@@ -109,9 +105,6 @@ class ProfileService {
       final fallback = await ConfigTemplate.loadFallbackTemplate();
       finalContent = ConfigTemplate.mergeIfNeeded(fallback, result.content);
     }
-
-    // Apply node filter rules (regex keep/exclude/rename)
-    finalContent = await NodeFilterService.instance.apply(finalContent);
 
     profile.configContent = finalContent;
     profile.lastUpdated = DateTime.now();

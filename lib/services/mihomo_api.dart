@@ -35,7 +35,7 @@ class MihomoApi {
     try {
       final resp = await http
           .get(Uri.parse('$_baseUrl/version'), headers: _headers)
-          .timeout(const Duration(seconds: 2));
+          .timeout(const Duration(milliseconds: 500));
       return resp.statusCode == 200;
     } catch (_) {
       return false;
@@ -89,10 +89,19 @@ class MihomoApi {
   Future<Map<String, dynamic>> testGroupDelay(String groupName,
       {String url = 'https://www.gstatic.com/generate_204',
       int timeout = 5000}) async {
-    return _get(
-      '/group/${Uri.encodeComponent(groupName)}/delay'
-      '?url=${Uri.encodeComponent(url)}&timeout=$timeout',
-    );
+    final resp = await http
+        .get(
+          Uri.parse(
+            '$_baseUrl/group/${Uri.encodeComponent(groupName)}/delay'
+            '?url=${Uri.encodeComponent(url)}&timeout=$timeout',
+          ),
+          headers: _headers,
+        )
+        .timeout(const Duration(seconds: 30));
+    if (resp.statusCode != 200) {
+      throw MihomoApiException(resp.statusCode, resp.body);
+    }
+    return json.decode(resp.body) as Map<String, dynamic>;
   }
 
   // ------------------------------------------------------------------

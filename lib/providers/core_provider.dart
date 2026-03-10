@@ -9,10 +9,8 @@ import '../models/traffic.dart';
 import '../models/traffic_history.dart';
 import '../providers/proxy_provider.dart';
 import '../services/core_manager.dart';
-import '../services/guard_service.dart';
 import '../services/mihomo_api.dart';
 import '../services/settings_service.dart';
-import '../services/unlock_test_service.dart';
 import '../services/vpn_service.dart';
 
 // ------------------------------------------------------------------
@@ -58,9 +56,6 @@ final systemProxyOnConnectProvider = StateProvider<bool>((ref) => true);
 /// Whether to auto-connect on startup
 final autoConnectProvider = StateProvider<bool>((ref) => false);
 
-/// Whether Guard mode (auto-restore system proxy) is enabled
-final guardModeProvider = StateProvider<bool>((ref) => false);
-
 // ------------------------------------------------------------------
 // Core actions
 // ------------------------------------------------------------------
@@ -73,8 +68,6 @@ class CoreActions {
 
   Future<bool> start(String configYaml) async {
     ref.read(coreStatusProvider.notifier).state = CoreStatus.starting;
-
-    await Future.delayed(const Duration(milliseconds: 300));
 
     final manager = CoreManager.instance;
     final ok = await manager.start(configYaml);
@@ -104,11 +97,6 @@ class CoreActions {
       try {
         await _setSystemProxy(manager.mixedPort);
       } catch (_) {}
-
-      // Start Guard mode if enabled
-      if (ref.read(guardModeProvider)) {
-        GuardService.instance.start(manager.mixedPort);
-      }
     }
 
     // Trigger initial proxy data fetch
@@ -119,10 +107,6 @@ class CoreActions {
 
   Future<void> stop() async {
     ref.read(coreStatusProvider.notifier).state = CoreStatus.stopping;
-    await Future.delayed(const Duration(milliseconds: 300));
-
-    // Stop Guard mode
-    GuardService.instance.stop();
 
     // Clear system proxy on macOS/Windows
     if ((Platform.isMacOS || Platform.isWindows) &&
@@ -159,9 +143,15 @@ class CoreActions {
           await Process.run('networksetup',
               ['-setwebproxy', svc, '127.0.0.1', '$mixedPort']);
           await Process.run('networksetup',
+              ['-setwebproxystate', svc, 'on']);
+          await Process.run('networksetup',
               ['-setsecurewebproxy', svc, '127.0.0.1', '$mixedPort']);
           await Process.run('networksetup',
+              ['-setsecurewebproxystate', svc, 'on']);
+          await Process.run('networksetup',
               ['-setsocksfirewallproxy', svc, '127.0.0.1', '$mixedPort']);
+          await Process.run('networksetup',
+              ['-setsocksfirewallproxystate', svc, 'on']);
         } catch (_) {}
       }
     } else if (Platform.isWindows) {
@@ -304,7 +294,6 @@ final coreHeartbeatProvider = Provider<void>((ref) {
     } else {
       failures++;
       if (failures >= 3) {
-        GuardService.instance.stop();
         ref.read(coreStatusProvider.notifier).state = CoreStatus.stopped;
         ref.read(trafficProvider.notifier).state = const Traffic();
       }
@@ -370,41 +359,3 @@ final memoryStreamProvider = Provider<void>((ref) {
   });
   ref.onDispose(() => sub.cancel());
 });
-
-// ------------------------------------------------------------------
-// Unlock test
-// ------------------------------------------------------------------
-
-final unlockResultsProvider =
-    StateProvider<Map<String, UnlockResult>>((ref) => {});
-
-final unlockTestingProvider = StateProvider<bool>((ref) => false);
-
-final unlockTestActionsProvider =
-    Provider<UnlockTestActions>((ref) => UnlockTestActions(ref));
-
-class UnlockTestActions {
-  final Ref ref;
-  UnlockTestActions(this.ref);
-
-  Future<void> runAll() async {
-    if (ref.read(unlockTestingProvider)) return;
-    ref.read(unlockTestingProvider.notifier).state = true;
-
-    // Mark all as "testing"
-    final initial = {
-      for (final svc in UnlockTestService.services)
-        svc.id: const UnlockResult(status: UnlockStatus.testing),
-    };
-    ref.read(unlockResultsProvider.notifier).state = Map.from(initial);
-
-    try {
-      final mixedPort = CoreManager.instance.mixedPort;
-      final results =
-          await UnlockTestService.instance.testAll(proxyPort: mixedPort);
-      ref.read(unlockResultsProvider.notifier).state = results;
-    } finally {
-      ref.read(unlockTestingProvider.notifier).state = false;
-    }
-  }
-}
