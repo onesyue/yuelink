@@ -73,17 +73,8 @@ class SettingsPage extends ConsumerWidget {
                   },
                 ),
                 ListTile(
-                  title: const Text('HTTP 端口'),
-                  trailing: Text('${AppConstants.defaultHttpPort}',
-                      style: Theme.of(context).textTheme.bodyMedium),
-                ),
-                ListTile(
-                  title: const Text('SOCKS 端口'),
-                  trailing: Text('${AppConstants.defaultSocksPort}',
-                      style: Theme.of(context).textTheme.bodyMedium),
-                ),
-                ListTile(
                   title: const Text('Mixed 端口'),
+                  subtitle: const Text('HTTP/SOCKS 混合代理'),
                   trailing: Text('${AppConstants.defaultMixedPort}',
                       style: Theme.of(context).textTheme.bodyMedium),
                 ),

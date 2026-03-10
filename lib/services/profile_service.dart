@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../constants.dart';
 import '../models/profile.dart';
+import 'config_template.dart';
 import 'subscription_parser.dart';
 
 /// Manages subscription profiles: download, store, update.
@@ -46,6 +47,10 @@ class ProfileService {
   }
 
   /// Download a subscription and save the config content.
+  ///
+  /// If the subscription only provides proxies (no proxy-groups/rules),
+  /// they are merged into the built-in default config template which
+  /// includes all the proxy-groups, rules, and DNS settings.
   static Future<Profile> addProfile({
     required String name,
     required String url,
@@ -53,11 +58,16 @@ class ProfileService {
     final result = await _downloadConfig(url);
     final id = DateTime.now().millisecondsSinceEpoch.toString();
 
+    // Merge with default template if subscription only has proxies
+    final template = await ConfigTemplate.loadDefaultTemplate();
+    final mergedContent =
+        ConfigTemplate.mergeWithTemplate(template, result.content);
+
     final profile = Profile(
       id: id,
       name: name,
       url: url,
-      configContent: result.content,
+      configContent: mergedContent,
       lastUpdated: DateTime.now(),
       subInfo: result.subInfo,
       updateInterval: result.subInfo.updateInterval != null
@@ -66,7 +76,7 @@ class ProfileService {
     );
 
     final dir = await _getProfilesDir();
-    await File('${dir.path}/$id.yaml').writeAsString(result.content);
+    await File('${dir.path}/$id.yaml').writeAsString(mergedContent);
 
     final profiles = await loadProfiles();
     profiles.add(profile);
@@ -78,13 +88,19 @@ class ProfileService {
   /// Update a subscription profile by re-downloading.
   static Future<Profile> updateProfile(Profile profile) async {
     final result = await _downloadConfig(profile.url);
-    profile.configContent = result.content;
+
+    // Merge with default template if subscription only has proxies
+    final template = await ConfigTemplate.loadDefaultTemplate();
+    final mergedContent =
+        ConfigTemplate.mergeWithTemplate(template, result.content);
+
+    profile.configContent = mergedContent;
     profile.lastUpdated = DateTime.now();
     profile.subInfo = result.subInfo;
 
     final dir = await _getProfilesDir();
     await File('${dir.path}/${profile.id}.yaml')
-        .writeAsString(result.content);
+        .writeAsString(mergedContent);
 
     final profiles = await loadProfiles();
     final idx = profiles.indexWhere((p) => p.id == profile.id);

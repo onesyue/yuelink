@@ -5,6 +5,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../constants.dart';
 import '../ffi/core_controller.dart';
+import 'config_template.dart';
 import 'mihomo_api.dart';
 import 'mihomo_stream.dart';
 import 'process_manager.dart';
@@ -77,20 +78,36 @@ class CoreManager {
   }
 
   /// Start the mihomo core with the given config.
+  ///
+  /// Automatically processes the config template (replaces `$app_name`,
+  /// ensures external-controller, extracts port/secret settings).
   Future<bool> start(String configYaml) async {
     if (_running) return true;
 
+    // Process template variables and ensure API access
+    final processed = ConfigTemplate.process(
+      configYaml,
+      apiPort: _apiPort,
+      secret: _apiSecret,
+    );
+
+    // Extract actual port/secret from processed config
+    _apiPort = ConfigTemplate.getApiPort(processed);
+    _apiSecret ??= ConfigTemplate.getSecret(processed);
+    _api = null; // Reset API client with new settings
+    _stream = null;
+
     switch (_mode) {
       case CoreMode.mock:
-        final ok = _core.start(configYaml);
+        final ok = _core.start(processed);
         _running = ok;
         return ok;
 
       case CoreMode.ffi:
-        return _startFfi(configYaml);
+        return _startFfi(processed);
 
       case CoreMode.subprocess:
-        return _startSubprocess(configYaml);
+        return _startSubprocess(processed);
     }
   }
 
@@ -119,14 +136,12 @@ class CoreManager {
   // ------------------------------------------------------------------
 
   Future<bool> _startFfi(String configYaml) async {
-    final configWithApi = _ensureExternalController(configYaml);
-
     // Write config file
     final appDir = await getApplicationSupportDirectory();
     final configFile = File('${appDir.path}/${AppConstants.configFileName}');
-    await configFile.writeAsString(configWithApi);
+    await configFile.writeAsString(configYaml);
 
-    final ok = _core.start(configWithApi);
+    final ok = _core.start(configYaml);
     if (!ok) return false;
 
     _running = true;
@@ -139,8 +154,7 @@ class CoreManager {
   // ------------------------------------------------------------------
 
   Future<bool> _startSubprocess(String configYaml) async {
-    final configWithApi = _ensureExternalController(configYaml);
-    final configPath = await ProcessManager.writeConfig(configWithApi);
+    final configPath = await ProcessManager.writeConfig(configYaml);
 
     final ok = await ProcessManager.instance.start(
       configPath: configPath,
@@ -156,15 +170,6 @@ class CoreManager {
   // ------------------------------------------------------------------
   // Helpers
   // ------------------------------------------------------------------
-
-  /// Ensure the config YAML has external-controller set.
-  String _ensureExternalController(String yaml) {
-    if (yaml.contains('external-controller:')) return yaml;
-    final apiConfig = '\n'
-        'external-controller: 127.0.0.1:$_apiPort\n'
-        '${_apiSecret != null ? 'secret: $_apiSecret\n' : ''}';
-    return yaml + apiConfig;
-  }
 
   /// Wait for the REST API to become available.
   Future<bool> _waitForApi({int maxRetries = 10}) async {

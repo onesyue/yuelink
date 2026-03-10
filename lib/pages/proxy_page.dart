@@ -206,6 +206,8 @@ class _ProxyGroupCard extends ConsumerWidget {
       margin: const EdgeInsets.only(bottom: 8),
       child: ExpansionTile(
         initiallyExpanded: searchQuery.isNotEmpty,
+        leading: Icon(_groupIcon(group.name),
+            size: 20, color: Theme.of(context).colorScheme.primary),
         title: Text(group.name,
             style: const TextStyle(fontWeight: FontWeight.w600)),
         subtitle: Row(
@@ -314,6 +316,39 @@ class _ProxyGroupCard extends ConsumerWidget {
     if (delay < 500) return Colors.orange;
     return Colors.red;
   }
+
+  /// Map group names to recognizable icons.
+  IconData _groupIcon(String name) {
+    final n = name.toLowerCase();
+    if (n.contains('youtube')) return Icons.play_circle_outline;
+    if (n.contains('tiktok')) return Icons.music_note;
+    if (n.contains('ai') || n.contains('openai') || n.contains('claude')) {
+      return Icons.auto_awesome;
+    }
+    if (n.contains('google')) return Icons.search;
+    if (n.contains('telegram')) return Icons.send;
+    if (n.contains('github')) return Icons.code;
+    if (n.contains('流媒体') || n.contains('netflix') || n.contains('disney')) {
+      return Icons.movie_outlined;
+    }
+    if (n.contains('社交') || n.contains('twitter') || n.contains('facebook')) {
+      return Icons.people_outline;
+    }
+    if (n.contains('游戏') || n.contains('game') || n.contains('steam')) {
+      return Icons.sports_esports;
+    }
+    if (n.contains('兜底') || n.contains('fallback') || n.contains('漏网')) {
+      return Icons.catching_pokemon;
+    }
+    if (n.contains('自动') || n.contains('url-test') || n.contains('auto')) {
+      return Icons.speed;
+    }
+    if (n.contains('故障') || n.contains('转移')) return Icons.swap_horiz;
+    if (n.contains('香港') || n.contains('🇭🇰')) return Icons.location_on;
+    if (n.contains('聚合') || n.contains('balance')) return Icons.balance;
+    if (n.contains('更多')) return Icons.language;
+    return Icons.dns_outlined;
+  }
 }
 
 class _TypeChip extends StatelessWidget {
@@ -325,16 +360,47 @@ class _TypeChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.secondaryContainer,
+        color: _typeColor(type).withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(4),
       ),
       child: Text(
-        type,
+        _typeLabel(type),
         style: TextStyle(
           fontSize: 10,
-          color: Theme.of(context).colorScheme.onSecondaryContainer,
+          fontWeight: FontWeight.w600,
+          color: _typeColor(type),
         ),
       ),
     );
+  }
+
+  String _typeLabel(String type) {
+    switch (type) {
+      case 'Selector':
+        return '手动选择';
+      case 'URLTest':
+        return '自动测速';
+      case 'Fallback':
+        return '故障转移';
+      case 'LoadBalance':
+        return '负载均衡';
+      default:
+        return type;
+    }
+  }
+
+  Color _typeColor(String type) {
+    switch (type) {
+      case 'Selector':
+        return Colors.blue;
+      case 'URLTest':
+        return Colors.green;
+      case 'Fallback':
+        return Colors.orange;
+      case 'LoadBalance':
+        return Colors.purple;
+      default:
+        return Colors.grey;
+    }
   }
 }

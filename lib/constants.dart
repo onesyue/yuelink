@@ -14,9 +14,7 @@ class AppConstants {
   static const defaultTestUrl = 'https://www.gstatic.com/generate_204';
   static const defaultTestTimeout = 5000; // ms
 
-  /// Default ports.
-  static const defaultHttpPort = 7890;
-  static const defaultSocksPort = 7891;
-  static const defaultMixedPort = 7893;
+  /// Default ports (aligned with standard mihomo config).
+  static const defaultMixedPort = 7890;
   static const defaultApiPort = 9090;
 }
