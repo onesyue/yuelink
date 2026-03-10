@@ -27,6 +27,14 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- Deep link: clash://install-config?url=... and mihomo://install-config?url=... -->
+            <intent-filter android:autoVerify="false">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="clash"/>
+                <data android:scheme="mihomo"/>
+            </intent-filter>
         </activity>
 
         <!-- VPN Service -->
@@ -39,6 +47,22 @@
                 <action android:name="android.net.VpnService" />
             </intent-filter>
         </service>
+
+        <!-- Boot receiver for auto-connect after device restart -->
+        <receiver
+            android:name=".BootReceiver"
+            android:exported="true"
+            android:enabled="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Foreground service used on Android 10+ to relay boot event -->
+        <service
+            android:name=".BootStartService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse" />
 
         <meta-data
             android:name="flutterEmbedding"

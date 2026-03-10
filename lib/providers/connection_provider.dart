@@ -20,23 +20,54 @@ final connectionsSnapshotProvider =
 final connectionsStreamProvider = Provider<void>((ref) {
   final status = ref.watch(coreStatusProvider);
   if (status != CoreStatus.running) {
-    // Clear on disconnect
+    // Clear connections and search query on disconnect
     ref.read(connectionsSnapshotProvider.notifier).state =
         const ConnectionsSnapshot(
             connections: [], downloadTotal: 0, uploadTotal: 0);
+    ref.read(connectionSearchProvider.notifier).state = '';
     return;
   }
 
   final manager = CoreManager.instance;
-  if (manager.isMockMode) return;
+
+  if (manager.isMockMode) {
+    // Mock mode: poll REST API every 2 seconds
+    Future<void> poll() async {
+      try {
+        final data = await manager.api.getConnections();
+        final snapshot = ConnectionsSnapshot.fromJson(data);
+        ref.read(connectionsSnapshotProvider.notifier).state = snapshot;
+      } catch (_) {}
+    }
+
+    poll();
+    final timer = Timer.periodic(const Duration(seconds: 2), (_) => poll());
+    ref.onDispose(() => timer.cancel());
+    return;
+  }
+
+  // Real mode: WebSocket stream with 500ms throttle to prevent UI overload
+  // (e.g. hundreds of connections during BT download)
+  ConnectionsSnapshot? pending;
+  Timer? throttle;
 
   final sub = manager.stream.connectionsStream().listen((data) {
     try {
-      final snapshot = ConnectionsSnapshot.fromJson(data);
-      ref.read(connectionsSnapshotProvider.notifier).state = snapshot;
+      pending = ConnectionsSnapshot.fromJson(data);
+      throttle ??= Timer(const Duration(milliseconds: 500), () {
+        final snap = pending;
+        if (snap != null) {
+          ref.read(connectionsSnapshotProvider.notifier).state = snap;
+          pending = null;
+        }
+        throttle = null;
+      });
     } catch (_) {}
   });
-  ref.onDispose(() => sub.cancel());
+  ref.onDispose(() {
+    sub.cancel();
+    throttle?.cancel();
+  });
 });
 
 // ------------------------------------------------------------------

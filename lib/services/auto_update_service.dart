@@ -13,6 +13,7 @@ class AutoUpdateService {
 
   Timer? _timer;
   bool _running = false;
+  bool _updating = false;
 
   /// Start the auto-update background loop.
   void start() {
@@ -31,43 +32,56 @@ class AutoUpdateService {
   }
 
   Future<void> _checkAndUpdate() async {
-    final intervalHours = await SettingsService.getAutoUpdateInterval();
-    if (intervalHours <= 0) return; // Disabled
+    if (_updating) return;
+    _updating = true;
+    try {
+      final intervalHours = await SettingsService.getAutoUpdateInterval();
+      if (intervalHours <= 0) return;
 
-    final profiles = await ProfileService.loadProfiles();
-    final now = DateTime.now();
+      final profiles = await ProfileService.loadProfiles();
+      final now = DateTime.now();
 
-    for (final profile in profiles) {
-      if (profile.url.isEmpty) continue;
+      for (final profile in profiles) {
+        if (profile.url.isEmpty) continue;
 
-      final effectiveInterval = profile.updateInterval;
-      final lastUpdated = profile.lastUpdated ?? DateTime(2000);
-      final due = lastUpdated.add(effectiveInterval);
+        final effectiveInterval = profile.updateInterval;
+        final lastUpdated = profile.lastUpdated ?? DateTime(2000);
+        final due = lastUpdated.add(effectiveInterval);
 
-      if (now.isAfter(due)) {
-        try {
-          await ProfileService.updateProfile(profile);
-        } catch (_) {
-          // Silently skip failed updates; will retry next cycle
+        if (now.isAfter(due)) {
+          try {
+            await ProfileService.updateProfile(profile);
+          } catch (_) {
+            // Skip failed updates; will retry next cycle
+          }
         }
       }
+    } finally {
+      _updating = false;
     }
   }
 
   /// Force-update all profiles immediately.
+  /// Returns immediately with zeros if an update is already in progress.
   Future<({int updated, int failed})> updateAll() async {
-    final profiles = await ProfileService.loadProfiles();
-    int updated = 0;
-    int failed = 0;
-    for (final profile in profiles) {
-      if (profile.url.isEmpty) continue;
-      try {
-        await ProfileService.updateProfile(profile);
-        updated++;
-      } catch (_) {
-        failed++;
+    if (_updating) return (updated: 0, failed: 0);
+    _updating = true;
+    try {
+      final profiles = await ProfileService.loadProfiles();
+      int updated = 0;
+      int failed = 0;
+      for (final profile in profiles) {
+        if (profile.url.isEmpty) continue;
+        try {
+          await ProfileService.updateProfile(profile);
+          updated++;
+        } catch (_) {
+          failed++;
+        }
       }
+      return (updated: updated, failed: failed);
+    } finally {
+      _updating = false;
     }
-    return (updated: updated, failed: failed);
   }
 }

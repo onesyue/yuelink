@@ -1,0 +1,82 @@
+import 'dart:convert';
+
+import 'package:http/http.dart' as http;
+import 'package:package_info_plus/package_info_plus.dart';
+
+/// Checks GitHub releases for a newer version of YueLink.
+class UpdateChecker {
+  UpdateChecker._();
+  static final instance = UpdateChecker._();
+
+  static const _repoApi =
+      'https://api.github.com/repos/onesyue/yuelink/releases/latest';
+
+  /// Check for updates. Returns null if already on latest or check fails.
+  Future<UpdateInfo?> check() async {
+    try {
+      final response = await http.get(
+        Uri.parse(_repoApi),
+        headers: {'Accept': 'application/vnd.github+json'},
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode != 200) return null;
+
+      final data = json.decode(response.body) as Map<String, dynamic>;
+      final latestTag = data['tag_name'] as String? ?? '';
+      final body = data['body'] as String? ?? '';
+      final htmlUrl = data['html_url'] as String? ?? '';
+      final publishedAt = data['published_at'] as String?;
+
+      final latestVersion = latestTag.replaceFirst(RegExp(r'^v'), '');
+      if (latestVersion.isEmpty) return null;
+
+      final info = await PackageInfo.fromPlatform();
+      final currentVersion = info.version;
+
+      if (!_isNewer(latestVersion, currentVersion)) return null;
+
+      return UpdateInfo(
+        currentVersion: currentVersion,
+        latestVersion: latestVersion,
+        releaseNotes: body,
+        releaseUrl: htmlUrl,
+        publishedAt: publishedAt != null ? DateTime.tryParse(publishedAt) : null,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Returns true if [candidate] is semantically newer than [current].
+  static bool _isNewer(String candidate, String current) {
+    final c = _parse(candidate);
+    final cur = _parse(current);
+    for (var i = 0; i < 3; i++) {
+      if (c[i] > cur[i]) return true;
+      if (c[i] < cur[i]) return false;
+    }
+    return false;
+  }
+
+  static List<int> _parse(String v) {
+    final parts = v.split('.').map((p) => int.tryParse(p) ?? 0).toList();
+    while (parts.length < 3) { parts.add(0); }
+    return parts;
+  }
+}
+
+class UpdateInfo {
+  final String currentVersion;
+  final String latestVersion;
+  final String releaseNotes;
+  final String releaseUrl;
+  final DateTime? publishedAt;
+
+  const UpdateInfo({
+    required this.currentVersion,
+    required this.latestVersion,
+    required this.releaseNotes,
+    required this.releaseUrl,
+    this.publishedAt,
+  });
+}

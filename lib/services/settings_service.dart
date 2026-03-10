@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'secure_storage_service.dart';
+
 /// Persistent settings storage using a simple JSON file.
 class SettingsService {
   static const _fileName = 'settings.json';
@@ -31,7 +33,10 @@ class SettingsService {
   static Future<void> save(Map<String, dynamic> settings) async {
     _cache = settings;
     final file = await _getFile();
-    await file.writeAsString(json.encode(settings));
+    // Atomic write: write to temp file then rename to prevent corruption
+    final tmp = File('${file.path}.tmp');
+    await tmp.writeAsString(json.encode(settings));
+    await tmp.rename(file.path);
   }
 
   static Future<void> set(String key, dynamic value) async {
@@ -143,26 +148,106 @@ class SettingsService {
     await set('autoUpdateInterval', hours);
   }
 
-  // ── WebDAV ───────────────────────────────────────────────────────────────
+  // ── Language (zh / en) ──────────────────────────────────────────────────
 
-  static Future<Map<String, String>> getWebDavConfig() async {
+  static Future<String> getLanguage() async {
+    return (await get<String>('language')) ?? 'zh';
+  }
+
+  static Future<void> setLanguage(String langCode) async {
+    await set('language', langCode);
+  }
+
+  // ── Daily traffic stats ──────────────────────────────────────────
+
+  static String _dateKey(DateTime date) {
+    final y = date.year;
+    final m = date.month.toString().padLeft(2, '0');
+    final d = date.day.toString().padLeft(2, '0');
+    return '$y-$m-$d';
+  }
+
+  static Future<Map<String, int>> getTodayTraffic() async {
+    final key = _dateKey(DateTime.now());
     final settings = await load();
     return {
-      'url': (settings['webdavUrl'] as String?) ?? '',
-      'username': (settings['webdavUsername'] as String?) ?? '',
-      'password': (settings['webdavPassword'] as String?) ?? '',
+      'up': (settings['traffic_up_$key'] as int?) ?? 0,
+      'down': (settings['traffic_down_$key'] as int?) ?? 0,
     };
   }
+
+  static Future<void> saveTodayTraffic(int up, int down) async {
+    final key = _dateKey(DateTime.now());
+    final settings = await load();
+    settings['traffic_up_$key'] = up;
+    settings['traffic_down_$key'] = down;
+    await save(settings);
+  }
+
+  // ── Guard 模式（系统代理守护）────────────────────────────────────────────
+
+  static Future<bool> getGuardMode() async {
+    return (await get<bool>('guardMode')) ?? false;
+  }
+
+  static Future<void> setGuardMode(bool value) async {
+    await set('guardMode', value);
+  }
+
+  // ── Sub-Store 订阅转换服务 ────────────────────────────────────────────────
+
+  static Future<String> getSubStoreUrl() async {
+    return (await get<String>('subStoreUrl')) ?? '';
+  }
+
+  static Future<void> setSubStoreUrl(String url) async {
+    await set('subStoreUrl', url);
+  }
+
+  // ── Android 分应用代理（Split Tunneling）────────────────────────────────
+
+  static Future<String> getSplitTunnelMode() async {
+    return (await get<String>('splitTunnelMode')) ?? 'all';
+  }
+
+  static Future<void> setSplitTunnelMode(String mode) async {
+    await set('splitTunnelMode', mode);
+  }
+
+  static Future<List<String>> getSplitTunnelApps() async {
+    final settings = await load();
+    final raw = settings['splitTunnelApps'];
+    if (raw is List) return raw.cast<String>();
+    return [];
+  }
+
+  static Future<void> setSplitTunnelApps(List<String> apps) async {
+    await set('splitTunnelApps', apps);
+  }
+
+  // ── 全局热键 ─────────────────────────────────────────────────────────────
+
+  static Future<String> getToggleHotkey() async {
+    return (await get<String>('toggleHotkey')) ?? 'ctrl+alt+c';
+  }
+
+  static Future<void> setToggleHotkey(String hotkey) async {
+    await set('toggleHotkey', hotkey);
+  }
+
+  // ── WebDAV (credentials stored in OS secure storage, not plain JSON) ────────
+
+  static Future<Map<String, String>> getWebDavConfig() =>
+      SecureStorageService.instance.getWebDavConfig();
 
   static Future<void> setWebDavConfig({
     required String url,
     required String username,
     required String password,
-  }) async {
-    final settings = await load();
-    settings['webdavUrl'] = url;
-    settings['webdavUsername'] = username;
-    settings['webdavPassword'] = password;
-    await save(settings);
-  }
+  }) =>
+      SecureStorageService.instance.setWebDavConfig(
+        url: url,
+        username: username,
+        password: password,
+      );
 }

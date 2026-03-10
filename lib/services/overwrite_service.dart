@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:path_provider/path_provider.dart';
+import 'package:yaml/yaml.dart';
 
 /// Manages user-defined config overwrite rules.
 ///
@@ -28,8 +29,25 @@ class OverwriteService {
     return file.readAsString();
   }
 
-  /// Save overwrite YAML.
+  /// Validate YAML syntax. Returns an error message, or null if valid.
+  static String? validate(String yaml) {
+    if (yaml.trim().isEmpty) return null;
+    try {
+      loadYaml(yaml);
+      return null;
+    } catch (e) {
+      // Extract a short, user-facing message from the parse exception
+      final msg = e.toString();
+      final line = RegExp(r'line (\d+)').firstMatch(msg);
+      if (line != null) return 'YAML 语法错误 (第 ${line.group(1)} 行): $msg';
+      return 'YAML 语法错误: $msg';
+    }
+  }
+
+  /// Save overwrite YAML. Throws [FormatException] if YAML is invalid.
   static Future<void> save(String yaml) async {
+    final error = validate(yaml);
+    if (error != null) throw FormatException(error);
     final file = await _getFile();
     await file.writeAsString(yaml);
   }

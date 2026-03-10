@@ -1,17 +1,15 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../ffi/core_controller.dart';
+import '../l10n/app_strings.dart';
 import '../models/rule.dart';
-import '../models/traffic.dart';
 import '../providers/core_provider.dart';
 import '../providers/log_provider.dart';
 import '../providers/rule_provider.dart';
-import '../services/core_manager.dart';
 import '../services/mihomo_stream.dart';
-import '../services/subscription_parser.dart';
 
 class LogPage extends ConsumerStatefulWidget {
   const LogPage({super.key});
@@ -27,7 +25,7 @@ class _LogPageState extends ConsumerState<LogPage>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 2, vsync: this);
   }
 
   @override
@@ -38,6 +36,7 @@ class _LogPageState extends ConsumerState<LogPage>
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     final status = ref.watch(coreStatusProvider);
     final isRunning = status == CoreStatus.running;
 
@@ -49,9 +48,11 @@ class _LogPageState extends ConsumerState<LogPage>
             children: [
               Icon(Icons.list_alt_outlined,
                   size: 64,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant),
+                  color: Theme.of(context)
+                      .colorScheme
+                      .onSurfaceVariant),
               const SizedBox(height: 16),
-              Text('请先连接以查看日志',
+              Text(s.notConnectedHintLog,
                   style: Theme.of(context).textTheme.bodyLarge),
             ],
           ),
@@ -64,17 +65,15 @@ class _LogPageState extends ConsumerState<LogPage>
         children: [
           TabBar(
             controller: _tabController,
-            tabs: const [
-              Tab(text: '连接'),
-              Tab(text: '日志'),
-              Tab(text: '规则'),
+            tabs: [
+              Tab(text: s.tabLogs),
+              Tab(text: s.tabRules),
             ],
           ),
           Expanded(
             child: TabBarView(
               controller: _tabController,
               children: const [
-                _ConnectionsTab(),
                 _LogsTab(),
                 _RulesTab(),
               ],
@@ -86,313 +85,9 @@ class _LogPageState extends ConsumerState<LogPage>
   }
 }
 
-// ==================================================================
-// Connections tab
-// ==================================================================
-
-class _ConnectionsTab extends ConsumerStatefulWidget {
-  const _ConnectionsTab();
-
-  @override
-  ConsumerState<_ConnectionsTab> createState() => _ConnectionsTabState();
-}
-
-class _ConnectionsTabState extends ConsumerState<_ConnectionsTab> {
-  List<ConnectionInfo> _connections = [];
-  int _uploadTotal = 0;
-  int _downloadTotal = 0;
-  Timer? _refreshTimer;
-  StreamSubscription? _streamSub;
-  String _searchQuery = '';
-  final _searchController = TextEditingController();
-
-  @override
-  void initState() {
-    super.initState();
-    _startListening();
-  }
-
-  @override
-  void dispose() {
-    _refreshTimer?.cancel();
-    _streamSub?.cancel();
-    _searchController.dispose();
-    super.dispose();
-  }
-
-  void _startListening() {
-    final manager = CoreManager.instance;
-
-    if (manager.isMockMode) {
-      // Mock mode: poll every 2 seconds
-      _refresh();
-      _refreshTimer = Timer.periodic(const Duration(seconds: 2), (_) {
-        if (mounted) _refresh();
-      });
-    } else {
-      // Real mode: WebSocket stream
-      _streamSub = manager.stream.connectionsStream().listen((data) {
-        if (!mounted) return;
-        final conns = (data['connections'] as List?)
-                ?.map((e) =>
-                    ConnectionInfo.fromJson(e as Map<String, dynamic>))
-                .toList() ??
-            [];
-        setState(() {
-          _connections = conns;
-          _uploadTotal = (data['uploadTotal'] as num?)?.toInt() ?? 0;
-          _downloadTotal = (data['downloadTotal'] as num?)?.toInt() ?? 0;
-        });
-      });
-    }
-  }
-
-  Future<void> _refresh() async {
-    final manager = CoreManager.instance;
-    Map<String, dynamic> data;
-
-    if (manager.isMockMode) {
-      data = CoreController.instance.getConnections();
-    } else {
-      try {
-        data = await manager.api.getConnections();
-      } catch (_) {
-        return;
-      }
-    }
-
-    final conns = (data['connections'] as List?)
-            ?.map((e) => ConnectionInfo.fromJson(e as Map<String, dynamic>))
-            .toList() ??
-        [];
-    if (mounted) {
-      setState(() {
-        _connections = conns;
-        _uploadTotal = (data['uploadTotal'] as num?)?.toInt() ?? 0;
-        _downloadTotal = (data['downloadTotal'] as num?)?.toInt() ?? 0;
-      });
-    }
-  }
-
-  Future<void> _closeConnection(String id) async {
-    final manager = CoreManager.instance;
-    if (manager.isMockMode) {
-      CoreController.instance.closeConnection(id);
-    } else {
-      await manager.api.closeConnection(id);
-    }
-  }
-
-  Future<void> _closeAllConnections() async {
-    final manager = CoreManager.instance;
-    if (manager.isMockMode) {
-      CoreController.instance.closeAllConnections();
-    } else {
-      await manager.api.closeAllConnections();
-    }
-  }
-
-  List<ConnectionInfo> get _filteredConnections {
-    if (_searchQuery.isEmpty) return _connections;
-    final q = _searchQuery.toLowerCase();
-    return _connections
-        .where((c) =>
-            c.host.toLowerCase().contains(q) ||
-            c.rule.toLowerCase().contains(q) ||
-            c.chains.toLowerCase().contains(q) ||
-            c.network.toLowerCase().contains(q))
-        .toList();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final filtered = _filteredConnections;
-
-    return Column(
-      children: [
-        // Summary bar
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          color: Theme.of(context).colorScheme.surfaceContainerLow,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              _StatChip(
-                icon: Icons.arrow_upward,
-                iconColor: Colors.blue,
-                label: '总上传',
-                value: formatBytes(_uploadTotal),
-              ),
-              _StatChip(
-                icon: Icons.arrow_downward,
-                iconColor: Colors.green,
-                label: '总下载',
-                value: formatBytes(_downloadTotal),
-              ),
-              _StatChip(
-                icon: Icons.link,
-                iconColor: Theme.of(context).colorScheme.primary,
-                label: '连接数',
-                value: '${_connections.length}',
-              ),
-            ],
-          ),
-        ),
-        const Divider(height: 1),
-
-        // Search + action bar
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-          child: Row(
-            children: [
-              Expanded(
-                child: SizedBox(
-                  height: 36,
-                  child: TextField(
-                    controller: _searchController,
-                    decoration: InputDecoration(
-                      hintText: '搜索连接...',
-                      prefixIcon: const Icon(Icons.search, size: 18),
-                      suffixIcon: _searchQuery.isNotEmpty
-                          ? GestureDetector(
-                              onTap: () {
-                                _searchController.clear();
-                                setState(() => _searchQuery = '');
-                              },
-                              child: const Icon(Icons.clear, size: 16),
-                            )
-                          : null,
-                      isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 6),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide.none,
-                      ),
-                      filled: true,
-                      fillColor: Theme.of(context)
-                          .colorScheme
-                          .surfaceContainerHighest,
-                    ),
-                    style: const TextStyle(fontSize: 13),
-                    onChanged: (v) =>
-                        setState(() => _searchQuery = v.trim()),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 4),
-              IconButton(
-                onPressed: _refresh,
-                icon: const Icon(Icons.refresh, size: 18),
-                tooltip: '刷新',
-                visualDensity: VisualDensity.compact,
-              ),
-              IconButton(
-                onPressed: _connections.isEmpty
-                    ? null
-                    : () async {
-                        await _closeAllConnections();
-                        _refresh();
-                      },
-                icon: const Icon(Icons.close_rounded, size: 18),
-                tooltip: '关闭全部',
-                visualDensity: VisualDensity.compact,
-                color: Colors.red.shade300,
-              ),
-            ],
-          ),
-        ),
-
-        // Connection list
-        Expanded(
-          child: filtered.isEmpty
-              ? Center(
-                  child: Text(
-                      _searchQuery.isEmpty ? '暂无活动连接' : '未找到匹配的连接',
-                      style: Theme.of(context).textTheme.bodyMedium))
-              : ListView.separated(
-                  itemCount: filtered.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
-                  itemBuilder: (context, index) {
-                    final conn = filtered[index];
-                    return _ConnectionTile(
-                      conn: conn,
-                      onTap: () => _showConnectionDetail(context, conn),
-                      onClose: () async {
-                        await _closeConnection(conn.id);
-                        _refresh();
-                      },
-                    );
-                  },
-                ),
-        ),
-      ],
-    );
-  }
-
-  void _showConnectionDetail(BuildContext context, ConnectionInfo conn) {
-    showModalBottomSheet(
-      context: context,
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    conn.network == 'udp' ? Icons.swap_horiz : Icons.link,
-                    size: 20,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(conn.host,
-                        style: Theme.of(context)
-                            .textTheme
-                            .titleMedium
-                            ?.copyWith(fontWeight: FontWeight.w600)),
-                  ),
-                ],
-              ),
-              const Divider(height: 24),
-              _DetailRow(label: '协议', value: conn.network.toUpperCase()),
-              _DetailRow(label: '规则', value: conn.rule),
-              _DetailRow(label: '代理链', value: conn.chains),
-              _DetailRow(label: '上传', value: formatBytes(conn.upload)),
-              _DetailRow(label: '下载', value: formatBytes(conn.download)),
-              _DetailRow(
-                  label: '开始时间',
-                  value:
-                      '${conn.start.hour.toString().padLeft(2, '0')}:${conn.start.minute.toString().padLeft(2, '0')}:${conn.start.second.toString().padLeft(2, '0')}'),
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: () async {
-                    await _closeConnection(conn.id);
-                    _refresh();
-                    if (ctx.mounted) Navigator.pop(ctx);
-                  },
-                  icon: const Icon(Icons.close, size: 16),
-                  label: const Text('关闭连接'),
-                  style:
-                      OutlinedButton.styleFrom(foregroundColor: Colors.red),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ==================================================================
+// ══════════════════════════════════════════════════════════════════════════════
 // Logs tab
-// ==================================================================
+// ══════════════════════════════════════════════════════════════════════════════
 
 class _LogsTab extends ConsumerStatefulWidget {
   const _LogsTab();
@@ -403,7 +98,12 @@ class _LogsTab extends ConsumerStatefulWidget {
 
 class _LogsTabState extends ConsumerState<_LogsTab> {
   String _searchQuery = '';
+  bool _regexMode = false;
+  bool _regexError = false;
   final _searchController = TextEditingController();
+
+  static bool get _isDesktop =>
+      Platform.isMacOS || Platform.isWindows || Platform.isLinux;
 
   @override
   void dispose() {
@@ -413,118 +113,277 @@ class _LogsTabState extends ConsumerState<_LogsTab> {
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     final logs = ref.watch(logEntriesProvider);
     final level = ref.watch(logLevelProvider);
-
     final filtered = _filterLogs(logs);
+    final isDesktop = _isDesktop;
 
-    return Column(
-      children: [
-        // Controls
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-          child: Row(
-            children: [
-              Expanded(
-                child: SizedBox(
-                  height: 36,
-                  child: TextField(
-                    controller: _searchController,
-                    decoration: InputDecoration(
-                      hintText: '搜索日志...',
-                      prefixIcon: const Icon(Icons.search, size: 18),
-                      suffixIcon: _searchQuery.isNotEmpty
-                          ? GestureDetector(
-                              onTap: () {
-                                _searchController.clear();
-                                setState(() => _searchQuery = '');
-                              },
-                              child: const Icon(Icons.clear, size: 16),
-                            )
-                          : null,
-                      isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 6),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide.none,
+    // Terminal dark theme for desktop
+    final bgColor = isDesktop ? const Color(0xFF1E1E1E) : null;
+    final controlsBg = isDesktop
+        ? const Color(0xFF2D2D2D)
+        : Theme.of(context).colorScheme.surfaceContainerLow;
+    final searchFillColor = isDesktop
+        ? const Color(0xFF3C3C3C)
+        : Theme.of(context).colorScheme.surfaceContainerHighest;
+    final searchTextColor =
+        isDesktop ? const Color(0xFFD4D4D4) : null;
+    final statusBarBg = isDesktop
+        ? const Color(0xFF007ACC)
+        : Theme.of(context).colorScheme.surfaceContainerLow;
+    final statusBarTextColor =
+        isDesktop ? Colors.white : null;
+
+    return Container(
+      color: bgColor,
+      child: Column(
+        children: [
+          // Controls toolbar
+          Container(
+            color: controlsBg,
+            padding:
+                const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            child: Row(
+              children: [
+                Expanded(
+                  child: SizedBox(
+                    height: 28,
+                    child: TextField(
+                      controller: _searchController,
+                      style: TextStyle(
+                          fontSize: 12,
+                          color: searchTextColor,
+                          fontFamily: isDesktop ? 'monospace' : null),
+                      decoration: InputDecoration(
+                        hintText: _regexMode
+                            ? s.searchLogsRegexHint
+                            : s.searchLogsHint,
+                        hintStyle: TextStyle(
+                            fontSize: 12,
+                            color: isDesktop
+                                ? const Color(0xFF6A6A6A)
+                                : null),
+                        prefixIcon: Icon(Icons.search,
+                            size: 16,
+                            color: isDesktop
+                                ? const Color(0xFF6A6A6A)
+                                : null),
+                        suffixIcon: _searchQuery.isNotEmpty
+                            ? GestureDetector(
+                                onTap: () {
+                                  _searchController.clear();
+                                  setState(() {
+                                    _searchQuery = '';
+                                    _regexError = false;
+                                  });
+                                },
+                                child: Icon(Icons.clear,
+                                    size: 14,
+                                    color: isDesktop
+                                        ? const Color(0xFF6A6A6A)
+                                        : null),
+                              )
+                            : null,
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(4),
+                          borderSide: _regexError
+                              ? const BorderSide(
+                                  color: Colors.red, width: 1)
+                              : BorderSide.none,
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(4),
+                          borderSide: _regexError
+                              ? const BorderSide(
+                                  color: Colors.red, width: 1)
+                              : BorderSide.none,
+                        ),
+                        filled: true,
+                        fillColor: searchFillColor,
                       ),
-                      filled: true,
-                      fillColor: Theme.of(context)
-                          .colorScheme
-                          .surfaceContainerHighest,
+                      onChanged: (v) {
+                        final trimmed = v.trim();
+                        bool hasError = false;
+                        if (_regexMode && trimmed.isNotEmpty) {
+                          try {
+                            RegExp(trimmed);
+                          } catch (_) {
+                            hasError = true;
+                          }
+                        }
+                        setState(() {
+                          _searchQuery = trimmed;
+                          _regexError = hasError;
+                        });
+                      },
                     ),
-                    style: const TextStyle(fontSize: 13),
-                    onChanged: (v) =>
-                        setState(() => _searchQuery = v.trim()),
                   ),
                 ),
-              ),
-              const SizedBox(width: 4),
-              // Level filter
-              PopupMenuButton<String>(
-                initialValue: level,
-                onSelected: (v) =>
-                    ref.read(logLevelProvider.notifier).state = v,
-                tooltip: '日志级别',
-                icon: Icon(Icons.filter_list, size: 18,
-                    color: level != 'info'
-                        ? Theme.of(context).colorScheme.primary
-                        : null),
-                itemBuilder: (_) => const [
-                  PopupMenuItem(value: 'debug', child: Text('Debug')),
-                  PopupMenuItem(value: 'info', child: Text('Info')),
-                  PopupMenuItem(value: 'warning', child: Text('Warning')),
-                  PopupMenuItem(value: 'error', child: Text('Error')),
-                ],
-              ),
-              IconButton(
-                onPressed: () =>
-                    ref.read(logEntriesProvider.notifier).clear(),
-                icon: const Icon(Icons.delete_outline, size: 18),
-                tooltip: '清空日志',
-                visualDensity: VisualDensity.compact,
-              ),
-            ],
-          ),
-        ),
-
-        // Log entries
-        Expanded(
-          child: filtered.isEmpty
-              ? Center(
-                  child: Text('暂无日志',
-                      style: Theme.of(context).textTheme.bodyMedium))
-              : ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  itemCount: filtered.length,
-                  itemBuilder: (context, index) {
-                    return _LogTile(entry: filtered[index]);
-                  },
+                const SizedBox(width: 2),
+                // Regex toggle
+                Tooltip(
+                  message: s.regexSearch,
+                  child: InkWell(
+                    onTap: () => setState(() {
+                      _regexMode = !_regexMode;
+                      _regexError = false;
+                    }),
+                    borderRadius: BorderRadius.circular(4),
+                    child: Container(
+                      width: 28,
+                      height: 28,
+                      decoration: BoxDecoration(
+                        color: _regexMode
+                            ? (isDesktop
+                                ? const Color(0xFF0E639C)
+                                : Theme.of(context)
+                                    .colorScheme
+                                    .primaryContainer)
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      alignment: Alignment.center,
+                      child: Text('.*',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            fontFamily: 'monospace',
+                            color: _regexMode
+                                ? (isDesktop
+                                    ? Colors.white
+                                    : Theme.of(context)
+                                        .colorScheme
+                                        .onPrimaryContainer)
+                                : (isDesktop
+                                    ? const Color(0xFF6A6A6A)
+                                    : Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant),
+                          )),
+                    ),
+                  ),
                 ),
-        ),
-
-        // Entry count
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-          color: Theme.of(context).colorScheme.surfaceContainerLow,
-          child: Row(
-            children: [
-              Text('${filtered.length} 条日志',
-                  style: Theme.of(context).textTheme.bodySmall),
-              const Spacer(),
-              Text('级别: ${level.toUpperCase()}',
-                  style: Theme.of(context).textTheme.bodySmall),
-            ],
+                const SizedBox(width: 2),
+                // Level filter
+                PopupMenuButton<String>(
+                  initialValue: level,
+                  onSelected: (v) =>
+                      ref.read(logLevelProvider.notifier).state = v,
+                  tooltip: s.logLevelSetting,
+                  icon: Icon(Icons.filter_list,
+                      size: 16,
+                      color: level != 'info'
+                          ? (isDesktop
+                              ? const Color(0xFF4EC9B0)
+                              : Theme.of(context).colorScheme.primary)
+                          : (isDesktop
+                              ? const Color(0xFF6A6A6A)
+                              : null)),
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(
+                        value: 'debug', child: Text('Debug')),
+                    PopupMenuItem(value: 'info', child: Text('Info')),
+                    PopupMenuItem(
+                        value: 'warning', child: Text('Warning')),
+                    PopupMenuItem(
+                        value: 'error', child: Text('Error')),
+                  ],
+                ),
+                IconButton(
+                  onPressed: () =>
+                      ref.read(logEntriesProvider.notifier).clear(),
+                  icon: Icon(Icons.delete_outline,
+                      size: 16,
+                      color: isDesktop
+                          ? const Color(0xFF6A6A6A)
+                          : null),
+                  tooltip: s.clearLogs,
+                  visualDensity: VisualDensity.compact,
+                ),
+              ],
+            ),
           ),
-        ),
-      ],
+
+          // Log entries
+          Expanded(
+            child: filtered.isEmpty
+                ? Center(
+                    child: Text(s.noLogs,
+                        style: TextStyle(
+                          color: isDesktop
+                              ? const Color(0xFF6A6A6A)
+                              : Theme.of(context)
+                                  .textTheme
+                                  .bodyMedium
+                                  ?.color,
+                        )))
+                : ListView.builder(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 4),
+                    itemCount: filtered.length,
+                    itemBuilder: (context, index) {
+                      return _LogTile(
+                          entry: filtered[index],
+                          isDesktop: isDesktop);
+                    },
+                  ),
+          ),
+
+          // Status bar
+          Container(
+            padding: const EdgeInsets.symmetric(
+                horizontal: 12, vertical: 3),
+            color: statusBarBg,
+            child: Row(
+              children: [
+                Text(s.logsCount(filtered.length),
+                    style: TextStyle(
+                        fontSize: 11,
+                        color: statusBarTextColor ??
+                            Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.color)),
+                const Spacer(),
+                if (_regexMode)
+                  Text('REGEX',
+                      style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: isDesktop
+                              ? const Color(0xFFFFC83D)
+                              : Theme.of(context)
+                                  .colorScheme
+                                  .primary)),
+                if (_regexMode) const SizedBox(width: 8),
+                Text(s.logLevelLabel(level.toUpperCase()),
+                    style: TextStyle(
+                        fontSize: 11,
+                        color: statusBarTextColor ??
+                            Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.color)),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
   List<LogEntry> _filterLogs(List<LogEntry> logs) {
     final level = ref.read(logLevelProvider);
-    final levelOrder = {'debug': 0, 'info': 1, 'warning': 2, 'error': 3};
+    final levelOrder = {
+      'debug': 0,
+      'info': 1,
+      'warning': 2,
+      'error': 3
+    };
     final minLevel = levelOrder[level] ?? 1;
 
     var filtered = logs
@@ -532,10 +391,22 @@ class _LogsTabState extends ConsumerState<_LogsTab> {
         .toList();
 
     if (_searchQuery.isNotEmpty) {
-      final q = _searchQuery.toLowerCase();
-      filtered = filtered
-          .where((l) => l.payload.toLowerCase().contains(q))
-          .toList();
+      if (_regexMode) {
+        try {
+          final regex =
+              RegExp(_searchQuery, caseSensitive: false);
+          filtered =
+              filtered.where((l) => regex.hasMatch(l.payload)).toList();
+        } catch (_) {
+          // Invalid regex — show nothing to indicate error
+          return [];
+        }
+      } else {
+        final q = _searchQuery.toLowerCase();
+        filtered = filtered
+            .where((l) => l.payload.toLowerCase().contains(q))
+            .toList();
+      }
     }
 
     return filtered;
@@ -544,50 +415,65 @@ class _LogsTabState extends ConsumerState<_LogsTab> {
 
 class _LogTile extends StatelessWidget {
   final LogEntry entry;
-  const _LogTile({required this.entry});
+  final bool isDesktop;
+  const _LogTile({required this.entry, this.isDesktop = false});
 
   @override
   Widget build(BuildContext context) {
+    final timeColor = isDesktop
+        ? const Color(0xFF569CD6) // VS Code blue for timestamps
+        : Theme.of(context).colorScheme.onSurfaceVariant;
+
+    final payloadColor = isDesktop
+        ? _desktopPayloadColor(entry.type)
+        : _mobilePayloadColor(entry.type, context);
+
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
+      padding: const EdgeInsets.symmetric(vertical: 1),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Timestamp
-          SizedBox(
-            width: 60,
-            child: Text(
-              '${entry.timestamp.hour.toString().padLeft(2, '0')}:${entry.timestamp.minute.toString().padLeft(2, '0')}:${entry.timestamp.second.toString().padLeft(2, '0')}',
+          Text(
+            '${entry.timestamp.hour.toString().padLeft(2, '0')}:'
+            '${entry.timestamp.minute.toString().padLeft(2, '0')}:'
+            '${entry.timestamp.second.toString().padLeft(2, '0')} ',
+            style: TextStyle(
+              fontSize: 11,
+              fontFamily: 'monospace',
+              color: timeColor,
+            ),
+          ),
+          // Level indicator dot (mobile) or bracket tag (desktop)
+          if (isDesktop)
+            Text(
+              '[${entry.type.toUpperCase().padRight(7)}] ',
               style: TextStyle(
                 fontSize: 11,
                 fontFamily: 'monospace',
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                color: _levelTagColor(entry.type),
+                fontWeight: FontWeight.bold,
+              ),
+            )
+          else
+            Container(
+              width: 8,
+              height: 8,
+              margin: const EdgeInsets.only(top: 3, right: 6),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: _levelDotColor(entry.type),
               ),
             ),
-          ),
-          // Level badge
-          Container(
-            width: 8,
-            height: 8,
-            margin: const EdgeInsets.only(top: 4, right: 6),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: _levelColor(entry.type),
-            ),
-          ),
           // Payload
           Expanded(
             child: SelectableText(
               entry.payload,
               style: TextStyle(
-                fontSize: 12,
+                fontSize: isDesktop ? 12 : 12,
                 fontFamily: 'monospace',
-                height: 1.4,
-                color: entry.type == 'error'
-                    ? Colors.red
-                    : entry.type == 'warning'
-                        ? Colors.orange
-                        : Theme.of(context).colorScheme.onSurface,
+                height: 1.5,
+                color: payloadColor,
               ),
             ),
           ),
@@ -596,7 +482,44 @@ class _LogTile extends StatelessWidget {
     );
   }
 
-  Color _levelColor(String type) {
+  Color _levelTagColor(String type) {
+    switch (type) {
+      case 'error':
+        return const Color(0xFFF44747); // VS Code red
+      case 'warning':
+        return const Color(0xFFFFCC00); // yellow
+      case 'debug':
+        return const Color(0xFF6A9955); // VS Code green comment
+      default:
+        return const Color(0xFF4EC9B0); // VS Code teal (info)
+    }
+  }
+
+  Color _desktopPayloadColor(String type) {
+    switch (type) {
+      case 'error':
+        return const Color(0xFFF44747);
+      case 'warning':
+        return const Color(0xFFCE9178); // VS Code string orange
+      case 'debug':
+        return const Color(0xFF6A9955);
+      default:
+        return const Color(0xFFD4D4D4); // VS Code default text
+    }
+  }
+
+  Color _mobilePayloadColor(String type, BuildContext context) {
+    switch (type) {
+      case 'error':
+        return Colors.red;
+      case 'warning':
+        return Colors.orange;
+      default:
+        return Theme.of(context).colorScheme.onSurface;
+    }
+  }
+
+  Color _levelDotColor(String type) {
     switch (type) {
       case 'error':
         return Colors.red;
@@ -610,9 +533,9 @@ class _LogTile extends StatelessWidget {
   }
 }
 
-// ==================================================================
+// ══════════════════════════════════════════════════════════════════════════════
 // Rules tab
-// ==================================================================
+// ══════════════════════════════════════════════════════════════════════════════
 
 class _RulesTab extends ConsumerStatefulWidget {
   const _RulesTab();
@@ -628,7 +551,8 @@ class _RulesTabState extends ConsumerState<_RulesTab> {
   @override
   void initState() {
     super.initState();
-    Future.microtask(() => ref.read(rulesProvider.notifier).refresh());
+    Future.microtask(
+        () => ref.read(rulesProvider.notifier).refresh());
   }
 
   @override
@@ -639,6 +563,7 @@ class _RulesTabState extends ConsumerState<_RulesTab> {
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     final rules = ref.watch(rulesProvider);
     final filtered = _filterRules(rules);
 
@@ -646,18 +571,22 @@ class _RulesTabState extends ConsumerState<_RulesTab> {
       children: [
         // Summary
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          color: Theme.of(context).colorScheme.surfaceContainerLow,
+          padding: const EdgeInsets.symmetric(
+              horizontal: 16, vertical: 10),
+          color:
+              Theme.of(context).colorScheme.surfaceContainerLow,
           child: Row(
             children: [
               Icon(Icons.rule_folder_outlined,
-                  size: 18, color: Theme.of(context).colorScheme.primary),
+                  size: 18,
+                  color: Theme.of(context).colorScheme.primary),
               const SizedBox(width: 8),
-              Text('共 ${rules.length} 条规则',
-                  style: Theme.of(context).textTheme.titleSmall),
+              Text(s.rulesCount(rules.length),
+                  style:
+                      Theme.of(context).textTheme.titleSmall),
               const Spacer(),
               if (_searchQuery.isNotEmpty)
-                Text('匹配 ${filtered.length} 条',
+                Text(s.matchedRulesCount(filtered.length),
                     style: Theme.of(context).textTheme.bodySmall),
             ],
           ),
@@ -666,7 +595,8 @@ class _RulesTabState extends ConsumerState<_RulesTab> {
 
         // Search
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          padding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
           child: Row(
             children: [
               Expanded(
@@ -675,15 +605,17 @@ class _RulesTabState extends ConsumerState<_RulesTab> {
                   child: TextField(
                     controller: _searchController,
                     decoration: InputDecoration(
-                      hintText: '搜索规则...',
-                      prefixIcon: const Icon(Icons.search, size: 18),
+                      hintText: s.searchRulesHint,
+                      prefixIcon:
+                          const Icon(Icons.search, size: 18),
                       suffixIcon: _searchQuery.isNotEmpty
                           ? GestureDetector(
                               onTap: () {
                                 _searchController.clear();
                                 setState(() => _searchQuery = '');
                               },
-                              child: const Icon(Icons.clear, size: 16),
+                              child:
+                                  const Icon(Icons.clear, size: 16),
                             )
                           : null,
                       isDense: true,
@@ -709,7 +641,7 @@ class _RulesTabState extends ConsumerState<_RulesTab> {
                 onPressed: () =>
                     ref.read(rulesProvider.notifier).refresh(),
                 icon: const Icon(Icons.refresh, size: 18),
-                tooltip: '刷新',
+                tooltip: S.of(context).retry,
                 visualDensity: VisualDensity.compact,
               ),
             ],
@@ -722,10 +654,13 @@ class _RulesTabState extends ConsumerState<_RulesTab> {
               ? const Center(child: CircularProgressIndicator())
               : filtered.isEmpty
                   ? Center(
-                      child: Text('未找到匹配的规则',
-                          style: Theme.of(context).textTheme.bodyMedium))
+                      child: Text(s.noMatchingRules,
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodyMedium))
                   : ListView.builder(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8),
                       itemCount: filtered.length,
                       itemBuilder: (context, index) {
                         return _RuleTile(rule: filtered[index]);
@@ -758,10 +693,10 @@ class _RuleTile extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
         children: [
-          // Type badge
           Container(
             width: 96,
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             decoration: BoxDecoration(
               color: _typeColor(context).withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(4),
@@ -777,14 +712,14 @@ class _RuleTile extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
-          // Payload
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   rule.payload.isEmpty ? '*' : rule.payload,
-                  style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+                  style: const TextStyle(
+                      fontSize: 12, fontFamily: 'monospace'),
                   overflow: TextOverflow.ellipsis,
                 ),
                 if (rule.size > 0)
@@ -798,18 +733,21 @@ class _RuleTile extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 6),
-          // Proxy target
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.secondaryContainer,
+              color:
+                  Theme.of(context).colorScheme.secondaryContainer,
               borderRadius: BorderRadius.circular(4),
             ),
             child: Text(
               rule.proxy,
               style: TextStyle(
                 fontSize: 10,
-                color: Theme.of(context).colorScheme.onSecondaryContainer,
+                color: Theme.of(context)
+                    .colorScheme
+                    .onSecondaryContainer,
               ),
             ),
           ),
@@ -834,107 +772,5 @@ class _RuleTile extends StatelessWidget {
       default:
         return Theme.of(context).colorScheme.primary;
     }
-  }
-}
-
-// ==================================================================
-// Shared widgets
-// ==================================================================
-
-class _DetailRow extends StatelessWidget {
-  final String label;
-  final String value;
-  const _DetailRow({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 72,
-            child: Text(label,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant)),
-          ),
-          Expanded(
-            child: Text(value,
-                style: Theme.of(context).textTheme.bodyMedium),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ConnectionTile extends StatelessWidget {
-  final ConnectionInfo conn;
-  final VoidCallback onTap;
-  final VoidCallback onClose;
-
-  const _ConnectionTile({
-    required this.conn,
-    required this.onTap,
-    required this.onClose,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return ListTile(
-      dense: true,
-      onTap: onTap,
-      leading: Icon(
-        conn.network == 'udp' ? Icons.swap_horiz : Icons.link,
-        size: 18,
-        color: Theme.of(context).colorScheme.primary,
-      ),
-      title: Text(conn.host, style: const TextStyle(fontSize: 13)),
-      subtitle: Text(
-        '${conn.network.toUpperCase()} · ${conn.rule} · ${conn.chains}',
-        style: const TextStyle(fontSize: 11),
-      ),
-      trailing: IconButton(
-        icon: const Icon(Icons.close, size: 16),
-        onPressed: onClose,
-        visualDensity: VisualDensity.compact,
-        color: Colors.red.shade300,
-      ),
-    );
-  }
-}
-
-class _StatChip extends StatelessWidget {
-  final IconData icon;
-  final Color iconColor;
-  final String label;
-  final String value;
-
-  const _StatChip({
-    required this.icon,
-    required this.iconColor,
-    required this.label,
-    required this.value,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 14, color: iconColor),
-            const SizedBox(width: 4),
-            Text(value,
-                style: Theme.of(context)
-                    .textTheme
-                    .titleSmall
-                    ?.copyWith(fontWeight: FontWeight.bold)),
-          ],
-        ),
-        Text(label, style: Theme.of(context).textTheme.bodySmall),
-      ],
-    );
   }
 }

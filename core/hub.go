@@ -6,7 +6,6 @@ package main
 import "C"
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -182,116 +181,6 @@ func UpdateConfig(configStr *C.char) C.int {
 
 	log.Infoln("Config updated successfully")
 	return 0
-}
-
-// --------------------------------------------------------------------
-// Proxies (minimal — prefer REST API for data operations)
-// --------------------------------------------------------------------
-
-// GetProxies returns the current proxy groups as JSON.
-// NOTE: In the hybrid architecture, prefer using the REST API
-// on external-controller port for proxy data. This FFI endpoint
-// exists as a fallback.
-// Caller must free the returned C string with FreeCString().
-//
-//export GetProxies
-func GetProxies() *C.char {
-	state.lock()
-	defer state.unlock()
-
-	if !state.isRunning {
-		return C.CString(`{"proxies":{}}`)
-	}
-
-	// Return a minimal response — the REST API provides full proxy data
-	result := map[string]interface{}{
-		"proxies": map[string]interface{}{},
-	}
-	data, _ := json.Marshal(result)
-	return C.CString(string(data))
-}
-
-// ChangeProxy switches the selected proxy in a group via FFI.
-// Returns 0 on success, -1 on failure.
-//
-//export ChangeProxy
-func ChangeProxy(groupName *C.char, proxyName *C.char) C.int {
-	state.lock()
-	defer state.unlock()
-
-	if !state.isRunning {
-		return -1
-	}
-
-	// In hybrid architecture, proxy changes go through REST API
-	_ = C.GoString(groupName)
-	_ = C.GoString(proxyName)
-
-	return 0
-}
-
-// TestDelay tests proxy latency via FFI.
-// Returns delay in ms, or -1 on failure.
-//
-//export TestDelay
-func TestDelay(proxyName *C.char, url *C.char, timeoutMs C.int) C.int {
-	state.lock()
-	defer state.unlock()
-
-	if !state.isRunning {
-		return -1
-	}
-
-	// In hybrid architecture, delay tests go through REST API
-	_ = C.GoString(proxyName)
-	_ = C.GoString(url)
-	_ = int(timeoutMs)
-
-	return -1
-}
-
-// --------------------------------------------------------------------
-// Traffic & Connections (minimal — prefer REST API)
-// --------------------------------------------------------------------
-
-// GetTraffic returns current traffic rates as JSON.
-//
-//export GetTraffic
-func GetTraffic() *C.char {
-	result := map[string]int64{
-		"up":   0,
-		"down": 0,
-	}
-	data, _ := json.Marshal(result)
-	return C.CString(string(data))
-}
-
-// GetConnections returns active connections as JSON.
-//
-//export GetConnections
-func GetConnections() *C.char {
-	result := map[string]interface{}{
-		"connections":   []interface{}{},
-		"uploadTotal":   0,
-		"downloadTotal": 0,
-	}
-	data, _ := json.Marshal(result)
-	return C.CString(string(data))
-}
-
-// CloseConnection closes a specific connection by ID.
-//
-//export CloseConnection
-func CloseConnection(connId *C.char) C.int {
-	_ = C.GoString(connId)
-	return 0
-}
-
-// CloseAllConnections closes all active connections.
-//
-//export CloseAllConnections
-func CloseAllConnections() {
-	// Handled by REST API in hybrid architecture
 }
 
 // --------------------------------------------------------------------

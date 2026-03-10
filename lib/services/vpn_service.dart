@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 
+import 'settings_service.dart';
+
 /// Platform-specific VPN service abstraction.
 ///
 /// Handles starting/stopping the OS-level VPN tunnel:
@@ -20,12 +22,40 @@ class VpnService {
   static Future<int> startAndroidVpn({int mixedPort = 7890}) async {
     assert(Platform.isAndroid);
     try {
+      // Load split-tunnel config and pass to native side
+      final splitMode = await SettingsService.getSplitTunnelMode();
+      final splitApps = await SettingsService.getSplitTunnelApps();
       final fd = await _channel.invokeMethod<int>('startVpn', {
         'mixedPort': mixedPort,
+        'splitMode': splitMode,
+        'splitApps': splitApps,
       });
       return fd ?? -1;
     } on PlatformException catch (_) {
       return -1;
+    }
+  }
+
+  static const _appsChannel = MethodChannel('com.yueto.yuelink/apps');
+
+  /// Returns installed apps as a list of {packageName, appName} maps.
+  static Future<List<Map<String, String>>> getInstalledApps({
+    bool showSystem = false,
+  }) async {
+    if (!Platform.isAndroid) return [];
+    try {
+      final raw = await _appsChannel.invokeListMethod<Map>(
+        'getInstalledApps',
+        {'showSystem': showSystem},
+      );
+      return (raw ?? [])
+          .map((m) => {
+                'packageName': m['packageName'] as String? ?? '',
+                'appName': m['appName'] as String? ?? '',
+              })
+          .toList();
+    } on PlatformException catch (_) {
+      return [];
     }
   }
 

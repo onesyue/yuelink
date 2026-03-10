@@ -5,6 +5,8 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
+import android.content.pm.ApplicationInfo
+import android.content.pm.PackageManager
 import android.net.VpnService
 import android.os.IBinder
 import io.flutter.embedding.android.FlutterActivity
@@ -13,12 +15,16 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
     companion object {
-        private const val VPN_CHANNEL = "com.yueto.yuelink/vpn"
+        private const val VPN_CHANNEL  = "com.yueto.yuelink/vpn"
+        private const val APPS_CHANNEL = "com.yueto.yuelink/apps"
         private const val VPN_REQUEST_CODE = 1001
     }
 
     private var vpnPermissionResult: MethodChannel.Result? = null
     private var vpnStartResult: MethodChannel.Result? = null
+    private var pendingMixedPort: Int = 7890
+    private var pendingSplitMode: String = "all"
+    private var pendingSplitApps: List<String> = emptyList()
 
     private var vpnService: YueLinkVpnService? = null
     private var serviceBound = false
@@ -28,7 +34,6 @@ class MainActivity : FlutterActivity() {
             vpnService = (service as YueLinkVpnService.LocalBinder).getService()
             serviceBound = true
         }
-
         override fun onServiceDisconnected(name: ComponentName?) {
             vpnService = null
             serviceBound = false
@@ -38,76 +43,116 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
+        // ── VPN channel ───────────────────────────────────────────────────────
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, VPN_CHANNEL)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     "requestPermission" -> requestVpnPermission(result)
                     "startVpn" -> {
                         val mixedPort = call.argument<Int>("mixedPort") ?: 7890
-                        startVpnService(mixedPort, result)
+                        val splitMode = call.argument<String>("splitMode") ?: "all"
+                        val splitApps = call.argument<List<String>>("splitApps") ?: emptyList()
+                        startVpnService(mixedPort, splitMode, splitApps, result)
                     }
-                    "stopVpn" -> stopVpnService(result)
+                    "stopVpn"  -> stopVpnService(result)
                     "getTunFd" -> result.success(vpnService?.getTunFd() ?: -1)
+                    else -> result.notImplemented()
+                }
+            }
+
+        // ── Installed apps channel ────────────────────────────────────────────
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, APPS_CHANNEL)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "getInstalledApps" -> {
+                        val showSystem = call.argument<Boolean>("showSystem") ?: false
+                        result.success(getInstalledApps(showSystem))
+                    }
                     else -> result.notImplemented()
                 }
             }
     }
 
+    // ── Installed apps ────────────────────────────────────────────────────────
+
+    private fun getInstalledApps(showSystem: Boolean): List<Map<String, String>> {
+        val pm = packageManager
+        val flags = PackageManager.GET_META_DATA
+        return pm.getInstalledApplications(flags)
+            .filter { app ->
+                val isSystem = (app.flags and ApplicationInfo.FLAG_SYSTEM) != 0
+                if (!showSystem && isSystem) return@filter false
+                // Exclude ourselves
+                app.packageName != packageName
+            }
+            .map { app ->
+                mapOf(
+                    "packageName" to app.packageName,
+                    "appName"     to (pm.getApplicationLabel(app).toString()),
+                )
+            }
+            .sortedBy { it["appName"] }
+    }
+
+    // ── VPN helpers ───────────────────────────────────────────────────────────
+
     private fun requestVpnPermission(result: MethodChannel.Result) {
         val intent = VpnService.prepare(this)
         if (intent != null) {
             vpnPermissionResult = result
+            @Suppress("DEPRECATION")
             startActivityForResult(intent, VPN_REQUEST_CODE)
         } else {
             result.success(true)
         }
     }
 
-    private fun startVpnService(mixedPort: Int, result: MethodChannel.Result) {
-        // Check / request VPN permission first
+    private fun startVpnService(
+        mixedPort: Int,
+        splitMode: String,
+        splitApps: List<String>,
+        result: MethodChannel.Result,
+    ) {
         val prepareIntent = VpnService.prepare(this)
         if (prepareIntent != null) {
-            vpnPermissionResult = null
-            vpnStartResult = result
+            vpnStartResult       = result
+            pendingMixedPort     = mixedPort
+            pendingSplitMode     = splitMode
+            pendingSplitApps     = splitApps
+            @Suppress("DEPRECATION")
             startActivityForResult(prepareIntent, VPN_REQUEST_CODE)
             return
         }
-
-        doStartVpnService(mixedPort, result)
+        doStartVpnService(mixedPort, splitMode, splitApps, result)
     }
 
-    private fun doStartVpnService(mixedPort: Int, result: MethodChannel.Result) {
+    private fun doStartVpnService(
+        mixedPort: Int,
+        splitMode: String,
+        splitApps: List<String>,
+        result: MethodChannel.Result,
+    ) {
         val serviceIntent = Intent(this, YueLinkVpnService::class.java).apply {
             action = YueLinkVpnService.ACTION_START
             putExtra(YueLinkVpnService.EXTRA_MIXED_PORT, mixedPort)
+            putExtra(YueLinkVpnService.EXTRA_SPLIT_MODE, splitMode)
+            putStringArrayListExtra(YueLinkVpnService.EXTRA_SPLIT_APPS, ArrayList(splitApps))
         }
         startForegroundService(serviceIntent)
 
-        // Bind to receive the TUN fd via callback
         val bindIntent = Intent(this, YueLinkVpnService::class.java)
         bindService(bindIntent, serviceConnection, Context.BIND_AUTO_CREATE)
 
-        // Wait for the service to establish the TUN and deliver the fd
-        // We set the callback — the service calls it once the fd is ready
-        val checkFd = Runnable {
-            // Service may already be running; poll the fd
-        }
-
-        // Use a short delayed mechanism via Handler to poll once bound
         android.os.Handler(mainLooper).postDelayed({
             val bound = vpnService
             if (bound != null) {
-                bound.onTunReady = { fd ->
-                    result.success(fd)
-                }
-                // If already running, trigger immediately
+                bound.onTunReady = { fd -> result.success(fd) }
                 val currentFd = bound.getTunFd()
                 if (currentFd != -1) {
                     bound.onTunReady = null
                     result.success(currentFd)
                 }
             } else {
-                // Service not yet bound — return -1, Flutter will retry
                 result.success(-1)
             }
         }, 500)
@@ -126,21 +171,23 @@ class MainActivity : FlutterActivity() {
         result.success(true)
     }
 
+    @Suppress("DEPRECATION")
+    @Deprecated("Deprecated in Java")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == VPN_REQUEST_CODE) {
-            val granted = resultCode == Activity.RESULT_OK
-            if (vpnPermissionResult != null) {
-                vpnPermissionResult?.success(granted)
-                vpnPermissionResult = null
-            } else if (vpnStartResult != null) {
-                val pendingResult = vpnStartResult!!
-                vpnStartResult = null
-                if (granted) {
-                    doStartVpnService(7890, pendingResult)
-                } else {
-                    pendingResult.success(-1)
-                }
+        if (requestCode != VPN_REQUEST_CODE) return
+
+        val granted = resultCode == Activity.RESULT_OK
+        if (vpnPermissionResult != null) {
+            vpnPermissionResult?.success(granted)
+            vpnPermissionResult = null
+        } else if (vpnStartResult != null) {
+            val pendingResult = vpnStartResult!!
+            vpnStartResult = null
+            if (granted) {
+                doStartVpnService(pendingMixedPort, pendingSplitMode, pendingSplitApps, pendingResult)
+            } else {
+                pendingResult.success(-1)
             }
         }
     }

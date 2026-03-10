@@ -5,9 +5,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../l10n/app_strings.dart';
 import '../providers/core_provider.dart';
 import '../providers/profile_provider.dart';
 import '../providers/proxy_provider.dart';
+import '../services/app_notifier.dart';
+import '../services/core_manager.dart';
 import '../services/profile_service.dart';
 import '../services/settings_service.dart';
 
@@ -21,6 +24,7 @@ class HomePage extends ConsumerStatefulWidget {
 class _HomePageState extends ConsumerState<HomePage> {
   DateTime? _connectedSince;
   Timer? _uptimeTimer;
+  bool _busy = false;
 
   @override
   void dispose() {
@@ -55,6 +59,7 @@ class _HomePageState extends ConsumerState<HomePage> {
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     final status = ref.watch(coreStatusProvider);
     final isMock = ref.watch(isMockModeProvider);
     final isRunning = status == CoreStatus.running;
@@ -64,6 +69,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     if (isRunning) {
       ref.watch(trafficStreamProvider);
       ref.watch(memoryStreamProvider);
+      ref.watch(coreHeartbeatProvider);
     }
 
     ref.listen(coreStatusProvider, (prev, next) {
@@ -95,7 +101,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                       Icon(Icons.science_outlined,
                           size: 16, color: Colors.amber.shade700),
                       const SizedBox(width: 6),
-                      Text('开发模式 · 模拟数据',
+                      Text(s.mockModeBanner,
                           style: TextStyle(
                               fontSize: 12, color: Colors.amber.shade700)),
                     ],
@@ -110,8 +116,10 @@ class _HomePageState extends ConsumerState<HomePage> {
 
               Text(
                 isTransitioning
-                    ? (status == CoreStatus.starting ? '连接中...' : '断开中...')
-                    : (isRunning ? '已连接' : '未连接'),
+                    ? (status == CoreStatus.starting
+                        ? s.statusConnecting
+                        : s.statusDisconnecting)
+                    : (isRunning ? s.statusConnected : s.statusDisconnected),
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                       fontWeight: FontWeight.w600,
                       color: isRunning
@@ -147,10 +155,12 @@ class _HomePageState extends ConsumerState<HomePage> {
               const SizedBox(height: 16),
 
               if (isRunning) ...[
-                const _TrafficChart(),
+                const RepaintBoundary(child: _TrafficChart()),
                 const SizedBox(height: 8),
                 const _TrafficCard(),
+                const SizedBox(height: 8),
               ],
+              const _DailyTrafficCard(),
 
               const Spacer(),
 
@@ -183,8 +193,10 @@ class _HomePageState extends ConsumerState<HomePage> {
                         ),
                       Text(
                         isTransitioning
-                            ? (status == CoreStatus.starting ? '连接中' : '断开中')
-                            : (isRunning ? '断开连接' : '连接'),
+                            ? (status == CoreStatus.starting
+                                ? s.btnConnecting
+                                : s.btnDisconnecting)
+                            : (isRunning ? s.btnDisconnect : s.btnConnect),
                         style: const TextStyle(fontSize: 18),
                       ),
                     ],
@@ -199,54 +211,87 @@ class _HomePageState extends ConsumerState<HomePage> {
     );
   }
 
+  void _showRollbackDialog(S s, String lastGoodConfig) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(s.rollbackTitle),
+        content: Text(s.rollbackContent),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(s.cancel),
+          ),
+          FilledButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final ok = await ref
+                  .read(coreActionsProvider)
+                  .start(lastGoodConfig);
+              if (ok) {
+                AppNotifier.success(s.rollbackSuccess);
+              } else {
+                AppNotifier.error(s.rollbackFailed);
+              }
+            },
+            child: Text(s.rollbackConfirm),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _toggle(BuildContext context, WidgetRef ref) async {
+    if (_busy) return;
+    _busy = true;
+
+    final s = S.of(context);
     final actions = ref.read(coreActionsProvider);
     final status = ref.read(coreStatusProvider);
     final isMock = ref.read(isMockModeProvider);
 
     HapticFeedback.mediumImpact();
 
-    if (status == CoreStatus.running) {
-      await actions.stop();
-      return;
-    }
-
-    if (isMock) {
-      await actions.start('');
-      return;
-    }
-
-    final activeId = ref.read(activeProfileIdProvider);
-    if (activeId == null) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('请先在「配置」页面添加订阅')),
-        );
+    try {
+      if (status == CoreStatus.running) {
+        await actions.stop();
+        return;
       }
-      return;
-    }
 
-    final config = await ProfileService.loadConfig(activeId);
-    if (config == null) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('配置文件不存在，请更新订阅')),
-        );
+      if (isMock) {
+        await actions.start('');
+        return;
       }
-      return;
-    }
-    final ok = await actions.start(config);
-    if (!ok && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('启动失败，请检查配置')),
-      );
+
+      final activeId = ref.read(activeProfileIdProvider);
+      if (activeId == null) {
+        AppNotifier.warning(s.snackNoProfile);
+        return;
+      }
+
+      final config = await ProfileService.loadConfig(activeId);
+      if (config == null) {
+        AppNotifier.warning(s.snackConfigMissing);
+        return;
+      }
+
+      final ok = await actions.start(config);
+      if (!ok && mounted) {
+        AppNotifier.error(s.snackStartFailed);
+        // Offer rollback to last known-good config
+        final lastGood =
+            await CoreManager.instance.loadLastWorkingConfig();
+        if (lastGood != null && lastGood != config && mounted) {
+          _showRollbackDialog(s, lastGood);
+        }
+      }
+    } finally {
+      _busy = false;
     }
   }
 }
 
-// ------------------------------------------------------------------
-// Routing Mode Switcher
-// ------------------------------------------------------------------
+// ── Routing Mode Switcher ─────────────────────────────────────────────────────
 
 class _RoutingModeSwitcher extends ConsumerWidget {
   final bool isRunning;
@@ -254,22 +299,23 @@ class _RoutingModeSwitcher extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final s = S.of(context);
     final mode = ref.watch(routingModeProvider);
 
     return SegmentedButton<String>(
-      segments: const [
+      segments: [
         ButtonSegment(
             value: 'rule',
-            label: Text('规则'),
-            icon: Icon(Icons.rule, size: 16)),
+            label: Text(s.routeModeRule),
+            icon: const Icon(Icons.rule, size: 16)),
         ButtonSegment(
             value: 'global',
-            label: Text('全局'),
-            icon: Icon(Icons.public, size: 16)),
+            label: Text(s.routeModeGlobal),
+            icon: const Icon(Icons.public, size: 16)),
         ButtonSegment(
             value: 'direct',
-            label: Text('直连'),
-            icon: Icon(Icons.wifi_tethering, size: 16)),
+            label: Text(s.routeModeDirect),
+            icon: const Icon(Icons.wifi_tethering, size: 16)),
       ],
       selected: {mode},
       onSelectionChanged: (set) async {
@@ -286,9 +332,7 @@ class _RoutingModeSwitcher extends ConsumerWidget {
   }
 }
 
-// ------------------------------------------------------------------
-// Traffic Chart
-// ------------------------------------------------------------------
+// ── Traffic Chart ─────────────────────────────────────────────────────────────
 
 class _TrafficChart extends ConsumerWidget {
   const _TrafficChart();
@@ -301,8 +345,10 @@ class _TrafficChart extends ConsumerWidget {
 
     if (downHistory.isEmpty) return const SizedBox.shrink();
 
-    final maxDown = history.maxDown;
-    final maxY = maxDown > 0 ? maxDown * 1.2 : 1024 * 1024.0;
+    // Use 90th-percentile as Y-axis ceiling to prevent a single traffic spike
+    // from compressing all other data into a flat line.
+    final p90 = history.p90;
+    final maxY = p90 > 0 ? p90 * 1.5 : 1024 * 1024.0;
 
     List<FlSpot> toSpots(List<double> data) => data
         .asMap()
@@ -351,9 +397,7 @@ class _TrafficChart extends ConsumerWidget {
   }
 }
 
-// ------------------------------------------------------------------
-// Other widgets
-// ------------------------------------------------------------------
+// ── Other widgets ─────────────────────────────────────────────────────────────
 
 class _ActiveNodeInfo extends ConsumerWidget {
   @override
@@ -397,16 +441,18 @@ class _ActiveNodeInfo extends ConsumerWidget {
 class _ActiveProfileName extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final s = S.of(context);
     final isMock = ref.watch(isMockModeProvider);
     if (isMock) {
-      return Text('模拟模式',
+      return Text(s.mockModeLabel,
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
               color: Theme.of(context).colorScheme.onSurfaceVariant));
     }
     final profiles = ref.watch(profilesProvider);
     final activeId = ref.watch(activeProfileIdProvider);
     final name = profiles.whenOrNull(
-      data: (list) => list.where((p) => p.id == activeId).firstOrNull?.name,
+      data: (list) =>
+          list.where((p) => p.id == activeId).firstOrNull?.name,
     );
     if (name == null) return const SizedBox.shrink();
     return Text(name,
@@ -418,12 +464,13 @@ class _ActiveProfileName extends ConsumerWidget {
 class _DisconnectedHint extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final s = S.of(context);
     final profiles = ref.watch(profilesProvider);
     final activeId = ref.watch(activeProfileIdProvider);
     final isMock = ref.watch(isMockModeProvider);
 
     if (isMock) {
-      return Text('点击连接启动模拟模式',
+      return Text(s.mockHint,
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
               color: Theme.of(context).colorScheme.onSurfaceVariant));
     }
@@ -435,9 +482,10 @@ class _DisconnectedHint extends ConsumerWidget {
         if (list.isEmpty) {
           return Padding(
             padding: const EdgeInsets.only(top: 4),
-            child: Text('请先在「配置」页面添加订阅',
+            child: Text(s.noProfileHint,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                    color:
+                        Theme.of(context).colorScheme.onSurfaceVariant)),
           );
         }
         final active =
@@ -453,8 +501,9 @@ class _DisconnectedHint extends ConsumerWidget {
               const SizedBox(width: 4),
               Text(active.name,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color:
-                          Theme.of(context).colorScheme.onSurfaceVariant)),
+                      color: Theme.of(context)
+                          .colorScheme
+                          .onSurfaceVariant)),
             ],
           ),
         );
@@ -509,6 +558,7 @@ class _TrafficCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final s = S.of(context);
     final traffic = ref.watch(trafficProvider);
     final memoryBytes = ref.watch(memoryUsageProvider);
 
@@ -522,14 +572,14 @@ class _TrafficCard extends ConsumerWidget {
               icon: Icons.arrow_upward,
               iconColor: Colors.blue,
               value: traffic.upFormatted,
-              label: '上传',
+              label: s.trafficUpload,
             ),
             const SizedBox(width: 36),
             _TrafficColumn(
               icon: Icons.arrow_downward,
               iconColor: Colors.green,
               value: traffic.downFormatted,
-              label: '下载',
+              label: s.trafficDownload,
             ),
             if (memoryBytes > 0) ...[
               const SizedBox(width: 36),
@@ -537,7 +587,7 @@ class _TrafficCard extends ConsumerWidget {
                 icon: Icons.memory,
                 iconColor: Colors.orange,
                 value: _formatMemory(memoryBytes),
-                label: '内存',
+                label: s.trafficMemory,
               ),
             ],
           ],
@@ -578,5 +628,56 @@ class _TrafficColumn extends StatelessWidget {
         Text(label, style: Theme.of(context).textTheme.bodySmall),
       ],
     );
+  }
+}
+
+// ── Daily traffic summary ─────────────────────────────────────────────────────
+
+class _DailyTrafficCard extends ConsumerWidget {
+  const _DailyTrafficCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = S.of(context);
+    final (upTotal, downTotal) = ref.watch(dailyTrafficProvider);
+
+    if (upTotal == 0 && downTotal == 0) return const SizedBox.shrink();
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Text(
+            s.todayUsage,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant),
+          ),
+          const Spacer(),
+          const Icon(Icons.arrow_upward, size: 12, color: Colors.blue),
+          const SizedBox(width: 3),
+          Text(_fmt(upTotal),
+              style: const TextStyle(fontSize: 12, color: Colors.blue)),
+          const SizedBox(width: 14),
+          const Icon(Icons.arrow_downward, size: 12, color: Colors.green),
+          const SizedBox(width: 3),
+          Text(_fmt(downTotal),
+              style: const TextStyle(fontSize: 12, color: Colors.green)),
+        ],
+      ),
+    );
+  }
+
+  String _fmt(int bytes) {
+    if (bytes < 1024 * 1024) {
+      return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    }
+    if (bytes < 1024 * 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
   }
 }

@@ -7,8 +7,11 @@ import 'package:path_provider/path_provider.dart';
 import '../ffi/core_controller.dart';
 import '../models/traffic.dart';
 import '../models/traffic_history.dart';
+import '../providers/proxy_provider.dart';
 import '../services/core_manager.dart';
+import '../services/guard_service.dart';
 import '../services/mihomo_api.dart';
+import '../services/settings_service.dart';
 import '../services/unlock_test_service.dart';
 import '../services/vpn_service.dart';
 
@@ -55,6 +58,9 @@ final systemProxyOnConnectProvider = StateProvider<bool>((ref) => true);
 /// Whether to auto-connect on startup
 final autoConnectProvider = StateProvider<bool>((ref) => false);
 
+/// Whether Guard mode (auto-restore system proxy) is enabled
+final guardModeProvider = StateProvider<bool>((ref) => false);
+
 // ------------------------------------------------------------------
 // Core actions
 // ------------------------------------------------------------------
@@ -98,10 +104,15 @@ class CoreActions {
       try {
         await _setSystemProxy(manager.mixedPort);
       } catch (_) {}
+
+      // Start Guard mode if enabled
+      if (ref.read(guardModeProvider)) {
+        GuardService.instance.start(manager.mixedPort);
+      }
     }
 
     // Trigger initial proxy data fetch
-    ref.read(proxyRefreshProvider);
+    ref.read(proxyGroupsProvider.notifier).refresh();
 
     return true;
   }
@@ -109,6 +120,9 @@ class CoreActions {
   Future<void> stop() async {
     ref.read(coreStatusProvider.notifier).state = CoreStatus.stopping;
     await Future.delayed(const Duration(milliseconds: 300));
+
+    // Stop Guard mode
+    GuardService.instance.stop();
 
     // Clear system proxy on macOS/Windows
     if ((Platform.isMacOS || Platform.isWindows) &&
@@ -139,12 +153,17 @@ class CoreActions {
 
   static Future<void> _setSystemProxy(int mixedPort) async {
     if (Platform.isMacOS) {
-      await Process.run(
-          'networksetup', ['-setwebproxy', 'Wi-Fi', '127.0.0.1', '$mixedPort']);
-      await Process.run('networksetup',
-          ['-setsecurewebproxy', 'Wi-Fi', '127.0.0.1', '$mixedPort']);
-      await Process.run('networksetup',
-          ['-setsocksfirewallproxy', 'Wi-Fi', '127.0.0.1', '$mixedPort']);
+      final services = await _listNetworkServices();
+      for (final svc in services) {
+        try {
+          await Process.run('networksetup',
+              ['-setwebproxy', svc, '127.0.0.1', '$mixedPort']);
+          await Process.run('networksetup',
+              ['-setsecurewebproxy', svc, '127.0.0.1', '$mixedPort']);
+          await Process.run('networksetup',
+              ['-setsocksfirewallproxy', svc, '127.0.0.1', '$mixedPort']);
+        } catch (_) {}
+      }
     } else if (Platform.isWindows) {
       await Process.run('reg', [
         'add',
@@ -162,12 +181,17 @@ class CoreActions {
 
   static Future<void> _clearSystemProxy() async {
     if (Platform.isMacOS) {
-      await Process.run(
-          'networksetup', ['-setwebproxystate', 'Wi-Fi', 'off']);
-      await Process.run(
-          'networksetup', ['-setsecurewebproxystate', 'Wi-Fi', 'off']);
-      await Process.run(
-          'networksetup', ['-setsocksfirewallproxystate', 'Wi-Fi', 'off']);
+      final services = await _listNetworkServices();
+      for (final svc in services) {
+        try {
+          await Process.run(
+              'networksetup', ['-setwebproxystate', svc, 'off']);
+          await Process.run(
+              'networksetup', ['-setsecurewebproxystate', svc, 'off']);
+          await Process.run(
+              'networksetup', ['-setsocksfirewallproxystate', svc, 'off']);
+        } catch (_) {}
+      }
     } else if (Platform.isWindows) {
       await Process.run('reg', [
         'add',
@@ -176,7 +200,118 @@ class CoreActions {
       ]);
     }
   }
+
+  /// Enumerate all active network services on macOS.
+  static Future<List<String>> _listNetworkServices() async {
+    try {
+      final result =
+          await Process.run('networksetup', ['-listallnetworkservices']);
+      return (result.stdout as String)
+          .split('\n')
+          .skip(1) // First line is the header notice
+          .map((l) => l.startsWith('*') ? l.substring(1).trim() : l.trim())
+          .where((l) => l.isNotEmpty)
+          .toList();
+    } catch (_) {
+      return ['Wi-Fi']; // Fallback
+    }
+  }
 }
+
+// ------------------------------------------------------------------
+// Daily traffic accumulation
+// ------------------------------------------------------------------
+
+final dailyTrafficProvider =
+    StateNotifierProvider<DailyTrafficNotifier, (int, int)>(
+  (ref) => DailyTrafficNotifier(),
+);
+
+class DailyTrafficNotifier extends StateNotifier<(int, int)> {
+  Timer? _flushTimer;
+  bool _loaded = false;
+  String _loadedDateKey = '';
+
+  DailyTrafficNotifier() : super((0, 0)) {
+    _load();
+  }
+
+  static String _todayKey() {
+    final d = DateTime.now();
+    final m = d.month.toString().padLeft(2, '0');
+    final day = d.day.toString().padLeft(2, '0');
+    return '${d.year}-$m-$day';
+  }
+
+  Future<void> _load() async {
+    _loadedDateKey = _todayKey();
+    final data = await SettingsService.getTodayTraffic();
+    if (mounted) {
+      state = (data['up']!, data['down']!);
+      _loaded = true;
+    }
+  }
+
+  void add(int upDelta, int downDelta) {
+    if (!_loaded || !mounted) return;
+
+    // Reset counters on day rollover (midnight boundary)
+    final today = _todayKey();
+    if (today != _loadedDateKey) {
+      _loadedDateKey = today;
+      state = (upDelta, downDelta);
+      SettingsService.saveTodayTraffic(upDelta, downDelta);
+      return;
+    }
+
+    state = (state.$1 + upDelta, state.$2 + downDelta);
+    _flushTimer?.cancel();
+    _flushTimer = Timer(const Duration(seconds: 30), _flush);
+  }
+
+  Future<void> _flush() async {
+    await SettingsService.saveTodayTraffic(state.$1, state.$2);
+  }
+
+  @override
+  void dispose() {
+    _flushTimer?.cancel();
+    // Fire-and-forget final flush so we don't lose partial data on exit
+    SettingsService.saveTodayTraffic(state.$1, state.$2);
+    super.dispose();
+  }
+}
+
+// ------------------------------------------------------------------
+// Core heartbeat — detects unexpected crashes
+// ------------------------------------------------------------------
+
+/// Periodically pings the core API while running.
+/// If the API stops responding (3 consecutive failures), automatically
+/// transitions state to stopped so the UI reflects the real situation.
+final coreHeartbeatProvider = Provider<void>((ref) {
+  final status = ref.watch(coreStatusProvider);
+  if (status != CoreStatus.running) return;
+
+  final manager = CoreManager.instance;
+  if (manager.isMockMode) return; // mock never crashes
+
+  var failures = 0;
+  final timer = Timer.periodic(const Duration(seconds: 5), (_) async {
+    final ok = await manager.api.isAvailable();
+    if (ok) {
+      failures = 0;
+    } else {
+      failures++;
+      if (failures >= 3) {
+        GuardService.instance.stop();
+        ref.read(coreStatusProvider.notifier).state = CoreStatus.stopped;
+        ref.read(trafficProvider.notifier).state = const Traffic();
+      }
+    }
+  });
+  ref.onDispose(() => timer.cancel());
+});
 
 // ------------------------------------------------------------------
 // Traffic streaming
@@ -198,10 +333,10 @@ final trafficStreamProvider = Provider<void>((ref) {
       final t = CoreController.instance.getTraffic();
       final traffic = Traffic(up: t.up, down: t.down);
       ref.read(trafficProvider.notifier).state = traffic;
-      // Reassign history to trigger rebuild
       final history = ref.read(trafficHistoryProvider);
       history.add(t.up, t.down);
       ref.read(trafficHistoryProvider.notifier).state = history;
+      ref.read(dailyTrafficProvider.notifier).add(t.up, t.down);
     });
     ref.onDispose(() => timer.cancel());
   } else {
@@ -211,6 +346,7 @@ final trafficStreamProvider = Provider<void>((ref) {
       final history = ref.read(trafficHistoryProvider);
       history.add(t.up, t.down);
       ref.read(trafficHistoryProvider.notifier).state = history;
+      ref.read(dailyTrafficProvider.notifier).add(t.up, t.down);
     });
     ref.onDispose(() => sub.cancel());
   }
@@ -234,12 +370,6 @@ final memoryStreamProvider = Provider<void>((ref) {
   });
   ref.onDispose(() => sub.cancel());
 });
-
-// ------------------------------------------------------------------
-// Proxy refresh trigger
-// ------------------------------------------------------------------
-
-final proxyRefreshProvider = Provider<void>((ref) {});
 
 // ------------------------------------------------------------------
 // Unlock test

@@ -30,6 +30,18 @@ class TrafficHistory {
   double get maxDown =>
       _down.reduce((a, b) => a > b ? a : b);
 
+  /// 90th-percentile of combined up+down values.
+  /// Used for chart Y-axis to prevent a single spike from compressing
+  /// all other data to a flat line.
+  double get p90 {
+    final all = [...upHistory, ...downHistory]
+      ..removeWhere((v) => v == 0)
+      ..sort();
+    if (all.isEmpty) return 0;
+    final idx = ((all.length - 1) * 0.9).round();
+    return all[idx];
+  }
+
   List<double> _ordered(List<double> buf) {
     if (!_full) return buf.sublist(0, _index);
     final result = <double>[];

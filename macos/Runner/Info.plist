@@ -28,5 +28,17 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>clash</string>
+				<string>mihomo</string>
+			</array>
+			<key>CFBundleURLName</key>
+			<string>YueLink URL Scheme</string>
+		</dict>
+	</array>
 </dict>
 </plist>

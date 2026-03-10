@@ -79,7 +79,10 @@ jobs:
           echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/27.2.12479018" >> $GITHUB_ENV
           echo "ANDROID_NDK=$ANDROID_SDK_ROOT/ndk/27.2.12479018" >> $GITHUB_ENV
 
-      # ── Windows: MinGW already on runner, nothing extra needed ────────────
+      # ── macOS/iOS: enable desktop/mobile targets ──────────────────────────
+      - name: Enable macOS desktop
+        if: matrix.platform == 'macos'
+        run: flutter config --enable-macos-desktop
 
       # ── Build ─────────────────────────────────────────────────────────────
       - name: Build core (${{ matrix.platform }})
@@ -168,6 +171,15 @@ jobs:
 
       - run: dart setup.dart install -p ios
 
+      - name: Cache CocoaPods
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cocoapods
+            ios/Pods
+          key: pods-ios-${{ hashFiles('ios/Podfile.lock') }}
+          restore-keys: pods-ios-
+
       - run: flutter pub get
       - run: flutter build ios --release --no-codesign
 
@@ -197,13 +209,28 @@ jobs:
 
       - run: dart setup.dart install -p macos
 
+      - name: Cache CocoaPods
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cocoapods
+            macos/Pods
+          key: pods-macos-${{ hashFiles('macos/Podfile.lock') }}
+          restore-keys: pods-macos-
+
+      - run: flutter config --enable-macos-desktop
       - run: flutter pub get
       - run: flutter build macos --release
+
+      - name: Package macOS app
+        run: |
+          cd build/macos/Build/Products/Release
+          zip -r --symlinks YueLink-macOS.zip YueLink.app
 
       - uses: actions/upload-artifact@v4
         with:
           name: yuelink-macos
-          path: build/macos/Build/Products/Release/YueLink.app
+          path: build/macos/Build/Products/Release/YueLink-macOS.zip
 
   # ── Windows ───────────────────────────────────────────────────────────────
   build-windows:
@@ -225,13 +252,20 @@ jobs:
           path: core/build/
 
       - run: dart setup.dart install -p windows
+      - run: flutter config --enable-windows-desktop
       - run: flutter pub get
       - run: flutter build windows --release
+
+      - name: Package Windows build
+        shell: pwsh
+        run: |
+          Compress-Archive -Path build/windows/x64/runner/Release/* `
+            -DestinationPath YueLink-Windows.zip
 
       - uses: actions/upload-artifact@v4
         with:
           name: yuelink-windows
-          path: build/windows/x64/runner/Release/
+          path: YueLink-Windows.zip
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Job 4: Release (only on version tags)

@@ -28,13 +28,15 @@ class ActiveProfileNotifier extends StateNotifier<String?> {
 
 final profilesProvider =
     StateNotifierProvider<ProfilesNotifier, AsyncValue<List<Profile>>>(
-  (ref) => ProfilesNotifier(),
+  (ref) => ProfilesNotifier(ref),
 );
 
 class ProfilesNotifier extends StateNotifier<AsyncValue<List<Profile>>> {
-  ProfilesNotifier() : super(const AsyncValue.loading()) {
+  ProfilesNotifier(this._ref) : super(const AsyncValue.loading()) {
     load();
   }
+
+  final Ref _ref;
 
   Future<void> load() async {
     state = const AsyncValue.loading();
@@ -48,17 +50,39 @@ class ProfilesNotifier extends StateNotifier<AsyncValue<List<Profile>>> {
 
   Future<Profile> add({required String name, required String url}) async {
     final profile = await ProfileService.addProfile(name: name, url: url);
-    await load();
+    state.whenData((list) {
+      state = AsyncValue.data([...list, profile]);
+    });
     return profile;
   }
 
+  /// Insert an already-created local profile into the state list.
+  void addLocal(Profile profile) {
+    state.whenData((list) {
+      state = AsyncValue.data([...list, profile]);
+    });
+  }
+
+  /// Update a profile in-place to avoid loading flash.
   Future<void> update(Profile profile) async {
     await ProfileService.updateProfile(profile);
-    await load();
+    state.whenData((list) {
+      final idx = list.indexWhere((p) => p.id == profile.id);
+      if (idx == -1) return;
+      final updated = [...list];
+      updated[idx] = profile;
+      state = AsyncValue.data(updated);
+    });
   }
 
   Future<void> delete(String id) async {
     await ProfileService.deleteProfile(id);
-    await load();
+    // Clear active profile selection if we deleted the active one
+    if (_ref.read(activeProfileIdProvider) == id) {
+      _ref.read(activeProfileIdProvider.notifier).select(null);
+    }
+    state.whenData((list) {
+      state = AsyncValue.data(list.where((p) => p.id != id).toList());
+    });
   }
 }

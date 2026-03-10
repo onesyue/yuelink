@@ -1,17 +1,50 @@
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../l10n/app_strings.dart';
+import '../main.dart' show deepLinkUrlProvider;
 import '../models/profile.dart';
 import '../providers/profile_provider.dart';
+import '../services/app_notifier.dart';
 import '../services/profile_service.dart';
 import '../services/subscription_parser.dart';
 
-class ProfilePage extends ConsumerWidget {
+/// Strip "Exception: " prefix from error strings for user-facing display.
+String _friendlyError(Object e) {
+  final s = e.toString();
+  if (s.startsWith('Exception: ')) return s.substring(11);
+  return s;
+}
+
+class ProfilePage extends ConsumerStatefulWidget {
   const ProfilePage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ProfilePage> createState() => _ProfilePageState();
+}
+
+class _ProfilePageState extends ConsumerState<ProfilePage> {
+  @override
+  void initState() {
+    super.initState();
+    // Handle deep links that arrive while this page is active
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.listenManual(deepLinkUrlProvider, (_, url) {
+        if (url != null && url.isNotEmpty && mounted) {
+          ref.read(deepLinkUrlProvider.notifier).state = null; // consume
+          _showAddDialog(context, ref, prefilledUrl: url);
+        }
+      });
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = S.of(context);
     final profilesAsync = ref.watch(profilesProvider);
     final activeId = ref.watch(activeProfileIdProvider);
 
@@ -26,13 +59,14 @@ class ProfilePage extends ConsumerWidget {
                   size: 48,
                   color: Theme.of(context).colorScheme.error),
               const SizedBox(height: 12),
-              Text('加载失败: $e',
+              Text(s.loadFailed(e.toString()),
                   style: Theme.of(context).textTheme.bodyMedium),
               const SizedBox(height: 12),
               FilledButton.icon(
-                onPressed: () => ref.read(profilesProvider.notifier).load(),
+                onPressed: () =>
+                    ref.read(profilesProvider.notifier).load(),
                 icon: const Icon(Icons.refresh, size: 16),
-                label: const Text('重试'),
+                label: Text(s.retry),
               ),
             ],
           ),
@@ -45,18 +79,19 @@ class ProfilePage extends ConsumerWidget {
                 children: [
                   Icon(Icons.description_outlined,
                       size: 64,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant),
+                      color: Theme.of(context)
+                          .colorScheme
+                          .onSurfaceVariant),
                   const SizedBox(height: 16),
-                  Text('暂无订阅',
+                  Text(s.noProfiles,
                       style: Theme.of(context).textTheme.bodyLarge),
                   const SizedBox(height: 8),
-                  Text('点击下方按钮添加机场订阅',
+                  Text(s.addSubscriptionHint,
                       style: Theme.of(context).textTheme.bodySmall),
                 ],
               ),
             );
           }
-          // Sort: active profile first
           final sorted = List<Profile>.from(profiles)
             ..sort((a, b) {
               if (a.id == activeId && b.id != activeId) return -1;
@@ -80,28 +115,21 @@ class ProfilePage extends ConsumerWidget {
                         .select(profile.id);
                   },
                   onUpdate: () async {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('正在更新订阅...')));
+                    AppNotifier.info(s.updatingSubscription);
                     try {
                       await ref
                           .read(profilesProvider.notifier)
                           .update(profile);
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                        ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('更新成功')));
-                      }
+                      AppNotifier.success(s.updateSuccess);
                     } catch (e) {
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                        ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('更新失败: $e')));
-                      }
+                      AppNotifier.error(s.updateFailed(_friendlyError(e)));
                     }
                   },
                   onEdit: () => _showEditDialog(context, ref, profile),
-                  onViewConfig: () => _showConfigViewer(context, profile),
-                  onDelete: () => _confirmDelete(context, ref, profile),
+                  onViewConfig: () =>
+                      _showConfigViewer(context, profile),
+                  onDelete: () =>
+                      _confirmDelete(context, ref, profile),
                 );
               },
             ),
@@ -114,14 +142,21 @@ class ProfilePage extends ConsumerWidget {
           FloatingActionButton.small(
             heroTag: 'paste',
             onPressed: () => _pasteFromClipboard(context, ref),
-            tooltip: '从剪贴板粘贴',
+            tooltip: S.of(context).pasteFromClipboard,
             child: const Icon(Icons.content_paste),
+          ),
+          const SizedBox(height: 8),
+          FloatingActionButton.small(
+            heroTag: 'import',
+            onPressed: () => _importLocalFile(context, ref),
+            tooltip: S.of(context).importLocalFile,
+            child: const Icon(Icons.folder_open),
           ),
           const SizedBox(height: 8),
           FloatingActionButton(
             heroTag: 'add',
             onPressed: () => _showAddDialog(context, ref),
-            tooltip: '添加订阅',
+            tooltip: S.of(context).addSubscription,
             child: const Icon(Icons.add),
           ),
         ],
@@ -129,15 +164,99 @@ class ProfilePage extends ConsumerWidget {
     );
   }
 
+  Future<void> _importLocalFile(
+      BuildContext context, WidgetRef ref) async {
+    final s = S.of(context);
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['yaml', 'yml'],
+    );
+    if (result == null || result.files.isEmpty) return;
+    final path = result.files.first.path;
+    if (path == null) return;
+
+    final content = await File(path).readAsString();
+    if (content.trim().isEmpty) {
+      AppNotifier.warning(s.importLocalFileFailed);
+      return;
+    }
+
+    // Use filename (without extension) as default profile name
+    final fileName = result.files.first.name;
+    final defaultName =
+        fileName.replaceAll(RegExp(r'\.(yaml|yml)$'), '');
+
+    if (!context.mounted) return;
+    _showImportNameDialog(context, ref, defaultName, content);
+  }
+
+  void _showImportNameDialog(BuildContext context, WidgetRef ref,
+      String defaultName, String configContent) {
+    final s = S.of(context);
+    final nameCtrl = TextEditingController(text: defaultName);
+    bool isLoading = false;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) => AlertDialog(
+          title: Text(s.importLocalFile),
+          content: TextField(
+            controller: nameCtrl,
+            autofocus: true,
+            decoration: InputDecoration(
+              labelText: s.nameLabel,
+              hintText: s.importLocalNameHint,
+              prefixIcon: const Icon(Icons.label_outline),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: isLoading ? null : () => Navigator.pop(ctx),
+              child: Text(s.cancel),
+            ),
+            FilledButton(
+              onPressed: isLoading
+                  ? null
+                  : () async {
+                      final name = nameCtrl.text.trim();
+                      if (name.isEmpty) return;
+                      setState(() => isLoading = true);
+                      try {
+                        final profile = await ProfileService.addLocalProfile(
+                            name: name, configContent: configContent);
+                        ref
+                            .read(activeProfileIdProvider.notifier)
+                            .select(profile.id);
+                        // Add to state in-place
+                        ref.read(profilesProvider.notifier).addLocal(profile);
+                        if (ctx.mounted) Navigator.pop(ctx);
+                        AppNotifier.success(s.importLocalFileSuccess);
+                      } catch (e) {
+                        setState(() => isLoading = false);
+                        AppNotifier.error(s.addFailed(_friendlyError(e)));
+                      }
+                    },
+              child: isLoading
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : Text(s.add),
+            ),
+          ],
+        ),
+      ),
+    ).whenComplete(nameCtrl.dispose);
+  }
+
   Future<void> _pasteFromClipboard(
       BuildContext context, WidgetRef ref) async {
+    final s = S.of(context);
     final data = await Clipboard.getData(Clipboard.kTextPlain);
     final text = data?.text?.trim() ?? '';
     if (text.isEmpty || !text.startsWith('http')) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('剪贴板中没有有效的订阅链接')));
-      }
+      AppNotifier.warning(s.clipboardNoUrl);
       return;
     }
     if (context.mounted) {
@@ -147,28 +266,33 @@ class ProfilePage extends ConsumerWidget {
 
   void _confirmDelete(
       BuildContext context, WidgetRef ref, Profile profile) {
+    final s = S.of(context);
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('确认删除'),
-        content: Text('确定要删除「${profile.name}」吗？'),
+        title: Text(s.confirmDelete),
+        content: Text(s.confirmDeleteMessage(profile.name)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
+            child: Text(s.cancel),
           ),
           FilledButton(
             onPressed: () {
               Navigator.pop(ctx);
-              ref.read(profilesProvider.notifier).delete(profile.id);
-              // Clear active if deleting the active profile
+              ref
+                  .read(profilesProvider.notifier)
+                  .delete(profile.id);
               final activeId = ref.read(activeProfileIdProvider);
               if (activeId == profile.id) {
-                ref.read(activeProfileIdProvider.notifier).select(null);
+                ref
+                    .read(activeProfileIdProvider.notifier)
+                    .select(null);
               }
             },
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('删除'),
+            style:
+                FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: Text(s.delete),
           ),
         ],
       ),
@@ -177,6 +301,7 @@ class ProfilePage extends ConsumerWidget {
 
   void _showAddDialog(BuildContext context, WidgetRef ref,
       {String? prefilledUrl}) {
+    final s = S.of(context);
     final nameCtrl = TextEditingController();
     final urlCtrl = TextEditingController(text: prefilledUrl);
     bool isLoading = false;
@@ -185,26 +310,26 @@ class ProfilePage extends ConsumerWidget {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setState) => AlertDialog(
-          title: const Text('添加订阅'),
+          title: Text(s.addSubscriptionDialogTitle),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
                 controller: nameCtrl,
-                decoration: const InputDecoration(
-                  labelText: '名称',
-                  hintText: '我的机场',
-                  prefixIcon: Icon(Icons.label_outline),
+                decoration: InputDecoration(
+                  labelText: s.nameLabel,
+                  hintText: s.nameHint,
+                  prefixIcon: const Icon(Icons.label_outline),
                 ),
                 textInputAction: TextInputAction.next,
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: urlCtrl,
-                decoration: const InputDecoration(
-                  labelText: '订阅链接',
+                decoration: InputDecoration(
+                  labelText: s.urlLabel,
                   hintText: 'https://...',
-                  prefixIcon: Icon(Icons.link),
+                  prefixIcon: const Icon(Icons.link),
                 ),
                 maxLines: 2,
                 textInputAction: TextInputAction.done,
@@ -214,7 +339,7 @@ class ProfilePage extends ConsumerWidget {
           actions: [
             TextButton(
               onPressed: isLoading ? null : () => Navigator.pop(ctx),
-              child: const Text('取消'),
+              child: Text(s.cancel),
             ),
             FilledButton(
               onPressed: isLoading
@@ -233,25 +358,20 @@ class ProfilePage extends ConsumerWidget {
                             .read(activeProfileIdProvider.notifier)
                             .select(profile.id);
                         if (ctx.mounted) Navigator.pop(ctx);
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('添加成功')));
-                        }
+                        AppNotifier.success(s.addSuccess);
                       } catch (e) {
                         setState(() => isLoading = false);
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('添加失败: $e')));
-                        }
+                        AppNotifier.error(s.addFailed(_friendlyError(e)));
                       }
                     },
               child: isLoading
                   ? const SizedBox(
                       width: 16,
                       height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
+                      child:
+                          CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : const Text('添加'),
+                  : Text(s.add),
             ),
           ],
         ),
@@ -261,11 +381,10 @@ class ProfilePage extends ConsumerWidget {
 
   void _showEditDialog(
       BuildContext context, WidgetRef ref, Profile profile) {
+    final s = S.of(context);
     final nameCtrl = TextEditingController(text: profile.name);
     final urlCtrl = TextEditingController(text: profile.url);
-    // Interval in hours: 0 = follow global, 6/12/24/48/168
     int intervalHours = profile.updateInterval.inHours;
-    // Normalize to nearest option
     const options = [0, 6, 12, 24, 48, 168];
     if (!options.contains(intervalHours)) intervalHours = 24;
 
@@ -273,85 +392,90 @@ class ProfilePage extends ConsumerWidget {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setStateDialog) => AlertDialog(
-        title: const Text('编辑订阅'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameCtrl,
-              decoration: const InputDecoration(
-                labelText: '名称',
-                prefixIcon: Icon(Icons.label_outline),
-              ),
-              textInputAction: TextInputAction.next,
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: urlCtrl,
-              decoration: const InputDecoration(
-                labelText: '订阅链接',
-                prefixIcon: Icon(Icons.link),
-              ),
-              maxLines: 2,
-              textInputAction: TextInputAction.done,
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                const Icon(Icons.update, size: 18,
-                    color: Colors.grey),
-                const SizedBox(width: 8),
-                const Text('更新间隔'),
-                const Spacer(),
-                DropdownButton<int>(
-                  value: intervalHours,
-                  underline: const SizedBox.shrink(),
-                  items: const [
-                    DropdownMenuItem(value: 0, child: Text('跟随全局')),
-                    DropdownMenuItem(value: 6, child: Text('6 小时')),
-                    DropdownMenuItem(value: 12, child: Text('12 小时')),
-                    DropdownMenuItem(value: 24, child: Text('24 小时')),
-                    DropdownMenuItem(value: 48, child: Text('48 小时')),
-                    DropdownMenuItem(value: 168, child: Text('7 天')),
-                  ],
-                  onChanged: (v) {
-                    if (v != null) setStateDialog(() => intervalHours = v);
-                  },
+          title: Text(s.editSubscriptionDialogTitle),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameCtrl,
+                decoration: InputDecoration(
+                  labelText: s.nameLabel,
+                  prefixIcon: const Icon(Icons.label_outline),
                 ),
-              ],
+                textInputAction: TextInputAction.next,
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: urlCtrl,
+                decoration: InputDecoration(
+                  labelText: s.urlLabel,
+                  prefixIcon: const Icon(Icons.link),
+                ),
+                maxLines: 2,
+                textInputAction: TextInputAction.done,
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  const Icon(Icons.update, size: 18, color: Colors.grey),
+                  const SizedBox(width: 8),
+                  Text(s.updateInterval),
+                  const Spacer(),
+                  DropdownButton<int>(
+                    value: intervalHours,
+                    underline: const SizedBox.shrink(),
+                    items: [
+                      DropdownMenuItem(
+                          value: 0, child: Text(s.followGlobal)),
+                      DropdownMenuItem(value: 6, child: Text(s.hours6)),
+                      DropdownMenuItem(
+                          value: 12, child: Text(s.hours12)),
+                      DropdownMenuItem(
+                          value: 24, child: Text(s.hours24)),
+                      DropdownMenuItem(
+                          value: 48, child: Text(s.hours48)),
+                      DropdownMenuItem(value: 168, child: Text(s.days7)),
+                    ],
+                    onChanged: (v) {
+                      if (v != null) {
+                        setStateDialog(() => intervalHours = v);
+                      }
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text(s.cancel),
+            ),
+            FilledButton(
+              onPressed: () {
+                final name = nameCtrl.text.trim();
+                final url = urlCtrl.text.trim();
+                if (name.isEmpty || url.isEmpty) return;
+
+                profile.name = name;
+                profile.url = url;
+                profile.updateInterval = intervalHours == 0
+                    ? const Duration(hours: 24)
+                    : Duration(hours: intervalHours);
+                ref.read(profilesProvider.notifier).update(profile);
+                Navigator.pop(ctx);
+                AppNotifier.success(s.saved);
+              },
+              child: Text(s.save),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () {
-              final name = nameCtrl.text.trim();
-              final url = urlCtrl.text.trim();
-              if (name.isEmpty || url.isEmpty) return;
-
-              profile.name = name;
-              profile.url = url;
-              profile.updateInterval = intervalHours == 0
-                  ? const Duration(hours: 24) // will use global default
-                  : Duration(hours: intervalHours);
-              ref.read(profilesProvider.notifier).update(profile);
-              Navigator.pop(ctx);
-              ScaffoldMessenger.of(context)
-                  .showSnackBar(const SnackBar(content: Text('已保存')));
-            },
-            child: const Text('保存'),
-          ),
-        ],
-      ),
       ),
     );
   }
 
   void _showConfigViewer(BuildContext context, Profile profile) async {
+    final s = S.of(context);
     final config = await ProfileService.loadConfig(profile.id);
     if (!context.mounted) return;
 
@@ -363,17 +487,16 @@ class ProfilePage extends ConsumerWidget {
             if (config != null)
               IconButton(
                 icon: const Icon(Icons.copy),
-                tooltip: '复制配置',
+                tooltip: s.copyConfig,
                 onPressed: () {
                   Clipboard.setData(ClipboardData(text: config));
-                  ScaffoldMessenger.of(ctx).showSnackBar(
-                      const SnackBar(content: Text('已复制配置内容')));
+                  AppNotifier.success(s.copiedConfig);
                 },
               ),
           ],
         ),
         body: config == null
-            ? const Center(child: Text('配置文件不存在'))
+            ? Center(child: Text(s.noConfig))
             : SingleChildScrollView(
                 padding: const EdgeInsets.all(16),
                 child: SelectableText(
@@ -411,12 +534,14 @@ class _ProfileCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     final sub = profile.subInfo;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
-      color:
-          isActive ? Theme.of(context).colorScheme.primaryContainer : null,
+      color: isActive
+          ? Theme.of(context).colorScheme.primaryContainer
+          : null,
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),
@@ -440,7 +565,8 @@ class _ProfileCard extends StatelessWidget {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(profile.name,
-                        style: const TextStyle(fontWeight: FontWeight.w600)),
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w600)),
                   ),
                   PopupMenuButton<String>(
                     onSelected: (action) {
@@ -454,26 +580,25 @@ class _ProfileCard extends StatelessWidget {
                         case 'copy':
                           Clipboard.setData(
                               ClipboardData(text: profile.url));
-                          ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                  content: Text('已复制订阅链接')));
+                          AppNotifier.success(s.copiedLink);
                         case 'delete':
                           onDelete();
                       }
                     },
                     itemBuilder: (_) => [
-                      const PopupMenuItem(
-                          value: 'update', child: Text('更新订阅')),
-                      const PopupMenuItem(
-                          value: 'edit', child: Text('编辑')),
-                      const PopupMenuItem(
-                          value: 'config', child: Text('查看配置')),
-                      const PopupMenuItem(
-                          value: 'copy', child: Text('复制链接')),
-                      const PopupMenuItem(
+                      PopupMenuItem(
+                          value: 'update',
+                          child: Text(s.updateSubscription)),
+                      PopupMenuItem(value: 'edit', child: Text(s.edit)),
+                      PopupMenuItem(
+                          value: 'config', child: Text(s.viewConfig)),
+                      PopupMenuItem(
+                          value: 'copy', child: Text(s.copyLink)),
+                      PopupMenuItem(
                           value: 'delete',
-                          child: Text('删除',
-                              style: TextStyle(color: Colors.red))),
+                          child: Text(s.delete,
+                              style:
+                                  const TextStyle(color: Colors.red))),
                     ],
                   ),
                 ],
@@ -482,7 +607,6 @@ class _ProfileCard extends StatelessWidget {
               // Subscription info
               if (profile.hasSubInfo && sub != null) ...[
                 const SizedBox(height: 8),
-                // Traffic usage bar
                 ClipRRect(
                   borderRadius: BorderRadius.circular(4),
                   child: LinearProgressIndicator(
@@ -498,15 +622,20 @@ class _ProfileCard extends StatelessWidget {
                 Row(
                   children: [
                     Text(
-                      '已用 ${formatBytes((sub.upload ?? 0) + (sub.download ?? 0))} / ${formatBytes(sub.total ?? 0)}',
+                      s.usageLabel(
+                        formatBytes(
+                            (sub.upload ?? 0) + (sub.download ?? 0)),
+                        formatBytes(sub.total ?? 0),
+                      ),
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                     const Spacer(),
                     if (sub.expire != null)
                       Text(
                         sub.isExpired
-                            ? '已过期'
-                            : '剩余 ${sub.daysRemaining} 天',
+                            ? s.expired
+                            : s.daysRemaining(
+                                sub.daysRemaining ?? 0),
                         style: TextStyle(
                           fontSize: 11,
                           color: sub.isExpired
@@ -529,7 +658,7 @@ class _ProfileCard extends StatelessWidget {
                 Row(
                   children: [
                     Text(
-                      '更新于 ${_formatTime(profile.lastUpdated!)}',
+                      s.updatedAt(_formatTime(profile.lastUpdated!)),
                       style: TextStyle(
                           fontSize: 11,
                           color: Theme.of(context)
@@ -539,9 +668,10 @@ class _ProfileCard extends StatelessWidget {
                     if (_isStale(profile)) ...[
                       const SizedBox(width: 6),
                       Icon(Icons.warning_amber_rounded,
-                          size: 14, color: Colors.orange.shade700),
+                          size: 14,
+                          color: Colors.orange.shade700),
                       const SizedBox(width: 2),
-                      Text('需要更新',
+                      Text(s.needsUpdate,
                           style: TextStyle(
                               fontSize: 11,
                               color: Colors.orange.shade700)),
@@ -568,6 +698,8 @@ class _ProfileCard extends StatelessWidget {
   }
 
   String _formatTime(DateTime dt) {
-    return '${dt.month}/${dt.day} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+    return '${dt.month}/${dt.day} '
+        '${dt.hour.toString().padLeft(2, '0')}:'
+        '${dt.minute.toString().padLeft(2, '0')}';
   }
 }

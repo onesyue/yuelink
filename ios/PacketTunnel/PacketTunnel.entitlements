@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- App Group: must match Runner -->
+    <key>com.apple.security.application-groups</key>
+    <array>
+        <string>group.com.yueto.yuelink</string>
+    </array>
+    <!-- Network Extension capabilities -->
+    <key>com.apple.developer.networking.networkextension</key>
+    <array>
+        <string>packet-tunnel-provider</string>
+    </array>
+    <!-- Outbound network connections for Go core proxy engine -->
+    <key>com.apple.security.network.client</key>
+    <true/>
+    <!-- Inbound network connections (TUN virtual interface) -->
+    <key>com.apple.security.network.server</key>
+    <true/>
+</dict>
+</plist>

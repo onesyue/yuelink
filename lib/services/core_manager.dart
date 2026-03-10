@@ -182,6 +182,21 @@ class CoreManager {
   // FFI mode
   // ------------------------------------------------------------------
 
+  static const _kLastWorkingConfig = 'last_working_config.yaml';
+
+  /// Load the last known-good config (for rollback).
+  Future<String?> loadLastWorkingConfig() async {
+    final appDir = await getApplicationSupportDirectory();
+    final file = File('${appDir.path}/$_kLastWorkingConfig');
+    if (!await file.exists()) return null;
+    return file.readAsString();
+  }
+
+  Future<void> _saveLastWorkingConfig(String configYaml) async {
+    final appDir = await getApplicationSupportDirectory();
+    await File('${appDir.path}/$_kLastWorkingConfig').writeAsString(configYaml);
+  }
+
   Future<bool> _startFfi(String configYaml) async {
     // Write config file
     final appDir = await getApplicationSupportDirectory();
@@ -192,8 +207,9 @@ class CoreManager {
     if (!ok) return false;
 
     _running = true;
-    await _waitForApi();
-    return true;
+    final apiOk = await _waitForApi();
+    if (apiOk) await _saveLastWorkingConfig(configYaml);
+    return apiOk;
   }
 
   // ------------------------------------------------------------------
@@ -210,8 +226,9 @@ class CoreManager {
     if (!ok) return false;
 
     _running = true;
-    await _waitForApi();
-    return true;
+    final apiOk = await _waitForApi();
+    if (apiOk) await _saveLastWorkingConfig(configYaml);
+    return apiOk;
   }
 
   // ------------------------------------------------------------------
@@ -219,10 +236,12 @@ class CoreManager {
   // ------------------------------------------------------------------
 
   /// Wait for the REST API to become available.
-  Future<bool> _waitForApi({int maxRetries = 10}) async {
+  /// Retries for up to ~9 seconds (30 × 300 ms) to accommodate slow devices
+  /// and complex configs that take longer to initialize.
+  Future<bool> _waitForApi({int maxRetries = 30}) async {
     for (var i = 0; i < maxRetries; i++) {
       if (await api.isAvailable()) return true;
-      await Future.delayed(const Duration(milliseconds: 200));
+      await Future.delayed(const Duration(milliseconds: 300));
     }
     return false;
   }

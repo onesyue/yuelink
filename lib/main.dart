@@ -1,26 +1,46 @@
 import 'dart:io';
 
+import 'package:app_links/app_links.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:launch_at_startup/launch_at_startup.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:tray_manager/tray_manager.dart';
+import 'package:window_manager/window_manager.dart';
 
 import 'constants.dart';
+import 'l10n/app_strings.dart';
 import 'pages/connections_page.dart';
 import 'pages/home_page.dart';
 import 'pages/log_page.dart';
 import 'pages/profile_page.dart';
 import 'pages/proxy_page.dart';
 import 'pages/settings_page.dart';
+import 'models/proxy.dart';
 import 'providers/core_provider.dart';
 import 'providers/profile_provider.dart';
+import 'providers/proxy_provider.dart';
+import 'services/app_notifier.dart';
 import 'services/auto_update_service.dart';
 import 'services/core_manager.dart';
 import 'services/profile_service.dart';
 import 'services/settings_service.dart';
 
+/// Global navigator key for deep-link navigation outside widget tree.
+final navigatorKey = GlobalKey<NavigatorState>();
+
+/// Jump-to-profile-page notifier (deep link triggers this).
+final deepLinkUrlProvider = StateProvider<String?>((ref) => null);
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // ── Crash logging ────────────────────────────────────────────────────────
+  _setupCrashLogging();
 
   // Restore persisted settings
   final savedTheme = await SettingsService.getThemeMode();
@@ -30,6 +50,11 @@ void main() async {
   final savedLogLevel = await SettingsService.getLogLevel();
   final savedAutoConnect = await SettingsService.getAutoConnect();
   final savedSystemProxy = await SettingsService.getSystemProxyOnConnect();
+  final savedGuardMode = await SettingsService.getGuardMode();
+  final savedLanguage = await SettingsService.getLanguage();
+
+  // Apply global strings language before runApp (for tray etc.)
+  S.setLanguage(savedLanguage);
 
   // Configure launch at startup (desktop only)
   if (Platform.isMacOS || Platform.isWindows) {
@@ -39,6 +64,20 @@ void main() async {
         appPath: Platform.resolvedExecutable,
       );
     } catch (_) {}
+
+    // Initialize window manager
+    await windowManager.ensureInitialized();
+    const windowOptions = WindowOptions(
+      size: Size(1280, 720),
+      minimumSize: Size(800, 560),
+      center: true,
+      title: AppConstants.appName,
+      titleBarStyle: TitleBarStyle.normal,
+    );
+    await windowManager.waitUntilReadyToShow(windowOptions, () async {
+      await windowManager.show();
+      await windowManager.focus();
+    });
   }
 
   // Initialize core manager
@@ -47,9 +86,15 @@ void main() async {
   // Start subscription auto-update service
   AutoUpdateService.instance.start();
 
+  // ── Global hotkeys (desktop) ─────────────────────────────────────────────
+  if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
+    await hotKeyManager.unregisterAll();
+  }
+
   runApp(ProviderScope(
     overrides: [
       themeProvider.overrideWith((ref) => savedTheme),
+      languageProvider.overrideWith((ref) => savedLanguage),
       activeProfileIdProvider
           .overrideWith((ref) => ActiveProfileNotifier(savedProfileId)),
       routingModeProvider.overrideWith((ref) => savedRoutingMode),
@@ -57,6 +102,7 @@ void main() async {
       logLevelProvider.overrideWith((ref) => savedLogLevel),
       autoConnectProvider.overrideWith((ref) => savedAutoConnect),
       systemProxyOnConnectProvider.overrideWith((ref) => savedSystemProxy),
+      guardModeProvider.overrideWith((ref) => savedGuardMode),
     ],
     child: const YueLinkApp(),
   ));
@@ -69,77 +115,228 @@ class YueLinkApp extends ConsumerStatefulWidget {
   ConsumerState<YueLinkApp> createState() => _YueLinkAppState();
 }
 
-class _YueLinkAppState extends ConsumerState<YueLinkApp> with TrayListener {
+class _YueLinkAppState extends ConsumerState<YueLinkApp>
+    with TrayListener, WindowListener {
   bool _trayInitialized = false;
+  final _appLinks = AppLinks();
 
   @override
   void initState() {
     super.initState();
     if (Platform.isMacOS || Platform.isWindows) {
+      windowManager.addListener(this);
+      windowManager.setPreventClose(true);
       _initTray();
     }
-    // Auto-connect after first frame is rendered
-    WidgetsBinding.instance.addPostFrameCallback((_) => _maybeAutoConnect());
+    // Auto-connect and expiry check after first frame is rendered
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _maybeAutoConnect();
+      _checkSubscriptionExpiry();
+      _initDeepLinks();
+      if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
+        _registerHotkeys();
+      }
+    });
   }
 
   @override
   void dispose() {
     if (_trayInitialized) trayManager.removeListener(this);
+    if (Platform.isMacOS || Platform.isWindows) {
+      windowManager.removeListener(this);
+    }
     AutoUpdateService.instance.stop();
+    if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
+      hotKeyManager.unregisterAll();
+    }
     super.dispose();
   }
 
+  // ── Deep links ────────────────────────────────────────────────────────────
+
+  void _initDeepLinks() {
+    // Handle links that launched the app cold
+    _appLinks.getInitialLink().then((uri) {
+      if (uri != null) _handleDeepLink(uri);
+    });
+    // Handle links while app is already running
+    _appLinks.uriLinkStream.listen(_handleDeepLink);
+  }
+
+  /// Parses clash://install-config?url=... or mihomo://install-config?url=...
+  void _handleDeepLink(Uri uri) {
+    if (!mounted) return;
+    final rawUrl = uri.queryParameters['url'];
+    if (rawUrl == null || rawUrl.isEmpty) return;
+    // Notify the profile page to pre-fill the add dialog
+    ref.read(deepLinkUrlProvider.notifier).state = rawUrl;
+    // If window is hidden (desktop), bring it to front
+    if (Platform.isMacOS || Platform.isWindows) {
+      windowManager.show();
+      windowManager.focus();
+    }
+  }
+
+  // ── Global hotkeys ────────────────────────────────────────────────────────
+
+  Future<void> _registerHotkeys() async {
+    try {
+      // Ctrl+Alt+C — toggle connection
+      final toggleKey = HotKey(
+        key: LogicalKeyboardKey.keyC,
+        modifiers: [HotKeyModifier.control, HotKeyModifier.alt],
+        scope: HotKeyScope.system,
+      );
+      await hotKeyManager.register(toggleKey, keyDownHandler: (_) {
+        _handleTrayToggle();
+      });
+    } catch (_) {
+      // Hotkey registration can fail if another app holds the shortcut
+    }
+  }
+
+  // ── Window manager callbacks ─────────────────────────────────────
+
+  @override
+  void onWindowClose() async {
+    // Hide to tray instead of quitting
+    await windowManager.hide();
+  }
+
+  // ── Tray ─────────────────────────────────────────────────────────
+
   Future<void> _initTray() async {
     try {
-      await trayManager.setIcon('assets/tray_icon.png');
+      await trayManager.setIcon(
+        Platform.isWindows
+            ? 'assets/tray_icon.png' // tray_manager accepts PNG on Windows
+            : 'assets/tray_icon.png',
+      );
       await _updateTrayMenu(isRunning: false);
       trayManager.addListener(this);
       _trayInitialized = true;
     } catch (_) {}
   }
 
-  Future<void> _updateTrayMenu({required bool isRunning}) async {
+  Future<void> _updateTrayMenu({
+    required bool isRunning,
+    List<ProxyGroup>? groups,
+  }) async {
+    if (!_trayInitialized) return;
+    final s = S.current;
+
+    // Build proxy quick-switch submenu (Selector groups only, max 3 groups × 10 nodes)
+    final proxySubMenus = <MenuItem>[];
+    if (isRunning && groups != null) {
+      final selectors = groups
+          .where((g) => g.type.toLowerCase() == 'selector')
+          .take(3)
+          .toList();
+      for (var gi = 0; gi < selectors.length; gi++) {
+        final group = selectors[gi];
+        final nodeItems = <MenuItem>[];
+        final nodes = group.all.take(10).toList();
+        for (var ni = 0; ni < nodes.length; ni++) {
+          final node = nodes[ni];
+          nodeItems.add(MenuItem(
+            key: 'proxy_${gi}_$ni',
+            label: node == group.now ? '✓ $node' : '  $node',
+          ));
+        }
+        if (nodeItems.isNotEmpty) {
+          proxySubMenus.add(MenuItem.submenu(
+            label: group.name,
+            submenu: Menu(items: nodeItems),
+          ));
+        }
+      }
+    }
+
     try {
       await trayManager.setContextMenu(Menu(items: [
-        MenuItem(key: 'toggle', label: isRunning ? '断开连接' : '连接'),
+        MenuItem(
+            key: 'toggle',
+            label: isRunning ? s.trayDisconnect : s.trayConnect),
+        MenuItem(key: 'show', label: s.trayShowWindow),
+        if (proxySubMenus.isNotEmpty) ...[
+          MenuItem.separator(),
+          MenuItem.submenu(
+            label: s.trayProxies,
+            submenu: Menu(items: proxySubMenus),
+          ),
+        ],
         MenuItem.separator(),
-        MenuItem(key: 'quit', label: '退出'),
+        MenuItem(key: 'quit', label: s.trayQuit),
       ]));
     } catch (_) {}
   }
 
-  Future<void> _maybeAutoConnect() async {
-    final autoConnect = ref.read(autoConnectProvider);
-    if (!autoConnect) return;
-
-    final isMock = ref.read(isMockModeProvider);
-    if (isMock) {
-      await ref.read(coreActionsProvider).start('');
-      return;
-    }
-
-    final activeId = ref.read(activeProfileIdProvider);
-    if (activeId == null) return;
-
-    final config = await ProfileService.loadConfig(activeId);
-    if (config == null) return;
-
-    await ref.read(coreActionsProvider).start(config);
+  // Resolves a proxy_gi_ni key to (groupName, nodeName) using current groups.
+  (String, String)? _resolveProxyKey(String key) {
+    final parts = key.split('_');
+    if (parts.length != 3) return null;
+    final gi = int.tryParse(parts[1]);
+    final ni = int.tryParse(parts[2]);
+    if (gi == null || ni == null) return null;
+    final groups = ref
+        .read(proxyGroupsProvider)
+        .where((g) => g.type.toLowerCase() == 'selector')
+        .take(3)
+        .toList();
+    if (gi >= groups.length) return null;
+    final group = groups[gi];
+    final nodes = group.all.take(10).toList();
+    if (ni >= nodes.length) return null;
+    return (group.name, nodes[ni]);
   }
 
   @override
   void onTrayIconMouseDown() {
+    if (Platform.isWindows) {
+      // Windows: left-click toggles window visibility
+      _toggleWindowVisibility();
+    } else {
+      trayManager.popUpContextMenu();
+    }
+  }
+
+  @override
+  void onTrayIconRightMouseDown() {
     trayManager.popUpContextMenu();
   }
 
   @override
   void onTrayMenuItemClick(MenuItem menuItem) {
-    switch (menuItem.key) {
+    final key = menuItem.key ?? '';
+    if (key.startsWith('proxy_')) {
+      final resolved = _resolveProxyKey(key);
+      if (resolved != null) {
+        ref
+            .read(proxyGroupsProvider.notifier)
+            .changeProxy(resolved.$1, resolved.$2);
+      }
+      return;
+    }
+    switch (key) {
       case 'toggle':
         _handleTrayToggle();
+      case 'show':
+        _toggleWindowVisibility();
       case 'quit':
         _handleQuit();
     }
+  }
+
+  Future<void> _toggleWindowVisibility() async {
+    try {
+      final isVisible = await windowManager.isVisible();
+      if (isVisible) {
+        await windowManager.hide();
+      } else {
+        await windowManager.show();
+        await windowManager.focus();
+      }
+    } catch (_) {}
   }
 
   Future<void> _handleTrayToggle() async {
@@ -167,27 +364,109 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp> with TrayListener {
     if (status == CoreStatus.running) {
       await ref.read(coreActionsProvider).stop();
     }
-    exit(0);
+    if (Platform.isMacOS || Platform.isWindows) {
+      await windowManager.setPreventClose(false);
+      await windowManager.close();
+    } else {
+      exit(0);
+    }
+  }
+
+  Future<void> _maybeAutoConnect() async {
+    final autoConnect = ref.read(autoConnectProvider);
+    if (!autoConnect) return;
+
+    final isMock = ref.read(isMockModeProvider);
+    if (isMock) {
+      await ref.read(coreActionsProvider).start('');
+      return;
+    }
+
+    final activeId = ref.read(activeProfileIdProvider);
+    if (activeId == null) return;
+
+    final config = await ProfileService.loadConfig(activeId);
+    if (config == null) return;
+
+    await ref.read(coreActionsProvider).start(config);
+  }
+
+  void _checkSubscriptionExpiry() {
+    final profiles = ref.read(profilesProvider);
+    profiles.whenData((list) {
+      final s = S.current;
+      for (final p in list) {
+        final sub = p.subInfo;
+        if (sub == null) continue;
+        if (sub.isExpired) {
+          AppNotifier.error(s.subExpired(p.name));
+        } else if (sub.daysRemaining != null && sub.daysRemaining! <= 7) {
+          AppNotifier.warning(s.subExpiringSoon(p.name, sub.daysRemaining!));
+        }
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final themeMode = ref.watch(themeProvider);
+    final language = ref.watch(languageProvider);
 
-    // Sync tray menu with connection state
-    ref.listen(coreStatusProvider, (_, next) {
-      if (_trayInitialized) {
-        if (next == CoreStatus.running) {
-          _updateTrayMenu(isRunning: true);
-        } else if (next == CoreStatus.stopped) {
-          _updateTrayMenu(isRunning: false);
+    // Keep S.current in sync with language provider
+    ref.listen(languageProvider, (_, lang) {
+      S.setLanguage(lang);
+      _updateTrayMenu(
+        isRunning: ref.read(coreStatusProvider) == CoreStatus.running,
+        groups: ref.read(proxyGroupsProvider),
+      );
+    });
+
+    // Sync tray menu with connection state; notify on unexpected disconnect
+    ref.listen(coreStatusProvider, (prev, next) {
+      _updateTrayMenu(
+        isRunning: next == CoreStatus.running,
+        groups: ref.read(proxyGroupsProvider),
+      );
+      if (prev == CoreStatus.running && next == CoreStatus.stopped) {
+        AppNotifier.warning(S.current.disconnectedUnexpected);
+        if (_trayInitialized) {
+          trayManager
+              .setToolTip('YueLink · ${S.current.statusDisconnected}')
+              .ignore();
         }
+      } else if (next == CoreStatus.running && _trayInitialized) {
+        trayManager.setToolTip('YueLink').ignore();
       }
     });
 
+    // Sync tray proxy submenu when proxy groups change
+    ref.listen(proxyGroupsProvider, (_, groups) {
+      _updateTrayMenu(
+        isRunning: ref.read(coreStatusProvider) == CoreStatus.running,
+        groups: groups,
+      );
+    });
+
+    // Re-check subscription expiry after profiles are updated
+    ref.listen(profilesProvider, (prev, next) {
+      if (next is AsyncData) _checkSubscriptionExpiry();
+    });
+
     return MaterialApp(
-      title: 'YueLink',
+      title: AppConstants.appName,
       debugShowCheckedModeBanner: false,
+      navigatorKey: navigatorKey,
+      scaffoldMessengerKey: scaffoldMessengerKey,
+
+      // i18n
+      locale: Locale(language),
+      supportedLocales: const [Locale('zh'), Locale('en')],
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+
       themeMode: themeMode,
       theme: ThemeData(
         colorSchemeSeed: const Color(0xFF6366F1),
@@ -223,32 +502,35 @@ class _MainShellState extends ConsumerState<MainShell> {
     SettingsPage(),
   ];
 
-  static const _destinations = [
-    NavigationDestination(
-        icon: Icon(Icons.home_outlined),
-        selectedIcon: Icon(Icons.home),
-        label: '首页'),
-    NavigationDestination(
-        icon: Icon(Icons.dns_outlined),
-        selectedIcon: Icon(Icons.dns),
-        label: '代理'),
-    NavigationDestination(
-        icon: Icon(Icons.cable_outlined),
-        selectedIcon: Icon(Icons.cable),
-        label: '连接'),
-    NavigationDestination(
-        icon: Icon(Icons.description_outlined),
-        selectedIcon: Icon(Icons.description),
-        label: '配置'),
-    NavigationDestination(
-        icon: Icon(Icons.list_alt_outlined),
-        selectedIcon: Icon(Icons.list_alt),
-        label: '日志'),
-    NavigationDestination(
-        icon: Icon(Icons.settings_outlined),
-        selectedIcon: Icon(Icons.settings),
-        label: '设置'),
-  ];
+  List<NavigationDestination> _destinations(BuildContext context) {
+    final s = S.of(context);
+    return [
+      NavigationDestination(
+          icon: const Icon(Icons.home_outlined),
+          selectedIcon: const Icon(Icons.home),
+          label: s.navHome),
+      NavigationDestination(
+          icon: const Icon(Icons.dns_outlined),
+          selectedIcon: const Icon(Icons.dns),
+          label: s.navProxy),
+      NavigationDestination(
+          icon: const Icon(Icons.cable_outlined),
+          selectedIcon: const Icon(Icons.cable),
+          label: s.navConnections),
+      NavigationDestination(
+          icon: const Icon(Icons.description_outlined),
+          selectedIcon: const Icon(Icons.description),
+          label: s.navProfile),
+      NavigationDestination(
+          icon: const Icon(Icons.list_alt_outlined),
+          selectedIcon: const Icon(Icons.list_alt),
+          label: s.navLog),
+      NavigationDestination(
+          icon: const Icon(Icons.settings_outlined),
+          selectedIcon: const Icon(Icons.settings),
+          label: s.navSettings),
+    ];
+  }
 
   @override
   void initState() {
@@ -257,7 +539,7 @@ class _MainShellState extends ConsumerState<MainShell> {
       final profiles = ref.read(profilesProvider);
       profiles.whenData((list) {
         if (list.isEmpty && mounted) {
-          setState(() => _currentIndex = 2);
+          setState(() => _currentIndex = 3); // jump to Profiles
         }
       });
     });
@@ -266,6 +548,7 @@ class _MainShellState extends ConsumerState<MainShell> {
   @override
   Widget build(BuildContext context) {
     final isWide = MediaQuery.sizeOf(context).width > 600;
+    final destinations = _destinations(context);
 
     if (isWide) {
       return Scaffold(
@@ -279,7 +562,7 @@ class _MainShellState extends ConsumerState<MainShell> {
                 padding: EdgeInsets.symmetric(vertical: 16),
                 child: _AppLogo(),
               ),
-              destinations: _destinations
+              destinations: destinations
                   .map((d) => NavigationRailDestination(
                         icon: d.icon,
                         selectedIcon: d.selectedIcon,
@@ -299,7 +582,7 @@ class _MainShellState extends ConsumerState<MainShell> {
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
         onDestinationSelected: (i) => setState(() => _currentIndex = i),
-        destinations: _destinations,
+        destinations: destinations,
       ),
     );
   }
@@ -334,4 +617,27 @@ class _AppLogo extends StatelessWidget {
       ],
     );
   }
+}
+
+// ── Crash logging ─────────────────────────────────────────────────────────────
+
+void _setupCrashLogging() {
+  FlutterError.onError = (details) {
+    FlutterError.presentError(details);
+    _writeCrashLog(details.exceptionAsString(), details.stack.toString());
+  };
+  PlatformDispatcher.instance.onError = (error, stack) {
+    _writeCrashLog(error.toString(), stack.toString());
+    return false; // let the platform handle it too
+  };
+}
+
+Future<void> _writeCrashLog(String error, String stack) async {
+  try {
+    final dir = await getApplicationSupportDirectory();
+    final logFile = File('${dir.path}/crash.log');
+    final timestamp = DateTime.now().toIso8601String();
+    final entry = '[$timestamp]\n$error\n$stack\n\n';
+    await logFile.writeAsString(entry, mode: FileMode.append);
+  } catch (_) {}
 }

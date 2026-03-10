@@ -198,19 +198,17 @@ class MihomoApi {
 
   /// Flush DNS cache.
   Future<bool> flushDnsCache() async {
-    final resp = await http.post(
-      Uri.parse('$_baseUrl/cache/dns/flush'),
-      headers: _headers,
-    );
+    final resp = await http
+        .post(Uri.parse('$_baseUrl/cache/dns/flush'), headers: _headers)
+        .timeout(_kTimeout);
     return resp.statusCode == 204 || resp.statusCode == 200;
   }
 
   /// Flush fake IP cache.
   Future<bool> flushFakeIpCache() async {
-    final resp = await http.post(
-      Uri.parse('$_baseUrl/cache/fakeip/flush'),
-      headers: _headers,
-    );
+    final resp = await http
+        .post(Uri.parse('$_baseUrl/cache/fakeip/flush'), headers: _headers)
+        .timeout(_kTimeout);
     return resp.statusCode == 204 || resp.statusCode == 200;
   }
 
@@ -238,11 +236,12 @@ class MihomoApi {
   // HTTP helpers
   // ------------------------------------------------------------------
 
+  static const _kTimeout = Duration(seconds: 10);
+
   Future<Map<String, dynamic>> _get(String path) async {
-    final resp = await http.get(
-      Uri.parse('$_baseUrl$path'),
-      headers: _headers,
-    );
+    final resp = await http
+        .get(Uri.parse('$_baseUrl$path'), headers: _headers)
+        .timeout(_kTimeout);
     if (resp.statusCode != 200) {
       throw MihomoApiException(resp.statusCode, resp.body);
     }
@@ -251,24 +250,30 @@ class MihomoApi {
 
   Future<http.Response> _put(String path,
       {Map<String, dynamic>? body}) async {
-    return http.put(
-      Uri.parse('$_baseUrl$path'),
-      headers: _headers,
-      body: body != null ? json.encode(body) : null,
-    );
+    return http
+        .put(
+          Uri.parse('$_baseUrl$path'),
+          headers: _headers,
+          body: body != null ? json.encode(body) : null,
+        )
+        .timeout(_kTimeout);
   }
 
   Future<http.Response> _patch(String path,
       {Map<String, dynamic>? body}) async {
-    return http.patch(
-      Uri.parse('$_baseUrl$path'),
-      headers: _headers,
-      body: body != null ? json.encode(body) : null,
-    );
+    return http
+        .patch(
+          Uri.parse('$_baseUrl$path'),
+          headers: _headers,
+          body: body != null ? json.encode(body) : null,
+        )
+        .timeout(_kTimeout);
   }
 
   Future<http.Response> _delete(String path) async {
-    return http.delete(Uri.parse('$_baseUrl$path'), headers: _headers);
+    return http
+        .delete(Uri.parse('$_baseUrl$path'), headers: _headers)
+        .timeout(_kTimeout);
   }
 }
 

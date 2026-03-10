@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../l10n/app_strings.dart';
 import '../models/proxy.dart';
 import '../providers/core_provider.dart';
 import '../providers/proxy_provider.dart';
@@ -24,6 +25,7 @@ class ProxyPage extends ConsumerStatefulWidget {
 class _ProxyPageState extends ConsumerState<ProxyPage> {
   String _searchQuery = '';
   _SortMode _sortMode = _SortMode.none;
+  String? _typeFilter; // null = all types
   final _searchController = TextEditingController();
 
   @override
@@ -40,6 +42,7 @@ class _ProxyPageState extends ConsumerState<ProxyPage> {
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     final groups = ref.watch(proxyGroupsProvider);
     final status = ref.watch(coreStatusProvider);
 
@@ -53,7 +56,7 @@ class _ProxyPageState extends ConsumerState<ProxyPage> {
                   size: 64,
                   color: Theme.of(context).colorScheme.onSurfaceVariant),
               const SizedBox(height: 16),
-              Text('请先连接以查看代理节点',
+              Text(s.notConnectedHintProxy,
                   style: Theme.of(context).textTheme.bodyLarge),
             ],
           ),
@@ -72,10 +75,36 @@ class _ProxyPageState extends ConsumerState<ProxyPage> {
     }
 
     final filteredGroups = _filterGroups(groups);
+    final availableTypes = groups.map((g) => g.type).toSet().toList()..sort();
 
     return Scaffold(
       body: Column(
         children: [
+          // Type filter chips
+          if (availableTypes.length > 1)
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
+              child: Row(
+                children: [
+                  FilterChip(
+                    label: Text(s.proxyTypeAll),
+                    selected: _typeFilter == null,
+                    onSelected: (_) => setState(() => _typeFilter = null),
+                  ),
+                  for (final type in availableTypes) ...[
+                    const SizedBox(width: 6),
+                    FilterChip(
+                      label: Text(type),
+                      selected: _typeFilter == type,
+                      onSelected: (_) => setState(
+                          () => _typeFilter = _typeFilter == type ? null : type),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+
           // Search bar + sort toggle
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 8, 4, 4),
@@ -85,7 +114,7 @@ class _ProxyPageState extends ConsumerState<ProxyPage> {
                   child: TextField(
                     controller: _searchController,
                     decoration: InputDecoration(
-                      hintText: '搜索节点...',
+                      hintText: s.searchNodesHint,
                       prefixIcon: const Icon(Icons.search, size: 20),
                       suffixIcon: _searchQuery.isNotEmpty
                           ? IconButton(
@@ -104,10 +133,12 @@ class _ProxyPageState extends ConsumerState<ProxyPage> {
                         borderSide: BorderSide.none,
                       ),
                       filled: true,
-                      fillColor:
-                          Theme.of(context).colorScheme.surfaceContainerHighest,
+                      fillColor: Theme.of(context)
+                          .colorScheme
+                          .surfaceContainerHighest,
                     ),
-                    onChanged: (v) => setState(() => _searchQuery = v.trim()),
+                    onChanged: (v) =>
+                        setState(() => _searchQuery = v.trim()),
                   ),
                 ),
                 IconButton(
@@ -123,12 +154,14 @@ class _ProxyPageState extends ConsumerState<ProxyPage> {
                         ? Theme.of(context).colorScheme.primary
                         : null,
                   ),
-                  tooltip: _sortMode == _SortMode.delay ? '取消排序' : '按延迟排序',
+                  tooltip: _sortMode == _SortMode.delay
+                      ? s.cancelSort
+                      : s.sortByDelay,
                 ),
                 IconButton(
                   onPressed: () => _showTestUrlDialog(context, ref),
                   icon: const Icon(Icons.tune, size: 20),
-                  tooltip: '测速设置',
+                  tooltip: s.testUrlSettings,
                 ),
               ],
             ),
@@ -142,7 +175,7 @@ class _ProxyPageState extends ConsumerState<ProxyPage> {
               },
               child: filteredGroups.isEmpty
                   ? Center(
-                      child: Text('未找到匹配的节点',
+                      child: Text(s.noMatchingNodes,
                           style: Theme.of(context).textTheme.bodyMedium))
                   : ListView.builder(
                       padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
@@ -163,22 +196,23 @@ class _ProxyPageState extends ConsumerState<ProxyPage> {
   }
 
   void _showTestUrlDialog(BuildContext context, WidgetRef ref) {
+    final s = S.of(context);
     final currentUrl = ref.read(testUrlProvider);
     final ctrl = TextEditingController(text: currentUrl);
 
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('测速 URL'),
+        title: Text(s.testUrlDialogTitle),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             TextField(
               controller: ctrl,
-              decoration: const InputDecoration(
-                labelText: '自定义 URL',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: s.customUrlLabel,
+                border: const OutlineInputBorder(),
                 isDense: true,
               ),
             ),
@@ -189,7 +223,8 @@ class _ProxyPageState extends ConsumerState<ProxyPage> {
                     padding: const EdgeInsets.symmetric(vertical: 4),
                     child: Row(
                       children: [
-                        Icon(Icons.link, size: 14,
+                        Icon(Icons.link,
+                            size: 14,
                             color: Theme.of(ctx).colorScheme.primary),
                         const SizedBox(width: 6),
                         Flexible(
@@ -206,7 +241,7 @@ class _ProxyPageState extends ConsumerState<ProxyPage> {
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('取消')),
+              child: Text(s.cancel)),
           FilledButton(
             onPressed: () {
               final url = ctrl.text.trim();
@@ -215,21 +250,27 @@ class _ProxyPageState extends ConsumerState<ProxyPage> {
               }
               Navigator.pop(ctx);
             },
-            child: const Text('确定'),
+            child: Text(s.confirm),
           ),
         ],
       ),
-    );
+    ).whenComplete(ctrl.dispose);
   }
 
   List<ProxyGroup> _filterGroups(List<ProxyGroup> groups) {
-    if (_searchQuery.isEmpty) return groups;
-    final q = _searchQuery.toLowerCase();
-    return groups
-        .where((g) =>
-            g.name.toLowerCase().contains(q) ||
-            g.all.any((n) => n.toLowerCase().contains(q)))
-        .toList();
+    var result = groups;
+    if (_typeFilter != null) {
+      result = result.where((g) => g.type == _typeFilter).toList();
+    }
+    if (_searchQuery.isNotEmpty) {
+      final q = _searchQuery.toLowerCase();
+      result = result
+          .where((g) =>
+              g.name.toLowerCase().contains(q) ||
+              g.all.any((n) => n.toLowerCase().contains(q)))
+          .toList();
+    }
+    return result;
   }
 }
 
@@ -246,27 +287,24 @@ class _ProxyGroupCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final s = S.of(context);
     final delays = ref.watch(delayResultsProvider);
     final testing = ref.watch(delayTestingProvider);
 
-    // Filter nodes if searching
     var visibleNodes = searchQuery.isEmpty
         ? List<String>.from(group.all)
         : group.all
-            .where(
-                (n) => n.toLowerCase().contains(searchQuery.toLowerCase()))
+            .where((n) =>
+                n.toLowerCase().contains(searchQuery.toLowerCase()))
             .toList();
 
-    // Sort by delay if enabled
     if (sortMode == _SortMode.delay) {
       visibleNodes.sort((a, b) {
         final da = delays[a];
         final db = delays[b];
-        // Untested nodes go to end
         if (da == null && db == null) return 0;
         if (da == null) return 1;
         if (db == null) return -1;
-        // Timeout (<=0) goes after valid delays
         if (da <= 0 && db <= 0) return 0;
         if (da <= 0) return 1;
         if (db <= 0) return -1;
@@ -307,7 +345,8 @@ class _ProxyGroupCard extends ConsumerWidget {
                 return GestureDetector(
                   onLongPress: isTesting
                       ? null
-                      : () => ref.read(delayTestProvider).testDelay(name),
+                      : () =>
+                          ref.read(delayTestProvider).testDelay(name),
                   child: ChoiceChip(
                     label: SizedBox(
                       width: 100,
@@ -322,10 +361,10 @@ class _ProxyGroupCard extends ConsumerWidget {
                             const SizedBox(
                               width: 12,
                               height: 12,
-                              child:
-                                  CircularProgressIndicator(strokeWidth: 1.5),
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 1.5),
                             )
-                          else if (delay != null)
+                          else if (delay != null) ...[
                             Text(
                               delay > 0 ? '${delay}ms' : 'timeout',
                               style: TextStyle(
@@ -333,8 +372,10 @@ class _ProxyGroupCard extends ConsumerWidget {
                                 fontWeight: FontWeight.w600,
                                 color: _delayColor(delay),
                               ),
-                            )
-                          else
+                            ),
+                            const SizedBox(height: 2),
+                            _DelayBar(delay: delay),
+                          ] else
                             Text('--',
                                 style: TextStyle(
                                     fontSize: 10,
@@ -367,11 +408,11 @@ class _ProxyGroupCard extends ConsumerWidget {
                       : null,
                   icon: const Icon(Icons.speed, size: 16),
                   label: Text(testing.isEmpty
-                      ? '测速全部'
-                      : '测速中 (${testing.length})'),
+                      ? s.testAll
+                      : s.testingCount(testing.length)),
                 ),
                 const Spacer(),
-                Text('${visibleNodes.length}/${group.all.length} 节点',
+                Text(s.nodesCount(visibleNodes.length, group.all.length),
                     style: Theme.of(context).textTheme.bodySmall),
               ],
             ),
@@ -389,30 +430,41 @@ class _ProxyGroupCard extends ConsumerWidget {
     return Colors.red;
   }
 
-  /// Map group names to recognizable icons.
   IconData _groupIcon(String name) {
     final n = name.toLowerCase();
     if (n.contains('youtube')) return Icons.play_circle_outline;
     if (n.contains('tiktok')) return Icons.music_note;
-    if (n.contains('ai') || n.contains('openai') || n.contains('claude')) {
+    if (n.contains('ai') ||
+        n.contains('openai') ||
+        n.contains('claude')) {
       return Icons.auto_awesome;
     }
     if (n.contains('google')) return Icons.search;
     if (n.contains('telegram')) return Icons.send;
     if (n.contains('github')) return Icons.code;
-    if (n.contains('流媒体') || n.contains('netflix') || n.contains('disney')) {
+    if (n.contains('流媒体') ||
+        n.contains('netflix') ||
+        n.contains('disney')) {
       return Icons.movie_outlined;
     }
-    if (n.contains('社交') || n.contains('twitter') || n.contains('facebook')) {
+    if (n.contains('社交') ||
+        n.contains('twitter') ||
+        n.contains('facebook')) {
       return Icons.people_outline;
     }
-    if (n.contains('游戏') || n.contains('game') || n.contains('steam')) {
+    if (n.contains('游戏') ||
+        n.contains('game') ||
+        n.contains('steam')) {
       return Icons.sports_esports;
     }
-    if (n.contains('兜底') || n.contains('fallback') || n.contains('漏网')) {
+    if (n.contains('兜底') ||
+        n.contains('fallback') ||
+        n.contains('漏网')) {
       return Icons.catching_pokemon;
     }
-    if (n.contains('自动') || n.contains('url-test') || n.contains('auto')) {
+    if (n.contains('自动') ||
+        n.contains('url-test') ||
+        n.contains('auto')) {
       return Icons.speed;
     }
     if (n.contains('故障') || n.contains('转移')) return Icons.swap_horiz;
@@ -429,6 +481,7 @@ class _TypeChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
       decoration: BoxDecoration(
@@ -436,7 +489,7 @@ class _TypeChip extends StatelessWidget {
         borderRadius: BorderRadius.circular(4),
       ),
       child: Text(
-        _typeLabel(type),
+        _typeLabel(type, s),
         style: TextStyle(
           fontSize: 10,
           fontWeight: FontWeight.w600,
@@ -446,16 +499,16 @@ class _TypeChip extends StatelessWidget {
     );
   }
 
-  String _typeLabel(String type) {
+  String _typeLabel(String type, S s) {
     switch (type) {
       case 'Selector':
-        return '手动选择';
+        return s.typeManual;
       case 'URLTest':
-        return '自动测速';
+        return s.typeAuto;
       case 'Fallback':
-        return '故障转移';
+        return s.typeFallback;
       case 'LoadBalance':
-        return '负载均衡';
+        return s.typeLoadBalance;
       default:
         return type;
     }
@@ -474,5 +527,42 @@ class _TypeChip extends StatelessWidget {
       default:
         return Colors.grey;
     }
+  }
+}
+
+// ── Delay heatmap bar ─────────────────────────────────────────────────────────
+
+class _DelayBar extends StatelessWidget {
+  final int delay;
+  const _DelayBar({required this.delay});
+
+  Color get _color {
+    if (delay <= 0) return Colors.grey;
+    if (delay < 100) return Colors.green;
+    if (delay < 300) return Colors.orange;
+    return Colors.red;
+  }
+
+  double get _fill {
+    if (delay <= 0) return 1.0;
+    // Map 0–1000ms to 0.1–1.0 fill
+    return (delay.clamp(50, 1000) / 1000.0).clamp(0.1, 1.0);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 44,
+      height: 3,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(2),
+        child: LinearProgressIndicator(
+          value: _fill,
+          backgroundColor: _color.withValues(alpha: 0.18),
+          color: _color,
+          minHeight: 3,
+        ),
+      ),
+    );
   }
 }

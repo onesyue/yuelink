@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
@@ -7,6 +9,8 @@ import 'package:path_provider/path_provider.dart';
 import '../constants.dart';
 import '../models/profile.dart';
 import 'config_template.dart';
+import 'node_filter_service.dart';
+import 'settings_service.dart';
 import 'subscription_parser.dart';
 
 /// Manages subscription profiles: download, store, update.
@@ -29,14 +33,17 @@ class ProfileService {
   }
 
   /// Load all saved profiles.
+  /// JSON decode runs in a background Isolate to avoid jank on large index files.
   static Future<List<Profile>> loadProfiles() async {
     final file = await _getProfilesFile();
     if (!await file.exists()) return [];
     final jsonStr = await file.readAsString();
-    final list = json.decode(jsonStr) as List;
-    return list
-        .map((e) => Profile.fromJson(e as Map<String, dynamic>))
-        .toList();
+    return Isolate.run(() {
+      final list = json.decode(jsonStr) as List;
+      return list
+          .map((e) => Profile.fromJson(e as Map<String, dynamic>))
+          .toList();
+    });
   }
 
   /// Save profiles index.
@@ -65,6 +72,9 @@ class ProfileService {
       final fallback = await ConfigTemplate.loadFallbackTemplate();
       finalContent = ConfigTemplate.mergeIfNeeded(fallback, result.content);
     }
+
+    // Apply node filter rules (regex keep/exclude/rename)
+    finalContent = await NodeFilterService.instance.apply(finalContent);
 
     final profile = Profile(
       id: id,
@@ -100,6 +110,9 @@ class ProfileService {
       finalContent = ConfigTemplate.mergeIfNeeded(fallback, result.content);
     }
 
+    // Apply node filter rules (regex keep/exclude/rename)
+    finalContent = await NodeFilterService.instance.apply(finalContent);
+
     profile.configContent = finalContent;
     profile.lastUpdated = DateTime.now();
     profile.subInfo = result.subInfo;
@@ -111,6 +124,39 @@ class ProfileService {
     final profiles = await loadProfiles();
     final idx = profiles.indexWhere((p) => p.id == profile.id);
     if (idx >= 0) profiles[idx] = profile;
+    await saveProfiles(profiles);
+
+    return profile;
+  }
+
+  /// Import a local YAML file as a profile (no URL, no auto-update).
+  static Future<Profile> addLocalProfile({
+    required String name,
+    required String configContent,
+  }) async {
+    final id = DateTime.now().millisecondsSinceEpoch.toString();
+
+    String finalContent = configContent;
+    if (!ConfigTemplate.isCompleteConfig(configContent)) {
+      final fallback = await ConfigTemplate.loadFallbackTemplate();
+      finalContent = ConfigTemplate.mergeIfNeeded(fallback, configContent);
+    }
+
+    final profile = Profile(
+      id: id,
+      name: name,
+      url: '', // no remote URL
+      configContent: finalContent,
+      lastUpdated: DateTime.now(),
+      subInfo: SubscriptionInfo(),
+      updateInterval: Duration.zero, // never auto-update
+    );
+
+    final dir = await _getProfilesDir();
+    await File('${dir.path}/$id.yaml').writeAsString(finalContent);
+
+    final profiles = await loadProfiles();
+    profiles.add(profile);
     await saveProfiles(profiles);
 
     return profile;
@@ -139,12 +185,32 @@ class ProfileService {
   }
 
   /// Download config YAML from a subscription URL.
+  /// If a Sub-Store server URL is configured, automatically converts the URL
+  /// to Clash format via Sub-Store before downloading.
   /// Returns both the content and parsed subscription info from headers.
   static Future<_DownloadResult> _downloadConfig(String url) async {
-    final response = await http.get(
-      Uri.parse(url),
-      headers: {'User-Agent': AppConstants.userAgent},
-    );
+    String downloadUrl = url;
+
+    final subStoreBase = await SettingsService.getSubStoreUrl();
+    if (subStoreBase.isNotEmpty) {
+      final encoded = Uri.encodeComponent(url);
+      downloadUrl = '$subStoreBase/sub?target=clash&url=$encoded';
+    }
+
+    http.Response response;
+    try {
+      response = await http
+          .get(
+            Uri.parse(downloadUrl),
+            headers: {'User-Agent': AppConstants.userAgent},
+          )
+          .timeout(const Duration(seconds: 30));
+    } on TimeoutException {
+      throw Exception('下载超时，请检查网络连接');
+    } on SocketException catch (e) {
+      throw Exception('网络错误: ${e.message.isNotEmpty ? e.message : e.address?.host ?? "无法连接"}');
+    }
+
     if (response.statusCode != 200) {
       throw Exception('下载失败: HTTP ${response.statusCode}');
     }

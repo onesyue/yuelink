@@ -80,10 +80,9 @@ class UnlockTestService {
   Future<UnlockResult> _test(UnlockService svc,
       {required int proxyPort}) async {
     final sw = Stopwatch()..start();
+    final client = HttpClient();
+    client.findProxy = (_) => 'PROXY 127.0.0.1:$proxyPort';
     try {
-      final client = HttpClient();
-      client.findProxy = (_) => 'PROXY 127.0.0.1:$proxyPort';
-
       final req = await client
           .getUrl(Uri.parse(svc.testUrl))
           .timeout(const Duration(seconds: 8));
@@ -104,10 +103,8 @@ class UnlockTestService {
         }
         body = utf8.decode(bytes, allowMalformed: true);
       } else {
-        resp.drain<void>();
+        await resp.drain<void>();
       }
-
-      client.close();
 
       if (resp.statusCode == 204) {
         return UnlockResult(status: UnlockStatus.unlocked, latencyMs: latency);
@@ -124,6 +121,8 @@ class UnlockTestService {
       return const UnlockResult(status: UnlockStatus.timeout);
     } catch (_) {
       return const UnlockResult(status: UnlockStatus.error);
+    } finally {
+      client.close();
     }
   }
 }
@@ -150,19 +149,4 @@ class UnlockResult {
   final UnlockStatus status;
   final int? latencyMs;
   const UnlockResult({required this.status, this.latencyMs});
-
-  String get label {
-    switch (status) {
-      case UnlockStatus.unlocked:
-        return latencyMs != null ? '可用 ${latencyMs}ms' : '可用';
-      case UnlockStatus.blocked:
-        return '被封锁';
-      case UnlockStatus.timeout:
-        return '超时';
-      case UnlockStatus.error:
-        return '错误';
-      case UnlockStatus.testing:
-        return '检测中...';
-    }
-  }
 }

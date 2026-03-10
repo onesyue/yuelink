@@ -28,10 +28,18 @@ class LogEntriesNotifier extends StateNotifier<List<LogEntry>> {
         state = [];
       }
     });
+    // Restart stream when log level changes while core is running
+    ref.listen(logLevelProvider, (prev, next) {
+      if (prev != next && ref.read(coreStatusProvider) == CoreStatus.running) {
+        _stopListening();
+        _startListening();
+      }
+    });
   }
 
   void _startListening() {
     final manager = CoreManager.instance;
+    final level = ref.read(logLevelProvider);
 
     if (manager.isMockMode) {
       // Generate mock log entries periodically
@@ -47,8 +55,8 @@ class LogEntriesNotifier extends StateNotifier<List<LogEntry>> {
         index++;
       });
     } else {
-      // Connect to real WebSocket log stream
-      _sub = manager.stream.logStream().listen((entry) {
+      // Connect to real WebSocket log stream with current log level
+      _sub = manager.stream.logStream(level: level).listen((entry) {
         if (mounted) _addEntry(entry);
       });
     }

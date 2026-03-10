@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../l10n/app_strings.dart';
 import '../providers/core_provider.dart';
 import '../services/unlock_test_service.dart';
 
@@ -9,13 +10,14 @@ class UnlockTestPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final s = S.of(context);
     final results = ref.watch(unlockResultsProvider);
     final testing = ref.watch(unlockTestingProvider);
     final actions = ref.read(unlockTestActionsProvider);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('节点解锁检测'),
+        title: Text(s.unlockTestTitle),
         actions: [
           if (testing)
             const Padding(
@@ -29,7 +31,7 @@ class UnlockTestPage extends ConsumerWidget {
           else
             IconButton(
               icon: const Icon(Icons.play_arrow_rounded),
-              tooltip: '开始检测',
+              tooltip: s.startDetect,
               onPressed: actions.runAll,
             ),
         ],
@@ -46,10 +48,14 @@ class UnlockTestPage extends ConsumerWidget {
                           .onSurfaceVariant
                           .withValues(alpha: 0.4)),
                   const SizedBox(height: 16),
-                  Text('点击右上角按钮开始检测',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color:
-                              Theme.of(context).colorScheme.onSurfaceVariant)),
+                  Text(s.clickToStart,
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodyMedium
+                          ?.copyWith(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant)),
                 ],
               ),
             )
@@ -83,7 +89,9 @@ class _ServiceTile extends StatelessWidget {
             style: const TextStyle(fontWeight: FontWeight.w500)),
         subtitle: Text(service.testUrl,
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                color: Theme.of(context)
+                    .colorScheme
+                    .onSurfaceVariant)),
         trailing: result == null
             ? const Icon(Icons.remove, color: Colors.grey)
             : _StatusWidget(result: result!),
@@ -98,6 +106,7 @@ class _StatusWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     return switch (result.status) {
       UnlockStatus.testing => const SizedBox(
           width: 20,
@@ -110,45 +119,57 @@ class _StatusWidget extends StatelessWidget {
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.check_circle, color: Colors.green, size: 18),
+                const Icon(Icons.check_circle,
+                    color: Colors.green, size: 18),
                 const SizedBox(width: 4),
-                Text('可用',
+                Text(s.unlockAvailable,
                     style: const TextStyle(
-                        color: Colors.green, fontWeight: FontWeight.w500)),
+                        color: Colors.green,
+                        fontWeight: FontWeight.w500)),
               ],
             ),
             if (result.latencyMs != null)
               Text('${result.latencyMs}ms',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodySmall
+                      ?.copyWith(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onSurfaceVariant)),
           ],
         ),
-      UnlockStatus.blocked => const Row(
+      UnlockStatus.blocked => Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.block, color: Colors.red, size: 18),
-            SizedBox(width: 4),
-            Text('被封锁',
-                style: TextStyle(
-                    color: Colors.red, fontWeight: FontWeight.w500)),
+            const Icon(Icons.block, color: Colors.red, size: 18),
+            const SizedBox(width: 4),
+            Text(s.unlockBlocked,
+                style: const TextStyle(
+                    color: Colors.red,
+                    fontWeight: FontWeight.w500)),
           ],
         ),
-      UnlockStatus.timeout => const Row(
+      UnlockStatus.timeout => Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.timer_off_outlined, color: Colors.orange, size: 18),
-            SizedBox(width: 4),
-            Text('超时',
-                style: TextStyle(
-                    color: Colors.orange, fontWeight: FontWeight.w500)),
+            const Icon(Icons.timer_off_outlined,
+                color: Colors.orange, size: 18),
+            const SizedBox(width: 4),
+            Text(s.unlockTimeout,
+                style: const TextStyle(
+                    color: Colors.orange,
+                    fontWeight: FontWeight.w500)),
           ],
         ),
-      UnlockStatus.error => const Row(
+      UnlockStatus.error => Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.error_outline, color: Colors.grey, size: 18),
-            SizedBox(width: 4),
-            Text('错误', style: TextStyle(color: Colors.grey)),
+            const Icon(Icons.error_outline,
+                color: Colors.grey, size: 18),
+            const SizedBox(width: 4),
+            Text(s.unlockError,
+                style: const TextStyle(color: Colors.grey)),
           ],
         ),
     };

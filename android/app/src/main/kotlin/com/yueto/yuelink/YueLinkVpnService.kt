@@ -13,10 +13,13 @@ import android.os.ParcelFileDescriptor
 class YueLinkVpnService : VpnService() {
     companion object {
         const val ACTION_START = "com.yueto.yuelink.action.START"
-        const val ACTION_STOP = "com.yueto.yuelink.action.STOP"
+        const val ACTION_STOP  = "com.yueto.yuelink.action.STOP"
 
-        // Extra key: mixed-port value passed from Flutter when starting
         const val EXTRA_MIXED_PORT = "mixed_port"
+        /** "all" | "whitelist" | "blacklist" */
+        const val EXTRA_SPLIT_MODE = "split_mode"
+        /** ArrayList<String> of package names */
+        const val EXTRA_SPLIT_APPS = "split_apps"
 
         private const val NOTIFICATION_ID = 1
         private const val CHANNEL_ID = "yuelink_vpn"
@@ -29,8 +32,10 @@ class YueLinkVpnService : VpnService() {
     private val binder = LocalBinder()
     private var tunFd: ParcelFileDescriptor? = null
 
-    // Callback invoked once TUN is established, delivers the raw fd integer to MainActivity
     var onTunReady: ((Int) -> Unit)? = null
+
+    // Split-tunnel config stored at start time for notification text
+    private var splitMode: String = "all"
 
     override fun onCreate() {
         super.onCreate()
@@ -43,19 +48,22 @@ class YueLinkVpnService : VpnService() {
         when (intent?.action) {
             ACTION_START -> {
                 val mixedPort = intent.getIntExtra(EXTRA_MIXED_PORT, 7890)
-                startTunnel(mixedPort)
+                val mode  = intent.getStringExtra(EXTRA_SPLIT_MODE) ?: "all"
+                val apps  = intent.getStringArrayListExtra(EXTRA_SPLIT_APPS) ?: arrayListOf()
+                startTunnel(mixedPort, mode, apps)
             }
             ACTION_STOP -> stopTunnel()
         }
         return START_STICKY
     }
 
-    private fun startTunnel(mixedPort: Int) {
+    private fun startTunnel(mixedPort: Int, mode: String, apps: List<String>) {
         if (tunFd != null) {
-            // Already running — deliver the existing fd
             onTunReady?.invoke(tunFd!!.fd)
             return
         }
+
+        splitMode = mode
 
         val builder = Builder()
             .setSession("YueLink")
@@ -66,16 +74,30 @@ class YueLinkVpnService : VpnService() {
             .addDnsServer("8.8.8.8")
             .setMtu(9000)
             .setBlocking(false)
-            // Allow the app itself to bypass the VPN (so the mihomo process
-            // can reach the internet directly without a routing loop)
+            // The mihomo process itself must always bypass the VPN to avoid routing loops
             .addDisallowedApplication(packageName)
+
+        when (mode) {
+            "whitelist" -> {
+                // Only listed apps go through VPN (allowedApplications)
+                for (pkg in apps) {
+                    try { builder.addAllowedApplication(pkg) } catch (_: Exception) {}
+                }
+            }
+            "blacklist" -> {
+                // Listed apps bypass VPN (disallowedApplications)
+                for (pkg in apps) {
+                    try { builder.addDisallowedApplication(pkg) } catch (_: Exception) {}
+                }
+            }
+            // "all" — no extra filtering, everything goes through (default)
+        }
 
         tunFd = builder.establish()
 
         val fd = tunFd?.fd
         if (fd != null) {
             startForeground(NOTIFICATION_ID, createNotification())
-            // Deliver fd to Flutter layer so it can be injected into config YAML
             onTunReady?.invoke(fd)
         }
     }
@@ -84,12 +106,10 @@ class YueLinkVpnService : VpnService() {
         tunFd?.close()
         tunFd = null
         onTunReady = null
-
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
 
-    /** The raw fd of the active TUN interface, or -1 if not running. */
     fun getTunFd(): Int = tunFd?.fd ?: -1
 
     override fun onDestroy() {
@@ -106,11 +126,8 @@ class YueLinkVpnService : VpnService() {
             CHANNEL_ID,
             "YueLink VPN",
             NotificationManager.IMPORTANCE_LOW
-        ).apply {
-            description = "YueLink VPN service status"
-        }
-        getSystemService(NotificationManager::class.java)
-            .createNotificationChannel(channel)
+        ).apply { description = "YueLink VPN service status" }
+        getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
     }
 
     private fun createNotification(): Notification {
@@ -119,10 +136,14 @@ class YueLinkVpnService : VpnService() {
             Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE
         )
-
+        val modeText = when (splitMode) {
+            "whitelist" -> "仅代理选定应用"
+            "blacklist" -> "跳过选定应用"
+            else        -> "VPN 已连接"
+        }
         return Notification.Builder(this, CHANNEL_ID)
             .setContentTitle("YueLink")
-            .setContentText("VPN 已连接")
+            .setContentText(modeText)
             .setSmallIcon(android.R.drawable.ic_lock_lock)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
