@@ -351,6 +351,7 @@ class _GroupCardState extends ConsumerState<_GroupCard>
                             } else {
                               AppNotifier.error('切换失败，请检查内核状态');
                             }
+                            return ok;
                           },
                           onTest: () => ref.read(delayTestProvider).testDelay(group.all[i]),
                         ),
@@ -396,12 +397,12 @@ class _GroupCardState extends ConsumerState<_GroupCard>
 
 // ── Node Tile (Compact & Interactive) ─────────────────────────────────────────
 
-class _NodeTile extends StatelessWidget {
+class _NodeTile extends StatefulWidget {
   final String name;
   final bool isSelected;
   final int? delay;
   final bool isTesting;
-  final VoidCallback onSelect;
+  final Future<bool> Function() onSelect;
   final VoidCallback onTest;
 
   const _NodeTile({
@@ -414,6 +415,22 @@ class _NodeTile extends StatelessWidget {
   });
 
   @override
+  State<_NodeTile> createState() => _NodeTileState();
+}
+
+class _NodeTileState extends State<_NodeTile> {
+  bool _isSwitching = false;
+
+  void _handleSelect() async {
+    if (_isSwitching || widget.isSelected) return;
+    setState(() => _isSwitching = true);
+    await widget.onSelect();
+    if (mounted) {
+      setState(() => _isSwitching = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primary = Theme.of(context).colorScheme.primary;
@@ -421,27 +438,32 @@ class _NodeTile extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: onSelect,
+        onTap: _handleSelect,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: YLSpacing.md, vertical: YLSpacing.sm),
           child: Row(
             children: [
-              // Selection Indicator
+              // Selection Indicator with Loading State
               SizedBox(
                 width: 24,
-                child: isSelected
-                    ? Icon(Icons.check_circle_rounded, color: primary, size: 18)
-                    : Icon(Icons.circle_outlined, color: isDark ? YLColors.zinc700 : YLColors.zinc300, size: 18),
+                child: _isSwitching
+                    ? const SizedBox(
+                        width: 16, height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : (widget.isSelected
+                        ? Icon(Icons.check_circle_rounded, color: primary, size: 18)
+                        : Icon(Icons.circle_outlined, color: isDark ? YLColors.zinc700 : YLColors.zinc300, size: 18)),
               ),
               const SizedBox(width: YLSpacing.xs),
               
               // Node Name
               Expanded(
                 child: Text(
-                  name,
+                  widget.name,
                   style: YLText.body.copyWith(
-                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                    color: isSelected 
+                    fontWeight: widget.isSelected ? FontWeight.w600 : FontWeight.w400,
+                    color: widget.isSelected 
                         ? (isDark ? Colors.white : YLColors.zinc900) 
                         : (isDark ? YLColors.zinc300 : YLColors.zinc700),
                   ),
@@ -454,11 +476,11 @@ class _NodeTile extends StatelessWidget {
               
               // Delay Badge (Tappable for single test)
               InkWell(
-                onTap: isTesting ? null : onTest,
+                onTap: widget.isTesting ? null : widget.onTest,
                 borderRadius: BorderRadius.circular(YLRadius.sm),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                  child: YLDelayBadge(delay: delay, testing: isTesting),
+                  child: YLDelayBadge(delay: widget.delay, testing: widget.isTesting),
                 ),
               ),
             ],

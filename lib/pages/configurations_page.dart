@@ -89,9 +89,7 @@ class ConfigurationsPage extends ConsumerWidget {
                     if (activeProfile != null) ...[
                       const SizedBox(height: YLSpacing.xxl),
                       const YLSectionLabel('Active Profile'),
-                      _buildProfileCard(
-                        context: context,
-                        ref: ref,
+                      _ProfileCard(
                         id: activeProfile.id,
                         name: activeProfile.name,
                         url: activeProfile.url ?? 'Local File',
@@ -106,9 +104,7 @@ class ConfigurationsPage extends ConsumerWidget {
                       const YLSectionLabel('All Profiles'),
                       ...otherProfiles.map((p) => Padding(
                         padding: const EdgeInsets.only(bottom: YLSpacing.lg),
-                        child: _buildProfileCard(
-                          context: context,
-                          ref: ref,
+                        child: _ProfileCard(
                           id: p.id,
                           name: p.name,
                           url: p.url ?? 'Local File',
@@ -166,16 +162,74 @@ class ConfigurationsPage extends ConsumerWidget {
     );
   }
 
-  Widget _buildProfileCard({
-    required BuildContext context,
-    required WidgetRef ref,
-    required String id,
-    required String name,
-    required String url,
-    required String updatedAt,
-    required bool isActive,
-    bool isExpired = false,
-  }) {
+  String _formatDate(DateTime? date) {
+    if (date == null) return 'Never';
+    final now = DateTime.now();
+    final diff = now.difference(date);
+    if (diff.inMinutes < 60) return '${diff.inMinutes} mins ago';
+    if (diff.inHours < 24) return '${diff.inHours} hours ago';
+    return '${diff.inDays} days ago';
+  }
+}
+
+class _ProfileCard extends ConsumerStatefulWidget {
+  final String id;
+  final String name;
+  final String url;
+  final String updatedAt;
+  final bool isActive;
+  final bool isExpired;
+
+  const _ProfileCard({
+    required this.id,
+    required this.name,
+    required this.url,
+    required this.updatedAt,
+    required this.isActive,
+    required this.isExpired,
+  });
+
+  @override
+  ConsumerState<_ProfileCard> createState() => _ProfileCardState();
+}
+
+class _ProfileCardState extends ConsumerState<_ProfileCard> {
+  bool _isApplying = false;
+
+  void _handleUse() async {
+    if (_isApplying) return;
+    setState(() => _isApplying = true);
+
+    // 真实状态闭环：如果内核正在运行，需要重启内核并等待结果
+    final status = ref.read(coreStatusProvider);
+    if (status == CoreStatus.running) {
+      AppNotifier.info('正在重启内核以应用新配置...');
+      await ref.read(coreActionsProvider).stop();
+      
+      final config = await ref.read(profileServiceProvider).loadConfig(widget.id);
+      if (config != null) {
+        final ok = await ref.read(coreActionsProvider).start(config);
+        if (ok) {
+          ref.read(activeProfileIdProvider.notifier).select(widget.id);
+          AppNotifier.success('已成功应用配置: ${widget.name}');
+        }
+        // 如果失败，coreActionsProvider.start 内部已经抛出了具体的错误提示，
+        // 且内核会停留在 stopped 状态，不会出现假同步。
+      } else {
+        AppNotifier.error('无法读取配置文件');
+      }
+    } else {
+      ref.read(activeProfileIdProvider.notifier).select(widget.id);
+      AppNotifier.success('已切换至配置: ${widget.name}');
+    }
+
+    if (mounted) {
+      setState(() => _isApplying = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return YLSurface(
@@ -190,10 +244,10 @@ class ConfigurationsPage extends ConsumerWidget {
               Padding(
                 padding: const EdgeInsets.only(top: 6.0, right: 12.0),
                 child: YLStatusDot(
-                  color: isActive 
+                  color: widget.isActive 
                       ? YLColors.connected 
-                      : (isExpired ? YLColors.error : YLColors.zinc300),
-                  glow: isActive,
+                      : (widget.isExpired ? YLColors.error : YLColors.zinc300),
+                  glow: widget.isActive,
                 ),
               ),
               
@@ -203,14 +257,14 @@ class ConfigurationsPage extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      name,
+                      widget.name,
                       style: YLText.titleMedium.copyWith(
-                        color: isExpired ? YLColors.error : null,
+                        color: widget.isExpired ? YLColors.error : null,
                       ),
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      url,
+                      widget.url,
                       style: YLText.caption.copyWith(color: YLColors.zinc500),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -240,48 +294,28 @@ class ConfigurationsPage extends ConsumerWidget {
           Row(
             children: [
               Icon(
-                isExpired ? Icons.error_outline_rounded : Icons.cloud_sync_rounded, 
+                widget.isExpired ? Icons.error_outline_rounded : Icons.cloud_sync_rounded, 
                 size: 14, 
-                color: isExpired ? YLColors.error : YLColors.zinc400
+                color: widget.isExpired ? YLColors.error : YLColors.zinc400
               ),
               const SizedBox(width: 6),
               Text(
-                isExpired ? 'Subscription Expired' : 'Updated $updatedAt',
+                widget.isExpired ? 'Subscription Expired' : 'Updated ${widget.updatedAt}',
                 style: YLText.caption.copyWith(
-                  color: isExpired ? YLColors.error : YLColors.zinc500,
+                  color: widget.isExpired ? YLColors.error : YLColors.zinc500,
                 ),
               ),
               const Spacer(),
-              if (!isActive) ...[
+              if (!widget.isActive) ...[
                 OutlinedButton(
-                  onPressed: () async {
-                    ref.read(activeProfileIdProvider.notifier).select(id);
-                    
-                    // 真实状态闭环：如果内核正在运行，需要重启内核并等待结果
-                    final status = ref.read(coreStatusProvider);
-                    if (status == CoreStatus.running) {
-                      AppNotifier.info('正在重启内核以应用新配置...');
-                      await ref.read(coreActionsProvider).stop();
-                      
-                      final config = await ref.read(profileServiceProvider).loadConfig(id);
-                      if (config != null) {
-                        final ok = await ref.read(coreActionsProvider).start(config);
-                        if (ok) {
-                          AppNotifier.success('已成功应用配置: $name');
-                        }
-                        // 如果失败，coreActionsProvider.start 内部已经抛出了具体的错误提示
-                      } else {
-                        AppNotifier.error('无法读取配置文件');
-                      }
-                    } else {
-                      AppNotifier.success('已切换至配置: $name');
-                    }
-                  },
+                  onPressed: _isApplying ? null : _handleUse,
                   style: OutlinedButton.styleFrom(
                     minimumSize: const Size(0, 28),
                     padding: const EdgeInsets.symmetric(horizontal: YLSpacing.md),
                   ),
-                  child: const Text('Use'),
+                  child: _isApplying 
+                      ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Text('Use'),
                 ),
               ],
             ],
@@ -289,14 +323,5 @@ class ConfigurationsPage extends ConsumerWidget {
         ],
       ),
     );
-  }
-
-  String _formatDate(DateTime? date) {
-    if (date == null) return 'Never';
-    final now = DateTime.now();
-    final diff = now.difference(date);
-    if (diff.inMinutes < 60) return '${diff.inMinutes} mins ago';
-    if (diff.inHours < 24) return '${diff.inHours} hours ago';
-    return '${diff.inDays} days ago';
   }
 }

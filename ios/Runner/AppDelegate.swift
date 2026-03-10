@@ -98,7 +98,9 @@ import NetworkExtension
             result(true)
         } else {
             NETunnelProviderManager.loadAllFromPreferences { managers, error in
-                managers?.first?.connection.stopVPNTunnel()
+                if let manager = managers?.first {
+                    manager.connection.stopVPNTunnel()
+                }
                 result(true)
             }
         }

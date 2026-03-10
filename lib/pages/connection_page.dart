@@ -3,11 +3,17 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../main.dart';
 import '../providers/core_provider.dart';
+import '../providers/profile_provider.dart';
+import '../providers/proxy_provider.dart';
+import '../services/app_notifier.dart';
+import '../services/core_manager.dart';
+import '../services/profile_service.dart';
 import '../theme.dart';
 
 /// The main Dashboard page.
-/// Focuses on the primary connection switch, real-time traffic, and quick actions.
+/// Priority: Connection Status > Current Node > Real-time Speed > Quick Actions.
 class ConnectionPage extends ConsumerWidget {
   const ConnectionPage({super.key});
 
@@ -16,7 +22,8 @@ class ConnectionPage extends ConsumerWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final status = ref.watch(coreStatusProvider);
     final isConnected = status == CoreStatus.running;
-    final isConnecting = status == CoreStatus.starting;
+    // 真实状态闭环：启动和停止过程中，都视为 Connecting/Loading 态，防止重复点击
+    final isConnecting = status == CoreStatus.starting || status == CoreStatus.stopping;
 
     return Scaffold(
       body: Stack(
@@ -51,7 +58,7 @@ class ConnectionPage extends ConsumerWidget {
                 surfaceTintColor: Colors.transparent,
                 pinned: true,
                 flexibleSpace: FlexibleSpaceBar(
-                  titlePadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                  titlePadding: const EdgeInsets.symmetric(horizontal: YLSpacing.xl, vertical: YLSpacing.lg),
                   title: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -61,9 +68,13 @@ class ConnectionPage extends ConsumerWidget {
                             : (isConnecting ? YLColors.connecting : YLColors.disconnected),
                         glow: isConnected,
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: YLSpacing.sm),
                       Text(
-                        isConnected ? 'YueLink Active' : (isConnecting ? 'Connecting...' : 'Disconnected'),
+                        isConnected 
+                            ? 'YueLink Active' 
+                            : (status == CoreStatus.starting 
+                                ? 'Connecting...' 
+                                : (status == CoreStatus.stopping ? 'Disconnecting...' : 'Disconnected')),
                         style: YLText.titleMedium.copyWith(
                           color: isDark ? YLColors.zinc50 : YLColors.zinc900,
                         ),
@@ -75,31 +86,31 @@ class ConnectionPage extends ConsumerWidget {
 
               SliverToBoxAdapter(
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                  padding: const EdgeInsets.symmetric(horizontal: YLSpacing.xl),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      const SizedBox(height: 40),
+                      const SizedBox(height: YLSpacing.xxl),
                       
-                      // Massive Power Button (The Visual Center)
+                      // 1. Massive Power Button (The Visual Center)
                       _buildPowerButton(context, ref, status),
                       
-                      const SizedBox(height: 60),
+                      const SizedBox(height: YLSpacing.massive),
 
-                      // Real-time Traffic Stats
+                      // 2. Current Node Info Card (Real State)
+                      _buildCurrentNodeCard(context, ref, isConnected),
+
+                      const SizedBox(height: YLSpacing.xl),
+
+                      // 3. Real-time Traffic Stats
                       _buildTrafficStats(context, ref),
 
-                      const SizedBox(height: 32),
+                      const SizedBox(height: YLSpacing.xl),
 
-                      // Current Node Info Card
-                      _buildCurrentNodeCard(context, isConnected),
-
-                      const SizedBox(height: 32),
-
-                      // Quick Actions / Modes
+                      // 4. Quick Actions / Modes
                       _buildQuickActions(context, ref),
 
-                      const SizedBox(height: 60),
+                      const SizedBox(height: YLSpacing.massive),
                     ],
                   ),
                 ),
@@ -114,7 +125,7 @@ class ConnectionPage extends ConsumerWidget {
   Widget _buildPowerButton(BuildContext context, WidgetRef ref, CoreStatus status) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isConnected = status == CoreStatus.running;
-    final isConnecting = status == CoreStatus.starting;
+    final isConnecting = status == CoreStatus.starting || status == CoreStatus.stopping;
 
     final buttonColor = isConnected 
         ? YLColors.connected 
@@ -127,8 +138,22 @@ class ConnectionPage extends ConsumerWidget {
     return GestureDetector(
       onTap: isConnecting ? null : () async {
         final actions = ref.read(coreActionsProvider);
-        // TODO: Pass actual config yaml from active profile
-        await actions.toggle(''); 
+        if (isConnected) {
+          await actions.stop();
+        } else {
+          final activeId = ref.read(activeProfileIdProvider);
+          if (activeId == null) {
+            AppNotifier.warning('请先在配置页选择或添加一个订阅');
+            MainShell.switchToTab(context, MainShell.tabConfigurations);
+            return;
+          }
+          final config = await ProfileService.loadConfig(activeId);
+          if (config == null) {
+            AppNotifier.error('无法读取配置文件');
+            return;
+          }
+          await actions.start(config);
+        }
       },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 400),
@@ -172,72 +197,32 @@ class ConnectionPage extends ConsumerWidget {
     );
   }
 
-  Widget _buildTrafficStats(BuildContext context, WidgetRef ref) {
-    final traffic = ref.watch(trafficProvider);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+  Widget _buildCurrentNodeCard(BuildContext context, WidgetRef ref, bool isConnected) {
+    String activeNodeName = 'No Active Node';
+    String activeNodeGroup = 'Connect to see details';
 
-    return Row(
-      children: [
-        Expanded(
-          child: YLSurface(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.arrow_downward_rounded, size: 16, color: YLColors.connected),
-                    const SizedBox(width: 6),
-                    Text('Download', style: YLText.caption.copyWith(color: YLColors.zinc500)),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  _formatSpeed(traffic.down),
-                  style: YLText.titleLarge.copyWith(
-                    fontFeatures: const [FontFeature.tabularFigures()],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: YLSurface(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.arrow_upward_rounded, size: 16, color: YLColors.accent),
-                    const SizedBox(width: 6),
-                    Text('Upload', style: YLText.caption.copyWith(color: YLColors.zinc500)),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  _formatSpeed(traffic.up),
-                  style: YLText.titleLarge.copyWith(
-                    fontFeatures: const [FontFeature.tabularFigures()],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildCurrentNodeCard(BuildContext context, bool isConnected) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    if (isConnected) {
+      final groups = ref.watch(proxyGroupsProvider);
+      if (groups.isNotEmpty) {
+        try {
+          // Try to find the main PROXIES or GLOBAL group, or fallback to the first Selector
+          final mainGroup = groups.firstWhere(
+            (g) => g.name == 'PROXIES' || g.name == 'GLOBAL' || g.name == '节点选择' || g.name == 'Proxy',
+            orElse: () => groups.firstWhere((g) => g.type == 'Selector', orElse: () => groups.first),
+          );
+          activeNodeName = mainGroup.now.isNotEmpty ? mainGroup.now : 'Direct / Auto';
+          activeNodeGroup = mainGroup.name;
+        } catch (_) {
+          activeNodeName = 'Connected';
+          activeNodeGroup = 'Unknown Group';
+        }
+      }
+    }
 
     return YLSurface(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(YLSpacing.lg),
       onTap: () {
-        // TODO: Navigate to Proxies page
+        MainShell.switchToTab(context, MainShell.tabNodes);
       },
       child: Row(
         children: [
@@ -253,43 +238,99 @@ class ConnectionPage extends ConsumerWidget {
               color: isConnected ? YLColors.connected : YLColors.zinc400,
             ),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: YLSpacing.lg),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  isConnected ? '🇭🇰 Hong Kong 01 - Premium' : 'No Active Node',
+                  activeNodeName,
                   style: YLText.titleMedium,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  isConnected ? 'Auto Select • Hysteria2' : 'Connect to see details',
+                  activeNodeGroup,
                   style: YLText.caption.copyWith(color: YLColors.zinc500),
                 ),
               ],
             ),
           ),
-          if (isConnected)
-            const YLDelayBadge(delay: 34),
-          const SizedBox(width: 8),
+          const SizedBox(width: YLSpacing.sm),
           Icon(Icons.chevron_right_rounded, color: YLColors.zinc400),
         ],
       ),
     );
   }
 
+  Widget _buildTrafficStats(BuildContext context, WidgetRef ref) {
+    final traffic = ref.watch(trafficProvider);
+
+    return Row(
+      children: [
+        Expanded(
+          child: YLSurface(
+            padding: const EdgeInsets.all(YLSpacing.lg),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.arrow_downward_rounded, size: 16, color: YLColors.connected),
+                    const SizedBox(width: 6),
+                    Text('Download', style: YLText.caption.copyWith(color: YLColors.zinc500)),
+                  ],
+                ),
+                const SizedBox(height: YLSpacing.sm),
+                Text(
+                  _formatSpeed(traffic.down),
+                  style: YLText.titleLarge.copyWith(
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(width: YLSpacing.lg),
+        Expanded(
+          child: YLSurface(
+            padding: const EdgeInsets.all(YLSpacing.lg),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.arrow_upward_rounded, size: 16, color: YLColors.accent),
+                    const SizedBox(width: 6),
+                    Text('Upload', style: YLText.caption.copyWith(color: YLColors.zinc500)),
+                  ],
+                ),
+                const SizedBox(height: YLSpacing.sm),
+                Text(
+                  _formatSpeed(traffic.up),
+                  style: YLText.titleLarge.copyWith(
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildQuickActions(BuildContext context, WidgetRef ref) {
     final routingMode = ref.watch(routingModeProvider);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final status = ref.watch(coreStatusProvider);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('Routing Mode', style: YLText.label.copyWith(color: YLColors.zinc500)),
-        const SizedBox(height: 12),
+        const SizedBox(height: YLSpacing.md),
         SizedBox(
           width: double.infinity,
           child: SegmentedButton<String>(
@@ -299,14 +340,23 @@ class ConnectionPage extends ConsumerWidget {
               ButtonSegment(value: 'direct', label: Text('Direct')),
             ],
             selected: {routingMode},
-            onSelectionChanged: (Set<String> newSelection) {
-              ref.read(routingModeProvider.notifier).state = newSelection.first;
-              // TODO: Apply to core if running
+            onSelectionChanged: (Set<String> newSelection) async {
+              final mode = newSelection.first;
+              ref.read(routingModeProvider.notifier).state = mode;
+              
+              if (status == CoreStatus.running) {
+                final ok = await CoreManager.instance.api.setRoutingMode(mode);
+                if (ok) {
+                  AppNotifier.success('已切换至 ${mode.toUpperCase()} 模式');
+                } else {
+                  AppNotifier.error('模式切换失败');
+                }
+              }
             },
             showSelectedIcon: false,
           ),
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: YLSpacing.xl),
         
         YLSurface(
           child: Column(
@@ -315,10 +365,20 @@ class ConnectionPage extends ConsumerWidget {
                 title: const Text('System Proxy', style: YLText.body),
                 subtitle: Text('Set as system default proxy', style: YLText.caption.copyWith(color: YLColors.zinc500)),
                 value: ref.watch(systemProxyOnConnectProvider),
-                onChanged: (val) {
+                onChanged: (val) async {
                   ref.read(systemProxyOnConnectProvider.notifier).state = val;
+                  
+                  if (status == CoreStatus.running) {
+                    if (val) {
+                      await ref.read(coreActionsProvider).applySystemProxy();
+                      AppNotifier.success('系统代理已开启');
+                    } else {
+                      await ref.read(coreActionsProvider).clearSystemProxy();
+                      AppNotifier.info('系统代理已关闭');
+                    }
+                  }
                 },
-                contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                contentPadding: const EdgeInsets.symmetric(horizontal: YLSpacing.lg, vertical: YLSpacing.xs),
               ),
               const Divider(height: 1),
               SwitchListTile.adaptive(
@@ -327,8 +387,12 @@ class ConnectionPage extends ConsumerWidget {
                 value: ref.watch(connectionModeProvider) == 'tun',
                 onChanged: (val) {
                   ref.read(connectionModeProvider.notifier).state = val ? 'tun' : 'systemProxy';
+                  
+                  if (status == CoreStatus.running) {
+                    AppNotifier.warning('切换 TUN 模式将在下次连接时生效');
+                  }
                 },
-                contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                contentPadding: const EdgeInsets.symmetric(horizontal: YLSpacing.lg, vertical: YLSpacing.xs),
               ),
             ],
           ),

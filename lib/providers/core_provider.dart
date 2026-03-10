@@ -130,6 +130,8 @@ class CoreActions {
       String msg = e.toString();
       if (e is FormatException) {
         msg = e.message;
+      } else if (e is MihomoApiException) {
+        msg = 'API 错误: ${e.statusCode} - ${e.body}';
       } else {
         msg = msg.split('\n').first; // 保持提示简短
       }
