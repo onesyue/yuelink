@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../ffi/core_controller.dart';
 import '../models/proxy.dart';
+import '../services/core_manager.dart';
 
 // ------------------------------------------------------------------
 // Proxy groups & nodes
@@ -17,8 +18,23 @@ final proxyGroupsProvider =
 class ProxyGroupsNotifier extends StateNotifier<List<ProxyGroup>> {
   ProxyGroupsNotifier() : super([]);
 
-  void refresh() {
-    final data = CoreController.instance.getProxies();
+  /// Refresh proxy data from the running mihomo instance.
+  ///
+  /// Uses REST API in real mode, direct FFI in mock mode.
+  Future<void> refresh() async {
+    final manager = CoreManager.instance;
+
+    Map<String, dynamic> data;
+    if (manager.isMockMode) {
+      data = CoreController.instance.getProxies();
+    } else {
+      try {
+        data = await manager.api.getProxies();
+      } catch (_) {
+        return; // API not available
+      }
+    }
+
     final proxiesMap = data['proxies'] as Map<String, dynamic>? ?? {};
 
     final groups = <ProxyGroup>[];
@@ -36,9 +52,18 @@ class ProxyGroupsNotifier extends StateNotifier<List<ProxyGroup>> {
     state = groups;
   }
 
-  bool changeProxy(String groupName, String proxyName) {
-    final ok = CoreController.instance.changeProxy(groupName, proxyName);
-    if (ok) refresh();
+  /// Change the selected proxy in a group.
+  Future<bool> changeProxy(String groupName, String proxyName) async {
+    final manager = CoreManager.instance;
+
+    bool ok;
+    if (manager.isMockMode) {
+      ok = CoreController.instance.changeProxy(groupName, proxyName);
+    } else {
+      ok = await manager.api.changeProxy(groupName, proxyName);
+    }
+
+    if (ok) await refresh();
     return ok;
   }
 }
@@ -57,17 +82,23 @@ class DelayTestActions {
   final Ref ref;
   DelayTestActions(this.ref);
 
-  /// Test delay for a single proxy node (async to not block UI).
+  /// Test delay for a single proxy node.
   Future<int> testDelay(String proxyName) async {
     // Mark as testing
     final testing = Set<String>.from(ref.read(delayTestingProvider));
     testing.add(proxyName);
     ref.read(delayTestingProvider.notifier).state = testing;
 
-    // Run in isolate-friendly way (compute for mock, direct for real)
-    final delay = await Future(() {
-      return CoreController.instance.testDelay(proxyName);
-    });
+    final manager = CoreManager.instance;
+    int delay;
+
+    if (manager.isMockMode) {
+      delay = await Future(() {
+        return CoreController.instance.testDelay(proxyName);
+      });
+    } else {
+      delay = await manager.api.testDelay(proxyName);
+    }
 
     // Update results
     final current = Map<String, int>.from(ref.read(delayResultsProvider));
@@ -82,11 +113,10 @@ class DelayTestActions {
     return delay;
   }
 
-  /// Test all proxies in a group sequentially.
+  /// Test all proxies in a group.
   Future<void> testGroup(List<String> proxyNames) async {
     for (final name in proxyNames) {
       await testDelay(name);
-      // Small gap to let UI update
       await Future.delayed(const Duration(milliseconds: 50));
     }
   }

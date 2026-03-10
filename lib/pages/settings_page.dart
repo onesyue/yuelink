@@ -85,6 +85,12 @@ class SettingsPage extends ConsumerWidget {
                   trailing: Text('${AppConstants.defaultMixedPort}',
                       style: Theme.of(context).textTheme.bodyMedium),
                 ),
+                ListTile(
+                  title: const Text('API 端口'),
+                  subtitle: const Text('external-controller'),
+                  trailing: Text('${AppConstants.defaultApiPort}',
+                      style: Theme.of(context).textTheme.bodyMedium),
+                ),
               ],
             ),
           ),

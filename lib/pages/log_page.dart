@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../ffi/core_controller.dart';
 import '../models/traffic.dart';
 import '../providers/core_provider.dart';
+import '../services/core_manager.dart';
 import '../services/subscription_parser.dart';
 
 class LogPage extends ConsumerStatefulWidget {
@@ -48,8 +49,20 @@ class _LogPageState extends ConsumerState<LogPage> {
     _refreshTimer = null;
   }
 
-  void _refresh() {
-    final data = CoreController.instance.getConnections();
+  Future<void> _refresh() async {
+    final manager = CoreManager.instance;
+    Map<String, dynamic> data;
+
+    if (manager.isMockMode) {
+      data = CoreController.instance.getConnections();
+    } else {
+      try {
+        data = await manager.api.getConnections();
+      } catch (_) {
+        return;
+      }
+    }
+
     final conns = (data['connections'] as List?)
             ?.map((e) => ConnectionInfo.fromJson(e as Map<String, dynamic>))
             .toList() ??
@@ -60,6 +73,24 @@ class _LogPageState extends ConsumerState<LogPage> {
         _uploadTotal = (data['uploadTotal'] as num?)?.toInt() ?? 0;
         _downloadTotal = (data['downloadTotal'] as num?)?.toInt() ?? 0;
       });
+    }
+  }
+
+  Future<void> _closeConnection(String id) async {
+    final manager = CoreManager.instance;
+    if (manager.isMockMode) {
+      CoreController.instance.closeConnection(id);
+    } else {
+      await manager.api.closeConnection(id);
+    }
+  }
+
+  Future<void> _closeAllConnections() async {
+    final manager = CoreManager.instance;
+    if (manager.isMockMode) {
+      CoreController.instance.closeAllConnections();
+    } else {
+      await manager.api.closeAllConnections();
     }
   }
 
@@ -190,8 +221,8 @@ class _LogPageState extends ConsumerState<LogPage> {
                 IconButton(
                   onPressed: _connections.isEmpty
                       ? null
-                      : () {
-                          CoreController.instance.closeAllConnections();
+                      : () async {
+                          await _closeAllConnections();
                           _refresh();
                         },
                   icon: const Icon(Icons.close_rounded, size: 18),
@@ -218,8 +249,8 @@ class _LogPageState extends ConsumerState<LogPage> {
                       return _ConnectionTile(
                         conn: conn,
                         onTap: () => _showConnectionDetail(context, conn),
-                        onClose: () {
-                          CoreController.instance.closeConnection(conn.id);
+                        onClose: () async {
+                          await _closeConnection(conn.id);
                           _refresh();
                         },
                       );
@@ -274,10 +305,10 @@ class _LogPageState extends ConsumerState<LogPage> {
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
-                  onPressed: () {
-                    CoreController.instance.closeConnection(conn.id);
+                  onPressed: () async {
+                    await _closeConnection(conn.id);
                     _refresh();
-                    Navigator.pop(ctx);
+                    if (ctx.mounted) Navigator.pop(ctx);
                   },
                   icon: const Icon(Icons.close, size: 16),
                   label: const Text('关闭连接'),

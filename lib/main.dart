@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'ffi/core_controller.dart';
 import 'pages/home_page.dart';
 import 'pages/log_page.dart';
 import 'pages/profile_page.dart';
 import 'pages/proxy_page.dart';
 import 'pages/settings_page.dart';
 import 'providers/profile_provider.dart';
+import 'services/core_manager.dart';
 import 'services/settings_service.dart';
 
 void main() async {
@@ -17,8 +17,8 @@ void main() async {
   final savedTheme = await SettingsService.getThemeMode();
   final savedProfileId = await SettingsService.getActiveProfileId();
 
-  // Initialize core
-  CoreController.instance;
+  // Initialize core manager (auto-detects FFI or mock)
+  CoreManager.instance;
 
   runApp(ProviderScope(
     overrides: [

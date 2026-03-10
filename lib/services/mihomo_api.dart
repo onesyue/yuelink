@@ -1,0 +1,266 @@
+import 'dart:async';
+import 'dart:convert';
+
+import 'package:http/http.dart' as http;
+
+/// Client for the mihomo RESTful API (external-controller).
+///
+/// Communicates with a running mihomo instance via HTTP on 127.0.0.1:9090.
+/// This is the standard way all major Clash clients (Clash Verge Rev, FlClash,
+/// metacubexd) interact with the mihomo core for proxy/traffic/connection data.
+class MihomoApi {
+  MihomoApi({
+    this.host = '127.0.0.1',
+    this.port = 9090,
+    this.secret,
+  });
+
+  final String host;
+  final int port;
+  final String? secret;
+
+  String get _baseUrl => 'http://$host:$port';
+
+  Map<String, String> get _headers => {
+        'Content-Type': 'application/json',
+        if (secret != null) 'Authorization': 'Bearer $secret',
+      };
+
+  // ------------------------------------------------------------------
+  // Version / Health
+  // ------------------------------------------------------------------
+
+  /// Check if mihomo is reachable.
+  Future<bool> isAvailable() async {
+    try {
+      final resp = await http
+          .get(Uri.parse('$_baseUrl/version'), headers: _headers)
+          .timeout(const Duration(seconds: 2));
+      return resp.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Get mihomo version info.
+  Future<Map<String, dynamic>> getVersion() async {
+    return _get('/version');
+  }
+
+  // ------------------------------------------------------------------
+  // Proxies
+  // ------------------------------------------------------------------
+
+  /// Get all proxies and groups.
+  Future<Map<String, dynamic>> getProxies() async {
+    return _get('/proxies');
+  }
+
+  /// Get a specific proxy info.
+  Future<Map<String, dynamic>> getProxy(String name) async {
+    return _get('/proxies/${Uri.encodeComponent(name)}');
+  }
+
+  /// Select a proxy in a group.
+  Future<bool> changeProxy(String groupName, String proxyName) async {
+    final resp = await _put(
+      '/proxies/${Uri.encodeComponent(groupName)}',
+      body: {'name': proxyName},
+    );
+    return resp.statusCode == 204 || resp.statusCode == 200;
+  }
+
+  /// Test proxy delay.
+  Future<int> testDelay(String proxyName,
+      {String url = 'https://www.gstatic.com/generate_204',
+      int timeout = 5000}) async {
+    try {
+      final resp = await _get(
+        '/proxies/${Uri.encodeComponent(proxyName)}/delay'
+        '?url=${Uri.encodeComponent(url)}&timeout=$timeout',
+      );
+      return resp['delay'] as int? ?? -1;
+    } catch (_) {
+      return -1;
+    }
+  }
+
+  /// Test all proxies in a group.
+  Future<Map<String, dynamic>> testGroupDelay(String groupName,
+      {String url = 'https://www.gstatic.com/generate_204',
+      int timeout = 5000}) async {
+    return _get(
+      '/group/${Uri.encodeComponent(groupName)}/delay'
+      '?url=${Uri.encodeComponent(url)}&timeout=$timeout',
+    );
+  }
+
+  // ------------------------------------------------------------------
+  // Connections
+  // ------------------------------------------------------------------
+
+  /// Get active connections.
+  Future<Map<String, dynamic>> getConnections() async {
+    return _get('/connections');
+  }
+
+  /// Close a specific connection.
+  Future<bool> closeConnection(String id) async {
+    final resp = await _delete('/connections/$id');
+    return resp.statusCode == 204 || resp.statusCode == 200;
+  }
+
+  /// Close all connections.
+  Future<bool> closeAllConnections() async {
+    final resp = await _delete('/connections');
+    return resp.statusCode == 204 || resp.statusCode == 200;
+  }
+
+  // ------------------------------------------------------------------
+  // Config
+  // ------------------------------------------------------------------
+
+  /// Get current running config.
+  Future<Map<String, dynamic>> getConfig() async {
+    return _get('/configs');
+  }
+
+  /// Patch running config (partial update).
+  Future<bool> patchConfig(Map<String, dynamic> patch) async {
+    final resp = await _patch('/configs', body: patch);
+    return resp.statusCode == 204 || resp.statusCode == 200;
+  }
+
+  /// Reload config from file. Set [force] to true to force reload.
+  Future<bool> reloadConfig(String path, {bool force = false}) async {
+    final resp = await _put(
+      '/configs?force=$force',
+      body: {'path': path},
+    );
+    return resp.statusCode == 204 || resp.statusCode == 200;
+  }
+
+  // ------------------------------------------------------------------
+  // Rules
+  // ------------------------------------------------------------------
+
+  /// Get all rules.
+  Future<Map<String, dynamic>> getRules() async {
+    return _get('/rules');
+  }
+
+  // ------------------------------------------------------------------
+  // Providers
+  // ------------------------------------------------------------------
+
+  /// Get all proxy providers.
+  Future<Map<String, dynamic>> getProxyProviders() async {
+    return _get('/providers/proxies');
+  }
+
+  /// Update a proxy provider (trigger re-download).
+  Future<bool> updateProxyProvider(String name) async {
+    final resp = await _put('/providers/proxies/${Uri.encodeComponent(name)}');
+    return resp.statusCode == 204 || resp.statusCode == 200;
+  }
+
+  /// Health check a proxy provider.
+  Future<void> healthCheckProvider(String name) async {
+    await _get('/providers/proxies/${Uri.encodeComponent(name)}/healthcheck');
+  }
+
+  // ------------------------------------------------------------------
+  // DNS
+  // ------------------------------------------------------------------
+
+  /// Query DNS.
+  Future<Map<String, dynamic>> queryDns(String name,
+      {String type = 'A'}) async {
+    return _get('/dns/query?name=${Uri.encodeComponent(name)}&type=$type');
+  }
+
+  /// Flush DNS cache.
+  Future<bool> flushDnsCache() async {
+    final resp = await http.post(
+      Uri.parse('$_baseUrl/cache/dns/flush'),
+      headers: _headers,
+    );
+    return resp.statusCode == 204 || resp.statusCode == 200;
+  }
+
+  /// Flush fake IP cache.
+  Future<bool> flushFakeIpCache() async {
+    final resp = await http.post(
+      Uri.parse('$_baseUrl/cache/fakeip/flush'),
+      headers: _headers,
+    );
+    return resp.statusCode == 204 || resp.statusCode == 200;
+  }
+
+  // ------------------------------------------------------------------
+  // Streaming (WebSocket-like via long-polling)
+  // ------------------------------------------------------------------
+
+  /// Get a single traffic snapshot.
+  /// For real-time, poll this or use WebSocket on /traffic.
+  Future<({int up, int down})> getTraffic() async {
+    final data = await _get('/traffic');
+    return (
+      up: (data['up'] as num?)?.toInt() ?? 0,
+      down: (data['down'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  /// Get memory usage.
+  Future<int> getMemory() async {
+    final data = await _get('/memory');
+    return (data['inuse'] as num?)?.toInt() ?? 0;
+  }
+
+  // ------------------------------------------------------------------
+  // HTTP helpers
+  // ------------------------------------------------------------------
+
+  Future<Map<String, dynamic>> _get(String path) async {
+    final resp = await http.get(
+      Uri.parse('$_baseUrl$path'),
+      headers: _headers,
+    );
+    if (resp.statusCode != 200) {
+      throw MihomoApiException(resp.statusCode, resp.body);
+    }
+    return json.decode(resp.body) as Map<String, dynamic>;
+  }
+
+  Future<http.Response> _put(String path,
+      {Map<String, dynamic>? body}) async {
+    return http.put(
+      Uri.parse('$_baseUrl$path'),
+      headers: _headers,
+      body: body != null ? json.encode(body) : null,
+    );
+  }
+
+  Future<http.Response> _patch(String path,
+      {Map<String, dynamic>? body}) async {
+    return http.patch(
+      Uri.parse('$_baseUrl$path'),
+      headers: _headers,
+      body: body != null ? json.encode(body) : null,
+    );
+  }
+
+  Future<http.Response> _delete(String path) async {
+    return http.delete(Uri.parse('$_baseUrl$path'), headers: _headers);
+  }
+}
+
+/// Exception from mihomo API.
+class MihomoApiException implements Exception {
+  final int statusCode;
+  final String body;
+  MihomoApiException(this.statusCode, this.body);
+
+  @override
+  String toString() => 'MihomoApiException($statusCode): $body';
+}

@@ -18,4 +18,5 @@ class AppConstants {
   static const defaultHttpPort = 7890;
   static const defaultSocksPort = 7891;
   static const defaultMixedPort = 7893;
+  static const defaultApiPort = 9090;
 }
