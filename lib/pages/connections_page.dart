@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -60,12 +61,40 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
   Widget build(BuildContext context) {
     final s = S.of(context);
     final status = ref.watch(coreStatusProvider);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     if (status != CoreStatus.running) {
       return Scaffold(
-        body: YLEmptyState(
-          icon: Icons.cable_outlined,
-          message: s.notConnectedHintConnections,
+        backgroundColor: Colors.transparent,
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: isDark ? YLColors.zinc900 : Colors.white,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 20,
+                      offset: const Offset(0, 8),
+                    )
+                  ],
+                ),
+                child: Icon(Icons.cable_rounded, size: 48, 
+                    color: isDark ? YLColors.zinc700 : YLColors.zinc300),
+              ),
+              const SizedBox(height: 24),
+              Text(
+                s.notConnectedHintConnections,
+                style: YLText.titleMedium.copyWith(
+                  color: isDark ? YLColors.zinc500 : YLColors.zinc400,
+                ),
+              ),
+            ],
+          ),
         ),
       );
     }
@@ -76,14 +105,14 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
     final filtered = ref.watch(filteredConnectionsProvider);
     final actions = ref.read(connectionActionsProvider);
 
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return Scaffold(
+      backgroundColor: Colors.transparent, // Let the parent gradient show through
       body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // ── Top bar ──────────────────────────────────────────────
           Padding(
-            padding: const EdgeInsets.fromLTRB(32, 24, 32, 20),
+            padding: const EdgeInsets.fromLTRB(24, 32, 24, 16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -91,73 +120,80 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
                   s.navConnection.toUpperCase(),
                   style: YLText.caption.copyWith(
                     letterSpacing: 2.0,
-                    fontWeight: FontWeight.w600,
-                    color: YLColors.zinc400,
+                    fontWeight: FontWeight.w700,
+                    color: YLColors.primary,
                   ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 4),
                 Text(
                   s.navConnection,
-                  style: const TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: -0.5,
+                  style: YLText.display.copyWith(
+                    color: isDark ? YLColors.zinc50 : YLColors.zinc900,
                   ),
                 ),
               ],
             ),
           ),
-          Container(
-            height: 0.5,
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.06)
-                : Colors.black.withValues(alpha: 0.06),
-          ),
 
-          // Summary bar
-          _SummaryBar(snapshot: snapshot),
+          // Summary bar (Glassmorphism)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: _SummaryBar(snapshot: snapshot),
+          ),
+          const SizedBox(height: 16),
 
           // Search + actions bar
           Padding(
-            padding: const EdgeInsets.symmetric(
-                horizontal: 12, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(
               children: [
                 Expanded(
-                  child: TextField(
-                    controller: _searchCtrl,
-                    decoration: InputDecoration(
-                      hintText: s.searchConnHint,
-                      prefixIcon:
-                          const Icon(Icons.search, size: 18),
-                      suffixIcon: _searchCtrl.text.isNotEmpty
-                          ? IconButton(
-                              icon: const Icon(Icons.clear, size: 16),
-                              onPressed: () {
-                                _searchCtrl.clear();
-                                ref
-                                    .read(connectionSearchProvider
-                                        .notifier)
-                                    .state = '';
-                              },
-                            )
-                          : null,
-                      isDense: true,
-                      contentPadding:
-                          const EdgeInsets.symmetric(vertical: 8),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(isDark ? 0.2 : 0.02),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        )
+                      ],
+                    ),
+                    child: TextField(
+                      controller: _searchCtrl,
+                      style: YLText.body,
+                      decoration: InputDecoration(
+                        hintText: s.searchConnHint,
+                        hintStyle: YLText.body.copyWith(color: YLColors.zinc500),
+                        prefixIcon: Icon(Icons.search_rounded, size: 20, color: YLColors.zinc400),
+                        suffixIcon: _searchCtrl.text.isNotEmpty
+                            ? IconButton(
+                                icon: Icon(Icons.cancel_rounded, size: 18, color: YLColors.zinc400),
+                                onPressed: () {
+                                  _searchCtrl.clear();
+                                  ref.read(connectionSearchProvider.notifier).state = '';
+                                },
+                              )
+                            : null,
+                      ),
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
-                TextButton.icon(
-                  icon: const Icon(Icons.close_outlined, size: 16),
-                  label: Text(s.closeAll),
-                  style: TextButton.styleFrom(
-                      foregroundColor: Colors.red),
-                  onPressed: snapshot.connections.isEmpty
-                      ? null
-                      : () =>
-                          _confirmCloseAll(context, actions),
+                const SizedBox(width: 12),
+                Container(
+                  decoration: BoxDecoration(
+                    color: snapshot.connections.isEmpty 
+                        ? Colors.transparent 
+                        : YLColors.errorLight.withOpacity(isDark ? 0.1 : 0.5),
+                    borderRadius: BorderRadius.circular(YLRadius.lg),
+                  ),
+                  child: IconButton(
+                    icon: Icon(Icons.delete_sweep_rounded, 
+                        color: snapshot.connections.isEmpty ? YLColors.zinc500 : YLColors.error),
+                    tooltip: s.closeAll,
+                    onPressed: snapshot.connections.isEmpty
+                        ? null
+                        : () => _confirmCloseAll(context, actions),
+                  ),
                 ),
               ],
             ),
@@ -165,31 +201,35 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
 
           // Count badge
           Padding(
-            padding: const EdgeInsets.only(left: 16, bottom: 4),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                filtered.length != snapshot.connections.length
-                    ? s.connectionsCountFiltered(filtered.length)
-                    : s.connectionsCount(filtered.length),
-                style: YLText.caption.copyWith(
-                    color: YLColors.zinc500),
-              ),
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+            child: Text(
+              filtered.length != snapshot.connections.length
+                  ? s.connectionsCountFiltered(filtered.length)
+                  : s.connectionsCount(filtered.length),
+              style: YLText.caption.copyWith(color: YLColors.zinc500, fontWeight: FontWeight.w600),
             ),
           ),
 
-          // Connections list — DataTable on desktop, cards on mobile
+          // Connections list
           Expanded(
             child: filtered.isEmpty
-                ? YLEmptyState(
-                    icon: Icons.cable_outlined,
-                    message: snapshot.connections.isEmpty
-                        ? s.noActiveConnections
-                        : s.noMatchingConnections,
+                ? Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.search_off_rounded, size: 48, 
+                            color: isDark ? YLColors.zinc700 : YLColors.zinc300),
+                        const SizedBox(height: 16),
+                        Text(
+                          snapshot.connections.isEmpty
+                              ? s.noActiveConnections
+                              : s.noMatchingConnections,
+                          style: YLText.body.copyWith(color: YLColors.zinc500),
+                        ),
+                      ],
+                    ),
                   )
-                : (Platform.isMacOS ||
-                        Platform.isWindows ||
-                        Platform.isLinux)
+                : (Platform.isMacOS || Platform.isWindows || Platform.isLinux)
                     ? _ConnectionsDataTable(
                         connections: _sorted(filtered),
                         sortColumn: _sortCol,
@@ -199,8 +239,8 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
                         onClose: (id) => actions.close(id),
                       )
                     : ListView.builder(
-                        padding: const EdgeInsets.only(
-                            left: 8, right: 8, bottom: 16),
+                        padding: const EdgeInsets.only(left: 16, right: 16, bottom: 32),
+                        physics: const BouncingScrollPhysics(),
                         itemCount: filtered.length,
                         itemBuilder: (context, i) => _ConnectionTile(
                           connection: filtered[i],
@@ -213,25 +253,30 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
     );
   }
 
-  void _confirmCloseAll(
-      BuildContext context, ConnectionActions actions) {
+  void _confirmCloseAll(BuildContext context, ConnectionActions actions) {
     final s = S.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(s.closeAllDialogTitle),
-        content: Text(s.closeAllDialogMessage),
+        backgroundColor: isDark ? YLColors.zinc900 : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(YLRadius.xl)),
+        title: Text(s.closeAllDialogTitle, style: YLText.titleLarge),
+        content: Text(s.closeAllDialogMessage, style: YLText.body),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: Text(s.cancel)),
+              child: Text(s.cancel, style: TextStyle(color: isDark ? YLColors.zinc400 : YLColors.zinc600))),
           FilledButton(
             onPressed: () {
               Navigator.pop(ctx);
               actions.closeAll();
             },
-            style:
-                FilledButton.styleFrom(backgroundColor: Colors.red),
+            style: FilledButton.styleFrom(
+              backgroundColor: YLColors.error,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(YLRadius.pill)),
+            ),
             child: Text(s.closeAll),
           ),
         ],
@@ -250,47 +295,34 @@ class _SummaryBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = S.of(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      padding:
-          const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        color: isDark ? YLColors.zinc800 : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.08),
-          width: 0.5,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.15 : 0.03),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
+    
+    return YLGlassSurface(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      borderRadius: YLRadius.xl,
+      blurSigma: 20,
+      customColor: isDark ? YLColors.zinc900.withOpacity(0.6) : Colors.white.withOpacity(0.7),
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           _StatItem(
-            icon: Icons.cable_outlined,
+            icon: Icons.cable_rounded,
             label: s.statConnections,
             value: '${snapshot.connections.length}',
             color: YLColors.primary,
           ),
-          const SizedBox(width: 24),
+          Container(width: 1, height: 32, color: isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.05)),
           _StatItem(
-            icon: Icons.arrow_downward,
+            icon: Icons.arrow_downward_rounded,
             label: s.statTotalDownload,
             value: _formatBytes(snapshot.downloadTotal),
-            color: Colors.green,
+            color: YLColors.connected,
           ),
-          const SizedBox(width: 24),
+          Container(width: 1, height: 32, color: isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.05)),
           _StatItem(
-            icon: Icons.arrow_upward,
+            icon: Icons.arrow_upward_rounded,
             label: s.statTotalUpload,
             value: _formatBytes(snapshot.uploadTotal),
-            color: Colors.blue,
+            color: Colors.blue.shade500,
           ),
         ],
       ),
@@ -327,18 +359,26 @@ class _StatItem extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 16, color: color),
-        const SizedBox(width: 4),
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.15),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, size: 18, color: color),
+        ),
+        const SizedBox(width: 12),
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(value,
-                style: YLText.body.copyWith(
-                    fontWeight: FontWeight.w600,
+                style: YLText.titleMedium.copyWith(
+                    fontWeight: FontWeight.w700,
+                    fontFeatures: const [FontFeature.tabularFigures()],
                     color: color)),
             Text(label,
                 style: YLText.caption.copyWith(
-                    color: YLColors.zinc500)),
+                    color: YLColors.zinc500, fontSize: 11)),
           ],
         ),
       ],
@@ -360,115 +400,131 @@ class _ConnectionTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final hasSpeed = connection.curDownloadSpeed > 0 ||
-        connection.curUploadSpeed > 0;
+    final hasSpeed = connection.curDownloadSpeed > 0 || connection.curUploadSpeed > 0;
 
     return Container(
-      margin: const EdgeInsets.symmetric(vertical: 3),
-      clipBehavior: Clip.antiAlias,
+      margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
-        color: isDark ? YLColors.zinc800 : Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        color: isDark ? YLColors.zinc900 : Colors.white,
+        borderRadius: BorderRadius.circular(YLRadius.lg),
         border: Border.all(
-          color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.08),
-          width: 0.5,
+          color: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.03),
+          width: 1,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.15 : 0.03),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+            color: Colors.black.withOpacity(isDark ? 0.2 : 0.02),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: () => _showDetail(context),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-              horizontal: 12, vertical: 10),
-          child: Row(
-            children: [
-              _NetworkBadge(network: connection.network),
-              const SizedBox(width: 10),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(YLRadius.lg),
+          onTap: () => _showDetail(context),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                _NetworkBadge(network: connection.network),
+                const SizedBox(width: 14),
 
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      connection.target,
-                      style: YLText.titleMedium.copyWith(fontSize: 13),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 2),
-                    Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            connection.chains.isNotEmpty
-                                ? connection.chains.join(' → ')
-                                : connection.rule,
-                            style: YLText.caption.copyWith(
-                                color: YLColors.primary),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        if (connection.processName.isNotEmpty) ...[
-                          Text(' · ',
-                              style: YLText.caption),
-                          Text(connection.processName,
-                              style: YLText.caption),
-                        ],
-                      ],
-                    ),
-                    if (hasSpeed)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 2),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.arrow_downward,
-                                size: 10, color: Colors.green),
-                            Text(
-                              _formatSpeed(
-                                  connection.curDownloadSpeed),
-                              style: const TextStyle(
-                                  fontSize: 10, color: Colors.green),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        connection.target,
+                        style: YLText.titleMedium.copyWith(fontSize: 14),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: YLColors.primary.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(YLRadius.sm),
+                              ),
+                              child: Text(
+                                connection.chains.isNotEmpty
+                                    ? connection.chains.join(' → ')
+                                    : connection.rule,
+                                style: YLText.caption.copyWith(color: YLColors.primary, fontSize: 10),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
+                          ),
+                          if (connection.processName.isNotEmpty) ...[
                             const SizedBox(width: 6),
-                            const Icon(Icons.arrow_upward,
-                                size: 10, color: Colors.blue),
-                            Text(
-                              _formatSpeed(
-                                  connection.curUploadSpeed),
-                              style: const TextStyle(
-                                  fontSize: 10, color: Colors.blue),
+                            Flexible(
+                              child: Text(
+                                connection.processName,
+                                style: YLText.caption.copyWith(color: YLColors.zinc500, fontSize: 11),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
                           ],
-                        ),
+                        ],
                       ),
+                      if (hasSpeed)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Row(
+                            children: [
+                              Icon(Icons.south_rounded, size: 12, color: YLColors.connected),
+                              const SizedBox(width: 2),
+                              Text(
+                                _formatSpeed(connection.curDownloadSpeed),
+                                style: YLText.mono.copyWith(fontSize: 11, color: YLColors.connected),
+                              ),
+                              const SizedBox(width: 12),
+                              Icon(Icons.north_rounded, size: 12, color: Colors.blue.shade500),
+                              const SizedBox(width: 2),
+                              Text(
+                                _formatSpeed(connection.curUploadSpeed),
+                                style: YLText.mono.copyWith(fontSize: 11, color: Colors.blue.shade500),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      connection.durationText,
+                      style: YLText.mono.copyWith(color: YLColors.zinc500, fontSize: 11),
+                    ),
+                    const SizedBox(height: 12),
+                    InkWell(
+                      borderRadius: BorderRadius.circular(YLRadius.pill),
+                      onTap: onClose,
+                      child: Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: YLColors.errorLight.withOpacity(isDark ? 0.1 : 0.5),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(Icons.close_rounded, size: 14, color: YLColors.error),
+                      ),
+                    ),
                   ],
                 ),
-              ),
-
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(connection.durationText,
-                      style: YLText.caption.copyWith(
-                          color: YLColors.zinc500)),
-                  const SizedBox(height: 4),
-                  InkWell(
-                    borderRadius: BorderRadius.circular(12),
-                    onTap: onClose,
-                    child: const Icon(Icons.close,
-                        size: 16, color: Colors.red),
-                  ),
-                ],
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -479,20 +535,17 @@ class _ConnectionTile extends StatelessWidget {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-          borderRadius:
-              BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) =>
-          _ConnectionDetailSheet(connection: connection),
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _ConnectionDetailSheet(connection: connection),
     );
   }
 
   String _formatSpeed(int bps) {
-    if (bps < 1024) return '${bps}B/s';
+    if (bps < 1024) return '${bps} B/s';
     if (bps < 1024 * 1024) {
-      return '${(bps / 1024).toStringAsFixed(0)}K/s';
+      return '${(bps / 1024).toStringAsFixed(0)} KB/s';
     }
-    return '${(bps / (1024 * 1024)).toStringAsFixed(1)}M/s';
+    return '${(bps / (1024 * 1024)).toStringAsFixed(1)} MB/s';
   }
 }
 
@@ -502,22 +555,26 @@ class _NetworkBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color =
-        network.toLowerCase() == 'udp' ? Colors.orange : Colors.blue;
+    final isUdp = network.toLowerCase() == 'udp';
+    final color = isUdp ? YLColors.connecting : Colors.blue.shade500;
+    
     return Container(
-      width: 34,
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      width: 36,
+      height: 36,
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
+        color: color.withOpacity(0.15),
         borderRadius: BorderRadius.circular(YLRadius.md),
+        border: Border.all(color: color.withOpacity(0.3), width: 1),
       ),
       alignment: Alignment.center,
       child: Text(
         network.toUpperCase(),
         style: TextStyle(
-            fontSize: 9,
-            fontWeight: FontWeight.w700,
-            color: color),
+          fontSize: 10,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.5,
+          color: color,
+        ),
       ),
     );
   }
@@ -532,64 +589,108 @@ class _ConnectionDetailSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
     return DraggableScrollableSheet(
-      initialChildSize: 0.55,
-      minChildSize: 0.3,
-      maxChildSize: 0.85,
-      expand: false,
-      builder: (ctx, scroll) => ListView(
-        controller: scroll,
-        padding: const EdgeInsets.all(20),
-        children: [
-          Center(
-            child: Container(
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                color: YLColors.zinc400,
-                borderRadius: BorderRadius.circular(2),
+      initialChildSize: 0.6,
+      minChildSize: 0.4,
+      maxChildSize: 0.9,
+      builder: (ctx, scroll) => Container(
+        decoration: BoxDecoration(
+          color: isDark ? YLColors.zinc900 : Colors.white,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(YLRadius.xl)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.2),
+              blurRadius: 24,
+              offset: const Offset(0, -4),
+            )
+          ],
+        ),
+        child: ListView(
+          controller: scroll,
+          padding: const EdgeInsets.all(24),
+          children: [
+            Center(
+              child: Container(
+                width: 48,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: isDark ? YLColors.zinc700 : YLColors.zinc300,
+                  borderRadius: BorderRadius.circular(YLRadius.pill),
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 16),
-          Text(s.connectionDetailTitle,
-              style: YLText.titleLarge),
-          const SizedBox(height: 16),
-          _DetailRow(s.detailTarget, connection.target),
-          _DetailRow(s.detailProtocol,
-              '${connection.network.toUpperCase()} / ${connection.type}'),
-          _DetailRow(s.detailSource,
-              '${connection.sourceIp}:${connection.sourcePort}'),
-          if (connection.destinationIp.isNotEmpty)
-            _DetailRow(s.detailTargetIp,
-                '${connection.destinationIp}:${connection.destinationPort}'),
-          _DetailRow(
-              s.detailProxyChain, connection.chains.join(' → ')),
-          _DetailRow(
-            s.detailRule,
-            connection.rule +
-                (connection.rulePayload.isNotEmpty
-                    ? ' (${connection.rulePayload})'
-                    : ''),
-          ),
-          if (connection.processName.isNotEmpty)
-            _DetailRow(s.detailProcess, connection.processName),
-          _DetailRow(s.detailDuration, connection.durationText),
-          _DetailRow(s.detailDownload, _fmtBytes(connection.download)),
-          _DetailRow(s.detailUpload, _fmtBytes(connection.upload)),
-          _DetailRow(s.detailConnectTime,
-              _formatTime(connection.start)),
-        ],
+            const SizedBox(height: 24),
+            Text(s.connectionDetailTitle, style: YLText.titleLarge),
+            const SizedBox(height: 24),
+            
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: isDark ? YLColors.zinc950 : YLColors.zinc50,
+                borderRadius: BorderRadius.circular(YLRadius.lg),
+                border: Border.all(color: isDark ? YLColors.zinc800 : YLColors.zinc200),
+              ),
+              child: Column(
+                children: [
+                  _DetailRow(s.detailTarget, connection.target),
+                  const Divider(height: 24),
+                  _DetailRow(s.detailProtocol, '${connection.network.toUpperCase()} / ${connection.type}'),
+                  const Divider(height: 24),
+                  _DetailRow(s.detailSource, '${connection.sourceIp}:${connection.sourcePort}'),
+                  if (connection.destinationIp.isNotEmpty) ...[
+                    const Divider(height: 24),
+                    _DetailRow(s.detailTargetIp, '${connection.destinationIp}:${connection.destinationPort}'),
+                  ],
+                  const Divider(height: 24),
+                  _DetailRow(s.detailProxyChain, connection.chains.join(' → ')),
+                  const Divider(height: 24),
+                  _DetailRow(
+                    s.detailRule,
+                    connection.rule + (connection.rulePayload.isNotEmpty ? ' (${connection.rulePayload})' : ''),
+                  ),
+                  if (connection.processName.isNotEmpty) ...[
+                    const Divider(height: 24),
+                    _DetailRow(s.detailProcess, connection.processName),
+                  ],
+                ],
+              ),
+            ),
+            
+            const SizedBox(height: 16),
+            
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: isDark ? YLColors.zinc950 : YLColors.zinc50,
+                borderRadius: BorderRadius.circular(YLRadius.lg),
+                border: Border.all(color: isDark ? YLColors.zinc800 : YLColors.zinc200),
+              ),
+              child: Column(
+                children: [
+                  _DetailRow(s.detailDuration, connection.durationText),
+                  const Divider(height: 24),
+                  _DetailRow(s.detailDownload, _fmtBytes(connection.download)),
+                  const Divider(height: 24),
+                  _DetailRow(s.detailUpload, _fmtBytes(connection.upload)),
+                  const Divider(height: 24),
+                  _DetailRow(s.detailConnectTime, _formatTime(connection.start)),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   String _fmtBytes(int bytes) {
-    if (bytes < 1024) return '${bytes}B';
+    if (bytes < 1024) return '${bytes} B';
     if (bytes < 1024 * 1024) {
-      return '${(bytes / 1024).toStringAsFixed(1)}KB';
+      return '${(bytes / 1024).toStringAsFixed(1)} KB';
     }
-    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)}MB';
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
 
   String _formatTime(DateTime t) {
@@ -606,24 +707,20 @@ class _DetailRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 90,
-            child: Text(label,
-                style: YLText.caption.copyWith(
-                    color: YLColors.zinc500)),
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 100,
+          child: Text(label, style: YLText.body.copyWith(color: YLColors.zinc500)),
+        ),
+        Expanded(
+          child: SelectableText(
+            value,
+            style: YLText.body.copyWith(fontWeight: FontWeight.w600),
           ),
-          Expanded(
-            child: SelectableText(value,
-                style: const TextStyle(
-                    fontSize: 13, fontWeight: FontWeight.w500)),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
@@ -646,7 +743,7 @@ class _ConnectionsDataTable extends StatelessWidget {
   });
 
   DataColumn _col(String label, _SortColumn col) => DataColumn(
-        label: Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+        label: Text(label, style: YLText.label.copyWith(fontWeight: FontWeight.w700)),
         numeric: col == _SortColumn.download || col == _SortColumn.upload,
         onSort: (_, asc) => onSort(col, asc),
       );
@@ -657,15 +754,17 @@ class _ConnectionsDataTable extends StatelessWidget {
     int sortIndex = _SortColumn.values.indexOf(sortColumn);
     return SingleChildScrollView(
       scrollDirection: Axis.vertical,
+      physics: const BouncingScrollPhysics(),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
         child: DataTable(
           sortColumnIndex: sortIndex,
           sortAscending: ascending,
-          columnSpacing: 20,
-          headingRowHeight: 36,
-          dataRowMinHeight: 32,
-          dataRowMaxHeight: 40,
+          columnSpacing: 24,
+          headingRowHeight: 48,
+          dataRowMinHeight: 40,
+          dataRowMaxHeight: 48,
           columns: [
             _col(s.detailTarget, _SortColumn.target),
             _col(s.detailProcess, _SortColumn.process),
@@ -678,19 +777,20 @@ class _ConnectionsDataTable extends StatelessWidget {
           rows: connections.map((c) => DataRow(cells: [
             DataCell(
               SizedBox(
-                width: 200,
+                width: 220,
                 child: Text(c.target,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontFamily: 'monospace', fontSize: 12)),
+                    style: YLText.mono.copyWith(fontSize: 13)),
               ),
             ),
-            DataCell(Text(c.processName, style: const TextStyle(fontSize: 12))),
-            DataCell(Text(c.rule, style: const TextStyle(fontSize: 12))),
-            DataCell(Text(_fmt(c.download), style: const TextStyle(fontSize: 12))),
-            DataCell(Text(_fmt(c.upload), style: const TextStyle(fontSize: 12))),
-            DataCell(Text(c.durationText, style: const TextStyle(fontSize: 12))),
+            DataCell(Text(c.processName, style: YLText.body)),
+            DataCell(Text(c.rule, style: YLText.body)),
+            DataCell(Text(_fmt(c.download), style: YLText.mono.copyWith(fontSize: 13))),
+            DataCell(Text(_fmt(c.upload), style: YLText.mono.copyWith(fontSize: 13))),
+            DataCell(Text(c.durationText, style: YLText.mono.copyWith(fontSize: 13))),
             DataCell(IconButton(
-              icon: const Icon(Icons.close, size: 14),
+              icon: const Icon(Icons.close_rounded, size: 18),
+              color: YLColors.error,
               padding: EdgeInsets.zero,
               onPressed: () => onClose(c.id),
             )),
@@ -701,8 +801,8 @@ class _ConnectionsDataTable extends StatelessWidget {
   }
 
   static String _fmt(int bytes) {
-    if (bytes < 1024) return '${bytes}B';
-    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)}KB';
-    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)}MB';
+    if (bytes < 1024) return '${bytes} B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
 }
