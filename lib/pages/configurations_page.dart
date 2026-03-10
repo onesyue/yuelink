@@ -1,13 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../providers/core_provider.dart';
+import '../providers/profile_provider.dart';
+import '../services/app_notifier.dart';
+import '../services/profile_service.dart';
 import '../theme.dart';
 
 /// Modern Configuration Management Page (Vercel/Tailwind style)
-class ConfigurationsPage extends StatelessWidget {
+/// Acts as the "Subscription Management Center".
+class ConfigurationsPage extends ConsumerWidget {
   const ConfigurationsPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final profilesAsync = ref.watch(profilesProvider);
+    final activeId = ref.watch(activeProfileIdProvider);
 
     return Scaffold(
       body: CustomScrollView(
@@ -29,73 +38,128 @@ class ConfigurationsPage extends StatelessWidget {
                 icon: const Icon(Icons.add_rounded),
                 onPressed: () {
                   // TODO: Show import options (URL, File, Clipboard)
+                  AppNotifier.info('添加订阅功能即将上线');
                 },
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: YLSpacing.sm),
             ],
           ),
           
           SliverPadding(
-            padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8.0),
-            sliver: SliverList(
-              delegate: SliverChildListDelegate([
-                
-                // Quick Import Input
-                TextField(
-                  decoration: InputDecoration(
-                    hintText: 'Paste subscription URL here...',
-                    prefixIcon: const Icon(Icons.link_rounded, size: 20),
-                    suffixIcon: Padding(
-                      padding: const EdgeInsets.all(4.0),
-                      child: FilledButton(
-                        onPressed: () {},
-                        style: FilledButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          minimumSize: const Size(0, 32),
+            padding: const EdgeInsets.symmetric(horizontal: YLSpacing.xl, vertical: YLSpacing.sm),
+            sliver: profilesAsync.when(
+              loading: () => const SliverToBoxAdapter(
+                child: Center(child: CircularProgressIndicator()),
+              ),
+              error: (err, stack) => SliverToBoxAdapter(
+                child: Center(child: Text('加载失败: $err', style: YLText.body.copyWith(color: YLColors.error))),
+              ),
+              data: (profiles) {
+                if (profiles.isEmpty) {
+                  return SliverToBoxAdapter(child: _buildEmptyState(context));
+                }
+
+                final activeProfile = profiles.where((p) => p.id == activeId).firstOrNull;
+                final otherProfiles = profiles.where((p) => p.id != activeId).toList();
+
+                return SliverList(
+                  delegate: SliverChildListDelegate([
+                    
+                    // Quick Import Input
+                    TextField(
+                      decoration: InputDecoration(
+                        hintText: 'Paste subscription URL here...',
+                        prefixIcon: const Icon(Icons.link_rounded, size: 20),
+                        suffixIcon: Padding(
+                          padding: const EdgeInsets.all(4.0),
+                          child: FilledButton(
+                            onPressed: () {
+                              AppNotifier.info('导入功能即将上线');
+                            },
+                            style: FilledButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: YLSpacing.lg),
+                              minimumSize: const Size(0, 32),
+                            ),
+                            child: const Text('Import'),
+                          ),
                         ),
-                        child: const Text('Import'),
                       ),
                     ),
-                  ),
-                ),
-                
-                const SizedBox(height: 32),
-                const YLSectionLabel('Active Profile'),
-                
-                _buildProfileCard(
-                  context: context,
-                  name: 'YueLink Premium Sub',
-                  url: 'https://api.yuelink.com/sub/xxx',
-                  updatedAt: 'Updated 2 hours ago',
-                  nodeCount: 42,
-                  isActive: true,
-                ),
-                
-                const SizedBox(height: 32),
-                const YLSectionLabel('All Profiles'),
-                
-                _buildProfileCard(
-                  context: context,
-                  name: 'Backup Nodes (Self-hosted)',
-                  url: 'Local File',
-                  updatedAt: 'Updated 3 days ago',
-                  nodeCount: 5,
-                  isActive: false,
-                ),
-                const SizedBox(height: 16),
-                _buildProfileCard(
-                  context: context,
-                  name: 'Test Subscription',
-                  url: 'https://test.com/sub',
-                  updatedAt: 'Update failed',
-                  nodeCount: 0,
-                  isActive: false,
-                  hasError: true,
-                ),
-                
-                const SizedBox(height: 100), 
-              ]),
+                    
+                    if (activeProfile != null) ...[
+                      const SizedBox(height: YLSpacing.xxl),
+                      const YLSectionLabel('Active Profile'),
+                      _buildProfileCard(
+                        context: context,
+                        ref: ref,
+                        id: activeProfile.id,
+                        name: activeProfile.name,
+                        url: activeProfile.url ?? 'Local File',
+                        updatedAt: _formatDate(activeProfile.updatedAt),
+                        isActive: true,
+                        isExpired: activeProfile.subInfo?.isExpired ?? false,
+                      ),
+                    ],
+                    
+                    if (otherProfiles.isNotEmpty) ...[
+                      const SizedBox(height: YLSpacing.xxl),
+                      const YLSectionLabel('All Profiles'),
+                      ...otherProfiles.map((p) => Padding(
+                        padding: const EdgeInsets.only(bottom: YLSpacing.lg),
+                        child: _buildProfileCard(
+                          context: context,
+                          ref: ref,
+                          id: p.id,
+                          name: p.name,
+                          url: p.url ?? 'Local File',
+                          updatedAt: _formatDate(p.updatedAt),
+                          isActive: false,
+                          isExpired: p.subInfo?.isExpired ?? false,
+                        ),
+                      )),
+                    ],
+                    
+                    const SizedBox(height: 100), 
+                  ]),
+                );
+              },
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyState(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Padding(
+      padding: const EdgeInsets.only(top: 60.0),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(YLSpacing.xl),
+            decoration: BoxDecoration(
+              color: isDark ? YLColors.zinc900 : YLColors.zinc100,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(Icons.inbox_rounded, size: 48, color: YLColors.zinc400),
+          ),
+          const SizedBox(height: YLSpacing.xl),
+          Text('No Profiles Found', style: YLText.titleLarge),
+          const SizedBox(height: YLSpacing.sm),
+          Text(
+            'Add a subscription URL or import a local config\nto get started.',
+            style: YLText.body.copyWith(color: YLColors.zinc500),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: YLSpacing.xxl),
+          FilledButton.icon(
+            onPressed: () {
+              AppNotifier.info('添加订阅功能即将上线');
+            },
+            icon: const Icon(Icons.add_rounded, size: 18),
+            label: const Text('Add Profile'),
           ),
         ],
       ),
@@ -104,18 +168,18 @@ class ConfigurationsPage extends StatelessWidget {
 
   Widget _buildProfileCard({
     required BuildContext context,
+    required WidgetRef ref,
+    required String id,
     required String name,
     required String url,
     required String updatedAt,
-    required int nodeCount,
     required bool isActive,
-    bool hasError = false,
+    bool isExpired = false,
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final primary = Theme.of(context).colorScheme.primary;
 
     return YLSurface(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(YLSpacing.lg),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -128,7 +192,7 @@ class ConfigurationsPage extends StatelessWidget {
                 child: YLStatusDot(
                   color: isActive 
                       ? YLColors.connected 
-                      : (hasError ? YLColors.error : YLColors.zinc300),
+                      : (isExpired ? YLColors.error : YLColors.zinc300),
                   glow: isActive,
                 ),
               ),
@@ -141,7 +205,7 @@ class ConfigurationsPage extends StatelessWidget {
                     Text(
                       name,
                       style: YLText.titleMedium.copyWith(
-                        color: hasError ? YLColors.error : null,
+                        color: isExpired ? YLColors.error : null,
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -161,49 +225,61 @@ class ConfigurationsPage extends StatelessWidget {
                 color: YLColors.zinc400,
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
-                onPressed: () {},
+                onPressed: () {
+                  AppNotifier.info('配置菜单即将上线');
+                },
               ),
             ],
           ),
           
-          const SizedBox(height: 20),
+          const SizedBox(height: YLSpacing.lg),
           const Divider(),
-          const SizedBox(height: 16),
+          const SizedBox(height: YLSpacing.lg),
           
           // Footer Stats & Actions
           Row(
             children: [
               Icon(
-                hasError ? Icons.error_outline_rounded : Icons.cloud_sync_rounded, 
+                isExpired ? Icons.error_outline_rounded : Icons.cloud_sync_rounded, 
                 size: 14, 
-                color: hasError ? YLColors.error : YLColors.zinc400
+                color: isExpired ? YLColors.error : YLColors.zinc400
               ),
               const SizedBox(width: 6),
               Text(
-                updatedAt,
+                isExpired ? 'Subscription Expired' : 'Updated $updatedAt',
                 style: YLText.caption.copyWith(
-                  color: hasError ? YLColors.error : YLColors.zinc500,
+                  color: isExpired ? YLColors.error : YLColors.zinc500,
                 ),
               ),
               const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: isDark ? YLColors.zinc800 : YLColors.zinc100,
-                  borderRadius: BorderRadius.circular(YLRadius.sm),
-                ),
-                child: Text(
-                  '$nodeCount Nodes',
-                  style: YLText.caption.copyWith(fontWeight: FontWeight.w600),
-                ),
-              ),
               if (!isActive) ...[
-                const SizedBox(width: 12),
                 OutlinedButton(
-                  onPressed: () {},
+                  onPressed: () async {
+                    ref.read(activeProfileIdProvider.notifier).select(id);
+                    
+                    // 真实状态闭环：如果内核正在运行，需要重启内核并等待结果
+                    final status = ref.read(coreStatusProvider);
+                    if (status == CoreStatus.running) {
+                      AppNotifier.info('正在重启内核以应用新配置...');
+                      await ref.read(coreActionsProvider).stop();
+                      
+                      final config = await ref.read(profileServiceProvider).loadConfig(id);
+                      if (config != null) {
+                        final ok = await ref.read(coreActionsProvider).start(config);
+                        if (ok) {
+                          AppNotifier.success('已成功应用配置: $name');
+                        }
+                        // 如果失败，coreActionsProvider.start 内部已经抛出了具体的错误提示
+                      } else {
+                        AppNotifier.error('无法读取配置文件');
+                      }
+                    } else {
+                      AppNotifier.success('已切换至配置: $name');
+                    }
+                  },
                   style: OutlinedButton.styleFrom(
                     minimumSize: const Size(0, 28),
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    padding: const EdgeInsets.symmetric(horizontal: YLSpacing.md),
                   ),
                   child: const Text('Use'),
                 ),
@@ -213,5 +289,14 @@ class ConfigurationsPage extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  String _formatDate(DateTime? date) {
+    if (date == null) return 'Never';
+    final now = DateTime.now();
+    final diff = now.difference(date);
+    if (diff.inMinutes < 60) return '${diff.inMinutes} mins ago';
+    if (diff.inHours < 24) return '${diff.inHours} hours ago';
+    return '${diff.inDays} days ago';
   }
 }

@@ -341,9 +341,16 @@ class _GroupCardState extends ConsumerState<_GroupCard>
                           isSelected: group.all[i] == group.now,
                           delay: delays[group.all[i]],
                           isTesting: testing.contains(group.all[i]),
-                          onSelect: () {
-                            ref.read(proxyGroupsProvider.notifier).changeProxy(group.name, group.all[i]);
-                            AppNotifier.success('已切换至: ${group.all[i]}');
+                          onSelect: () async {
+                            // 真实状态闭环：等待 API 返回结果
+                            final ok = await ref.read(proxyGroupsProvider.notifier).changeProxy(group.name, group.all[i]);
+                            if (ok) {
+                              AppNotifier.success('已切换至: ${group.all[i]}');
+                              // 强制刷新全局状态，确保 Dashboard 等其他页面同步更新
+                              ref.read(proxyGroupsProvider.notifier).refresh();
+                            } else {
+                              AppNotifier.error('切换失败，请检查内核状态');
+                            }
                           },
                           onTest: () => ref.read(delayTestProvider).testDelay(group.all[i]),
                         ),

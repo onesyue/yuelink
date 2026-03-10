@@ -8,6 +8,7 @@ import '../ffi/core_controller.dart';
 import '../models/traffic.dart';
 import '../models/traffic_history.dart';
 import '../providers/proxy_provider.dart';
+import '../services/app_notifier.dart';
 import '../services/core_manager.dart';
 import '../services/mihomo_api.dart';
 import '../services/settings_service.dart';
@@ -69,61 +70,98 @@ class CoreActions {
   Future<bool> start(String configYaml) async {
     ref.read(coreStatusProvider.notifier).state = CoreStatus.starting;
 
-    final manager = CoreManager.instance;
-    final ok = await manager.start(configYaml);
-    if (!ok) {
+    try {
+      final manager = CoreManager.instance;
+
+      // 1. Check VPN Permission for TUN mode (Android)
+      if (!manager.isMockMode && ref.read(connectionModeProvider) == 'tun') {
+        final hasPerm = await VpnService.requestPermission();
+        if (!hasPerm) {
+          ref.read(coreStatusProvider.notifier).state = CoreStatus.stopped;
+          AppNotifier.error('缺少 VPN 权限，无法开启 TUN 模式');
+          return false;
+        }
+      }
+
+      // 2. Start Core
+      final ok = await manager.start(configYaml);
+      if (!ok) {
+        ref.read(coreStatusProvider.notifier).state = CoreStatus.stopped;
+        AppNotifier.error('内核启动失败，请检查配置格式或端口占用');
+        return false;
+      }
+
+      // 3. Start VPN Tunnel if needed
+      if (!manager.isMockMode && ref.read(connectionModeProvider) == 'tun') {
+        final vpnOk = await VpnService.startVpn();
+        if (!vpnOk) {
+          await manager.stop();
+          ref.read(coreStatusProvider.notifier).state = CoreStatus.stopped;
+          AppNotifier.error('VPN 隧道建立失败');
+          return false;
+        }
+      }
+
+      ref.read(coreStatusProvider.notifier).state = CoreStatus.running;
+      AppNotifier.success('已成功连接');
+
+      // 4. Apply routing mode from settings to running core
+      final routingMode = ref.read(routingModeProvider);
+      if (routingMode != 'rule') {
+        try {
+          await manager.api.setRoutingMode(routingMode);
+        } catch (_) {}
+      }
+
+      // 5. Auto-set system proxy on macOS/Windows
+      if ((Platform.isMacOS || Platform.isWindows) &&
+          ref.read(systemProxyOnConnectProvider)) {
+        await applySystemProxy();
+      }
+
+      // Trigger initial proxy data fetch
+      ref.read(proxyGroupsProvider.notifier).refresh();
+
+      return true;
+    } catch (e) {
       ref.read(coreStatusProvider.notifier).state = CoreStatus.stopped;
+      
+      // 真实状态闭环：精准透传底层错误（如 YAML 语法错误及行号）
+      String msg = e.toString();
+      if (e is FormatException) {
+        msg = e.message;
+      } else {
+        msg = msg.split('\n').first; // 保持提示简短
+      }
+      
+      AppNotifier.error('启动失败: $msg');
       return false;
     }
-
-    // Start platform VPN tunnel (skip in mock mode)
-    if (!manager.isMockMode) {
-      await VpnService.startVpn();
-    }
-
-    ref.read(coreStatusProvider.notifier).state = CoreStatus.running;
-
-    // Apply routing mode from settings to running core
-    final routingMode = ref.read(routingModeProvider);
-    if (routingMode != 'rule') {
-      try {
-        await manager.api.setRoutingMode(routingMode);
-      } catch (_) {}
-    }
-
-    // Auto-set system proxy on macOS/Windows
-    if ((Platform.isMacOS || Platform.isWindows) &&
-        ref.read(systemProxyOnConnectProvider)) {
-      try {
-        await _setSystemProxy(manager.mixedPort);
-      } catch (_) {}
-    }
-
-    // Trigger initial proxy data fetch
-    ref.read(proxyGroupsProvider.notifier).refresh();
-
-    return true;
   }
 
   Future<void> stop() async {
     ref.read(coreStatusProvider.notifier).state = CoreStatus.stopping;
 
-    // Clear system proxy on macOS/Windows
-    if ((Platform.isMacOS || Platform.isWindows) &&
-        ref.read(systemProxyOnConnectProvider)) {
-      try {
-        await _clearSystemProxy();
-      } catch (_) {}
-    }
+    try {
+      // Clear system proxy on macOS/Windows
+      if ((Platform.isMacOS || Platform.isWindows) &&
+          ref.read(systemProxyOnConnectProvider)) {
+        await clearSystemProxy();
+      }
 
-    final manager = CoreManager.instance;
-    if (!manager.isMockMode) {
-      await VpnService.stopVpn();
-    }
-    await manager.stop();
+      final manager = CoreManager.instance;
+      if (!manager.isMockMode) {
+        await VpnService.stopVpn();
+      }
+      await manager.stop();
 
-    ref.read(coreStatusProvider.notifier).state = CoreStatus.stopped;
-    ref.read(trafficProvider.notifier).state = const Traffic();
+      ref.read(coreStatusProvider.notifier).state = CoreStatus.stopped;
+      ref.read(trafficProvider.notifier).state = const Traffic();
+      AppNotifier.info('已断开连接');
+    } catch (e) {
+      ref.read(coreStatusProvider.notifier).state = CoreStatus.stopped;
+      AppNotifier.error('断开连接时发生错误');
+    }
   }
 
   Future<void> toggle(String configYaml) async {
@@ -133,6 +171,15 @@ class CoreActions {
     } else if (status == CoreStatus.stopped) {
       await start(configYaml);
     }
+  }
+
+  Future<void> applySystemProxy() async {
+    final port = CoreManager.instance.mixedPort;
+    await _setSystemProxy(port);
+  }
+
+  Future<void> clearSystemProxy() async {
+    await _clearSystemProxy();
   }
 
   static Future<void> _setSystemProxy(int mixedPort) async {

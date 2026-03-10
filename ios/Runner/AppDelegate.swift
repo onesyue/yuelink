@@ -92,8 +92,16 @@ import NetworkExtension
     }
 
     private func stopVpn(result: @escaping FlutterResult) {
-        vpnManager?.connection.stopVPNTunnel()
-        result(true)
+        // 真实状态闭环：处理 App 被杀后台后 vpnManager 丢失的情况
+        if let manager = vpnManager {
+            manager.connection.stopVPNTunnel()
+            result(true)
+        } else {
+            NETunnelProviderManager.loadAllFromPreferences { managers, error in
+                managers?.first?.connection.stopVPNTunnel()
+                result(true)
+            }
+        }
     }
 
     // MARK: - App Group config sharing
