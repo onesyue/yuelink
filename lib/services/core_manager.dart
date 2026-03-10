@@ -103,14 +103,13 @@ class CoreManager {
   Future<bool> start(String configYaml) async {
     debugPrint('[CoreManager] start() called, running=$_running, mode=$_mode');
     if (_running) return true;
-    await _ensureInit();
-    debugPrint('[CoreManager] init done, initialized=$_initialized');
 
     // Apply overwrite layer on top of base config
     final overwrite = await OverwriteService.load();
     final withOverwrite = OverwriteService.apply(configYaml, overwrite);
 
     // iOS: Go core runs inside the PacketTunnel extension process.
+    // Skip _ensureInit() — the extension calls InitCore in its own process.
     if (Platform.isIOS && !isMockMode) {
       final processed = ConfigTemplate.process(
         withOverwrite,
@@ -127,6 +126,10 @@ class CoreManager {
       if (ok) _running = true;
       return ok;
     }
+
+    // Non-iOS: initialize Go core in this process
+    await _ensureInit();
+    debugPrint('[CoreManager] init done, initialized=$_initialized');
 
     // On Android, start VpnService first to get the TUN fd
     int? tunFd;

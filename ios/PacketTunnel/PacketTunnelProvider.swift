@@ -2,14 +2,19 @@ import NetworkExtension
 
 // libclash.a is statically linked — declare the C functions directly.
 // These symbols come from core/hub.go (exported via CGo).
+// InitCore returns a C string: "" on success, error message on failure.
+// Caller must free the returned string via FreeCString.
 @_silgen_name("InitCore")
-func InitCore(_ homeDir: UnsafePointer<CChar>!) -> Int32
+func InitCore(_ homeDir: UnsafePointer<CChar>!) -> UnsafeMutablePointer<CChar>!
 
 @_silgen_name("StartCore")
 func StartCore(_ configYaml: UnsafePointer<CChar>!) -> Int32
 
 @_silgen_name("StopCore")
 func StopCore()
+
+@_silgen_name("FreeCString")
+func FreeCString(_ s: UnsafeMutablePointer<CChar>!)
 
 class PacketTunnelProvider: NEPacketTunnelProvider {
 
@@ -98,12 +103,17 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         }
 
         // Initialize Go core with home directory
-        let initResult = homeDir.withCString { ptr in
+        let initResultPtr = homeDir.withCString { ptr in
             InitCore(ptr)
         }
-        guard initResult == 0 else {
-            completionHandler(TunnelError.initFailed)
-            return
+        if let resultPtr = initResultPtr {
+            let errorMsg = String(cString: resultPtr)
+            FreeCString(resultPtr)
+            if !errorMsg.isEmpty {
+                NSLog("[PacketTunnel] InitCore failed: %@", errorMsg)
+                completionHandler(TunnelError.initFailed)
+                return
+            }
         }
 
         // Start Go core with config
