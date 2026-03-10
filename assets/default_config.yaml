@@ -56,9 +56,19 @@ dns:
   enhanced-mode: fake-ip
   fake-ip-range: 198.18.0.1/16
   fake-ip-filter:
-    - "*"
     - "+.lan"
     - "+.local"
+    - "+.direct"
+    - "+.msftconnecttest.com"
+    - "+.msftncsi.com"
+    - "localhost.ptlogin2.qq.com"
+    - "+.srv.nintendo.net"
+    - "+.stun.playstation.net"
+    - "+.xboxlive.com"
+    - "+.ntp.org"
+    - "+.pool.ntp.org"
+    - "+.time.edu.cn"
+    - "+.push.apple.com"
   default-nameserver:
     - 223.5.5.5
     - 119.29.29.29

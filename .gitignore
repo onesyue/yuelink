@@ -46,6 +46,7 @@ app.*.map.json
 
 # Go core build artifacts
 core/build/
+core/core
 core/mihomo/
 
 # Installed native libraries

@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project Overview
 
 YueLink (by Yue.to) is a cross-platform proxy client built with Flutter + mihomo (Clash.Meta) Go core.
-Supports: Android, iOS, macOS, Windows. Version: `0.0.1-alpha` (dev uses `v0.0.1-alpha` tag; version increments only for releases).
+Supports: Android, iOS, macOS, Windows.
 
 ## Build Commands
 
@@ -41,7 +41,7 @@ Flutter UI (Dart, Riverpod) → CoreController (dart:ffi) → hub.go (CGO //expo
 - **`lib/ffi/`** — Dart FFI bindings. `CoreBindings` has raw FFI (8 lifecycle symbols: InitCore, StartCore, StopCore, Shutdown, IsRunning, ValidateConfig, UpdateConfig, FreeCString). `CoreController` is the high-level wrapper; data methods (getProxies, changeProxy, testDelay, getTraffic) always delegate to `CoreMock` — they exist only for mock mode UI development.
 - **`lib/providers/`** — Riverpod state management. `core_provider.dart` (lifecycle, traffic, heartbeat), `proxy_provider.dart` (nodes, groups, delay tests), `profile_provider.dart` (subscriptions), `proxy_provider_provider.dart` (remote proxy providers).
 - **`lib/pages/`** — 4-tab layout: Dashboard (connect/traffic/status), Nodes (proxy groups + routing mode), Subscriptions (profiles), Settings. Settings sub-pages: connections, logs, overwrite, proxy providers.
-- **`lib/services/`** — `VpnService` (MethodChannel), `MihomoApi` (REST on port 9090), `MihomoStream` (WebSocket for traffic/logs), `CoreManager` (lifecycle singleton — handles VPN internally per platform), `ProfileService` (static methods for profile CRUD + config loading), `OverwriteService` (config merging), `SettingsService` (SharedPreferences wrapper).
+- **`lib/services/`** — `VpnService` (MethodChannel), `MihomoApi` (REST on port 9090), `MihomoStream` (WebSocket for traffic/logs), `CoreManager` (lifecycle singleton — handles VPN internally per platform), `ProfileService` (static methods for profile CRUD + config loading), `OverwriteService` (config merging), `ConfigTemplate` (config processing with ensure-pattern injection), `SettingsService` (SharedPreferences wrapper).
 - **`lib/theme.dart`** — Design system: `YLColors` (zinc palette + semantic colors), `YLText` (typography), `YLSpacing`/`YLRadius`, `YLShadow` (context-aware for dark mode), reusable widgets (`YLSurface`, `YLStatusDot`, `YLChip`, `YLDelayBadge`, `YLPillSegmentedControl`, etc.).
 - **`lib/l10n/app_strings.dart`** — Hand-written `S` class for i18n. Both Chinese and English via `_e ? 'en' : 'zh'` ternaries. No code generation. Use `S.of(context)` in widgets, `S.current` in providers/services without BuildContext.
 
@@ -73,7 +73,9 @@ Flutter UI (Dart, Riverpod) → CoreController (dart:ffi) → hub.go (CGO //expo
 - **All Go exports that can fail return `*C.char`** (empty string = success, non-empty = error message). Caller must free via `FreeCString`. This applies to InitCore, StartCore, and UpdateConfig. Only IsRunning/StopCore/Shutdown use simple types.
 - `CoreManager` handles VPN internally for each platform — `CoreActions` must NOT call `VpnService` directly.
 - Android VPN permission is always requested (no connectionMode guard) because Android always needs VpnService.
-- **Android TUN config**: `ConfigTemplate._injectTunFd()` replaces the entire `tun:` section with Android-safe settings: `auto-route: false`, `auto-detect-interface: false` (netlink banned on Android 14+). Never set `auto-route: true` when using VpnService fd.
+- **Android TUN config**: `ConfigTemplate._injectTunFd()` replaces the entire `tun:` section with Android-safe settings: `stack: mixed`, `auto-route: false`, `auto-detect-interface: false` (netlink banned on Android 14+), `find-process-mode: off`. Never set `auto-route: true` when using VpnService fd.
+- **iOS TUN config**: `PacketTunnelProvider.injectTunConfig()` uses `stack: gvisor` (not mixed — iOS doesn't need system stack). Also forces `find-process-mode: off` and injects full DNS fallback config.
+- **TUN stack difference is intentional**: Android uses `mixed` (gvisor for UDP + system for TCP), iOS uses `gvisor` only.
 - Connection mode UI is hidden on mobile — only shown on desktop (`isDesktop = Platform.isMacOS || Platform.isWindows`).
 - MethodChannel name: `com.yueto.yuelink/vpn` (consistent across all platforms).
 - Package/Bundle ID: `com.yueto.yuelink`
@@ -92,9 +94,27 @@ Dart bindings (`core_bindings.dart`) must exactly match Go exports (`core/hub.go
 
 When Go core is unavailable (no native library), `CoreController` automatically falls back to `CoreMock`, which simulates proxy groups, nodes, traffic, and connections. UI development works fully without Go — just `flutter run`.
 
+### Config processing pipeline (`ConfigTemplate.process()`)
+
+Uses "ensure" pattern: only injects when missing, never overwrites subscription-provided settings.
+
+1. Replace template variables (`$app_name` → `YueLink`)
+2. `_ensureMixedPort` — without it mihomo silently skips HTTP+SOCKS listener
+3. `_ensureExternalController` — REST API endpoint for data operations
+4. `_ensureDns` — comprehensive fake-ip + fallback + fallback-filter (all modes, not just TUN)
+5. `_ensureSniffer` — HTTP/TLS/QUIC domain detection for DOMAIN-type rules
+6. `_ensureGeodata` — geodata-mode + geo URLs + auto-update for GEOIP/GEOSITE rules
+7. `_ensureProfile` — store-selected + store-fake-ip persistence
+8. `_ensurePerformance` — tcp-concurrent, unified-delay, TLS fingerprint
+9. `_ensureAllowLan` — allow-lan + bind-address for mixed-port
+10. `_ensureFindProcessMode` — `always` on desktop, `off` on mobile (no permission)
+11. `_injectTunFd` — Android TUN fd injection (only when tunFd provided)
+
+iOS PacketTunnelProvider has its own `injectTunConfig()` in Swift with equivalent logic (runs in separate process, can't use Dart ConfigTemplate).
+
 ### Core startup sequence
 
-`CoreActions.start()` → VPN permission (Android only) → `CoreManager.start(configYaml)` → `OverwriteService.apply()` → platform-specific VPN (Android: `startAndroidVpn()` for TUN fd, iOS: `startIosVpn()`) → `ConfigTemplate.process()` (injects TUN fd on Android, ensures external-controller) → `CoreController.start()` → `_waitForApi()` (non-blocking) → system proxy (desktop). `CoreManager` owns all VPN logic internally. On failure, `CoreManager._startFfi()` throws with the actual Go error message (propagated to UI via `CoreActions` catch block).
+`CoreActions.start()` → VPN permission (Android only) → `CoreManager.start(configYaml)` → `OverwriteService.apply()` → platform-specific VPN (Android: `startAndroidVpn()` for TUN fd, iOS: `startIosVpn()`) → `ConfigTemplate.process()` (full ensure pipeline + TUN fd injection) → `CoreController.start()` → `_waitForApi()` (awaited, up to 5s) → system proxy (desktop). `CoreManager` owns all VPN logic internally. On failure, `CoreManager._startFfi()` throws with the actual Go error message (propagated to UI via `CoreActions` catch block).
 
 ### Proxy group ordering
 
@@ -103,7 +123,7 @@ Groups are ordered by the `GLOBAL` group's `all` field from the mihomo API (`/pr
 ## Git & CI
 
 - **Branches**: `master` (main/release), `dev` (development). CI triggers on push to `main` and `dev`, and on version tags (`v*`).
-- **Versioning**: Dev cycle uses `v0.0.1-alpha` tag (delete + recreate on same tag). Version increments only for formal releases.
+- **Release flow**: merge to `dev` first → tag from `dev` (`git tag v0.x.x`) → push tag. Never tag before merging. Release job only runs on `v*` tags; dev push skipping "Create Release" is normal.
 - **CI pipeline** (`.github/workflows/build.yml`): analyze+test → build Go cores (per-platform matrix) → Flutter builds (download core artifacts → install → build) → release (on `v*` tags).
 - **Release artifacts**: `YueLink-Windows-Setup.exe` (Inno Setup), `YueLink-macOS.dmg` (create-dmg, universal binary), `YueLink-Android.apk` (fat universal), `YueLink-iOS.ipa` (no-codesign).
 - **Analyze in CI** uses `--no-fatal-infos --no-fatal-warnings` — only errors fail the build.

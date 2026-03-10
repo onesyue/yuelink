@@ -8,7 +8,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:io';
 
-import '../constants.dart';
 import '../l10n/app_strings.dart';
 import '../main.dart';
 import '../providers/core_provider.dart';
@@ -74,7 +73,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     try {
       // Route through mihomo's mixed-port proxy to get the proxy exit IP
       final proxyHost = '127.0.0.1';
-      final proxyPort = AppConstants.defaultMixedPort;
+      final proxyPort = CoreManager.instance.mixedPort;
       final httpClient = HttpClient()
         ..findProxy = (uri) => 'PROXY $proxyHost:$proxyPort';
       try {
