@@ -79,5 +79,4 @@ class LogEntriesNotifier extends StateNotifier<List<LogEntry>> {
   }
 }
 
-/// Log level filter.
-final logLevelProvider = StateProvider<String>((ref) => 'info');
+// logLevelProvider moved to core_provider.dart

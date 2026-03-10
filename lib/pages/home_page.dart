@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,6 +9,7 @@ import '../providers/core_provider.dart';
 import '../providers/profile_provider.dart';
 import '../providers/proxy_provider.dart';
 import '../services/profile_service.dart';
+import '../services/settings_service.dart';
 
 class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
@@ -59,13 +61,11 @@ class _HomePageState extends ConsumerState<HomePage> {
     final isTransitioning =
         status == CoreStatus.starting || status == CoreStatus.stopping;
 
-    // Keep traffic & memory streams alive
     if (isRunning) {
       ref.watch(trafficStreamProvider);
       ref.watch(memoryStreamProvider);
     }
 
-    // Track uptime
     ref.listen(coreStatusProvider, (prev, next) {
       if (next == CoreStatus.running) {
         _startUptimeTimer();
@@ -80,7 +80,6 @@ class _HomePageState extends ConsumerState<HomePage> {
           padding: const EdgeInsets.all(24),
           child: Column(
             children: [
-              // Mock mode banner
               if (isMock)
                 Container(
                   width: double.infinity,
@@ -105,12 +104,10 @@ class _HomePageState extends ConsumerState<HomePage> {
 
               const Spacer(),
 
-              // Status orb
               _StatusOrb(
                   isRunning: isRunning, isTransitioning: isTransitioning),
               const SizedBox(height: 24),
 
-              // Status text
               Text(
                 isTransitioning
                     ? (status == CoreStatus.starting ? '连接中...' : '断开中...')
@@ -123,36 +120,40 @@ class _HomePageState extends ConsumerState<HomePage> {
                     ),
               ),
 
-              // Uptime
               if (isRunning && _connectedSince != null) ...[
                 const SizedBox(height: 4),
                 Text(_uptimeText,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color:
-                            Theme.of(context).colorScheme.onSurfaceVariant)),
+                        color: Theme.of(context)
+                            .colorScheme
+                            .onSurfaceVariant)),
               ],
 
               const SizedBox(height: 8),
 
-              // Active node info (when connected)
               if (isRunning) ...[
                 _ActiveNodeInfo(),
                 const SizedBox(height: 6),
                 _ActiveProfileName(),
               ],
 
-              // Selected profile hint (when disconnected)
-              if (!isRunning && !isTransitioning)
-                _DisconnectedHint(),
+              if (!isRunning && !isTransitioning) _DisconnectedHint(),
 
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
 
-              // Traffic stats
-              if (isRunning) const _TrafficCard(),
+              // Routing mode switcher
+              _RoutingModeSwitcher(isRunning: isRunning),
+
+              const SizedBox(height: 16),
+
+              if (isRunning) ...[
+                const _TrafficChart(),
+                const SizedBox(height: 8),
+                const _TrafficCard(),
+              ],
 
               const Spacer(),
 
-              // Connect button
               SizedBox(
                 width: 200,
                 height: 56,
@@ -182,9 +183,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                         ),
                       Text(
                         isTransitioning
-                            ? (status == CoreStatus.starting
-                                ? '连接中'
-                                : '断开中')
+                            ? (status == CoreStatus.starting ? '连接中' : '断开中')
                             : (isRunning ? '断开连接' : '连接'),
                         style: const TextStyle(fontSize: 18),
                       ),
@@ -245,11 +244,121 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 }
 
+// ------------------------------------------------------------------
+// Routing Mode Switcher
+// ------------------------------------------------------------------
+
+class _RoutingModeSwitcher extends ConsumerWidget {
+  final bool isRunning;
+  const _RoutingModeSwitcher({required this.isRunning});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final mode = ref.watch(routingModeProvider);
+
+    return SegmentedButton<String>(
+      segments: const [
+        ButtonSegment(
+            value: 'rule',
+            label: Text('规则'),
+            icon: Icon(Icons.rule, size: 16)),
+        ButtonSegment(
+            value: 'global',
+            label: Text('全局'),
+            icon: Icon(Icons.public, size: 16)),
+        ButtonSegment(
+            value: 'direct',
+            label: Text('直连'),
+            icon: Icon(Icons.wifi_tethering, size: 16)),
+      ],
+      selected: {mode},
+      onSelectionChanged: (set) async {
+        final newMode = set.first;
+        ref.read(routingModeProvider.notifier).state = newMode;
+        await SettingsService.setRoutingMode(newMode);
+        if (isRunning) {
+          try {
+            await ref.read(mihomoApiProvider).setRoutingMode(newMode);
+          } catch (_) {}
+        }
+      },
+    );
+  }
+}
+
+// ------------------------------------------------------------------
+// Traffic Chart
+// ------------------------------------------------------------------
+
+class _TrafficChart extends ConsumerWidget {
+  const _TrafficChart();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final history = ref.watch(trafficHistoryProvider);
+    final downHistory = history.downHistory;
+    final upHistory = history.upHistory;
+
+    if (downHistory.isEmpty) return const SizedBox.shrink();
+
+    final maxDown = history.maxDown;
+    final maxY = maxDown > 0 ? maxDown * 1.2 : 1024 * 1024.0;
+
+    List<FlSpot> toSpots(List<double> data) => data
+        .asMap()
+        .entries
+        .map((e) => FlSpot(e.key.toDouble(), e.value))
+        .toList();
+
+    return SizedBox(
+      height: 80,
+      child: LineChart(
+        LineChartData(
+          minY: 0,
+          maxY: maxY,
+          gridData: const FlGridData(show: false),
+          borderData: FlBorderData(show: false),
+          titlesData: const FlTitlesData(show: false),
+          lineTouchData: const LineTouchData(enabled: false),
+          lineBarsData: [
+            LineChartBarData(
+              spots: toSpots(downHistory),
+              isCurved: true,
+              color: Colors.green,
+              barWidth: 2,
+              dotData: const FlDotData(show: false),
+              belowBarData: BarAreaData(
+                show: true,
+                color: Colors.green.withValues(alpha: 0.1),
+              ),
+            ),
+            LineChartBarData(
+              spots: toSpots(upHistory),
+              isCurved: true,
+              color: Colors.blue,
+              barWidth: 2,
+              dotData: const FlDotData(show: false),
+              belowBarData: BarAreaData(
+                show: true,
+                color: Colors.blue.withValues(alpha: 0.1),
+              ),
+            ),
+          ],
+        ),
+        duration: const Duration(milliseconds: 100),
+      ),
+    );
+  }
+}
+
+// ------------------------------------------------------------------
+// Other widgets
+// ------------------------------------------------------------------
+
 class _ActiveNodeInfo extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final groups = ref.watch(proxyGroupsProvider);
-    // Find the main selector group
     final mainGroup = groups.isEmpty
         ? null
         : groups.firstWhere(
@@ -262,7 +371,10 @@ class _ActiveNodeInfo extends ConsumerWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+        color: Theme.of(context)
+            .colorScheme
+            .surfaceContainerHighest
+            .withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
@@ -272,8 +384,10 @@ class _ActiveNodeInfo extends ConsumerWidget {
               size: 14, color: Theme.of(context).colorScheme.primary),
           const SizedBox(width: 6),
           Text(mainGroup.now,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  fontWeight: FontWeight.w500)),
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(fontWeight: FontWeight.w500)),
         ],
       ),
     );
@@ -400,7 +514,7 @@ class _TrafficCard extends ConsumerWidget {
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [

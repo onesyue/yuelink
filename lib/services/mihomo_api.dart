@@ -131,6 +131,23 @@ class MihomoApi {
     return resp.statusCode == 204 || resp.statusCode == 200;
   }
 
+  /// Set routing mode: "rule" | "global" | "direct".
+  Future<bool> setRoutingMode(String mode) => patchConfig({'mode': mode});
+
+  /// Set log level: "info" | "debug" | "warning" | "error" | "silent".
+  Future<bool> setLogLevel(String level) =>
+      patchConfig({'log-level': level});
+
+  /// Get current routing mode from running config.
+  Future<String> getRoutingMode() async {
+    try {
+      final cfg = await getConfig();
+      return (cfg['mode'] as String?) ?? 'rule';
+    } catch (_) {
+      return 'rule';
+    }
+  }
+
   /// Reload config from file. Set [force] to true to force reload.
   Future<bool> reloadConfig(String path, {bool force = false}) async {
     final resp = await _put(

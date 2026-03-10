@@ -8,6 +8,7 @@ import '../ffi/core_controller.dart';
 import 'config_template.dart';
 import 'mihomo_api.dart';
 import 'mihomo_stream.dart';
+import 'overwrite_service.dart';
 import 'process_manager.dart';
 import 'vpn_service.dart' as vpn;
 
@@ -68,6 +69,9 @@ class CoreManager {
   CoreMode get mode => _mode;
   bool get isMockMode => _mode == CoreMode.mock;
   bool get isRunning => _running;
+  int get mixedPort => _mixedPort;
+
+  int _mixedPort = 7890;
 
   /// Configure the API endpoint.
   void configure({int? port, String? secret, CoreMode? mode}) {
@@ -88,15 +92,19 @@ class CoreManager {
   Future<bool> start(String configYaml) async {
     if (_running) return true;
 
+    // Apply overwrite layer on top of base config
+    final overwrite = await OverwriteService.load();
+    final withOverwrite = OverwriteService.apply(configYaml, overwrite);
+
     // iOS: Go core runs inside the PacketTunnel extension process.
-    // Pass the config to the extension and let it manage the core lifecycle.
     if (Platform.isIOS && !isMockMode) {
       final processed = ConfigTemplate.process(
-        configYaml,
+        withOverwrite,
         apiPort: _apiPort,
         secret: _apiSecret,
       );
       _apiPort = ConfigTemplate.getApiPort(processed);
+      _mixedPort = ConfigTemplate.getMixedPort(processed);
       _apiSecret ??= ConfigTemplate.getSecret(processed);
       _api = null;
       _stream = null;
@@ -109,17 +117,16 @@ class CoreManager {
     // On Android, start VpnService first to get the TUN fd
     int? tunFd;
     if (Platform.isAndroid && !isMockMode) {
-      final mixedPort = ConfigTemplate.getMixedPort(configYaml);
-      tunFd = await vpn.VpnService.startAndroidVpn(mixedPort: mixedPort);
+      final mp = ConfigTemplate.getMixedPort(withOverwrite);
+      tunFd = await vpn.VpnService.startAndroidVpn(mixedPort: mp);
       if (tunFd <= 0) {
-        // VPN permission denied or service failed
         return false;
       }
     }
 
     // Process template variables, ensure API access, inject TUN fd
     final processed = ConfigTemplate.process(
-      configYaml,
+      withOverwrite,
       apiPort: _apiPort,
       secret: _apiSecret,
       tunFd: tunFd,
@@ -127,6 +134,7 @@ class CoreManager {
 
     // Extract actual port/secret from processed config
     _apiPort = ConfigTemplate.getApiPort(processed);
+    _mixedPort = ConfigTemplate.getMixedPort(processed);
     _apiSecret ??= ConfigTemplate.getSecret(processed);
     _api = null; // Reset API client with new settings
     _stream = null;
