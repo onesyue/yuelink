@@ -241,18 +241,21 @@ jobs:
         run: |
           create-dmg \
             --volname "YueLink" \
-            --volicon "macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_512.png" \
             --window-pos 200 120 \
             --window-size 660 400 \
             --icon-size 80 \
-            --icon "YueLink.app" 180 170 \
+            --icon "yuelink.app" 180 170 \
             --app-drop-link 480 170 \
-            --hide-extension "YueLink.app" \
+            --hide-extension "yuelink.app" \
             "YueLink-macOS.dmg" \
-            "build/macos/Build/Products/Release/YueLink.app" \
+            "build/macos/Build/Products/Release/yuelink.app" \
           || true
-          # create-dmg returns 2 on success when --volicon uses png, treat as success
-          test -f YueLink-macOS.dmg
+          # create-dmg exits 2 on success when no code signing identity found
+          if [ ! -f YueLink-macOS.dmg ]; then
+            echo "ERROR: DMG was not created!"
+            exit 1
+          fi
+          ls -lh YueLink-macOS.dmg
 
       - uses: actions/upload-artifact@v4
         with:
