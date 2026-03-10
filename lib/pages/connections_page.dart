@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -171,7 +170,7 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
                   decoration: BoxDecoration(
                     color: snapshot.connections.isEmpty 
                         ? Colors.transparent 
-                        : YLColors.errorLight.withOpacity(isDark ? 0.1 : 0.5),
+                        : YLColors.errorLight.withValues(alpha:isDark ? 0.1 : 0.5),
                     borderRadius: BorderRadius.circular(YLRadius.lg),
                   ),
                   child: IconButton(
@@ -290,7 +289,7 @@ class _SummaryBar extends StatelessWidget {
         color: isDark ? YLColors.zinc900 : Colors.white,
         borderRadius: BorderRadius.circular(YLRadius.xl),
         border: Border.all(
-          color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.05),
+          color: isDark ? Colors.white.withValues(alpha:0.08) : Colors.black.withValues(alpha:0.05),
           width: 0.5,
         ),
         boxShadow: YLShadow.card(context),
@@ -304,14 +303,14 @@ class _SummaryBar extends StatelessWidget {
             value: '${snapshot.connections.length}',
             color: isDark ? Colors.white : YLColors.primary,
           ),
-          Container(width: 1, height: 32, color: isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.05)),
+          Container(width: 1, height: 32, color: isDark ? Colors.white.withValues(alpha:0.1) : Colors.black.withValues(alpha:0.05)),
           _StatItem(
             icon: Icons.arrow_downward_rounded,
             label: s.statTotalDownload,
             value: _formatBytes(snapshot.downloadTotal),
             color: YLColors.connected,
           ),
-          Container(width: 1, height: 32, color: isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.05)),
+          Container(width: 1, height: 32, color: isDark ? Colors.white.withValues(alpha:0.1) : Colors.black.withValues(alpha:0.05)),
           _StatItem(
             icon: Icons.arrow_upward_rounded,
             label: s.statTotalUpload,
@@ -356,7 +355,7 @@ class _StatItem extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: color.withOpacity(0.15),
+            color: color.withValues(alpha:0.15),
             shape: BoxShape.circle,
           ),
           child: Icon(icon, size: 18, color: color),
@@ -402,7 +401,7 @@ class _ConnectionTile extends StatelessWidget {
         color: isDark ? YLColors.zinc900 : Colors.white,
         borderRadius: BorderRadius.circular(YLRadius.lg),
         border: Border.all(
-          color: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.03),
+          color: isDark ? Colors.white.withValues(alpha:0.05) : Colors.black.withValues(alpha:0.03),
           width: 1,
         ),
         boxShadow: YLShadow.card(context),
@@ -437,7 +436,7 @@ class _ConnectionTile extends StatelessWidget {
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                               decoration: BoxDecoration(
-                                color: (isDark ? Colors.white : YLColors.primary).withOpacity(0.1),
+                                color: (isDark ? Colors.white : YLColors.primary).withValues(alpha:0.1),
                                 borderRadius: BorderRadius.circular(YLRadius.sm),
                               ),
                               child: Text(
@@ -503,7 +502,7 @@ class _ConnectionTile extends StatelessWidget {
                       child: Container(
                         padding: const EdgeInsets.all(6),
                         decoration: BoxDecoration(
-                          color: YLColors.errorLight.withOpacity(isDark ? 0.1 : 0.5),
+                          color: YLColors.errorLight.withValues(alpha:isDark ? 0.1 : 0.5),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(Icons.close_rounded, size: 14, color: YLColors.error),
@@ -529,7 +528,7 @@ class _ConnectionTile extends StatelessWidget {
   }
 
   String _formatSpeed(int bps) {
-    if (bps < 1024) return '${bps} B/s';
+    if (bps < 1024) return '$bps B/s';
     if (bps < 1024 * 1024) {
       return '${(bps / 1024).toStringAsFixed(0)} KB/s';
     }
@@ -550,9 +549,9 @@ class _NetworkBadge extends StatelessWidget {
       width: 36,
       height: 36,
       decoration: BoxDecoration(
-        color: color.withOpacity(0.15),
+        color: color.withValues(alpha:0.15),
         borderRadius: BorderRadius.circular(YLRadius.md),
-        border: Border.all(color: color.withOpacity(0.3), width: 1),
+        border: Border.all(color: color.withValues(alpha:0.3), width: 1),
       ),
       alignment: Alignment.center,
       child: Text(
@@ -668,7 +667,7 @@ class _ConnectionDetailSheet extends StatelessWidget {
   }
 
   String _fmtBytes(int bytes) {
-    if (bytes < 1024) return '${bytes} B';
+    if (bytes < 1024) return '$bytes B';
     if (bytes < 1024 * 1024) {
       return '${(bytes / 1024).toStringAsFixed(1)} KB';
     }
@@ -783,7 +782,7 @@ class _ConnectionsDataTable extends StatelessWidget {
   }
 
   static String _fmt(int bytes) {
-    if (bytes < 1024) return '${bytes} B';
+    if (bytes < 1024) return '$bytes B';
     if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
     return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
   }

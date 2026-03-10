@@ -156,7 +156,7 @@ class _GroupCardState extends ConsumerState<_GroupCard> with SingleTickerProvide
         color: isDark ? YLColors.zinc900 : Colors.white,
         borderRadius: BorderRadius.circular(YLRadius.xl),
         border: Border.all(
-          color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.04),
+          color: isDark ? Colors.white.withValues(alpha:0.08) : Colors.black.withValues(alpha:0.04),
           width: 0.5,
         ),
         boxShadow: YLShadow.card(context),
@@ -239,11 +239,12 @@ class _GroupCardState extends ConsumerState<_GroupCard> with SingleTickerProvide
                             delay: delays[nodeName],
                             isTesting: testing.contains(nodeName),
                             onSelect: () async {
+                              final s = S.of(context);
                               final ok = await ref.read(proxyGroupsProvider.notifier).changeProxy(group.name, nodeName);
                               if (ok) {
-                                AppNotifier.success(S.of(context).switchedTo(nodeName));
+                                AppNotifier.success(s.switchedTo(nodeName));
                               } else {
-                                AppNotifier.error(S.of(context).switchFailed);
+                                AppNotifier.error(s.switchFailed);
                               }
                               return ok;
                             },
@@ -382,7 +383,7 @@ class _NodeTileState extends State<_NodeTile> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: YLSpacing.md, vertical: YLSpacing.sm),
           color: widget.isSelected
-              ? (isDark ? Colors.white.withOpacity(0.08) : YLColors.primary.withOpacity(0.05))
+              ? (isDark ? Colors.white.withValues(alpha:0.08) : YLColors.primary.withValues(alpha:0.05))
               : Colors.transparent,
           child: Row(
             children: [

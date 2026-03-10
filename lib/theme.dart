@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 
 // ── Semantic colour tokens (Vercel / Tailwind inspired) ──────────────────────
@@ -147,7 +145,7 @@ ThemeData buildTheme(Brightness brightness) {
     seedColor: primary,
     brightness: brightness,
     surface: surface,
-    background: bg,
+    surfaceContainerLowest: bg,
   ).copyWith(
     primary: primary,
     onPrimary: isDark ? Colors.black : Colors.white,
@@ -163,7 +161,7 @@ ThemeData buildTheme(Brightness brightness) {
     splashFactory: NoSplash.splashFactory, // Remove Android ripples for premium feel
     splashColor: Colors.transparent,
     highlightColor: Colors.transparent,
-    hoverColor: isDark ? Colors.white.withOpacity(0.04) : Colors.black.withOpacity(0.03),
+    hoverColor: isDark ? Colors.white.withValues(alpha: 0.04) : Colors.black.withValues(alpha: 0.03),
     fontFamily: '.SF Pro Display', // Apple system font fallback
 
     // Surfaces
@@ -249,12 +247,12 @@ ThemeData buildTheme(Brightness brightness) {
 
     // Switch (iOS style)
     switchTheme: SwitchThemeData(
-      thumbColor: MaterialStateProperty.all(Colors.white),
-      trackColor: MaterialStateProperty.resolveWith((s) {
-        if (s.contains(MaterialState.selected)) return YLColors.connected;
+      thumbColor: WidgetStateProperty.all(Colors.white),
+      trackColor: WidgetStateProperty.resolveWith((s) {
+        if (s.contains(WidgetState.selected)) return YLColors.connected;
         return isDark ? YLColors.zinc700 : YLColors.zinc300;
       }),
-      trackOutlineColor: MaterialStateProperty.all(Colors.transparent),
+      trackOutlineColor: WidgetStateProperty.all(Colors.transparent),
     ),
   );
 }
@@ -276,7 +274,7 @@ class YLStatusDot extends StatelessWidget {
         shape: BoxShape.circle, 
         color: color,
         boxShadow: glow ? [
-          BoxShadow(color: color.withOpacity(0.4), blurRadius: 6, spreadRadius: 1)
+          BoxShadow(color: color.withValues(alpha: 0.4), blurRadius: 6, spreadRadius: 1)
         ] : null,
       ),
     );
@@ -289,7 +287,6 @@ class YLSectionLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Padding(
       padding: const EdgeInsets.fromLTRB(YLSpacing.lg, YLSpacing.xl, YLSpacing.lg, YLSpacing.sm),
       child: Text(
@@ -297,7 +294,7 @@ class YLSectionLabel extends StatelessWidget {
         style: YLText.caption.copyWith(
           fontWeight: FontWeight.w600,
           letterSpacing: 0.5,
-          color: isDark ? YLColors.zinc500 : YLColors.zinc500,
+          color: YLColors.zinc500,
         ),
       ),
     );
@@ -329,7 +326,7 @@ class YLSurface extends StatelessWidget {
         color: isDark ? YLColors.zinc900 : Colors.white,
         borderRadius: BorderRadius.circular(YLRadius.xl),
         border: Border.all(
-          color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.05),
+          color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05),
           width: 0.5,
         ),
         boxShadow: YLShadow.card(context),
@@ -349,51 +346,6 @@ class YLSurface extends StatelessWidget {
     }
 
     return content;
-  }
-}
-
-class YLGlassSurface extends StatelessWidget {
-  final Widget child;
-  final EdgeInsetsGeometry? margin;
-  final EdgeInsetsGeometry? padding;
-  final double blurSigma;
-  final double borderRadius;
-  final Color? customColor;
-
-  const YLGlassSurface({
-    super.key,
-    required this.child,
-    this.margin,
-    this.padding,
-    this.blurSigma = 20,
-    this.borderRadius = YLRadius.xl,
-    this.customColor,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Container(
-      margin: margin,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(borderRadius),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
-          child: Container(
-            padding: padding,
-            decoration: BoxDecoration(
-              color: customColor ?? (isDark ? Colors.white.withOpacity(0.03) : Colors.white.withOpacity(0.6)),
-              borderRadius: BorderRadius.circular(borderRadius),
-              border: Border.all(
-                color: isDark ? Colors.white.withOpacity(0.08) : Colors.white.withOpacity(0.4),
-                width: 0.5,
-              ),
-            ),
-            child: child,
-          ),
-        ),
-      ),
-    );
   }
 }
 
@@ -420,7 +372,7 @@ class YLDelayBadge extends StatelessWidget {
     }
     if (delay == null) {
       return Icon(Icons.speed_rounded, size: 14,
-          color: Theme.of(context).colorScheme.onSurface.withOpacity(0.3));
+          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.3));
     }
     final c = colorFor(delay!);
     return Text(
@@ -520,7 +472,7 @@ class YLPillSegmentedControl<T> extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
-        color: isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.05),
+        color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(YLRadius.pill),
       ),
       child: Row(
@@ -600,7 +552,7 @@ class YLGroupedListItem extends StatelessWidget {
           decoration: BoxDecoration(
             border: isLast ? null : Border(
               bottom: BorderSide(
-                color: isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.05),
+                color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.05),
                 width: 0.5,
               ),
             ),

@@ -6,7 +6,7 @@ import '../../l10n/app_strings.dart';
 import '../../services/core_manager.dart';
 
 class RunningConfigPage extends StatefulWidget {
-  const RunningConfigPage();
+  const RunningConfigPage({super.key});
 
   @override
   State<RunningConfigPage> createState() => _RunningConfigPageState();

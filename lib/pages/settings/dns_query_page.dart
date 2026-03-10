@@ -4,7 +4,7 @@ import '../../l10n/app_strings.dart';
 import '../../services/core_manager.dart';
 
 class DnsQueryPage extends StatefulWidget {
-  const DnsQueryPage();
+  const DnsQueryPage({super.key});
 
   @override
   State<DnsQueryPage> createState() => _DnsQueryPageState();
