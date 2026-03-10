@@ -206,8 +206,8 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
     try {
       await trayManager.setIcon(
         Platform.isWindows
-            ? 'assets/tray_icon.png' // tray_manager accepts PNG on Windows
-            : 'assets/tray_icon.png',
+            ? 'assets/tray_icon_win.png'
+            : 'assets/tray_icon_macos.png',
       );
       await _updateTrayMenu(isRunning: false);
       trayManager.addListener(this);

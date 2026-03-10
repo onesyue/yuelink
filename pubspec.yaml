@@ -57,6 +57,8 @@ flutter:
   assets:
     - assets/default_config.yaml
     - assets/tray_icon.png
+    - assets/tray_icon_macos.png
+    - assets/tray_icon_win.png
 
 # slang i18n configuration
 # Run: dart pub run slang  (or: dart run build_runner build)
