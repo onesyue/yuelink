@@ -49,6 +49,7 @@ jobs:
             platform: macos
           - os: windows-latest
             platform: windows
+            arch: amd64
 
     steps:
       - uses: actions/checkout@v4
@@ -82,9 +83,16 @@ jobs:
 
       # ── Build ─────────────────────────────────────────────────────────────
       - name: Build core (${{ matrix.platform }})
-        run: dart setup.dart build -p ${{ matrix.platform }}
+        shell: bash
+        run: |
+          if [ -n "${{ matrix.arch }}" ]; then
+            dart setup.dart build -p ${{ matrix.platform }} -a ${{ matrix.arch }}
+          else
+            dart setup.dart build -p ${{ matrix.platform }}
+          fi
 
       - name: Install core to Flutter dirs
+        shell: bash
         run: dart setup.dart install -p ${{ matrix.platform }}
 
       # ── Upload artifacts ──────────────────────────────────────────────────
