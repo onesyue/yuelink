@@ -108,7 +108,7 @@ class YLShadow {
   static List<BoxShadow> card(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return [BoxShadow(
-      color: Colors.black.withValues(alpha: isDark ? 0.10 : 0.03),
+      color: Colors.black.withValues(alpha: isDark ? 0.10 : 0.06),
       blurRadius: isDark ? 6 : 10,
       offset: Offset(0, isDark ? 2 : 3),
     )];
@@ -118,7 +118,7 @@ class YLShadow {
   static List<BoxShadow> hero(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return [BoxShadow(
-      color: Colors.black.withValues(alpha: isDark ? 0.18 : 0.06),
+      color: Colors.black.withValues(alpha: isDark ? 0.18 : 0.08),
       blurRadius: isDark ? 12 : 16,
       offset: Offset(0, isDark ? 3 : 4),
     )];
@@ -135,11 +135,11 @@ class YLShadow {
 ThemeData buildTheme(Brightness brightness) {
   final isDark = brightness == Brightness.dark;
 
-  final bg      = isDark ? YLColors.zinc950  : YLColors.zinc50;
+  final bg      = isDark ? YLColors.zinc950  : YLColors.zinc100;
   final surface = isDark ? YLColors.zinc900  : Colors.white;
-  final border  = isDark ? YLColors.zinc800  : YLColors.zinc200;
+  final border  = isDark ? YLColors.zinc800  : YLColors.zinc300;
   final primary = isDark ? YLColors.primaryDark : YLColors.primary;
-  final divider = isDark ? const Color(0x1AFFFFFF) : const Color(0x0D000000);
+  final divider = isDark ? const Color(0x1AFFFFFF) : const Color(0x14000000);
 
   final colorScheme = ColorScheme.fromSeed(
     seedColor: primary,
@@ -326,7 +326,7 @@ class YLSurface extends StatelessWidget {
         color: isDark ? YLColors.zinc900 : Colors.white,
         borderRadius: BorderRadius.circular(YLRadius.xl),
         border: Border.all(
-          color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05),
+          color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.07),
           width: 0.5,
         ),
         boxShadow: YLShadow.card(context),

@@ -8,7 +8,7 @@ import NetworkExtension
 func InitCore(_ homeDir: UnsafePointer<CChar>!) -> UnsafeMutablePointer<CChar>!
 
 @_silgen_name("StartCore")
-func StartCore(_ configYaml: UnsafePointer<CChar>!) -> Int32
+func StartCore(_ configYaml: UnsafePointer<CChar>!) -> UnsafeMutablePointer<CChar>!
 
 @_silgen_name("StopCore")
 func StopCore()
@@ -69,10 +69,8 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         // Write new config to app group and reload
         writeConfig(configYaml)
 
-        let result = configYaml.withCString { ptr in
-            StartCore(ptr)
-        }
-        let response = Data([result == 0 ? 1 : 0])
+        let startOk = startCoreWithConfig(configYaml)
+        let response = Data([startOk ? 1 : 0])
         completionHandler?(response)
     }
 
@@ -117,15 +115,29 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         }
 
         // Start Go core with config
-        let startResult = configYaml.withCString { ptr in
-            StartCore(ptr)
-        }
-        guard startResult == 0 else {
+        guard startCoreWithConfig(configYaml) else {
             completionHandler(TunnelError.startFailed)
             return
         }
 
         completionHandler(nil)
+    }
+
+    /// Call StartCore and check the returned error string.
+    /// Returns true on success, false on failure.
+    private func startCoreWithConfig(_ configYaml: String) -> Bool {
+        let resultPtr = configYaml.withCString { ptr in
+            StartCore(ptr)
+        }
+        if let ptr = resultPtr {
+            let errorMsg = String(cString: ptr)
+            FreeCString(ptr)
+            if !errorMsg.isEmpty {
+                NSLog("[PacketTunnel] StartCore failed: %@", errorMsg)
+                return false
+            }
+        }
+        return true
     }
 
     private func writeConfig(_ yaml: String) {

@@ -51,36 +51,42 @@ class ConfigTemplate {
     return config;
   }
 
-  /// Inject (or replace) the `tun.file-descriptor` value in a config.
+  /// Inject Android-safe TUN configuration with the VpnService file descriptor.
   ///
-  /// mihomo reads this fd directly instead of opening a new TUN device,
-  /// which is required on Android where VpnService must own the fd.
+  /// On Android, VpnService owns the TUN device and handles routing.
+  /// mihomo must use the provided fd without trying to create routes itself.
+  /// Key settings:
+  /// - `file-descriptor: <fd>` — use VpnService's TUN device
+  /// - `auto-route: false` — VpnService handles routing (netlink banned on Android 14+)
+  /// - `auto-detect-interface: false` — avoid NetworkUpdateMonitor (netlink)
+  /// - `enable: true` + `stack: system` — enable TUN with system stack
+  /// - `dns-hijack: [any:53]` — intercept DNS for fake-ip/redir
   static String _injectTunFd(String config, int fd) {
-    // If a tun: section already exists, update/add file-descriptor inside it
+    // Remove existing tun section entirely and replace with Android-safe config.
+    // This avoids partial merges where subscription settings (auto-route: true)
+    // conflict with Android VpnService requirements.
     if (_hasKey(config, 'tun')) {
-      if (RegExp(r'^\s+file-descriptor:', multiLine: true).hasMatch(config)) {
-        // Replace existing value
-        return config.replaceAllMapped(
-          RegExp(r'^(\s+file-descriptor:\s*).*$', multiLine: true),
-          (m) => '${m.group(1)}$fd',
-        );
-      } else {
-        // Insert after `tun:` line
-        return config.replaceFirstMapped(
-          RegExp(r'^(tun:.*\n)', multiLine: true),
-          (m) => '${m.group(1)}  file-descriptor: $fd\n',
-        );
-      }
-    } else {
-      // Append a minimal tun section
-      return '$config\ntun:\n'
-          '  enable: true\n'
-          '  stack: system\n'
-          '  file-descriptor: $fd\n'
-          '  dns-hijack:\n'
-          '    - any:53\n'
-          '  auto-route: false\n';
+      config = _removeSection(config, 'tun');
     }
+
+    // Append clean Android TUN section
+    return '$config\ntun:\n'
+        '  enable: true\n'
+        '  stack: system\n'
+        '  file-descriptor: $fd\n'
+        '  auto-route: false\n'
+        '  auto-detect-interface: false\n'
+        '  dns-hijack:\n'
+        '    - any:53\n';
+  }
+
+  /// Remove a top-level YAML section (key + all indented content below it).
+  static String _removeSection(String config, String key) {
+    final pattern = RegExp(
+      '^$key:.*\n(?:[ \t]+.*\n)*',
+      multiLine: true,
+    );
+    return config.replaceFirst(pattern, '');
   }
 
   /// Ensure the config has external-controller set.

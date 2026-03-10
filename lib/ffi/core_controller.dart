@@ -49,11 +49,18 @@ class CoreController {
     }
   }
 
-  bool start(String configYaml) {
-    if (_useMock) return _mock.start(configYaml);
+  /// Start the core. Returns null on success, error message on failure.
+  String? start(String configYaml) {
+    if (_useMock) {
+      _mock.start(configYaml);
+      return null;
+    }
     final ptr = configYaml.toNativeUtf8();
     try {
-      return _bindings!.startCore(ptr) == 0;
+      final resultPtr = _bindings!.startCore(ptr);
+      final result = resultPtr.toDartString();
+      _bindings!.freeCString(resultPtr);
+      return result.isEmpty ? null : result;
     } finally {
       calloc.free(ptr);
     }
@@ -88,11 +95,18 @@ class CoreController {
     }
   }
 
-  bool updateConfig(String configYaml) {
-    if (_useMock) return _mock.updateConfig(configYaml);
+  /// Update config (hot reload). Returns null on success, error message on failure.
+  String? updateConfig(String configYaml) {
+    if (_useMock) {
+      _mock.updateConfig(configYaml);
+      return null;
+    }
     final ptr = configYaml.toNativeUtf8();
     try {
-      return _bindings!.updateConfig(ptr) == 0;
+      final resultPtr = _bindings!.updateConfig(ptr);
+      final result = resultPtr.toDartString();
+      _bindings!.freeCString(resultPtr);
+      return result.isEmpty ? null : result;
     } finally {
       calloc.free(ptr);
     }

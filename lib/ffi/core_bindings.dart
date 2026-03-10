@@ -96,9 +96,10 @@ class CoreBindings {
     'InitCore',
   );
 
-  /// int StartCore(char* configStr)
-  late final int Function(Pointer<Utf8>) startCore = _lib
-      .lookupFunction<Int32 Function(Pointer<Utf8>), int Function(Pointer<Utf8>)>(
+  /// char* StartCore(char* configStr) — returns "" on success, error message on failure.
+  /// Caller must free the returned string via freeCString.
+  late final Pointer<Utf8> Function(Pointer<Utf8>) startCore = _lib
+      .lookupFunction<Pointer<Utf8> Function(Pointer<Utf8>), Pointer<Utf8> Function(Pointer<Utf8>)>(
     'StartCore',
   );
 
@@ -124,9 +125,10 @@ class CoreBindings {
     'ValidateConfig',
   );
 
-  /// int UpdateConfig(char* configStr)
-  late final int Function(Pointer<Utf8>) updateConfig = _lib
-      .lookupFunction<Int32 Function(Pointer<Utf8>), int Function(Pointer<Utf8>)>(
+  /// char* UpdateConfig(char* configStr) — returns "" on success, error message on failure.
+  /// Caller must free the returned string via freeCString.
+  late final Pointer<Utf8> Function(Pointer<Utf8>) updateConfig = _lib
+      .lookupFunction<Pointer<Utf8> Function(Pointer<Utf8>), Pointer<Utf8> Function(Pointer<Utf8>)>(
     'UpdateConfig',
   );
 

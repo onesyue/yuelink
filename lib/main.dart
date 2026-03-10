@@ -621,7 +621,7 @@ class _Sidebar extends StatelessWidget {
 
     return Container(
       width: 230,
-      color: isDark ? YLColors.zinc900 : YLColors.zinc50,
+      color: isDark ? YLColors.zinc900 : YLColors.zinc50, // Sidebar one shade lighter than zinc100 bg
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -713,23 +713,22 @@ class _SidebarItem extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 2),
       child: Material(
-        color: Colors.transparent,
+        color: isActive
+            ? (isDark ? YLColors.zinc800 : Colors.white)
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(YLRadius.lg),
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(YLRadius.xl),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 150),
+          borderRadius: BorderRadius.circular(YLRadius.lg),
+          child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
             decoration: BoxDecoration(
-              color: isActive
-                  ? (isDark ? YLColors.zinc800 : Colors.white)
-                  : Colors.transparent,
-              borderRadius: BorderRadius.circular(YLRadius.xl),
+              borderRadius: BorderRadius.circular(YLRadius.lg),
               border: isActive
                   ? Border.all(
                       color: isDark
                           ? Colors.white.withValues(alpha: 0.08)
-                          : Colors.black.withValues(alpha: 0.08),
+                          : Colors.black.withValues(alpha: 0.06),
                       width: 0.5,
                     )
                   : null,

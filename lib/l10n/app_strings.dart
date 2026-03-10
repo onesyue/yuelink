@@ -30,7 +30,7 @@ class S {
   // ── Navigation ──────────────────────────────────────────────────
   String get navHome => _e ? 'Dashboard' : '仪表盘';
   String get navProxies => _e ? 'Proxies' : '代理';
-  String get navProfile => _e ? 'Profiles' : '配置';
+  String get navProfile => _e ? 'Subscriptions' : '订阅';
   String get navConnections => _e ? 'Connections' : '连接';
   String get navLog => _e ? 'Logs' : '日志';
   String get navSettings => _e ? 'Settings' : '设置';

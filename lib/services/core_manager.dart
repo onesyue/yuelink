@@ -158,9 +158,13 @@ class CoreManager {
 
     switch (_mode) {
       case CoreMode.mock:
-        final ok = _core.start(processed);
-        _running = ok;
-        return ok;
+        final error = _core.start(processed);
+        if (error != null) {
+          debugPrint('[CoreManager] mock start failed: $error');
+          return false;
+        }
+        _running = true;
+        return true;
 
       case CoreMode.ffi:
         return _startFfi(processed);
@@ -221,9 +225,11 @@ class CoreManager {
     await configFile.writeAsString(configYaml);
     debugPrint('[CoreManager] config written to: ${configFile.path}');
 
-    final ok = _core.start(configYaml);
-    debugPrint('[CoreManager] _core.start() returned: $ok');
-    if (!ok) return false;
+    final error = _core.start(configYaml);
+    if (error != null) {
+      debugPrint('[CoreManager] StartCore failed: $error');
+      throw Exception('StartCore: $error');
+    }
 
     _running = true;
     // Save config and wait for API in background — don't block UI

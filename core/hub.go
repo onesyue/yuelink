@@ -64,18 +64,19 @@ func InitCore(homeDir *C.char) *C.char {
 
 // StartCore starts the mihomo core with the given YAML configuration.
 // This starts the proxy engine, listeners, and the external-controller REST API.
-// Returns 0 on success, -1 on failure.
+// Returns a C string: empty string on success, error message on failure.
+// Caller must free the returned string via FreeCString.
 //
 //export StartCore
-func StartCore(configStr *C.char) C.int {
+func StartCore(configStr *C.char) *C.char {
 	state.lock()
 	defer state.unlock()
 
 	if !state.isInit {
-		return -1
+		return C.CString("core not initialized, call InitCore first")
 	}
 	if state.isRunning {
-		return -1
+		return C.CString("")
 	}
 
 	configYaml := C.GoString(configStr)
@@ -83,21 +84,18 @@ func StartCore(configStr *C.char) C.int {
 	// Write config to file so mihomo can reload it later
 	configPath := filepath.Join(state.homeDir, "config.yaml")
 	if err := os.WriteFile(configPath, []byte(configYaml), 0o644); err != nil {
-		log.Errorln("Failed to write config: %v", err)
-		return -1
+		return C.CString(fmt.Sprintf("write config: %v", err))
 	}
 	mihomoConst.SetConfig(configPath)
 
 	// Parse and apply config via hub.Parse (starts everything)
-	var options []hub.Option
-	if err := hub.Parse([]byte(configYaml), options...); err != nil {
-		log.Errorln("Failed to parse config: %v", err)
-		return -1
+	if err := hub.Parse([]byte(configYaml)); err != nil {
+		return C.CString(fmt.Sprintf("parse config: %v", err))
 	}
 
 	state.isRunning = true
 	log.Infoln("YueLink core started")
-	return 0
+	return C.CString("")
 }
 
 // StopCore stops the mihomo core.
@@ -159,15 +157,16 @@ func ValidateConfig(configStr *C.char) C.int {
 }
 
 // UpdateConfig applies a new configuration (hot reload).
-// Returns 0 on success, -1 on failure.
+// Returns a C string: empty string on success, error message on failure.
+// Caller must free the returned string via FreeCString.
 //
 //export UpdateConfig
-func UpdateConfig(configStr *C.char) C.int {
+func UpdateConfig(configStr *C.char) *C.char {
 	state.lock()
 	defer state.unlock()
 
 	if !state.isRunning {
-		return -1
+		return C.CString("core not running")
 	}
 
 	yaml := C.GoString(configStr)
@@ -175,17 +174,16 @@ func UpdateConfig(configStr *C.char) C.int {
 	// Write updated config
 	configPath := filepath.Join(state.homeDir, "config.yaml")
 	if err := os.WriteFile(configPath, []byte(yaml), 0o644); err != nil {
-		return -1
+		return C.CString(fmt.Sprintf("write config: %v", err))
 	}
 
 	// Re-parse and apply
 	if err := hub.Parse([]byte(yaml)); err != nil {
-		log.Errorln("Config update failed: %v", err)
-		return -1
+		return C.CString(fmt.Sprintf("parse config: %v", err))
 	}
 
 	log.Infoln("Config updated successfully")
-	return 0
+	return C.CString("")
 }
 
 // --------------------------------------------------------------------
