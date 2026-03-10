@@ -93,7 +93,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                       tooltip: s.addSubscription,
                       onPressed: () => _showAddDialog(context, ref),
                       style: IconButton.styleFrom(
-                        foregroundColor: YLColors.primary,
+                        foregroundColor: isDark ? Colors.white : YLColors.primary,
                       ),
                     ),
                   ],
@@ -101,10 +101,11 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                 const SizedBox(height: 8),
                 Text(
                   s.navProfile,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 28,
                     fontWeight: FontWeight.w600,
                     letterSpacing: -0.5,
+                    color: isDark ? Colors.white : Colors.black,
                   ),
                 ),
               ],

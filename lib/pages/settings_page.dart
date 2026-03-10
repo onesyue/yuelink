@@ -108,10 +108,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 const SizedBox(height: 8),
                 Text(
                   s.navSettings,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 28,
                     fontWeight: FontWeight.w600,
                     letterSpacing: -0.5,
+                    color: isDark ? Colors.white : Colors.black,
                   ),
                 ),
               ],
@@ -236,7 +237,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                       trailing: DropdownButton<String>(
                         value: connectionMode,
                         underline: const SizedBox.shrink(),
-                        style: YLText.body,
+                        style: YLText.body.copyWith(
+                          color: isDark ? YLColors.zinc200 : YLColors.zinc700,
+                        ),
+                        dropdownColor: isDark ? YLColors.zinc800 : Colors.white,
                         items: [
                           DropdownMenuItem(
                               value: 'tun', child: Text(s.modeTun)),
@@ -281,7 +285,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                       trailing: DropdownButton<int>(
                         value: _autoUpdateInterval,
                         underline: const SizedBox.shrink(),
-                        style: YLText.body,
+                        style: YLText.body.copyWith(
+                          color: isDark ? YLColors.zinc200 : YLColors.zinc700,
+                        ),
+                        dropdownColor: isDark ? YLColors.zinc800 : Colors.white,
                         items: [
                           DropdownMenuItem(
                               value: 0, child: Text(s.disabled)),
@@ -366,7 +373,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                       trailing: DropdownButton<String>(
                         value: logLevel,
                         underline: const SizedBox.shrink(),
-                        style: YLText.body,
+                        style: YLText.body.copyWith(
+                          color: isDark ? YLColors.zinc200 : YLColors.zinc700,
+                        ),
+                        dropdownColor: isDark ? YLColors.zinc800 : Colors.white,
                         items: const [
                           DropdownMenuItem(
                               value: 'debug', child: Text('Debug')),
@@ -558,7 +568,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                               ? YLChip(
                                   s.updateAvailableV(
                                       _pendingUpdate!.latestVersion),
-                                  color: YLColors.primary)
+                                  color: isDark ? Colors.white : YLColors.primary)
                               : const Icon(Icons.chevron_right,
                                   size: 18, color: YLColors.zinc400),
                       onTap: _checkingUpdate
@@ -875,7 +885,7 @@ class _SettingsCard extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: isDark ? YLColors.zinc800 : Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(YLRadius.xl),
         border: Border.all(
           color: isDark
               ? Colors.white.withValues(alpha: 0.08)
@@ -1059,7 +1069,10 @@ class _SplitTunnelSectionState extends ConsumerState<_SplitTunnelSection> {
             trailing: DropdownButton<SplitTunnelMode>(
               value: mode,
               underline: const SizedBox.shrink(),
-              style: YLText.body,
+              style: YLText.body.copyWith(
+                color: isDark ? YLColors.zinc200 : YLColors.zinc700,
+              ),
+              dropdownColor: isDark ? YLColors.zinc800 : Colors.white,
               items: [
                 DropdownMenuItem(
                     value: SplitTunnelMode.all,

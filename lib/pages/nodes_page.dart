@@ -210,7 +210,7 @@ class _GroupCardState extends ConsumerState<_GroupCard> with SingleTickerProvide
                         ? const CupertinoActivityIndicator(radius: 7)
                         : const Icon(Icons.bolt_rounded),
                     iconSize: 18,
-                    color: YLColors.primary,
+                    color: isDark ? Colors.white : YLColors.primary,
                     visualDensity: VisualDensity.compact,
                   ),
                 ],
@@ -381,8 +381,8 @@ class _NodeTileState extends State<_NodeTile> {
         onTap: _handleSelect,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: YLSpacing.md, vertical: YLSpacing.sm),
-          color: widget.isSelected 
-              ? (isDark ? YLColors.primary.withOpacity(0.1) : YLColors.primary.withOpacity(0.05))
+          color: widget.isSelected
+              ? (isDark ? Colors.white.withOpacity(0.08) : YLColors.primary.withOpacity(0.05))
               : Colors.transparent,
           child: Row(
             children: [
@@ -391,7 +391,7 @@ class _NodeTileState extends State<_NodeTile> {
                 child: _isSwitching
                     ? const CupertinoActivityIndicator(radius: 7)
                     : (widget.isSelected
-                        ? const Icon(Icons.check_rounded, color: YLColors.primary, size: 18)
+                        ? Icon(Icons.check_rounded, color: isDark ? Colors.white : YLColors.primary, size: 18)
                         : null),
               ),
               const SizedBox(width: YLSpacing.xs),
@@ -400,8 +400,8 @@ class _NodeTileState extends State<_NodeTile> {
                   widget.name,
                   style: YLText.body.copyWith(
                     fontWeight: widget.isSelected ? FontWeight.w600 : FontWeight.w400,
-                    color: widget.isSelected 
-                        ? YLColors.primary 
+                    color: widget.isSelected
+                        ? (isDark ? Colors.white : YLColors.primary)
                         : (isDark ? Colors.white : Colors.black),
                   ),
                   maxLines: 1,

@@ -115,7 +115,7 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
                   style: YLText.caption.copyWith(
                     letterSpacing: 2.0,
                     fontWeight: FontWeight.w700,
-                    color: YLColors.primary,
+                    color: isDark ? Colors.white : YLColors.primary,
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -284,11 +284,17 @@ class _SummaryBar extends StatelessWidget {
     final s = S.of(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     
-    return YLGlassSurface(
+    return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-      borderRadius: YLRadius.xl,
-      blurSigma: 20,
-      customColor: isDark ? YLColors.zinc900.withOpacity(0.6) : Colors.white.withOpacity(0.7),
+      decoration: BoxDecoration(
+        color: isDark ? YLColors.zinc900 : Colors.white,
+        borderRadius: BorderRadius.circular(YLRadius.xl),
+        border: Border.all(
+          color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.05),
+          width: 0.5,
+        ),
+        boxShadow: YLShadow.card(context),
+      ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -296,7 +302,7 @@ class _SummaryBar extends StatelessWidget {
             icon: Icons.cable_rounded,
             label: s.statConnections,
             value: '${snapshot.connections.length}',
-            color: YLColors.primary,
+            color: isDark ? Colors.white : YLColors.primary,
           ),
           Container(width: 1, height: 32, color: isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.05)),
           _StatItem(
@@ -431,14 +437,14 @@ class _ConnectionTile extends StatelessWidget {
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                               decoration: BoxDecoration(
-                                color: YLColors.primary.withOpacity(0.1),
+                                color: (isDark ? Colors.white : YLColors.primary).withOpacity(0.1),
                                 borderRadius: BorderRadius.circular(YLRadius.sm),
                               ),
                               child: Text(
                                 connection.chains.isNotEmpty
                                     ? connection.chains.join(' → ')
                                     : connection.rule,
-                                style: YLText.caption.copyWith(color: YLColors.primary, fontSize: 10),
+                                style: YLText.caption.copyWith(color: isDark ? Colors.white : YLColors.primary, fontSize: 10),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
