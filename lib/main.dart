@@ -6,6 +6,7 @@ import 'package:launch_at_startup/launch_at_startup.dart';
 import 'package:tray_manager/tray_manager.dart';
 
 import 'constants.dart';
+import 'pages/connections_page.dart';
 import 'pages/home_page.dart';
 import 'pages/log_page.dart';
 import 'pages/profile_page.dart';
@@ -216,6 +217,7 @@ class _MainShellState extends ConsumerState<MainShell> {
   static const _pages = [
     HomePage(),
     ProxyPage(),
+    ConnectionsPage(),
     ProfilePage(),
     LogPage(),
     SettingsPage(),
@@ -230,6 +232,10 @@ class _MainShellState extends ConsumerState<MainShell> {
         icon: Icon(Icons.dns_outlined),
         selectedIcon: Icon(Icons.dns),
         label: '代理'),
+    NavigationDestination(
+        icon: Icon(Icons.cable_outlined),
+        selectedIcon: Icon(Icons.cable),
+        label: '连接'),
     NavigationDestination(
         icon: Icon(Icons.description_outlined),
         selectedIcon: Icon(Icons.description),

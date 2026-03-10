@@ -6,6 +6,10 @@ import '../ffi/core_controller.dart';
 import '../models/proxy.dart';
 import '../services/core_manager.dart';
 
+/// Custom URL used for latency testing. Defaults to the standard gstatic URL.
+final testUrlProvider = StateProvider<String>(
+    (ref) => 'https://www.gstatic.com/generate_204');
+
 // ------------------------------------------------------------------
 // Proxy groups & nodes
 // ------------------------------------------------------------------
@@ -84,12 +88,12 @@ class DelayTestActions {
 
   /// Test delay for a single proxy node.
   Future<int> testDelay(String proxyName) async {
-    // Mark as testing
     final testing = Set<String>.from(ref.read(delayTestingProvider));
     testing.add(proxyName);
     ref.read(delayTestingProvider.notifier).state = testing;
 
     final manager = CoreManager.instance;
+    final testUrl = ref.read(testUrlProvider);
     int delay;
 
     if (manager.isMockMode) {
@@ -97,7 +101,7 @@ class DelayTestActions {
         return CoreController.instance.testDelay(proxyName);
       });
     } else {
-      delay = await manager.api.testDelay(proxyName);
+      delay = await manager.api.testDelay(proxyName, url: testUrl);
     }
 
     // Update results
@@ -121,13 +125,13 @@ class DelayTestActions {
     final manager = CoreManager.instance;
 
     if (!manager.isMockMode) {
-      // Mark all as testing
       final testing = Set<String>.from(ref.read(delayTestingProvider));
       testing.addAll(proxyNames);
       ref.read(delayTestingProvider.notifier).state = testing;
 
+      final testUrl = ref.read(testUrlProvider);
       try {
-        final results = await manager.api.testGroupDelay(groupName);
+        final results = await manager.api.testGroupDelay(groupName, url: testUrl);
         // Results: {proxyName: {delay: int}, ...} or {proxyName: int}
         final current = Map<String, int>.from(ref.read(delayResultsProvider));
         for (final entry in results.entries) {

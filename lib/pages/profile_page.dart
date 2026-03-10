@@ -263,10 +263,16 @@ class ProfilePage extends ConsumerWidget {
       BuildContext context, WidgetRef ref, Profile profile) {
     final nameCtrl = TextEditingController(text: profile.name);
     final urlCtrl = TextEditingController(text: profile.url);
+    // Interval in hours: 0 = follow global, 6/12/24/48/168
+    int intervalHours = profile.updateInterval.inHours;
+    // Normalize to nearest option
+    const options = [0, 6, 12, 24, 48, 168];
+    if (!options.contains(intervalHours)) intervalHours = 24;
 
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setStateDialog) => AlertDialog(
         title: const Text('编辑订阅'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -289,6 +295,31 @@ class ProfilePage extends ConsumerWidget {
               maxLines: 2,
               textInputAction: TextInputAction.done,
             ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                const Icon(Icons.update, size: 18,
+                    color: Colors.grey),
+                const SizedBox(width: 8),
+                const Text('更新间隔'),
+                const Spacer(),
+                DropdownButton<int>(
+                  value: intervalHours,
+                  underline: const SizedBox.shrink(),
+                  items: const [
+                    DropdownMenuItem(value: 0, child: Text('跟随全局')),
+                    DropdownMenuItem(value: 6, child: Text('6 小时')),
+                    DropdownMenuItem(value: 12, child: Text('12 小时')),
+                    DropdownMenuItem(value: 24, child: Text('24 小时')),
+                    DropdownMenuItem(value: 48, child: Text('48 小时')),
+                    DropdownMenuItem(value: 168, child: Text('7 天')),
+                  ],
+                  onChanged: (v) {
+                    if (v != null) setStateDialog(() => intervalHours = v);
+                  },
+                ),
+              ],
+            ),
           ],
         ),
         actions: [
@@ -304,6 +335,9 @@ class ProfilePage extends ConsumerWidget {
 
               profile.name = name;
               profile.url = url;
+              profile.updateInterval = intervalHours == 0
+                  ? const Duration(hours: 24) // will use global default
+                  : Duration(hours: intervalHours);
               ref.read(profilesProvider.notifier).update(profile);
               Navigator.pop(ctx);
               ScaffoldMessenger.of(context)
@@ -312,6 +346,7 @@ class ProfilePage extends ConsumerWidget {
             child: const Text('保存'),
           ),
         ],
+      ),
       ),
     );
   }

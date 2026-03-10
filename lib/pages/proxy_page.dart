@@ -5,6 +5,13 @@ import '../models/proxy.dart';
 import '../providers/core_provider.dart';
 import '../providers/proxy_provider.dart';
 
+const _kPresetTestUrls = [
+  'https://www.gstatic.com/generate_204',
+  'https://cp.cloudflare.com/generate_204',
+  'http://www.google.com/generate_204',
+  'https://www.apple.com/library/test/success.html',
+];
+
 enum _SortMode { none, delay }
 
 class ProxyPage extends ConsumerStatefulWidget {
@@ -118,6 +125,11 @@ class _ProxyPageState extends ConsumerState<ProxyPage> {
                   ),
                   tooltip: _sortMode == _SortMode.delay ? '取消排序' : '按延迟排序',
                 ),
+                IconButton(
+                  onPressed: () => _showTestUrlDialog(context, ref),
+                  icon: const Icon(Icons.tune, size: 20),
+                  tooltip: '测速设置',
+                ),
               ],
             ),
           ),
@@ -144,6 +156,66 @@ class _ProxyPageState extends ConsumerState<ProxyPage> {
                       },
                     ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showTestUrlDialog(BuildContext context, WidgetRef ref) {
+    final currentUrl = ref.read(testUrlProvider);
+    final ctrl = TextEditingController(text: currentUrl);
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('测速 URL'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TextField(
+              controller: ctrl,
+              decoration: const InputDecoration(
+                labelText: '自定义 URL',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: 12),
+            ...(_kPresetTestUrls.map((url) => InkWell(
+                  onTap: () => ctrl.text = url,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      children: [
+                        Icon(Icons.link, size: 14,
+                            color: Theme.of(ctx).colorScheme.primary),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(url,
+                              style: const TextStyle(fontSize: 12),
+                              overflow: TextOverflow.ellipsis),
+                        ),
+                      ],
+                    ),
+                  ),
+                ))),
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('取消')),
+          FilledButton(
+            onPressed: () {
+              final url = ctrl.text.trim();
+              if (url.isNotEmpty) {
+                ref.read(testUrlProvider.notifier).state = url;
+              }
+              Navigator.pop(ctx);
+            },
+            child: const Text('确定'),
           ),
         ],
       ),
