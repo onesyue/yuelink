@@ -96,7 +96,9 @@ class ProcessManager {
       _process!.stdout.transform(const SystemEncoding().decoder).listen(
         (line) => _logController.add(line),
         onDone: () {
+          // 进程意外退出或正常结束时，确保重置状态
           _isRunning = false;
+          _process = null;
         },
       );
       _process!.stderr.transform(const SystemEncoding().decoder).listen(
@@ -106,8 +108,8 @@ class ProcessManager {
       // Wait a moment for process to initialize
       await Future.delayed(const Duration(milliseconds: 500));
 
-      // Check if process is still running
-      if (_process?.pid == null) {
+      // Check if process is still running (might have crashed immediately)
+      if (_process == null) {
         _isRunning = false;
         return false;
       }
@@ -116,25 +118,30 @@ class ProcessManager {
     } catch (e) {
       _logController.add('[ProcessManager] Failed to start: $e');
       _isRunning = false;
+      _process = null;
       return false;
     }
   }
 
   /// Stop the mihomo process.
   Future<void> stop() async {
-    if (!_isRunning || _process == null) return;
+    // 强制先重置状态，防止后续代码抛出异常导致状态卡死
+    final p = _process;
+    _isRunning = false;
+    _process = null;
 
-    _process!.kill(ProcessSignal.sigterm);
+    if (p == null) return;
+
+    p.kill(ProcessSignal.sigterm);
 
     // Wait for graceful shutdown
     try {
-      await _process!.exitCode.timeout(const Duration(seconds: 5));
+      await p.exitCode.timeout(const Duration(seconds: 5));
     } on TimeoutException {
-      _process!.kill(ProcessSignal.sigkill);
+      p.kill(ProcessSignal.sigkill);
+    } catch (_) {
+      // 忽略其他可能的进程退出异常
     }
-
-    _process = null;
-    _isRunning = false;
   }
 
   /// Write config and return the file path.
