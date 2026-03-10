@@ -12,14 +12,14 @@ class NodeFilterRulesNotifier extends AsyncNotifier<List<NodeFilterRule>> {
       NodeFilterService.instance.loadRules();
 
   Future<void> add(NodeFilterRule rule) async {
-    final current = state.valueOrNull ?? [];
-    final updated = [...current, rule];
+    final current = state.valueOrNull ?? <NodeFilterRule>[];
+    final updated = <NodeFilterRule>[...current, rule];
     await NodeFilterService.instance.saveRules(updated);
     state = AsyncData(updated);
   }
 
   Future<void> remove(int index) async {
-    final current = [...(state.valueOrNull ?? [])];
+    final current = <NodeFilterRule>[...(state.valueOrNull ?? [])];
     if (index < 0 || index >= current.length) return;
     current.removeAt(index);
     await NodeFilterService.instance.saveRules(current);
@@ -27,7 +27,7 @@ class NodeFilterRulesNotifier extends AsyncNotifier<List<NodeFilterRule>> {
   }
 
   Future<void> reorder(int oldIndex, int newIndex) async {
-    final current = [...(state.valueOrNull ?? [])];
+    final current = <NodeFilterRule>[...(state.valueOrNull ?? [])];
     if (newIndex > oldIndex) newIndex--;
     final item = current.removeAt(oldIndex);
     current.insert(newIndex, item);
