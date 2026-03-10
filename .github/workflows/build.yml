@@ -143,12 +143,17 @@ jobs:
           dart setup.dart install -p android
 
       - run: flutter pub get
-      - run: flutter build apk --release --split-per-abi
+      - run: flutter build apk --release
+
+      - name: Rename artifact
+        run: |
+          cp build/app/outputs/flutter-apk/app-release.apk \
+             build/app/outputs/flutter-apk/YueLink-Android.apk
 
       - uses: actions/upload-artifact@v4
         with:
           name: yuelink-android
-          path: build/app/outputs/flutter-apk/*.apk
+          path: build/app/outputs/flutter-apk/YueLink-Android.apk
 
   # ── iOS ──────────────────────────────────────────────────────────────────
   build-ios:
@@ -183,10 +188,17 @@ jobs:
       - run: flutter pub get
       - run: flutter build ios --release --no-codesign
 
+      - name: Package iOS app
+        run: |
+          cd build/ios/iphoneos
+          mkdir -p Payload
+          cp -r Runner.app Payload/
+          zip -r --symlinks YueLink-iOS.ipa Payload
+
       - uses: actions/upload-artifact@v4
         with:
           name: yuelink-ios
-          path: build/ios/iphoneos/Runner.app
+          path: build/ios/iphoneos/YueLink-iOS.ipa
 
   # ── macOS ─────────────────────────────────────────────────────────────────
   build-macos:
@@ -282,8 +294,17 @@ jobs:
         with:
           path: artifacts/
 
+      - name: Flatten release assets
+        run: |
+          mkdir -p release
+          cp artifacts/yuelink-android/YueLink-Android.apk release/
+          cp artifacts/yuelink-ios/YueLink-iOS.ipa release/
+          cp artifacts/yuelink-macos/YueLink-macOS.zip release/
+          cp artifacts/yuelink-windows/YueLink-Windows.zip release/
+          ls -lh release/
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: artifacts/**/*
+          files: release/*
           generate_release_notes: true
