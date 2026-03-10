@@ -88,8 +88,8 @@ class CoreManager {
   Future<void> _ensureInit() async {
     if (_initialized || _mode == CoreMode.mock) return;
     final appDir = await getApplicationSupportDirectory();
-    final ok = _core.init(appDir.path);
-    if (!ok) throw Exception('InitCore failed');
+    final error = _core.init(appDir.path);
+    if (error != null) throw Exception('InitCore: $error');
     _initialized = true;
   }
 

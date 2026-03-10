@@ -3,8 +3,6 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:path_provider/path_provider.dart';
-
 import '../ffi/core_controller.dart';
 import '../models/traffic.dart';
 import '../models/traffic_history.dart';
@@ -24,11 +22,6 @@ enum CoreStatus { stopped, starting, running, stopping }
 
 final coreStatusProvider =
     StateProvider<CoreStatus>((ref) => CoreStatus.stopped);
-
-final coreInitProvider = FutureProvider<bool>((ref) async {
-  final appDir = await getApplicationSupportDirectory();
-  return CoreController.instance.init(appDir.path);
-});
 
 /// Whether the core is running in mock mode (no native library).
 final isMockModeProvider = Provider<bool>((ref) {

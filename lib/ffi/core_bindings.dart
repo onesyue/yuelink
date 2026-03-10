@@ -89,9 +89,10 @@ class CoreBindings {
   // Lifecycle
   // ------------------------------------------------------------------
 
-  /// int InitCore(char* homeDir)
-  late final int Function(Pointer<Utf8>) initCore = _lib
-      .lookupFunction<Int32 Function(Pointer<Utf8>), int Function(Pointer<Utf8>)>(
+  /// char* InitCore(char* homeDir) — returns "" on success, error message on failure.
+  /// Caller must free the returned string via freeCString.
+  late final Pointer<Utf8> Function(Pointer<Utf8>) initCore = _lib
+      .lookupFunction<Pointer<Utf8> Function(Pointer<Utf8>), Pointer<Utf8> Function(Pointer<Utf8>)>(
     'InitCore',
   );
 

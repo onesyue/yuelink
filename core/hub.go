@@ -24,10 +24,11 @@ import (
 
 // InitCore initializes the mihomo core with the given home directory.
 // Sets up config paths and prepares the runtime environment.
-// Returns 0 on success, -1 on failure.
+// Returns a C string: empty string on success, error message on failure.
+// Caller must free the returned string via FreeCString.
 //
 //export InitCore
-func InitCore(homeDir *C.char) C.int {
+func InitCore(homeDir *C.char) *C.char {
 	state.lock()
 	defer state.unlock()
 
@@ -35,7 +36,7 @@ func InitCore(homeDir *C.char) C.int {
 
 	// Ensure directory exists
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return -1
+		return C.CString(fmt.Sprintf("MkdirAll failed: %v", err))
 	}
 
 	// Set mihomo home directory
@@ -45,16 +46,20 @@ func InitCore(homeDir *C.char) C.int {
 	}
 	mihomoConst.SetHomeDir(dir)
 
+	// Set config file to absolute path BEFORE config.Init()
+	// (config.Init uses C.Path.Config() which defaults to relative "config.yaml",
+	// causing file creation failures on Android where cwd is not writable)
+	mihomoConst.SetConfig(filepath.Join(dir, "config.yaml"))
+
 	// Initialize config system (creates necessary files)
 	if err := config.Init(dir); err != nil {
-		log.Errorln("Config init failed: %v", err)
-		return -1
+		return C.CString(fmt.Sprintf("config.Init failed: %v", err))
 	}
 
 	state.homeDir = dir
 	state.isInit = true
 
-	return 0
+	return C.CString("")
 }
 
 // StartCore starts the mihomo core with the given YAML configuration.

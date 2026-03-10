@@ -32,11 +32,18 @@ class CoreController {
   // Lifecycle
   // ------------------------------------------------------------------
 
-  bool init(String homeDir) {
-    if (_useMock) return _mock.init(homeDir);
+  /// Initialize the core. Returns null on success, error message on failure.
+  String? init(String homeDir) {
+    if (_useMock) {
+      _mock.init(homeDir);
+      return null;
+    }
     final ptr = homeDir.toNativeUtf8();
     try {
-      return _bindings!.initCore(ptr) == 0;
+      final resultPtr = _bindings!.initCore(ptr);
+      final result = resultPtr.toDartString();
+      _bindings!.freeCString(resultPtr);
+      return result.isEmpty ? null : result;
     } finally {
       calloc.free(ptr);
     }
