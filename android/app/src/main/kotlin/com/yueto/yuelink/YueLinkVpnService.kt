@@ -58,6 +58,10 @@ class YueLinkVpnService : VpnService() {
     }
 
     private fun startTunnel(mixedPort: Int, mode: String, apps: List<String>) {
+        // Must call startForeground ASAP (within 5s of startForegroundService)
+        // to avoid ANR. Call it before establish() which may take time.
+        startForeground(NOTIFICATION_ID, createNotification())
+
         if (tunFd != null) {
             onTunReady?.invoke(tunFd!!.fd)
             return
@@ -74,7 +78,8 @@ class YueLinkVpnService : VpnService() {
             .addDnsServer("8.8.8.8")
             .setMtu(9000)
             .setBlocking(false)
-            // The mihomo process itself must always bypass the VPN to avoid routing loops
+            // The mihomo process itself must always bypass the VPN to avoid routing loops.
+            // This excludes the entire app UID (Go core shares the same process/UID).
             .addDisallowedApplication(packageName)
 
         when (mode) {
@@ -97,7 +102,6 @@ class YueLinkVpnService : VpnService() {
 
         val fd = tunFd?.fd
         if (fd != null) {
-            startForeground(NOTIFICATION_ID, createNotification())
             onTunReady?.invoke(fd)
         }
     }

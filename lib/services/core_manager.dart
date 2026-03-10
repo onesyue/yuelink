@@ -232,13 +232,18 @@ class CoreManager {
     }
 
     _running = true;
-    _saveLastWorkingConfig(configYaml);
 
     // Wait for the external-controller HTTP server to be ready.
     // It starts in a goroutine, so there's a brief delay after hub.Parse().
     // Without waiting, API calls (routing mode, proxy refresh) fail silently.
     final apiOk = await _waitForApi();
     debugPrint('[CoreManager] API ${apiOk ? "ready" : "NOT available"}');
+    if (!apiOk) {
+      _running = false;
+      _core.stop();
+      throw Exception('mihomo API not available after startup');
+    }
+    _saveLastWorkingConfig(configYaml);
     return true;
   }
 

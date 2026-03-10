@@ -225,9 +225,9 @@ Future<void> buildCore({
         env['GOARM'] = '7';
       }
       buildMode = 'c-shared';
-      // cmfa tag enables mihomo's Android-specific features
-      // (CMFA process lookup, package name resolver, safe path bypass)
-      extraArgs.addAll(['-tags', 'cmfa']);
+      // Use standard Android mode (not cmfa).
+      // cmfa requires external DefaultSocketHook + JNI bridge (FlClash pattern).
+      // Standard mode uses mihomo's built-in Android TUN/process handling.
       break;
 
     // -----------------------------------------------------------------
