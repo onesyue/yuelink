@@ -501,6 +501,9 @@ class S {
   String get msgDisconnected => _e ? 'Disconnected' : '已断开连接';
   String get errStopFailed =>
       _e ? 'Error while disconnecting' : '断开连接时发生错误';
+  String get errSystemProxyFailed => _e
+      ? 'System proxy setup failed. Configure proxy manually at 127.0.0.1'
+      : '系统代理设置失败，请手动设置代理 127.0.0.1';
 
   // ── Download error messages ───────────────────────────────────
   String get errDownloadTimeout =>

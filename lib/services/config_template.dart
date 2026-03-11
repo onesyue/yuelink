@@ -73,6 +73,13 @@ class ConfigTemplate {
     // Platform-specific: find-process-mode
     config = _ensureFindProcessMode(config);
 
+    // Ensure routing mode defaults to 'rule' if not specified.
+    // Without this, mihomo defaults to 'rule' but being explicit prevents
+    // ambiguity and ensures rules-based routing is active.
+    if (!_hasKey(config, 'mode')) {
+      config += '\nmode: rule\n';
+    }
+
     // Inject TUN fd (Android VpnService mode)
     if (tunFd != null && tunFd > 0) {
       config = _injectTunFd(config, tunFd);

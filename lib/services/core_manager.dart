@@ -156,6 +156,18 @@ class CoreManager {
     _api = null; // Reset API client with new settings
     _stream = null;
 
+    debugPrint('[CoreManager] processed config: '
+        'apiPort=$_apiPort, mixedPort=$_mixedPort, '
+        'hasSecret=${_apiSecret != null}, '
+        'tunFd=$tunFd, configLen=${processed.length}');
+    // Log first 500 chars and last 300 chars for debugging config issues
+    debugPrint('[CoreManager] config head: '
+        '${processed.substring(0, processed.length.clamp(0, 500))}');
+    if (processed.length > 500) {
+      debugPrint('[CoreManager] config tail: '
+          '...${processed.substring(processed.length - 300.clamp(0, processed.length))}');
+    }
+
     switch (_mode) {
       case CoreMode.mock:
         final error = _core.start(processed);

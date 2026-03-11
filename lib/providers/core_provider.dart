@@ -166,46 +166,113 @@ class CoreActions {
     }
   }
 
-  Future<void> applySystemProxy() async {
+  Future<bool> applySystemProxy() async {
     final port = CoreManager.instance.mixedPort;
-    await _setSystemProxy(port);
+    final ok = await _setSystemProxy(port);
+    if (!ok) {
+      debugPrint('[CoreActions] System proxy setup failed for port $port');
+      AppNotifier.warning(S.current.errSystemProxyFailed);
+    }
+    return ok;
   }
 
   Future<void> clearSystemProxy() async {
     await _clearSystemProxy();
   }
 
-  static Future<void> _setSystemProxy(int mixedPort) async {
+  static Future<bool> _setSystemProxy(int mixedPort) async {
     if (Platform.isMacOS) {
       final services = await _listNetworkServices();
+      if (services.isEmpty) {
+        debugPrint('[SystemProxy] No network services found');
+        return false;
+      }
+      var anySuccess = false;
       for (final svc in services) {
         try {
-          await Process.run('networksetup',
-              ['-setwebproxy', svc, '127.0.0.1', '$mixedPort']);
-          await Process.run('networksetup',
-              ['-setwebproxystate', svc, 'on']);
-          await Process.run('networksetup',
-              ['-setsecurewebproxy', svc, '127.0.0.1', '$mixedPort']);
-          await Process.run('networksetup',
-              ['-setsecurewebproxystate', svc, 'on']);
-          await Process.run('networksetup',
-              ['-setsocksfirewallproxy', svc, '127.0.0.1', '$mixedPort']);
-          await Process.run('networksetup',
-              ['-setsocksfirewallproxystate', svc, 'on']);
-        } catch (_) {}
+          final results = await Future.wait([
+            Process.run('networksetup',
+                ['-setwebproxy', svc, '127.0.0.1', '$mixedPort']),
+            Process.run('networksetup',
+                ['-setsecurewebproxy', svc, '127.0.0.1', '$mixedPort']),
+            Process.run('networksetup',
+                ['-setsocksfirewallproxy', svc, '127.0.0.1', '$mixedPort']),
+          ]);
+          final allOk = results.every((r) => r.exitCode == 0);
+          if (!allOk) {
+            for (final r in results) {
+              if (r.exitCode != 0) {
+                debugPrint('[SystemProxy] networksetup failed for $svc: '
+                    'exit=${r.exitCode} stderr=${r.stderr}');
+              }
+            }
+          }
+          // Enable each proxy type
+          await Future.wait([
+            Process.run('networksetup', ['-setwebproxystate', svc, 'on']),
+            Process.run('networksetup',
+                ['-setsecurewebproxystate', svc, 'on']),
+            Process.run('networksetup',
+                ['-setsocksfirewallproxystate', svc, 'on']),
+          ]);
+          if (allOk) anySuccess = true;
+        } catch (e) {
+          debugPrint('[SystemProxy] Failed to set proxy for $svc: $e');
+        }
       }
+      // Verify the proxy was actually set
+      if (anySuccess) {
+        final verified = await _verifySystemProxy(mixedPort);
+        if (!verified) {
+          debugPrint('[SystemProxy] WARNING: proxy set commands succeeded '
+              'but verification failed');
+        }
+        return verified;
+      }
+      return false;
     } else if (Platform.isWindows) {
-      await Process.run('reg', [
+      final r1 = await Process.run('reg', [
         'add',
         r'HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings',
         '/v', 'ProxyEnable', '/t', 'REG_DWORD', '/d', '1', '/f'
       ]);
-      await Process.run('reg', [
+      final r2 = await Process.run('reg', [
         'add',
         r'HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings',
         '/v', 'ProxyServer', '/t', 'REG_SZ',
         '/d', '127.0.0.1:$mixedPort', '/f'
       ]);
+      if (r1.exitCode != 0 || r2.exitCode != 0) {
+        debugPrint('[SystemProxy] Windows registry update failed: '
+            'r1=${r1.exitCode} r2=${r2.exitCode}');
+        return false;
+      }
+      return true;
+    }
+    return false;
+  }
+
+  /// Verify that macOS system proxy is actually pointing to our port.
+  static Future<bool> _verifySystemProxy(int mixedPort) async {
+    if (!Platform.isMacOS) return true;
+    try {
+      final services = await _listNetworkServices();
+      for (final svc in services) {
+        final result = await Process.run(
+            'networksetup', ['-getwebproxy', svc]);
+        final output = result.stdout as String;
+        if (output.contains('Enabled: Yes') &&
+            output.contains('Port: $mixedPort')) {
+          debugPrint('[SystemProxy] Verified proxy on $svc: port $mixedPort');
+          return true;
+        }
+      }
+      debugPrint('[SystemProxy] Verification failed: no service has '
+          'proxy set to port $mixedPort');
+      return false;
+    } catch (e) {
+      debugPrint('[SystemProxy] Verification error: $e');
+      return false;
     }
   }
 
@@ -214,20 +281,26 @@ class CoreActions {
       final services = await _listNetworkServices();
       for (final svc in services) {
         try {
-          await Process.run(
-              'networksetup', ['-setwebproxystate', svc, 'off']);
-          await Process.run(
-              'networksetup', ['-setsecurewebproxystate', svc, 'off']);
-          await Process.run(
-              'networksetup', ['-setsocksfirewallproxystate', svc, 'off']);
-        } catch (_) {}
+          await Future.wait([
+            Process.run('networksetup', ['-setwebproxystate', svc, 'off']),
+            Process.run(
+                'networksetup', ['-setsecurewebproxystate', svc, 'off']),
+            Process.run(
+                'networksetup', ['-setsocksfirewallproxystate', svc, 'off']),
+          ]);
+        } catch (e) {
+          debugPrint('[SystemProxy] Failed to clear proxy for $svc: $e');
+        }
       }
     } else if (Platform.isWindows) {
-      await Process.run('reg', [
+      final r = await Process.run('reg', [
         'add',
         r'HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings',
         '/v', 'ProxyEnable', '/t', 'REG_DWORD', '/d', '0', '/f'
       ]);
+      if (r.exitCode != 0) {
+        debugPrint('[SystemProxy] Windows registry clear failed: ${r.stderr}');
+      }
     }
   }
 

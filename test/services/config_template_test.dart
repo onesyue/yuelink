@@ -70,6 +70,64 @@ void main() {
       expect(result, equals(sub));
     });
 
+    test('adds mode: rule when missing', () {
+      const config = 'mixed-port: 7890\ndns:\n  enable: true';
+      final result = ConfigTemplate.process(config);
+      expect(result, contains('mode: rule'));
+    });
+
+    test('does not override existing mode', () {
+      const config = 'mixed-port: 7890\nmode: global\ndns:\n  enable: true';
+      final result = ConfigTemplate.process(config);
+      expect(result, contains('mode: global'));
+      expect(result, isNot(contains('mode: rule')));
+    });
+
+    test('preserves complete subscription config without corruption', () {
+      // Simulate a real subscription config structure
+      const config = '''
+mixed-port: 7890
+allow-lan: true
+find-process-mode: always
+dns:
+  enable: true
+  enhanced-mode: fake-ip
+  respect-rules: true
+sniffer:
+  enable: true
+geodata-mode: true
+profile:
+  store-selected: true
+tcp-concurrent: true
+unified-delay: true
+global-client-fingerprint: chrome
+proxies:
+  - {name: node1, type: ss, server: 1.2.3.4, port: 443}
+proxy-groups:
+  - {name: Proxy, type: select, proxies: [node1]}
+rules:
+  - MATCH,Proxy
+''';
+      final result = ConfigTemplate.process(config, apiPort: 9090);
+      // Should add external-controller but not duplicate existing keys
+      expect(result, contains('external-controller: 127.0.0.1:9090'));
+      expect(result, contains('mode: rule'));
+      // Existing keys should NOT be duplicated
+      expect(
+          'dns:'.allMatches(result).length, 1, reason: 'dns should not be duplicated');
+      expect('sniffer:'.allMatches(result).length, 1,
+          reason: 'sniffer should not be duplicated');
+      expect('geodata-mode:'.allMatches(result).length, 1,
+          reason: 'geodata-mode should not be duplicated');
+      expect('profile:'.allMatches(result).length, 1,
+          reason: 'profile should not be duplicated');
+      expect('mixed-port:'.allMatches(result).length, 1,
+          reason: 'mixed-port should not be duplicated');
+      // Proxy structure should be preserved
+      expect(result, contains('MATCH,Proxy'));
+      expect(result, contains('name: node1'));
+    });
+
     test('merges proxies into template when sub has no groups', () {
       const template =
           'mixed-port: 7890\nproxies:\n\nproxy-groups:\n  - name: g\n';
