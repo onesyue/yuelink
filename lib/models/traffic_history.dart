@@ -1,6 +1,10 @@
 /// A fixed-size ring buffer that stores recent traffic data points for charting.
+///
+/// Capacity is 1800 samples (30 minutes at 1 sample/second).
+/// The chart view downsamples to ~60 display points regardless of range,
+/// so chart rendering cost stays constant across all time ranges.
 class TrafficHistory {
-  static const int capacity = 60; // 60 seconds of history
+  static const int capacity = 1800; // 30 minutes at 1s/sample
 
   final List<double> _up;
   final List<double> _down;
@@ -21,20 +25,29 @@ class TrafficHistory {
 
   int get count => _full ? capacity : _index;
 
-  /// Upload speed history, oldest first.
-  List<double> get upHistory => _ordered(_up);
+  /// Upload speed history for the last [seconds] seconds, oldest first.
+  /// Returns at most [seconds] raw points (no downsampling).
+  List<double> upHistory({int seconds = 60}) => _slice(_up, seconds);
 
-  /// Download speed history, oldest first.
-  List<double> get downHistory => _ordered(_down);
+  /// Download speed history for the last [seconds] seconds, oldest first.
+  List<double> downHistory({int seconds = 60}) => _slice(_down, seconds);
 
-  double get maxDown =>
-      _down.reduce((a, b) => a > b ? a : b);
+  /// Downsampled history suitable for chart rendering (~60 display points).
+  ///
+  /// Groups raw samples into [targetPoints] buckets and averages each bucket.
+  /// This keeps chart rendering cost constant regardless of [seconds].
+  List<double> upSampled({int seconds = 60, int targetPoints = 60}) =>
+      _downsample(_slice(_up, seconds), targetPoints);
 
-  /// 90th-percentile of combined up+down values.
-  /// Used for chart Y-axis to prevent a single spike from compressing
-  /// all other data to a flat line.
-  double get p90 {
-    final all = [...upHistory, ...downHistory]
+  List<double> downSampled({int seconds = 60, int targetPoints = 60}) =>
+      _downsample(_slice(_down, seconds), targetPoints);
+
+  /// 90th-percentile of sampled up+down values for a given range.
+  double p90({int seconds = 60}) {
+    final all = [
+      ...upSampled(seconds: seconds),
+      ...downSampled(seconds: seconds),
+    ]
       ..removeWhere((v) => v == 0)
       ..sort();
     if (all.isEmpty) return 0;
@@ -56,14 +69,32 @@ class TrafficHistory {
     return c;
   }
 
-  List<double> _ordered(List<double> buf) {
-    if (!_full) return buf.sublist(0, _index);
+  /// Returns the last [seconds] raw samples in chronological order (oldest first).
+  List<double> _slice(List<double> buf, int seconds) {
+    final n = seconds.clamp(1, count);
+    if (n == 0) return [];
     final result = <double>[];
-    for (var i = _index; i < capacity; i++) {
-      result.add(buf[i]);
+    // Walk backwards from current write head to collect `n` samples,
+    // then reverse to get oldest-first order.
+    for (var i = 1; i <= n; i++) {
+      final idx = (_index - i + capacity) % capacity;
+      result.add(buf[idx]);
     }
-    for (var i = 0; i < _index; i++) {
-      result.add(buf[i]);
+    return result.reversed.toList();
+  }
+
+  /// Downsamples [data] to [targetPoints] by averaging consecutive buckets.
+  List<double> _downsample(List<double> data, int targetPoints) {
+    if (data.isEmpty) return [];
+    if (data.length <= targetPoints) return data;
+    final bucketSize = data.length / targetPoints;
+    final result = <double>[];
+    for (var i = 0; i < targetPoints; i++) {
+      final start = (i * bucketSize).round();
+      final end = ((i + 1) * bucketSize).round().clamp(0, data.length);
+      if (start >= end) continue;
+      final sum = data.sublist(start, end).fold(0.0, (a, b) => a + b);
+      result.add(sum / (end - start));
     }
     return result;
   }

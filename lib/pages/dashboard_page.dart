@@ -888,8 +888,10 @@ class _ChartCard extends ConsumerWidget {
     final s = S.of(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final history = ref.watch(trafficHistoryProvider);
-    final downHistory = history.downHistory;
-    final upHistory = history.upHistory;
+    final range = ref.watch(trafficChartRangeProvider);
+
+    final downHistory = history.downSampled(seconds: range);
+    final upHistory = history.upSampled(seconds: range);
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -907,7 +909,7 @@ class _ChartCard extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
+          // Header row: title + range selector + legend
           Row(
             children: [
               Expanded(
@@ -916,7 +918,13 @@ class _ChartCard extends ConsumerWidget {
                     overflow: TextOverflow.ellipsis,
                     style: YLText.caption.copyWith(color: YLColors.zinc500)),
               ),
-              const SizedBox(width: 8),
+              // Time range buttons
+              _RangeButton(label: '1m', value: 60, range: range, ref: ref),
+              const SizedBox(width: 4),
+              _RangeButton(label: '5m', value: 300, range: range, ref: ref),
+              const SizedBox(width: 4),
+              _RangeButton(label: '30m', value: 1800, range: range, ref: ref),
+              const SizedBox(width: 10),
               _LegendDot(color: YLColors.accent, label: '↓'),
               const SizedBox(width: 10),
               _LegendDot(color: YLColors.connected, label: '↑'),
@@ -931,7 +939,8 @@ class _ChartCard extends ConsumerWidget {
                     child: Text('—',
                         style: YLText.body.copyWith(color: YLColors.zinc400)),
                   )
-                : _buildChart(context, downHistory, upHistory, history.p90),
+                : _buildChart(context, downHistory, upHistory,
+                    history.p90(seconds: range)),
           ),
         ],
       ),
@@ -1018,6 +1027,43 @@ class _ChartCard extends ConsumerWidget {
     if (bps < 1024) return '${bps.toStringAsFixed(0)}B';
     if (bps < 1024 * 1024) return '${(bps / 1024).toStringAsFixed(0)}K';
     return '${(bps / (1024 * 1024)).toStringAsFixed(1)}M';
+  }
+}
+
+class _RangeButton extends StatelessWidget {
+  final String label;
+  final int value;
+  final int range;
+  final WidgetRef ref;
+  const _RangeButton(
+      {required this.label,
+      required this.value,
+      required this.range,
+      required this.ref});
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = value == range;
+    return GestureDetector(
+      onTap: () => ref.read(trafficChartRangeProvider.notifier).state = value,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+        decoration: BoxDecoration(
+          color: selected
+              ? YLColors.zinc500.withValues(alpha: 0.15)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Text(
+          label,
+          style: YLText.caption.copyWith(
+            fontSize: 10,
+            color: selected ? YLColors.zinc400 : YLColors.zinc500,
+            fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+          ),
+        ),
+      ),
+    );
   }
 }
 

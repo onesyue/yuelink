@@ -441,6 +441,9 @@ final trafficProvider = StateProvider<Traffic>((ref) => const Traffic());
 final trafficHistoryProvider =
     StateProvider<TrafficHistory>((ref) => TrafficHistory());
 
+/// Selected time range for the traffic chart in seconds: 60 / 300 / 1800.
+final trafficChartRangeProvider = StateProvider<int>((ref) => 60);
+
 final trafficStreamProvider = Provider<void>((ref) {
   final status = ref.watch(coreStatusProvider);
   if (status != CoreStatus.running) return;
