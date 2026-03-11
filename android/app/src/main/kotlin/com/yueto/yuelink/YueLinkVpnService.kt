@@ -23,6 +23,17 @@ class YueLinkVpnService : VpnService() {
 
         private const val NOTIFICATION_ID = 1
         private const val CHANNEL_ID = "yuelink_vpn"
+
+        // JNI bridge to Go core's protect_android.c
+        // Called to register/unregister VpnService for socket protection.
+        // The Go core's DefaultSocketHook calls VpnService.protect(fd) for
+        // every outbound socket to bypass VPN routing.
+        @JvmStatic external fun nativeStartProtect(vpnService: VpnService)
+        @JvmStatic external fun nativeStopProtect()
+
+        init {
+            System.loadLibrary("clash")
+        }
     }
 
     inner class LocalBinder : Binder() {
@@ -67,6 +78,15 @@ class YueLinkVpnService : VpnService() {
             return
         }
 
+        // Register this VpnService for socket protection BEFORE TUN starts.
+        // The Go core's DefaultSocketHook calls protect(fd) on every outbound
+        // socket to prevent routing loops through the VPN tunnel.
+        try {
+            nativeStartProtect(this)
+        } catch (e: UnsatisfiedLinkError) {
+            android.util.Log.w("YueLinkVpn", "nativeStartProtect unavailable: ${e.message}")
+        }
+
         splitMode = mode
 
         val builder = Builder()
@@ -77,8 +97,11 @@ class YueLinkVpnService : VpnService() {
             // Routing IPv6 to TUN without inet6-address creates a black hole:
             // Android prefers IPv6, packets go to TUN, mihomo can't process them,
             // connections hang. IPv6 traffic bypasses VPN and goes direct instead.
-            .addDnsServer("223.5.5.5")
-            .addDnsServer("8.8.8.8")
+            // Use TUN gateway (172.19.0.2 = .1/30 network's other usable IP) as DNS.
+            // This ensures DNS queries always enter the TUN and get caught by
+            // mihomo's dns-hijack. External DNS IPs (223.5.5.5) may have edge
+            // cases where packets don't match the hijack pattern.
+            .addDnsServer("172.19.0.2")
             .setMtu(9000)
             .setBlocking(false)
             // The mihomo process itself must always bypass the VPN to avoid routing loops.
@@ -110,6 +133,9 @@ class YueLinkVpnService : VpnService() {
     }
 
     private fun stopTunnel() {
+        try {
+            nativeStopProtect()
+        } catch (_: UnsatisfiedLinkError) {}
         tunFd?.close()
         tunFd = null
         onTunReady = null
