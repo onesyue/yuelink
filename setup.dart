@@ -225,9 +225,10 @@ Future<void> buildCore({
         env['GOARM'] = '7';
       }
       buildMode = 'c-shared';
-      // Use standard Android mode (not cmfa).
-      // cmfa requires external DefaultSocketHook + JNI bridge (FlClash pattern).
-      // Standard mode uses mihomo's built-in Android TUN/process handling.
+      // with_gvisor: required for TUN fd mode (file-descriptor) on Android.
+      // Without it, mihomo can't start the gVisor userspace TCP/IP stack and
+      // TUN listening fails with "gVisor is not included in this build".
+      extraArgs = ['-tags', 'with_gvisor'];
       break;
 
     // -----------------------------------------------------------------
