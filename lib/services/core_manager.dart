@@ -85,10 +85,11 @@ class CoreManager {
   }
 
   /// Ensure the Go core is initialized (homeDir set).
+  /// Uses async FFI to avoid blocking the UI thread.
   Future<void> _ensureInit() async {
     if (_initialized || _mode == CoreMode.mock) return;
     final appDir = await getApplicationSupportDirectory();
-    final error = _core.init(appDir.path);
+    final error = await _core.initAsync(appDir.path);
     if (error != null) throw Exception('InitCore: $error');
     _initialized = true;
   }
@@ -237,7 +238,8 @@ class CoreManager {
     await configFile.writeAsString(configYaml);
     debugPrint('[CoreManager] config written to: ${configFile.path}');
 
-    final error = _core.start(configYaml);
+    // Use async FFI to avoid blocking the UI thread during hub.Parse()
+    final error = await _core.startAsync(configYaml);
     if (error != null) {
       debugPrint('[CoreManager] StartCore failed: $error');
       throw Exception('StartCore: $error');

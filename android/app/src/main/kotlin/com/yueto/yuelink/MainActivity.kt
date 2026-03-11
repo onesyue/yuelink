@@ -66,7 +66,12 @@ class MainActivity : FlutterActivity() {
                 when (call.method) {
                     "getInstalledApps" -> {
                         val showSystem = call.argument<Boolean>("showSystem") ?: false
-                        result.success(getInstalledApps(showSystem))
+                        // Run on background thread to avoid blocking the main thread.
+                        // PackageManager queries can take 500ms-2s on devices with many apps.
+                        Thread {
+                            val apps = getInstalledApps(showSystem)
+                            mainExecutor.execute { result.success(apps) }
+                        }.start()
                     }
                     else -> result.notImplemented()
                 }
@@ -143,26 +148,63 @@ class MainActivity : FlutterActivity() {
         val bindIntent = Intent(this, YueLinkVpnService::class.java)
         bindService(bindIntent, serviceConnection, Context.BIND_AUTO_CREATE)
 
-        android.os.Handler(mainLooper).postDelayed({
-            if (isFinishing || isDestroyed) return@postDelayed
-            try {
+        // Poll for TUN fd with retry instead of fixed 500ms delay.
+        // The VPN service may take varying time to bind and establish().
+        waitForTunFd(result)
+    }
+
+    /**
+     * Poll for the TUN file descriptor with exponential backoff.
+     * Retries every 100ms for up to 5 seconds, then gives up.
+     * Also sets an onTunReady callback as fallback for late delivery.
+     */
+    private fun waitForTunFd(
+        result: MethodChannel.Result,
+        maxRetries: Int = 50,
+    ) {
+        val handler = android.os.Handler(mainLooper)
+        var retries = 0
+        var responded = false
+
+        val checker = object : Runnable {
+            override fun run() {
+                if (responded || isFinishing || isDestroyed) return
+
                 val bound = vpnService
                 if (bound != null) {
-                    bound.onTunReady = { fd ->
-                        try { result.success(fd) } catch (_: Exception) {}
-                    }
-                    val currentFd = bound.getTunFd()
-                    if (currentFd != -1) {
+                    val fd = bound.getTunFd()
+                    if (fd != -1) {
+                        responded = true
                         bound.onTunReady = null
-                        result.success(currentFd)
+                        try { result.success(fd) } catch (_: Exception) {}
+                        return
                     }
-                } else {
-                    result.success(-1)
                 }
-            } catch (_: Exception) {
-                try { result.success(-1) } catch (_: Exception) {}
+
+                retries++
+                if (retries >= maxRetries) {
+                    // Final attempt: set callback for late delivery
+                    bound?.onTunReady = { fd ->
+                        if (!responded) {
+                            responded = true
+                            try { result.success(fd) } catch (_: Exception) {}
+                        }
+                    }
+                    // Absolute timeout: give up after 3 more seconds
+                    handler.postDelayed({
+                        if (!responded) {
+                            responded = true
+                            bound?.onTunReady = null
+                            try { result.success(-1) } catch (_: Exception) {}
+                        }
+                    }, 3000)
+                    return
+                }
+                handler.postDelayed(this, 100)
             }
-        }, 500)
+        }
+        // Start checking immediately (no initial delay)
+        handler.post(checker)
     }
 
     private fun stopVpnService(result: MethodChannel.Result) {

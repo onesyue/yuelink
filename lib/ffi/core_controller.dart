@@ -1,7 +1,38 @@
+import 'dart:isolate';
+
 import 'package:ffi/ffi.dart';
 
 import 'core_bindings.dart';
 import 'core_mock.dart';
+
+/// Top-level functions for Isolate.run — cannot be closures or instance methods.
+/// Each isolate loads its own CoreBindings handle, but the OS shares the same
+/// underlying native library, so Go global state is accessible from any thread.
+String? _ffiInit(String homeDir) {
+  final bindings = CoreBindings.instance;
+  final ptr = homeDir.toNativeUtf8();
+  try {
+    final resultPtr = bindings.initCore(ptr);
+    final result = resultPtr.toDartString();
+    bindings.freeCString(resultPtr);
+    return result.isEmpty ? null : result;
+  } finally {
+    calloc.free(ptr);
+  }
+}
+
+String? _ffiStart(String configYaml) {
+  final bindings = CoreBindings.instance;
+  final ptr = configYaml.toNativeUtf8();
+  try {
+    final resultPtr = bindings.startCore(ptr);
+    final result = resultPtr.toDartString();
+    bindings.freeCString(resultPtr);
+    return result.isEmpty ? null : result;
+  } finally {
+    calloc.free(ptr);
+  }
+}
 
 /// High-level Dart wrapper around the mihomo Go core.
 ///
@@ -49,6 +80,16 @@ class CoreController {
     }
   }
 
+  /// Async init — runs FFI in a separate isolate to avoid blocking the UI thread.
+  /// InitCore typically takes 100-500ms (directory setup, GeoIP loading).
+  Future<String?> initAsync(String homeDir) async {
+    if (_useMock) {
+      _mock.init(homeDir);
+      return null;
+    }
+    return Isolate.run(() => _ffiInit(homeDir));
+  }
+
   /// Start the core. Returns null on success, error message on failure.
   String? start(String configYaml) {
     if (_useMock) {
@@ -64,6 +105,16 @@ class CoreController {
     } finally {
       calloc.free(ptr);
     }
+  }
+
+  /// Async start — runs FFI in a separate isolate to avoid blocking the UI thread.
+  /// StartCore calls hub.Parse() which takes 500ms-2s (YAML parsing, DNS setup, listener startup).
+  Future<String?> startAsync(String configYaml) async {
+    if (_useMock) {
+      _mock.start(configYaml);
+      return null;
+    }
+    return Isolate.run(() => _ffiStart(configYaml));
   }
 
   void stop() {
