@@ -86,12 +86,29 @@ class ConfigTemplate {
       config += '\nmode: rule\n';
     }
 
+    // Desktop (macOS/Windows): force TUN off — system proxy is used instead.
+    // Subscription configs often ship with tun.enable: true which causes
+    // hub.Parse() to try creating a TUN device, blocking on system permissions.
+    if (Platform.isMacOS || Platform.isWindows) {
+      config = _disableTun(config);
+    }
+
     // Inject TUN fd (Android VpnService mode)
     if (tunFd != null && tunFd > 0) {
       config = _injectTunFd(config, tunFd);
     }
 
     return config;
+  }
+
+  /// Disable TUN on desktop platforms where system proxy is used instead.
+  static String _disableTun(String config) {
+    if (!_hasKey(config, 'tun')) return config;
+    // Replace enable: true with enable: false inside the tun section
+    return config.replaceAllMapped(
+      RegExp(r'^(tun:.*\n(?:[ \t]+.*\n)*?[ \t]+enable:\s*)true', multiLine: true),
+      (m) => '${m.group(1)}false',
+    );
   }
 
   /// Inject Android-safe TUN configuration with the VpnService file descriptor.

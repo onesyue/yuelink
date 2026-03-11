@@ -154,16 +154,20 @@ class CoreManager {
       await _step(steps, 'buildConfig', StartupError.configBuildFailed,
           () async {
         // 5a. Apply user overwrite layer
+        debugPrint('[CoreManager] buildConfig 5a: loading overwrite...');
         final overwrite = await OverwriteService.load();
+        debugPrint('[CoreManager] buildConfig 5b: applying overwrite...');
         final withOverwrite = OverwriteService.apply(configYaml, overwrite);
 
         // 5b. Template processing (ports, DNS, sniffer, geo, TUN fd)
+        debugPrint('[CoreManager] buildConfig 5c: ConfigTemplate.process...');
         processed = ConfigTemplate.process(
               withOverwrite,
               apiPort: _apiPort,
               secret: _apiSecret,
               tunFd: tunFd,
             );
+        debugPrint('[CoreManager] buildConfig 5c: done, len=${processed.length}');
 
         // 5c. Extract ports/secret from final config
         _apiPort = ConfigTemplate.getApiPort(processed);
@@ -181,6 +185,7 @@ class CoreManager {
       // ── Step 6: startCore (Go hub.Parse) ───────────────────────────
       await _step(steps, 'startCore', StartupError.coreStartFailed, () async {
         // Write config to disk for debugging
+        debugPrint('[CoreManager] startCore: writing config to disk...');
         final appDir = await getApplicationSupportDirectory();
         await File('${appDir.path}/${AppConstants.configFileName}')
             .writeAsString(processed);
@@ -193,7 +198,9 @@ class CoreManager {
             return 'mock started';
 
           case CoreMode.ffi:
+            debugPrint('[CoreManager] startCore: calling StartCore FFI (may take 1-3s)...');
             final error = await _core.startAsync(processed);
+            debugPrint('[CoreManager] startCore: StartCore returned: $error');
             if (error != null && error.isNotEmpty) throw Exception(error);
             _running = true;
             final goRunning = _core.isRunning;
