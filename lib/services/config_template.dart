@@ -36,39 +36,37 @@ class ConfigTemplate {
   }) {
     var config = rawConfig;
 
+    debugPrint('[Config] process start, len=${config.length}');
+
     // Replace template variables
     for (final entry in _variables.entries) {
       config = config.replaceAll(entry.key, entry.value);
     }
+    debugPrint('[Config] 1 variables done');
 
-    // Ensure mixed-port is present — without it mihomo silently skips
-    // creating the HTTP+SOCKS listener, so system proxy (macOS/Windows)
-    // and direct proxy connections all fail.
     config = _ensureMixedPort(config, mixedPort);
+    debugPrint('[Config] 2 mixedPort done');
 
-    // Ensure external-controller is present
     config = _ensureExternalController(config, apiPort, secret);
+    debugPrint('[Config] 3 externalController done');
 
-    // Ensure DNS is always present — not just for TUN mode.
-    // Without DNS config, subscriptions relying on fake-ip or domain
-    // resolution fail silently even in system proxy mode.
     config = _ensureDns(config);
+    debugPrint('[Config] 4 dns done');
 
-    // Ensure sniffer for TLS/HTTP domain detection — critical for
-    // DOMAIN-type rules to work correctly with encrypted connections.
     config = _ensureSniffer(config);
+    debugPrint('[Config] 5 sniffer done');
 
-    // Ensure geodata settings so GEOIP/GEOSITE rules work
     config = _ensureGeodata(config);
+    debugPrint('[Config] 6 geodata done');
 
-    // Ensure profile persistence (store selected node, fake-ip cache)
     config = _ensureProfile(config);
+    debugPrint('[Config] 7 profile done');
 
-    // Ensure performance tuning defaults
     config = _ensurePerformance(config);
+    debugPrint('[Config] 8 performance done');
 
-    // Ensure allow-lan for mixed-port to listen on all interfaces
     config = _ensureAllowLan(config);
+    debugPrint('[Config] 9 allowLan done');
 
     // Disable IPv6 — mihomo TUN only has inet4-address, and Android
     // VpnService only routes IPv4. Enabling IPv6 causes resolution failures.
@@ -76,27 +74,23 @@ class ConfigTemplate {
       config += '\nipv6: false\n';
     }
 
-    // Platform-specific: find-process-mode
     config = _ensureFindProcessMode(config);
+    debugPrint('[Config] 10 findProcessMode done');
 
-    // Ensure routing mode defaults to 'rule' if not specified.
-    // Without this, mihomo defaults to 'rule' but being explicit prevents
-    // ambiguity and ensures rules-based routing is active.
     if (!_hasKey(config, 'mode')) {
       config += '\nmode: rule\n';
     }
+    debugPrint('[Config] 11 mode done');
 
-    // Desktop (macOS/Windows): force TUN off — system proxy is used instead.
-    // Subscription configs often ship with tun.enable: true which causes
-    // hub.Parse() to try creating a TUN device, blocking on system permissions.
     if (Platform.isMacOS || Platform.isWindows) {
       config = _disableTun(config);
     }
+    debugPrint('[Config] 12 disableTun done');
 
-    // Inject TUN fd (Android VpnService mode)
     if (tunFd != null && tunFd > 0) {
       config = _injectTunFd(config, tunFd);
     }
+    debugPrint('[Config] 13 tunFd done');
 
     return config;
   }
@@ -104,11 +98,26 @@ class ConfigTemplate {
   /// Disable TUN on desktop platforms where system proxy is used instead.
   static String _disableTun(String config) {
     if (!_hasKey(config, 'tun')) return config;
-    // Replace enable: true with enable: false inside the tun section
-    return config.replaceAllMapped(
-      RegExp(r'^(tun:.*\n(?:[ \t]+.*\n)*?[ \t]+enable:\s*)true', multiLine: true),
-      (m) => '${m.group(1)}false',
-    );
+    // Find the tun section and replace enable: true → false within it.
+    // Use string operations to avoid catastrophic backtracking on large configs.
+    final tunMatch = RegExp(r'^tun:', multiLine: true).firstMatch(config);
+    if (tunMatch == null) return config;
+
+    final afterTunLine = config.indexOf('\n', tunMatch.start);
+    final afterTun = afterTunLine >= 0 ? afterTunLine + 1 : config.length;
+    final nextTopLevel =
+        RegExp(r'^\S', multiLine: true).firstMatch(config.substring(afterTun));
+    final tunEnd =
+        nextTopLevel != null ? afterTun + nextTopLevel.start : config.length;
+
+    final tunSection = config.substring(tunMatch.start, tunEnd);
+    if (!RegExp(r'\benable:\s*true').hasMatch(tunSection)) return config;
+
+    final newSection =
+        tunSection.replaceFirst(RegExp(r'\benable:\s*true'), 'enable: false');
+    return config.substring(0, tunMatch.start) +
+        newSection +
+        config.substring(tunEnd);
   }
 
   /// Inject Android-safe TUN configuration with the VpnService file descriptor.
@@ -170,24 +179,32 @@ class ConfigTemplate {
       // disables mihomo's DNS resolver entirely. Without the resolver,
       // dns-hijack captures DNS queries but has nowhere to send them.
       //
-      // Target only `enable:` that immediately follows `dns:` line
-      // (within the first few lines of the dns section).
-      final dnsEnableFalse = RegExp(
-        r'^(dns:\s*\n(?:\s+.*\n)*?\s+enable:\s*)false',
-        multiLine: true,
-      );
-      final dnsEnableTrue = RegExp(
-        r'^dns:\s*\n(?:\s+.*\n)*?\s+enable:\s*true',
-        multiLine: true,
-      );
-      if (dnsEnableFalse.hasMatch(config)) {
-        config = config.replaceFirst(dnsEnableFalse, r'${1}true');
-      } else if (!dnsEnableTrue.hasMatch(config)) {
-        // DNS section exists but has no 'enable' key — inject it
-        config = config.replaceFirst(
-          RegExp(r'^(dns:[ \t]*)$', multiLine: true),
-          r'$1' '\n  enable: true',
-        );
+      // Use string operations instead of multi-line regex to avoid
+      // catastrophic backtracking on large configs with YAML anchors.
+      final dnsMatch = RegExp(r'^dns:', multiLine: true).firstMatch(config);
+      if (dnsMatch != null) {
+        // Find where the dns section ends (next top-level key)
+        final afterDnsLine = config.indexOf('\n', dnsMatch.start);
+        final afterDns = afterDnsLine >= 0 ? afterDnsLine + 1 : config.length;
+        final nextTopLevel =
+            RegExp(r'^\S', multiLine: true).firstMatch(config.substring(afterDns));
+        final dnsEnd =
+            nextTopLevel != null ? afterDns + nextTopLevel.start : config.length;
+
+        final dnsSection = config.substring(dnsMatch.start, dnsEnd);
+
+        if (RegExp(r'\benable:\s*false').hasMatch(dnsSection)) {
+          final newSection =
+              dnsSection.replaceFirst(RegExp(r'\benable:\s*false'), 'enable: true');
+          return config.substring(0, dnsMatch.start) +
+              newSection +
+              config.substring(dnsEnd);
+        } else if (!RegExp(r'\benable:\s*true').hasMatch(dnsSection)) {
+          // DNS section exists but has no 'enable' key — inject after dns: line
+          return config.substring(0, afterDns) +
+              '  enable: true\n' +
+              config.substring(afterDns);
+        }
       }
       return config;
     }
