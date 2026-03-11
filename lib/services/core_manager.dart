@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import '../constants.dart';
 import '../ffi/core_controller.dart';
 import 'config_template.dart';
+import 'geodata_service.dart';
 import 'mihomo_api.dart';
 import 'mihomo_stream.dart';
 import 'overwrite_service.dart';
@@ -135,6 +136,16 @@ class CoreManager {
     // Non-iOS: initialize Go core in this process
     await _ensureInit();
     debugPrint('[CoreManager] init done, initialized=$_initialized');
+
+    // Pre-download GeoIP/GeoSite data files if missing.
+    // mihomo also downloads during rule parsing, but doing it here lets the
+    // UI show progress and avoids a silent multi-second stall on first launch.
+    final missing = await GeoDataService.missingFiles();
+    if (missing.isNotEmpty) {
+      debugPrint('[CoreManager] Missing geo files: $missing — downloading...');
+      final got = await GeoDataService.ensureFiles();
+      debugPrint('[CoreManager] Downloaded geo files: $got');
+    }
 
     // On Android, start VpnService first to get the TUN fd
     int? tunFd;
