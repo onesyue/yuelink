@@ -191,7 +191,7 @@ class CoreMock {
         {'type': 'DOMAIN-SUFFIX', 'payload': 'google.com', 'proxy': '节点选择'},
         {'type': 'DOMAIN-SUFFIX', 'payload': 'github.com', 'proxy': '节点选择'},
         {'type': 'DOMAIN-SUFFIX', 'payload': 'openai.com', 'proxy': 'AI 服务'},
-        {'type': 'DOMAIN-SUFFIX', 'payload': 'claude.ai', 'proxy': 'AI 服务'},
+        {'type': 'DOMAIN-SUFFIX', 'payload': 'gemini.google.com', 'proxy': 'AI 服务'},
         {'type': 'DOMAIN-SUFFIX', 'payload': 'youtube.com', 'proxy': '流媒体'},
         {'type': 'DOMAIN-SUFFIX', 'payload': 'netflix.com', 'proxy': '流媒体'},
         {'type': 'DOMAIN-SUFFIX', 'payload': 'spotify.com', 'proxy': '流媒体'},
