@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
@@ -156,18 +155,15 @@ class CoreManager {
           () async {
         // 5a. Apply user overwrite layer
         final overwrite = await OverwriteService.load();
-        final withOverwrite = await Isolate.run(
-            () => OverwriteService.apply(configYaml, overwrite));
+        final withOverwrite = OverwriteService.apply(configYaml, overwrite);
 
         // 5b. Template processing (ports, DNS, sniffer, geo, TUN fd)
-        final apiPort = _apiPort;
-        final apiSecret = _apiSecret;
-        processed = await Isolate.run(() => ConfigTemplate.process(
+        processed = ConfigTemplate.process(
               withOverwrite,
-              apiPort: apiPort,
-              secret: apiSecret,
+              apiPort: _apiPort,
+              secret: _apiSecret,
               tunFd: tunFd,
-            ));
+            );
 
         // 5c. Extract ports/secret from final config
         _apiPort = ConfigTemplate.getApiPort(processed);
@@ -288,15 +284,12 @@ class CoreManager {
     await _step(steps, 'buildConfig_ios', StartupError.configBuildFailed,
         () async {
       final overwrite = await OverwriteService.load();
-      final withOverwrite = await Isolate.run(
-          () => OverwriteService.apply(configYaml, overwrite));
-      final apiPort = _apiPort;
-      final apiSecret = _apiSecret;
-      processed = await Isolate.run(() => ConfigTemplate.process(
+      final withOverwrite = OverwriteService.apply(configYaml, overwrite);
+      processed = ConfigTemplate.process(
             withOverwrite,
-            apiPort: apiPort,
-            secret: apiSecret,
-          ));
+            apiPort: _apiPort,
+            secret: _apiSecret,
+          );
       _apiPort = ConfigTemplate.getApiPort(processed);
       _mixedPort = ConfigTemplate.getMixedPort(processed);
       _apiSecret ??= ConfigTemplate.getSecret(processed);
