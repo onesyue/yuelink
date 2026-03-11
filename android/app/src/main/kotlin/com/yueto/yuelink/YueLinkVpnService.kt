@@ -52,6 +52,10 @@ class YueLinkVpnService : VpnService() {
     // the ParcelFileDescriptor, killing all TUN traffic.
     private var tunFd: Int = -1
 
+    // Set to true immediately when establish() returns null, so waitForTunFd
+    // can detect failure in the next poll (100ms) instead of 8s timeout.
+    var tunSetupFailed: Boolean = false
+
     var onTunReady: ((Int) -> Unit)? = null
 
     private var splitMode: String = "all"
@@ -130,6 +134,8 @@ class YueLinkVpnService : VpnService() {
 
         val pfd = builder.establish()
         if (pfd == null) {
+            android.util.Log.e("YueLinkVpn", "establish() returned null — permission denied or another VPN active")
+            tunSetupFailed = true
             onTunReady?.invoke(-1)
             return
         }
@@ -146,6 +152,7 @@ class YueLinkVpnService : VpnService() {
     }
 
     private fun stopTunnel() {
+        tunSetupFailed = false
         stopNetworkMonitor()
         try {
             nativeStopProtect()

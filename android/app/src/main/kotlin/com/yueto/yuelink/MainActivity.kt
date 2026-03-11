@@ -118,16 +118,10 @@ class MainActivity : FlutterActivity() {
         splitApps: List<String>,
         result: MethodChannel.Result,
     ) {
-        val prepareIntent = VpnService.prepare(this)
-        if (prepareIntent != null) {
-            vpnStartResult       = result
-            pendingMixedPort     = mixedPort
-            pendingSplitMode     = splitMode
-            pendingSplitApps     = splitApps
-            @Suppress("DEPRECATION")
-            startActivityForResult(prepareIntent, VPN_REQUEST_CODE)
-            return
-        }
+        // Permission was already obtained by the requestPermission() step.
+        // Do NOT call VpnService.prepare() here again — on Samsung Galaxy devices
+        // a second prepare() call shows a duplicate permission dialog even after
+        // the user just granted, causing confusion and an 8s timeout.
         doStartVpnService(mixedPort, splitMode, splitApps, result)
     }
 
@@ -172,6 +166,14 @@ class MainActivity : FlutterActivity() {
 
                 val bound = vpnService
                 if (bound != null) {
+                    // Fast-fail: establish() returned null immediately
+                    if (bound.tunSetupFailed) {
+                        responded = true
+                        bound.onTunReady = null
+                        android.util.Log.e("YueLinkVpn", "waitForTunFd: tunSetupFailed — reporting -1 immediately")
+                        try { result.success(-1) } catch (_: Exception) {}
+                        return
+                    }
                     val fd = bound.getTunFd()
                     if (fd != -1) {
                         responded = true
