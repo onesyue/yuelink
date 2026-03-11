@@ -70,58 +70,39 @@ class CoreActions {
     ref.read(coreStatusProvider.notifier).state = CoreStatus.starting;
     ref.read(coreStartupErrorProvider.notifier).state = null;
 
-    try {
-      final manager = CoreManager.instance;
-      debugPrint('[CoreActions] mode: ${manager.mode}, isMock: ${manager.isMockMode}');
+    final manager = CoreManager.instance;
 
+    try {
       // 1. Check VPN Permission (Android only — always needed for VpnService)
       if (Platform.isAndroid && !manager.isMockMode) {
         final hasPerm = await VpnService.requestPermission();
         if (!hasPerm) {
-          debugPrint('[CoreActions] VPN permission denied');
           ref.read(coreStatusProvider.notifier).state = CoreStatus.stopped;
-          ref.read(coreStartupErrorProvider.notifier).state = S.current.errVpnPermission;
+          ref.read(coreStartupErrorProvider.notifier).state =
+              'vpnPermission: ${S.current.errVpnPermission}';
           AppNotifier.error(S.current.errVpnPermission);
           return false;
         }
       }
 
-      // 2. Start Core (CoreManager handles VPN tunnel internally for Android/iOS)
-      debugPrint('[CoreActions] calling CoreManager.start()...');
+      // 2. Start Core — all steps are tracked inside CoreManager
       final ok = await manager.start(configYaml);
-      debugPrint('[CoreActions] CoreManager.start() returned: $ok');
       if (!ok) {
         ref.read(coreStatusProvider.notifier).state = CoreStatus.stopped;
-        ref.read(coreStartupErrorProvider.notifier).state = S.current.errCoreStartFailed;
-        AppNotifier.error(S.current.errCoreStartFailed);
+        final report = manager.lastReport;
+        final detail = report?.failureSummary ?? S.current.errCoreStartFailed;
+        ref.read(coreStartupErrorProvider.notifier).state = detail;
+        AppNotifier.error(detail);
         return false;
       }
 
       ref.read(coreStatusProvider.notifier).state = CoreStatus.running;
       AppNotifier.success(S.current.msgConnected);
 
-      // 3. Apply routing mode from settings to running core
-      final routingMode = ref.read(routingModeProvider);
-      if (routingMode != 'rule') {
-        try {
-          final ok = await manager.api.setRoutingMode(routingMode);
-          debugPrint('[CoreActions] setRoutingMode($routingMode): $ok');
-          if (!ok) {
-            debugPrint('[CoreActions] setRoutingMode returned false!');
-          }
-          // Verify
-          final actual = await manager.api.getRoutingMode();
-          debugPrint('[CoreActions] actual routing mode: $actual');
-        } catch (e) {
-          debugPrint('[CoreActions] setRoutingMode failed: $e');
-        }
-      } else {
-        // Even for 'rule', verify the core is actually in rule mode
-        final actual = await manager.api.getRoutingMode();
-        debugPrint('[CoreActions] routing mode: saved=$routingMode, actual=$actual');
-      }
+      // 3. Apply routing mode (non-blocking — errors logged, not thrown)
+      _applyRoutingMode(manager);
 
-      // 4. Auto-set system proxy on macOS/Windows
+      // 4. System proxy (desktop)
       if ((Platform.isMacOS || Platform.isWindows) &&
           ref.read(systemProxyOnConnectProvider)) {
         await applySystemProxy();
@@ -132,23 +113,30 @@ class CoreActions {
 
       return true;
     } catch (e, st) {
-      debugPrint('[CoreActions] start() error: $e');
-      debugPrint('[CoreActions] stack trace: $st');
+      debugPrint('[CoreActions] start() error: $e\n$st');
       ref.read(coreStatusProvider.notifier).state = CoreStatus.stopped;
 
-      // 真实状态闭环：精准透传底层错误（如 YAML 语法错误及行号）
-      String msg = e.toString();
-      if (e is FormatException) {
-        msg = e.message;
-      } else if (e is MihomoApiException) {
-        msg = S.current.errApiError(e.statusCode, e.body);
-      } else {
-        msg = msg.split('\n').first; // 保持提示简短
-      }
-      
-      ref.read(coreStartupErrorProvider.notifier).state = msg;
-      AppNotifier.error(S.current.errStartFailed(msg));
+      // Use the startup report for a precise error message
+      final report = manager.lastReport;
+      final detail = report?.failureSummary ?? e.toString().split('\n').first;
+      ref.read(coreStartupErrorProvider.notifier).state = detail;
+      AppNotifier.error(detail);
       return false;
+    }
+  }
+
+  /// Apply saved routing mode to the running core.
+  /// Errors are logged but never thrown — routing mode is not critical.
+  void _applyRoutingMode(CoreManager manager) async {
+    final routingMode = ref.read(routingModeProvider);
+    try {
+      if (routingMode != 'rule') {
+        await manager.api.setRoutingMode(routingMode);
+      }
+      final actual = await manager.api.getRoutingMode();
+      debugPrint('[CoreActions] routingMode: saved=$routingMode, actual=$actual');
+    } catch (e) {
+      debugPrint('[CoreActions] setRoutingMode error: $e');
     }
   }
 

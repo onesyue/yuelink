@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../constants.dart';
 import '../ffi/core_controller.dart';
+import '../models/startup_report.dart';
 import 'config_template.dart';
 import 'geodata_service.dart';
 import 'mihomo_api.dart';
@@ -16,31 +17,13 @@ import 'process_manager.dart';
 import 'vpn_service.dart' as vpn;
 
 /// How mihomo is managed.
-enum CoreMode {
-  /// Embedded via dart:ffi (FlClash pattern).
-  ffi,
-  /// External subprocess (Clash Verge Rev pattern).
-  subprocess,
-  /// Mock mode for development without Go core.
-  mock,
-}
+enum CoreMode { ffi, subprocess, mock }
 
 /// Manages the mihomo core lifecycle and provides API access.
-///
-/// Architecture follows Clash Verge Rev / FlClash pattern:
-/// - **Lifecycle** (start/stop): via FFI, subprocess, or mock
-/// - **Data operations** (proxies, traffic, connections): via REST API on :9090
-///
-/// This separation means the UI layer always uses the same REST API interface,
-/// regardless of whether the core is embedded (FFI) or external (subprocess).
 class CoreManager {
   CoreManager._() {
     _core = CoreController.instance;
-    if (_core.isMockMode) {
-      _mode = CoreMode.mock;
-    } else {
-      _mode = CoreMode.ffi;
-    }
+    _mode = _core.isMockMode ? CoreMode.mock : CoreMode.ffi;
   }
 
   static CoreManager? _instance;
@@ -53,7 +36,9 @@ class CoreManager {
   bool _running = false;
   bool _initialized = false;
 
-  /// The REST API client for the running mihomo instance.
+  /// The most recent startup report (kept in memory for UI).
+  StartupReport? lastReport;
+
   MihomoApi get api => _api ??= MihomoApi(
         host: '127.0.0.1',
         port: _apiPort,
@@ -63,7 +48,6 @@ class CoreManager {
   int _apiPort = 9090;
   String? _apiSecret;
 
-  /// The WebSocket stream client for real-time data.
   MihomoStream get stream => _stream ??= MihomoStream(
         host: '127.0.0.1',
         port: _apiPort,
@@ -74,50 +58,241 @@ class CoreManager {
   bool get isMockMode => _mode == CoreMode.mock;
   bool get isRunning => _running;
   int get mixedPort => _mixedPort;
-
   int _mixedPort = 7890;
 
-  /// Configure the API endpoint.
   void configure({int? port, String? secret, CoreMode? mode}) {
     if (port != null) _apiPort = port;
     _apiSecret = secret;
     if (mode != null) _mode = mode;
-    _api = null; // Reset so next access uses new config
+    _api = null;
     _stream = null;
   }
 
-  /// Ensure the Go core is initialized (homeDir set).
-  /// Uses async FFI to avoid blocking the UI thread.
-  Future<void> _ensureInit() async {
-    if (_initialized || _mode == CoreMode.mock) return;
-    final appDir = await getApplicationSupportDirectory();
-    final error = await _core.initAsync(appDir.path);
-    if (error != null) throw Exception('InitCore: $error');
-    _initialized = true;
-  }
+  // ==================================================================
+  // Start — 7 observable steps with errorCodes
+  // ==================================================================
+  //
+  //  Step       | errorCode                  | What it checks
+  //  -----------|----------------------------|-----------------------------
+  //  ensureGeo  | E009_GEO_FILES_FAILED      | Geo files copied from assets
+  //  initCore   | E002_INIT_CORE_FAILED      | Go InitCore(homeDir)
+  //  vpnPerm    | E003_VPN_PERMISSION_DENIED  | Android VPN permission
+  //  startVpn   | E004_VPN_FD_INVALID        | Android TUN fd
+  //  buildConfig| E005_CONFIG_BUILD_FAILED    | Overwrite + template + TUN inject
+  //  startCore  | E006_CORE_START_FAILED      | Go hub.Parse()
+  //  waitApi    | E007_API_TIMEOUT            | REST API readiness
+  //  verify     | E008_CORE_DIED_AFTER_START  | isRunning + API recheck
 
-  /// Start the mihomo core with the given config.
-  ///
-  /// Automatically processes the config template (replaces `$app_name`,
-  /// ensures external-controller, extracts port/secret settings).
-  ///
-  /// On Android, also starts the VpnService to obtain the TUN fd and injects
-  /// it into the config so mihomo uses the OS-managed TUN interface.
   Future<bool> start(String configYaml) async {
-    debugPrint('[CoreManager] start() called, running=$_running, mode=$_mode');
+    debugPrint('[CoreManager] ══════ START ══════');
     if (_running) return true;
 
-    // Apply overwrite layer on top of base config (heavy regex — use Isolate)
-    final overwrite = await OverwriteService.load();
-    final withOverwrite = await Isolate.run(
-        () => OverwriteService.apply(configYaml, overwrite));
+    final steps = <StartupStep>[];
+    String? homeDir;
 
-    // iOS: Go core runs inside the PacketTunnel extension process.
-    // Skip _ensureInit() — the extension calls InitCore in its own process.
-    if (Platform.isIOS && !isMockMode) {
+    try {
+      // iOS: separate process, different path
+      if (Platform.isIOS && !isMockMode) {
+        return _startIos(configYaml, steps);
+      }
+
+      // ── Step 1: ensureGeo ──────────────────────────────────────────
+      await _step(steps, 'ensureGeo', StartupError.geoFilesFailed, () async {
+        final installed = await GeoDataService.ensureFiles();
+        return 'installed=$installed';
+      });
+
+      // ── Step 2: initCore ───────────────────────────────────────────
+      await _step(steps, 'initCore', StartupError.initCoreFailed, () async {
+        if (_initialized || _mode == CoreMode.mock) {
+          return 'skip (mode=$_mode, initialized=$_initialized)';
+        }
+        final appDir = await getApplicationSupportDirectory();
+        homeDir = appDir.path;
+
+        // Verify writable
+        final testFile = File('$homeDir/.write_test');
+        await testFile.writeAsString('ok');
+        await testFile.delete();
+
+        final error = await _core.initAsync(homeDir!);
+        if (error != null && error.isNotEmpty) {
+          throw Exception(error);
+        }
+        _initialized = true;
+        return 'homeDir=$homeDir';
+      });
+
+      // ── Step 3: vpnPermission (Android only) ───────────────────────
+      if (Platform.isAndroid && !isMockMode) {
+        await _step(steps, 'vpnPermission', StartupError.vpnPermissionDenied,
+            () async {
+          final granted = await vpn.VpnService.requestPermission();
+          if (!granted) {
+            throw Exception('user denied VPN permission');
+          }
+          return 'granted';
+        });
+      }
+
+      // ── Step 4: startVpn (Android only) ────────────────────────────
+      int? tunFd;
+      if (Platform.isAndroid && !isMockMode) {
+        await _step(steps, 'startVpn', StartupError.vpnFdInvalid, () async {
+          // Need mixedPort from raw config before full processing
+          final rawMp = ConfigTemplate.getMixedPort(configYaml);
+          tunFd = await vpn.VpnService.startAndroidVpn(mixedPort: rawMp);
+          if (tunFd == null || tunFd! <= 0) {
+            throw Exception('fd=$tunFd (expected > 0)');
+          }
+          return 'fd=$tunFd, mixedPort=$rawMp';
+        });
+      }
+
+      // ── Step 5: buildConfig ────────────────────────────────────────
+      // Single step: overwrite → template processing → TUN injection
+      String processed = '';
+      await _step(steps, 'buildConfig', StartupError.configBuildFailed,
+          () async {
+        // 5a. Apply user overwrite layer
+        final overwrite = await OverwriteService.load();
+        final withOverwrite = await Isolate.run(
+            () => OverwriteService.apply(configYaml, overwrite));
+
+        // 5b. Template processing (ports, DNS, sniffer, geo, TUN fd)
+        final apiPort = _apiPort;
+        final apiSecret = _apiSecret;
+        processed = await Isolate.run(() => ConfigTemplate.process(
+              withOverwrite,
+              apiPort: apiPort,
+              secret: apiSecret,
+              tunFd: tunFd,
+            ));
+
+        // 5c. Extract ports/secret from final config
+        _apiPort = ConfigTemplate.getApiPort(processed);
+        _mixedPort = ConfigTemplate.getMixedPort(processed);
+        _apiSecret ??= ConfigTemplate.getSecret(processed);
+        _api = null;
+        _stream = null;
+
+        return 'input=${configYaml.length}b, '
+            'output=${processed.length}b, '
+            'apiPort=$_apiPort, mixedPort=$_mixedPort, '
+            'tunFd=$tunFd';
+      });
+
+      // ── Step 6: startCore (Go hub.Parse) ───────────────────────────
+      await _step(steps, 'startCore', StartupError.coreStartFailed, () async {
+        // Write config to disk for debugging
+        final appDir = await getApplicationSupportDirectory();
+        await File('${appDir.path}/${AppConstants.configFileName}')
+            .writeAsString(processed);
+
+        switch (_mode) {
+          case CoreMode.mock:
+            final error = _core.start(processed);
+            if (error != null && error.isNotEmpty) throw Exception(error);
+            _running = true;
+            return 'mock started';
+
+          case CoreMode.ffi:
+            final error = await _core.startAsync(processed);
+            if (error != null && error.isNotEmpty) throw Exception(error);
+            _running = true;
+            final goRunning = _core.isRunning;
+            return 'ffi OK, isRunning=$goRunning';
+
+          case CoreMode.subprocess:
+            final path = await ProcessManager.writeConfig(processed);
+            final ok = await ProcessManager.instance.start(
+                configPath: path, apiPort: _apiPort);
+            if (!ok) throw Exception('subprocess start failed');
+            _running = true;
+            return 'subprocess OK';
+        }
+      });
+
+      // ── Step 7: waitApi ────────────────────────────────────────────
+      await _step(steps, 'waitApi', StartupError.apiTimeout, () async {
+        for (var i = 1; i <= 50; i++) {
+          if (await api.isAvailable()) {
+            return 'ready after $i attempts';
+          }
+          await Future.delayed(const Duration(milliseconds: 100));
+        }
+        _running = false;
+        _core.stop();
+        throw Exception('API not available after 50 attempts (5s)');
+      });
+
+      // ── Step 8: verify ─────────────────────────────────────────────
+      await _step(steps, 'verify', StartupError.coreDiedAfterStart, () async {
+        final goRunning = _core.isRunning;
+        final apiOk = await api.isAvailable();
+
+        if (!goRunning) throw Exception('isRunning=false');
+        if (!apiOk) throw Exception('API unavailable after startup');
+
+        // Save known-good config
+        final appDir = await getApplicationSupportDirectory();
+        await File('${appDir.path}/$_kLastWorkingConfig')
+            .writeAsString(processed);
+
+        String info = 'goRunning=$goRunning, apiOk=$apiOk';
+
+        // DNS diagnostic (non-blocking)
+        try {
+          final dns = await api.queryDns('google.com');
+          final answers = dns['Answer'] as List?;
+          info += ', dns=${answers?.length ?? 0}answers';
+        } catch (e) {
+          info += ', dnsErr=$e';
+        }
+
+        return info;
+      });
+
+      // ── Success ────────────────────────────────────────────────────
+      await _finishReport(steps, true, null);
+      return true;
+    } catch (e) {
+      final failedName =
+          steps.where((s) => !s.success).firstOrNull?.name ?? 'unknown';
+      await _finishReport(steps, false, failedName);
+
+      // Clean up partial state
+      if (_running) {
+        _running = false;
+        try {
+          _core.stop();
+        } catch (_) {}
+      }
+      if (Platform.isAndroid) {
+        try {
+          await vpn.VpnService.stopVpn();
+        } catch (_) {}
+      }
+
+      rethrow;
+    }
+  }
+
+  // ==================================================================
+  // iOS start
+  // ==================================================================
+
+  Future<bool> _startIos(String configYaml, List<StartupStep> steps) async {
+    String processed = configYaml;
+
+    await _step(steps, 'buildConfig_ios', StartupError.configBuildFailed,
+        () async {
+      final overwrite = await OverwriteService.load();
+      final withOverwrite = await Isolate.run(
+          () => OverwriteService.apply(configYaml, overwrite));
       final apiPort = _apiPort;
       final apiSecret = _apiSecret;
-      final processed = await Isolate.run(() => ConfigTemplate.process(
+      processed = await Isolate.run(() => ConfigTemplate.process(
             withOverwrite,
             apiPort: apiPort,
             secret: apiSecret,
@@ -127,81 +302,24 @@ class CoreManager {
       _apiSecret ??= ConfigTemplate.getSecret(processed);
       _api = null;
       _stream = null;
+      return 'len=${processed.length}, apiPort=$_apiPort';
+    });
 
+    await _step(steps, 'startIosVpn', StartupError.coreStartFailed, () async {
       final ok = await vpn.VpnService.startIosVpn(configYaml: processed);
-      if (ok) _running = true;
-      return ok;
-    }
+      if (!ok) throw Exception('startIosVpn returned false');
+      _running = true;
+      return 'ok';
+    });
 
-    // Non-iOS: initialize Go core in this process
-    await _ensureInit();
-    debugPrint('[CoreManager] init done, initialized=$_initialized');
-
-    // Ensure GeoIP/GeoSite files exist before starting core.
-    // Primary: copy from bundled assets (instant).
-    // Fallback: download from CDN mirrors (if assets not bundled).
-    // Without these files, mihomo's parseRules fails on GEOIP/GEOSITE rules.
-    await GeoDataService.ensureFiles();
-
-    // On Android, start VpnService first to get the TUN fd
-    int? tunFd;
-    if (Platform.isAndroid && !isMockMode) {
-      final mp = ConfigTemplate.getMixedPort(withOverwrite);
-      tunFd = await vpn.VpnService.startAndroidVpn(mixedPort: mp);
-      if (tunFd <= 0) {
-        return false;
-      }
-    }
-
-    // Process template variables, ensure API access, inject TUN fd
-    // Heavy regex operations — run in background Isolate to prevent ANR
-    final apiPort = _apiPort;
-    final apiSecret = _apiSecret;
-    final processed = await Isolate.run(() => ConfigTemplate.process(
-          withOverwrite,
-          apiPort: apiPort,
-          secret: apiSecret,
-          tunFd: tunFd,
-        ));
-
-    // Extract actual port/secret from processed config
-    _apiPort = ConfigTemplate.getApiPort(processed);
-    _mixedPort = ConfigTemplate.getMixedPort(processed);
-    _apiSecret ??= ConfigTemplate.getSecret(processed);
-    _api = null; // Reset API client with new settings
-    _stream = null;
-
-    debugPrint('[CoreManager] processed config: '
-        'apiPort=$_apiPort, mixedPort=$_mixedPort, '
-        'hasSecret=${_apiSecret != null}, '
-        'tunFd=$tunFd, configLen=${processed.length}');
-    // Log first 500 chars and last 300 chars for debugging config issues
-    debugPrint('[CoreManager] config head: '
-        '${processed.substring(0, processed.length.clamp(0, 500))}');
-    if (processed.length > 500) {
-      debugPrint('[CoreManager] config tail: '
-          '...${processed.substring(processed.length - 300.clamp(0, processed.length))}');
-    }
-
-    switch (_mode) {
-      case CoreMode.mock:
-        final error = _core.start(processed);
-        if (error != null) {
-          debugPrint('[CoreManager] mock start failed: $error');
-          return false;
-        }
-        _running = true;
-        return true;
-
-      case CoreMode.ffi:
-        return _startFfi(processed);
-
-      case CoreMode.subprocess:
-        return _startSubprocess(processed);
-    }
+    await _finishReport(steps, true, null);
+    return true;
   }
 
-  /// Stop the mihomo core.
+  // ==================================================================
+  // Stop
+  // ==================================================================
+
   Future<void> stop() async {
     if (!_running) return;
 
@@ -210,33 +328,35 @@ class CoreManager {
         _core.stop();
 
       case CoreMode.ffi:
-        try { await api.closeAllConnections(); } catch (_) {}
-        // Stop Go core FIRST (shuts down TUN listener cleanly),
-        // then close VPN fd. Reverse order causes Go to read from
-        // an invalid fd → potential panic.
+        try {
+          await api.closeAllConnections();
+        } catch (e) {
+          debugPrint('[CoreManager] closeAllConnections: $e');
+        }
         _core.stop();
 
       case CoreMode.subprocess:
-        try { await api.closeAllConnections(); } catch (_) {}
+        try {
+          await api.closeAllConnections();
+        } catch (e) {
+          debugPrint('[CoreManager] closeAllConnections: $e');
+        }
         await ProcessManager.instance.stop();
     }
 
     _running = false;
 
-    // Tear down OS VPN tunnel AFTER core is stopped.
-    // On Android, this closes the TUN fd and calls stopSelf().
     if (Platform.isAndroid || Platform.isIOS) {
       await vpn.VpnService.stopVpn();
     }
   }
 
-  // ------------------------------------------------------------------
-  // FFI mode
-  // ------------------------------------------------------------------
+  // ==================================================================
+  // Helpers
+  // ==================================================================
 
   static const _kLastWorkingConfig = 'last_working_config.yaml';
 
-  /// Load the last known-good config (for rollback).
   Future<String?> loadLastWorkingConfig() async {
     final appDir = await getApplicationSupportDirectory();
     final file = File('${appDir.path}/$_kLastWorkingConfig');
@@ -244,100 +364,70 @@ class CoreManager {
     return file.readAsString();
   }
 
-  Future<void> _saveLastWorkingConfig(String configYaml) async {
-    final appDir = await getApplicationSupportDirectory();
-    await File('${appDir.path}/$_kLastWorkingConfig').writeAsString(configYaml);
-  }
-
-  Future<bool> _startFfi(String configYaml) async {
-    // Write config file
-    final appDir = await getApplicationSupportDirectory();
-    final configFile = File('${appDir.path}/${AppConstants.configFileName}');
-    await configFile.writeAsString(configYaml);
-    debugPrint('[CoreManager] config written to: ${configFile.path}');
-
-    // Use async FFI to avoid blocking the UI thread during hub.Parse()
-    final error = await _core.startAsync(configYaml);
-    if (error != null) {
-      debugPrint('[CoreManager] StartCore failed: $error');
-      throw Exception('StartCore: $error');
-    }
-
-    _running = true;
-
-    // Wait for the external-controller HTTP server to be ready.
-    // It starts in a goroutine, so there's a brief delay after hub.Parse().
-    // Without waiting, API calls (routing mode, proxy refresh) fail silently.
-    final apiOk = await _waitForApi();
-    debugPrint('[CoreManager] API ${apiOk ? "ready" : "NOT available"}');
-    if (!apiOk) {
-      _running = false;
-      _core.stop();
-      throw Exception('mihomo API not available after startup');
-    }
-    _saveLastWorkingConfig(configYaml);
-
-    // Post-startup DNS diagnostic (non-blocking)
-    _runDnsDiagnostic();
-
-    return true;
-  }
-
-  /// Test DNS resolution after startup to verify the resolver works.
-  /// Non-blocking — logs result but doesn't affect startup.
-  Future<void> _runDnsDiagnostic() async {
+  /// Run a single step with timing, errorCode, and structured recording.
+  Future<void> _step(
+    List<StartupStep> steps,
+    String name,
+    String errorCode,
+    Future<String> Function() action,
+  ) async {
+    final sw = Stopwatch()..start();
     try {
-      final result = await api.queryDns('google.com');
-      final status = result['Status'];
-      final answers = result['Answer'] as List?;
-      if (status == 0 && answers != null && answers.isNotEmpty) {
-        debugPrint('[CoreManager] DNS diagnostic OK: google.com → '
-            '${answers.map((a) => a['data']).join(', ')}');
-      } else {
-        debugPrint('[CoreManager] DNS diagnostic FAILED: status=$status, '
-            'answers=${answers?.length ?? 0}');
-      }
+      final detail = await action();
+      sw.stop();
+      steps.add(StartupStep(
+        name: name,
+        success: true,
+        detail: detail,
+        durationMs: sw.elapsedMilliseconds,
+      ));
+      debugPrint('[CoreManager] ✓ $name (${sw.elapsedMilliseconds}ms) $detail');
     } catch (e) {
-      debugPrint('[CoreManager] DNS diagnostic ERROR: $e');
+      sw.stop();
+      steps.add(StartupStep(
+        name: name,
+        success: false,
+        errorCode: errorCode,
+        error: e.toString(),
+        durationMs: sw.elapsedMilliseconds,
+      ));
+      debugPrint(
+          '[CoreManager] ✗ $name [$errorCode] (${sw.elapsedMilliseconds}ms) $e');
+      rethrow;
     }
   }
 
-  // ------------------------------------------------------------------
-  // Subprocess mode (desktop sidecar)
-  // ------------------------------------------------------------------
-
-  Future<bool> _startSubprocess(String configYaml) async {
-    final configPath = await ProcessManager.writeConfig(configYaml);
-
-    final ok = await ProcessManager.instance.start(
-      configPath: configPath,
-      apiPort: _apiPort,
-    );
-    if (!ok) return false;
-
-    _running = true;
-    final apiOk = await _waitForApi();
-    if (apiOk) await _saveLastWorkingConfig(configYaml);
-    return apiOk;
-  }
-
-  // ------------------------------------------------------------------
-  // Helpers
-  // ------------------------------------------------------------------
-
-  /// Wait for the REST API to become available.
-  /// The external-controller HTTP server starts in a goroutine after
-  /// hub.Parse() returns, typically ready within 100-300ms.
-  /// Retries for up to ~5 seconds to accommodate slow devices.
-  Future<bool> _waitForApi({int maxRetries = 50}) async {
-    for (var i = 0; i < maxRetries; i++) {
-      if (await api.isAvailable()) {
-        debugPrint('[CoreManager] API available after ${i + 1} attempts');
-        return true;
+  /// Build the final report, read Go core logs, save to disk.
+  Future<void> _finishReport(
+    List<StartupStep> steps,
+    bool success,
+    String? failedStep,
+  ) async {
+    // Read Go-side core.log (written by logrus in InitCore)
+    List<String> coreLogs = [];
+    try {
+      final appDir = await getApplicationSupportDirectory();
+      final logFile = File('${appDir.path}/core.log');
+      if (logFile.existsSync()) {
+        final lines = await logFile.readAsLines();
+        // Keep last 100 lines to avoid huge reports
+        coreLogs = lines.length > 100 ? lines.sublist(lines.length - 100) : lines;
       }
-      await Future.delayed(const Duration(milliseconds: 100));
-    }
-    debugPrint('[CoreManager] API not available after $maxRetries attempts');
-    return false;
+    } catch (_) {}
+
+    final report = StartupReport(
+      timestamp: DateTime.now(),
+      platform: Platform.operatingSystem,
+      overallSuccess: success,
+      steps: steps,
+      failedStep: failedStep,
+      coreLogs: coreLogs,
+    );
+
+    lastReport = report;
+    debugPrint(report.toDebugString());
+
+    // Save to disk (fire-and-forget)
+    StartupReport.save(report);
   }
 }

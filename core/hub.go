@@ -7,6 +7,7 @@ import "C"
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -19,6 +20,8 @@ import (
 	"github.com/metacubex/mihomo/hub/executor"
 	"github.com/metacubex/mihomo/listener"
 	"github.com/metacubex/mihomo/log"
+
+	logrus "github.com/sirupsen/logrus"
 )
 
 // --------------------------------------------------------------------
@@ -59,6 +62,16 @@ func InitCore(homeDir *C.char) *C.char {
 		return C.CString(fmt.Sprintf("config.Init failed: %v", err))
 	}
 
+	// Redirect logrus output to core.log so Dart can read Go-side logs.
+	// Also tee to stdout for adb logcat / Xcode console.
+	logPath := filepath.Join(dir, "core.log")
+	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	if err == nil {
+		logrus.SetOutput(io.MultiWriter(os.Stdout, logFile))
+	}
+
+	log.Infoln("[BOOT] InitCore OK, homeDir=%s", dir)
+
 	state.homeDir = dir
 	state.isInit = true
 
@@ -91,13 +104,16 @@ func StartCore(configStr *C.char) *C.char {
 	}
 
 	configYaml := C.GoString(configStr)
+	log.Infoln("[CORE] StartCore called, configLen=%d", len(configYaml))
 
 	// Write config to file so mihomo can reload it later
 	configPath := filepath.Join(state.homeDir, "config.yaml")
 	if err := os.WriteFile(configPath, []byte(configYaml), 0o644); err != nil {
+		log.Errorln("[CORE] write config failed: %v", err)
 		return C.CString(fmt.Sprintf("write config: %v", err))
 	}
 	mihomoConst.SetConfig(configPath)
+	log.Infoln("[CORE] config written to %s", configPath)
 
 	// Log key config sections for diagnostics
 	logConfigDiag(configYaml)
@@ -105,23 +121,25 @@ func StartCore(configStr *C.char) *C.char {
 	// Parse and apply config via hub.Parse (starts everything).
 	// If parsing fails (bad YAML, missing geo files, invalid rules, etc.),
 	// fall back to mihomo's default config so the core always starts.
-	// This matches FlClash's approach — the core must be running for the
-	// REST API and VPN tunnel to function, even with a degraded config.
+	log.Infoln("[CORE] calling hub.Parse()...")
 	if err := hub.Parse([]byte(configYaml)); err != nil {
-		log.Warnln("[StartCore] config parse failed: %v — falling back to default config", err)
+		log.Warnln("[CORE] hub.Parse failed: %v — falling back to default config", err)
 		defaultCfg, defaultErr := config.ParseRawConfig(config.DefaultRawConfig())
 		if defaultErr != nil {
+			log.Errorln("[CORE] default config fallback also failed: %v", defaultErr)
 			return C.CString(fmt.Sprintf("parse config: %v (default fallback also failed: %v)", err, defaultErr))
 		}
 		hub.ApplyConfig(defaultCfg)
-		log.Warnln("[StartCore] running with default config (no proxies/rules)")
+		log.Warnln("[CORE] running with default config (no proxies/rules)")
+	} else {
+		log.Infoln("[CORE] hub.Parse OK")
 	}
 
 	// Post-startup diagnostics
 	logPostStartDiag()
 
 	state.isRunning = true
-	log.Infoln("YueLink core started")
+	log.Infoln("[CORE] YueLink core started successfully")
 	return C.CString("")
 }
 

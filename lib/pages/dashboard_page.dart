@@ -521,40 +521,12 @@ class _HeroCard extends ConsumerWidget {
             ),
           ],
 
-          // Startup error banner (shown when core failed to start)
+          // Startup error banner with expandable report
           if (!isRunning && !isTransitioning) ...[
             Consumer(builder: (context, ref, _) {
               final error = ref.watch(coreStartupErrorProvider);
               if (error == null) return const SizedBox.shrink();
-              return Padding(
-                padding: const EdgeInsets.only(top: 12),
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: Colors.red.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(YLRadius.md),
-                    border: Border.all(
-                        color: Colors.red.withValues(alpha: 0.2)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.error_outline, size: 16,
-                          color: Colors.red),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          error,
-                          style: YLText.caption.copyWith(
-                              color: Colors.red.shade700),
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
+              return _StartupErrorBanner(error: error);
             }),
           ],
         ],
@@ -1068,6 +1040,161 @@ class _LegendDot extends StatelessWidget {
         const SizedBox(width: 4),
         Text(label, style: YLText.caption.copyWith(color: YLColors.zinc400)),
       ],
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Startup Error Banner — shows failed step + expandable report
+// ═══════════════════════════════════════════════════════════════════════════════
+
+class _StartupErrorBanner extends StatefulWidget {
+  final String error;
+  const _StartupErrorBanner({required this.error});
+
+  @override
+  State<_StartupErrorBanner> createState() => _StartupErrorBannerState();
+}
+
+class _StartupErrorBannerState extends State<_StartupErrorBanner> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final report = CoreManager.instance.lastReport;
+    final steps = report?.steps ?? [];
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: Colors.red.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(YLRadius.md),
+          border: Border.all(color: Colors.red.withValues(alpha: 0.2)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Error summary + expand button
+            GestureDetector(
+              onTap: steps.isNotEmpty
+                  ? () => setState(() => _expanded = !_expanded)
+                  : null,
+              child: Row(
+                children: [
+                  const Icon(Icons.error_outline, size: 16, color: Colors.red),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      widget.error,
+                      style: YLText.caption.copyWith(color: Colors.red.shade700),
+                      maxLines: _expanded ? 10 : 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (steps.isNotEmpty) ...[
+                    const SizedBox(width: 4),
+                    Icon(
+                      _expanded ? Icons.expand_less : Icons.expand_more,
+                      size: 16,
+                      color: Colors.red.shade400,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+
+            // Expanded step-by-step report
+            if (_expanded && steps.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              const Divider(height: 1),
+              const SizedBox(height: 8),
+              for (final step in steps)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        step.success ? Icons.check_circle : Icons.cancel,
+                        size: 14,
+                        color: step.success ? Colors.green : Colors.red,
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          '${step.name} (${step.durationMs}ms)'
+                          '${step.errorCode != null ? ' [${step.errorCode}]' : ''}'
+                          '${step.error != null ? '\n${step.error}' : ''}'
+                          '${step.detail != null && !step.success ? '\n${step.detail}' : ''}',
+                          style: YLText.caption.copyWith(
+                            fontSize: 11,
+                            color: step.success
+                                ? Colors.green.shade700
+                                : Colors.red.shade700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              // Go core logs (last few lines)
+              if (report != null && report.coreLogs.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                const Divider(height: 1),
+                const SizedBox(height: 6),
+                Text(
+                  'Go Core 日志 (最后${report.coreLogs.length}行):',
+                  style: YLText.caption.copyWith(
+                    fontSize: 11,
+                    color: Colors.red.shade600,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.04),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    report.coreLogs.take(20).join('\n'),
+                    style: YLText.caption.copyWith(
+                      fontSize: 10,
+                      fontFamily: 'monospace',
+                      color: Colors.red.shade800,
+                    ),
+                  ),
+                ),
+              ],
+              // Copy report button
+              const SizedBox(height: 4),
+              Align(
+                alignment: Alignment.centerRight,
+                child: GestureDetector(
+                  onTap: () {
+                    final text = report?.toDebugString() ?? widget.error;
+                    Clipboard.setData(ClipboardData(text: text));
+                    AppNotifier.info('已复制启动报告');
+                  },
+                  child: Text(
+                    '复制报告',
+                    style: YLText.caption.copyWith(
+                      fontSize: 11,
+                      color: Colors.red.shade400,
+                      decoration: TextDecoration.underline,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }
