@@ -57,11 +57,16 @@ class ProfileService {
   /// If the subscription only provides proxies (no proxy-groups/rules),
   /// they are merged into the built-in default config template which
   /// includes all the proxy-groups, rules, and DNS settings.
+  ///
+  /// [proxyPort] — pass the running core's mixed-port so the download
+  /// goes through the local proxy (needed on Android where the app is
+  /// excluded from VPN).
   static Future<Profile> addProfile({
     required String name,
     required String url,
+    int? proxyPort,
   }) async {
-    final result = await _downloadConfig(url);
+    final result = await _downloadConfig(url, proxyPort: proxyPort);
     final id = DateTime.now().millisecondsSinceEpoch.toString();
 
     // Use subscription config directly if complete (normal case).
@@ -95,8 +100,8 @@ class ProfileService {
   }
 
   /// Update a subscription profile by re-downloading.
-  static Future<Profile> updateProfile(Profile profile) async {
-    final result = await _downloadConfig(profile.url);
+  static Future<Profile> updateProfile(Profile profile, {int? proxyPort}) async {
+    final result = await _downloadConfig(profile.url, proxyPort: proxyPort);
 
     // Use subscription config directly if complete (normal case).
     // Only merge with fallback template if subscription has no groups/rules.
@@ -179,15 +184,48 @@ class ProfileService {
 
   /// Download config YAML from a subscription URL.
   /// Returns both the content and parsed subscription info from headers.
-  static Future<_DownloadResult> _downloadConfig(String url) async {
+  ///
+  /// When [proxyPort] is provided (core is running), the download goes
+  /// through the local proxy. This is critical on Android: the app itself
+  /// is excluded from VPN (addDisallowedApplication), so direct HTTP
+  /// requests bypass the proxy. If the subscription URL is behind a
+  /// firewall, direct download fails while proxied download succeeds.
+  static Future<_DownloadResult> _downloadConfig(
+    String url, {
+    int? proxyPort,
+  }) async {
     http.Response response;
     try {
-      response = await http
-          .get(
-            Uri.parse(url),
-            headers: {'User-Agent': AppConstants.userAgent},
-          )
-          .timeout(const Duration(seconds: 30));
+      if (proxyPort != null && proxyPort > 0) {
+        // Use local proxy for download (app is excluded from VPN on Android)
+        final client = HttpClient();
+        client.findProxy = (_) => 'PROXY 127.0.0.1:$proxyPort';
+        client.connectionTimeout = const Duration(seconds: 30);
+        try {
+          final request = await client.getUrl(Uri.parse(url));
+          request.headers.set('User-Agent', AppConstants.userAgent);
+          final ioResponse =
+              await request.close().timeout(const Duration(seconds: 30));
+          final body =
+              await ioResponse.transform(utf8.decoder).join();
+          final headers = <String, String>{};
+          ioResponse.headers.forEach((name, values) {
+            headers[name] = values.join(', ');
+          });
+          response = http.Response(body, ioResponse.statusCode,
+              headers: headers);
+        } finally {
+          client.close();
+        }
+      } else {
+        // Direct download (no proxy running)
+        response = await http
+            .get(
+              Uri.parse(url),
+              headers: {'User-Agent': AppConstants.userAgent},
+            )
+            .timeout(const Duration(seconds: 30));
+      }
     } on TimeoutException {
       throw Exception(S.current.errDownloadTimeout);
     } on SocketException catch (e) {

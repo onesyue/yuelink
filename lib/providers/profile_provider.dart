@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/profile.dart';
+import '../services/core_manager.dart';
 import '../services/profile_service.dart';
 import '../services/settings_service.dart';
 
@@ -49,7 +50,11 @@ class ProfilesNotifier extends StateNotifier<AsyncValue<List<Profile>>> {
   }
 
   Future<Profile> add({required String name, required String url}) async {
-    final profile = await ProfileService.addProfile(name: name, url: url);
+    final proxyPort = CoreManager.instance.isRunning
+        ? CoreManager.instance.mixedPort
+        : null;
+    final profile = await ProfileService.addProfile(
+        name: name, url: url, proxyPort: proxyPort);
     state.whenData((list) {
       state = AsyncValue.data([...list, profile]);
     });
@@ -65,7 +70,10 @@ class ProfilesNotifier extends StateNotifier<AsyncValue<List<Profile>>> {
 
   /// Update a profile in-place to avoid loading flash.
   Future<void> update(Profile profile) async {
-    await ProfileService.updateProfile(profile);
+    final proxyPort = CoreManager.instance.isRunning
+        ? CoreManager.instance.mixedPort
+        : null;
+    await ProfileService.updateProfile(profile, proxyPort: proxyPort);
     state.whenData((list) {
       final idx = list.indexWhere((p) => p.id == profile.id);
       if (idx == -1) return;
