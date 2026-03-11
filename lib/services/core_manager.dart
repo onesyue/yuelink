@@ -137,15 +137,11 @@ class CoreManager {
     await _ensureInit();
     debugPrint('[CoreManager] init done, initialized=$_initialized');
 
-    // Pre-download GeoIP/GeoSite data files if missing.
-    // mihomo also downloads during rule parsing, but doing it here lets the
-    // UI show progress and avoids a silent multi-second stall on first launch.
-    final missing = await GeoDataService.missingFiles();
-    if (missing.isNotEmpty) {
-      debugPrint('[CoreManager] Missing geo files: $missing — downloading...');
-      final got = await GeoDataService.ensureFiles();
-      debugPrint('[CoreManager] Downloaded geo files: $got');
-    }
+    // Ensure GeoIP/GeoSite files exist before starting core.
+    // Primary: copy from bundled assets (instant).
+    // Fallback: download from CDN mirrors (if assets not bundled).
+    // Without these files, mihomo's parseRules fails on GEOIP/GEOSITE rules.
+    await GeoDataService.ensureFiles();
 
     // On Android, start VpnService first to get the TUN fd
     int? tunFd;

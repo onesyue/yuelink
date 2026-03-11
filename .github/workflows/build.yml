@@ -159,6 +159,15 @@ jobs:
           echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/27.2.12479018" >> $GITHUB_ENV
           dart setup.dart install -p android
 
+      - name: Download geodata files
+        run: |
+          mkdir -p assets/geodata
+          curl -fSL -o assets/geodata/GeoIP.dat    "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.dat"
+          curl -fSL -o assets/geodata/GeoSite.dat  "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geosite.dat"
+          curl -fSL -o assets/geodata/country.mmdb  "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/country.mmdb"
+          curl -fSL -o assets/geodata/ASN.mmdb      "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/GeoLite2-ASN.mmdb"
+          ls -lh assets/geodata/
+
       - run: flutter pub get
       - run: flutter build apk --release
 
@@ -193,6 +202,15 @@ jobs:
           path: core/build/
 
       - run: dart setup.dart install -p ios
+
+      - name: Download geodata files
+        run: |
+          mkdir -p assets/geodata
+          curl -fSL -o assets/geodata/GeoIP.dat    "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.dat"
+          curl -fSL -o assets/geodata/GeoSite.dat  "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geosite.dat"
+          curl -fSL -o assets/geodata/country.mmdb  "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/country.mmdb"
+          curl -fSL -o assets/geodata/ASN.mmdb      "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/GeoLite2-ASN.mmdb"
+          ls -lh assets/geodata/
 
       - name: Cache CocoaPods
         uses: actions/cache@v4
@@ -239,6 +257,15 @@ jobs:
           path: core/build/
 
       - run: dart setup.dart install -p macos
+
+      - name: Download geodata files
+        run: |
+          mkdir -p assets/geodata
+          curl -fSL -o assets/geodata/GeoIP.dat    "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.dat"
+          curl -fSL -o assets/geodata/GeoSite.dat  "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geosite.dat"
+          curl -fSL -o assets/geodata/country.mmdb  "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/country.mmdb"
+          curl -fSL -o assets/geodata/ASN.mmdb      "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/GeoLite2-ASN.mmdb"
+          ls -lh assets/geodata/
 
       - name: Cache CocoaPods
         uses: actions/cache@v4
@@ -302,6 +329,17 @@ jobs:
           path: core/build/
 
       - run: dart setup.dart install -p windows
+
+      - name: Download geodata files
+        shell: bash
+        run: |
+          mkdir -p assets/geodata
+          curl -fSL -o assets/geodata/GeoIP.dat    "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.dat"
+          curl -fSL -o assets/geodata/GeoSite.dat  "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geosite.dat"
+          curl -fSL -o assets/geodata/country.mmdb  "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/country.mmdb"
+          curl -fSL -o assets/geodata/ASN.mmdb      "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/GeoLite2-ASN.mmdb"
+          ls -lh assets/geodata/
+
       - run: flutter config --enable-windows-desktop
       - run: flutter pub get
       - run: flutter build windows --release

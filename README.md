@@ -19,13 +19,15 @@
 
 ## 功能
 
-- 订阅管理 — 添加 / 更新 / 自动刷新，解析流量与到期信息
+- 订阅管理 — 添加 / 更新 / 导入本地配置，解析流量与到期信息
 - 代理节点 — 分组展示、搜索筛选、延迟排序、单节点 / 批量测速
+- 路由模式 — 规则 / 全局 / 直连 一键切换
 - 连接监控 — 实时连接列表、搜索过滤、一键关闭
 - 配置覆写 — 在订阅配置之上叠加自定义规则
 - 代理提供者 — 查看与更新远程 proxy-provider
 - WebDAV 同步 — 跨设备备份和恢复配置
 - 分应用代理 — Android 黑白名单模式
+- GeoIP/GeoSite — 首次启动自动下载，后续自动更新
 - 亮色 / 暗色主题、中英文切换
 - 开机自启、自动连接
 
@@ -93,7 +95,7 @@ CI 自动产出：`YueLink-Android.apk`、`YueLink-iOS.ipa`、`YueLink-macOS.dmg
 ## 测试
 
 ```bash
-flutter test       # 78 个单元测试
+flutter test       # 12 个测试文件
 flutter analyze    # 静态分析 (CI 使用 --no-fatal-infos --no-fatal-warnings)
 ```
 
@@ -102,13 +104,15 @@ flutter analyze    # 静态分析 (CI 使用 --no-fatal-infos --no-fatal-warning
 ```
 yuelink/
 ├── core/                  # Go 核心 (CGO //export → mihomo)
-│   └── mihomo/            # mihomo 子模块
+│   ├── mihomo/            # mihomo 子模块
+│   └── patches/           # mihomo 补丁 (非致命 MMDB/iptables 等)
 ├── lib/
 │   ├── ffi/               # dart:ffi 绑定 + CoreMock
 │   ├── models/            # 数据模型
 │   ├── providers/         # Riverpod 状态管理
-│   ├── pages/             # UI 页面 (Dashboard / Nodes / Profile / Settings)
-│   ├── services/          # MihomoApi / VpnService / CoreManager / SettingsService
+│   ├── pages/             # UI 页面 (Dashboard / Nodes / Connections / Profile / Log / Settings)
+│   ├── services/          # CoreManager / MihomoApi / VpnService / GeoDataService 等 18 个服务
+│   ├── widgets/           # 可复用组件 (LoadingOverlay 等)
 │   ├── l10n/              # 中英文 i18n (手写 S 类)
 │   └── theme.dart         # 设计系统 (YLColors / YLText / YLShadow)
 ├── android/               # VpnService TUN 实现
@@ -131,7 +135,7 @@ yuelink/
 
 ## 版本策略
 
-- 开发阶段使用 `v0.0.1-alpha` 标签
+- 开发阶段使用 `v0.0.5-alpha.x` 标签
 - 正式发布时递增版本号（`v0.1.0`、`v1.0.0` 等）
 - 推送 `v*` 标签触发 CI 全平台构建 + GitHub Release
 

@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project Overview
 
 YueLink (by Yue.to) is a cross-platform proxy client built with Flutter + mihomo (Clash.Meta) Go core.
-Supports: Android, iOS, macOS, Windows.
+Supports: Android, iOS, macOS, Windows. (No Linux support.)
 
 ## Build Commands
 
@@ -41,7 +41,7 @@ Flutter UI (Dart, Riverpod) → CoreController (dart:ffi) → hub.go (CGO //expo
 - **`lib/ffi/`** — Dart FFI bindings. `CoreBindings` has raw FFI (8 lifecycle symbols: InitCore, StartCore, StopCore, Shutdown, IsRunning, ValidateConfig, UpdateConfig, FreeCString). `CoreController` is the high-level wrapper; data methods (getProxies, changeProxy, testDelay, getTraffic) always delegate to `CoreMock` — they exist only for mock mode UI development.
 - **`lib/providers/`** — Riverpod state management. `core_provider.dart` (lifecycle, traffic, heartbeat), `proxy_provider.dart` (nodes, groups, delay tests), `profile_provider.dart` (subscriptions), `proxy_provider_provider.dart` (remote proxy providers).
 - **`lib/pages/`** — 4-tab layout: Dashboard (connect/traffic/status), Nodes (proxy groups + routing mode), Subscriptions (profiles), Settings. Settings sub-pages: connections, logs, overwrite, proxy providers.
-- **`lib/services/`** — `VpnService` (MethodChannel), `MihomoApi` (REST on port 9090), `MihomoStream` (WebSocket for traffic/logs), `CoreManager` (lifecycle singleton — handles VPN internally per platform), `ProfileService` (static methods for profile CRUD + config loading), `OverwriteService` (config merging), `ConfigTemplate` (config processing with ensure-pattern injection), `SettingsService` (SharedPreferences wrapper).
+- **`lib/services/`** — `VpnService` (MethodChannel), `MihomoApi` (REST on port 9090), `MihomoStream` (WebSocket for traffic/logs), `CoreManager` (lifecycle singleton — handles VPN internally per platform), `ProfileService` (static methods for profile CRUD + config loading), `OverwriteService` (config merging), `ConfigTemplate` (config processing with ensure-pattern injection), `SettingsService` (SharedPreferences wrapper), `GeoDataService` (pre-downloads GeoIP/GeoSite files before core start), `AppNotifier` (global toast/snackbar), `AutoUpdateService`/`UpdateChecker` (app updates), `WebdavService` (backup/sync).
 - **`lib/theme.dart`** — Design system: `YLColors` (zinc palette + semantic colors), `YLText` (typography), `YLSpacing`/`YLRadius`, `YLShadow` (context-aware for dark mode), reusable widgets (`YLSurface`, `YLStatusDot`, `YLChip`, `YLDelayBadge`, `YLPillSegmentedControl`, etc.).
 - **`lib/l10n/app_strings.dart`** — Hand-written `S` class for i18n. Both Chinese and English via `_e ? 'en' : 'zh'` ternaries. No code generation. Use `S.of(context)` in widgets, `S.current` in providers/services without BuildContext.
 
@@ -114,7 +114,7 @@ iOS PacketTunnelProvider has its own `injectTunConfig()` in Swift with equivalen
 
 ### Core startup sequence
 
-`CoreActions.start()` → VPN permission (Android only) → `CoreManager.start(configYaml)` → `OverwriteService.apply()` → platform-specific VPN (Android: `startAndroidVpn()` for TUN fd, iOS: `startIosVpn()`) → `ConfigTemplate.process()` (full ensure pipeline + TUN fd injection) → `CoreController.start()` → `_waitForApi()` (awaited, up to 5s) → system proxy (desktop). `CoreManager` owns all VPN logic internally. On failure, `CoreManager._startFfi()` throws with the actual Go error message (propagated to UI via `CoreActions` catch block).
+`CoreActions.start()` → VPN permission (Android only) → `CoreManager.start(configYaml)` → `OverwriteService.apply()` → `_ensureInit()` → **`GeoDataService.ensureFiles()`** (downloads GeoIP.dat, GeoSite.dat, country.mmdb, ASN.mmdb if missing — blocks up to 10min/file for slow networks) → platform-specific VPN (Android: `startAndroidVpn()` for TUN fd, iOS: `startIosVpn()`) → `ConfigTemplate.process()` (full ensure pipeline + TUN fd injection) → `CoreController.start()` → `_waitForApi()` (awaited, up to 5s) → system proxy (desktop). `CoreManager` owns all VPN logic internally. On failure, `CoreManager._startFfi()` throws with the actual Go error message (propagated to UI via `CoreActions` catch block).
 
 ### Proxy group ordering
 
@@ -128,6 +128,7 @@ Groups are ordered by the `GLOBAL` group's `all` field from the mihomo API (`/pr
 - **Release artifacts**: `YueLink-Windows-Setup.exe` (Inno Setup), `YueLink-macOS.dmg` (create-dmg, universal binary), `YueLink-Android.apk` (fat universal), `YueLink-iOS.ipa` (no-codesign).
 - **Analyze in CI** uses `--no-fatal-infos --no-fatal-warnings` — only errors fail the build.
 - Submodules: `core/mihomo` is a git submodule. Clone with `--recursive` or run `git submodule update --init --recursive`.
+- **mihomo patches** (`core/patches/`): Applied during CI build. `0001-non-fatal-buildAndroidRules.patch` (PackageManager errors non-fatal), `0002-non-fatal-mmdb-and-iptables.patch` (MMDB/ASN `log.Fatalln` → `log.Errorln`, removes `os.Exit(2)` from iptables handler). These prevent the Go core from killing the entire Flutter process on non-critical failures.
 
 ## Testing
 

@@ -63,6 +63,9 @@ android/local.properties
 **/Flutter/ephemeral/
 *.symlinks/
 
+# Bundled geodata (downloaded during CI, ~42MB)
+assets/geodata/
+
 # Secrets
 *.env
 *.keystore
