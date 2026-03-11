@@ -204,6 +204,9 @@ class CoreManager {
 
       case CoreMode.ffi:
         try { await api.closeAllConnections(); } catch (_) {}
+        // Stop Go core FIRST (shuts down TUN listener cleanly),
+        // then close VPN fd. Reverse order causes Go to read from
+        // an invalid fd → potential panic.
         _core.stop();
 
       case CoreMode.subprocess:
@@ -211,12 +214,13 @@ class CoreManager {
         await ProcessManager.instance.stop();
     }
 
-    // Tear down OS VPN tunnel on mobile platforms
+    _running = false;
+
+    // Tear down OS VPN tunnel AFTER core is stopped.
+    // On Android, this closes the TUN fd and calls stopSelf().
     if (Platform.isAndroid || Platform.isIOS) {
       await vpn.VpnService.stopVpn();
     }
-
-    _running = false;
   }
 
   // ------------------------------------------------------------------

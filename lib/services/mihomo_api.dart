@@ -35,7 +35,7 @@ class MihomoApi {
     try {
       final resp = await http
           .get(Uri.parse('$_baseUrl/version'), headers: _headers)
-          .timeout(const Duration(milliseconds: 500));
+          .timeout(const Duration(seconds: 2));
       return resp.statusCode == 200;
     } catch (_) {
       return false;

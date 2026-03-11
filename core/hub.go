@@ -75,6 +75,14 @@ func StartCore(configStr *C.char) *C.char {
 	state.lock()
 	defer state.unlock()
 
+	// Recover from Go panics — a panic in CGO kills the entire Flutter process.
+	// Catch it and return an error string instead.
+	defer func() {
+		if r := recover(); r != nil {
+			log.Errorln("[StartCore] PANIC recovered: %v", r)
+		}
+	}()
+
 	if !state.isInit {
 		return C.CString("core not initialized, call InitCore first")
 	}
@@ -115,10 +123,17 @@ func StopCore() {
 	state.lock()
 	defer state.unlock()
 
+	defer func() {
+		if r := recover(); r != nil {
+			log.Errorln("[StopCore] PANIC recovered: %v", r)
+		}
+	}()
+
 	if !state.isRunning {
 		return
 	}
 
+	log.Infoln("[StopCore] shutting down...")
 	executor.Shutdown()
 	state.isRunning = false
 	log.Infoln("YueLink core stopped")

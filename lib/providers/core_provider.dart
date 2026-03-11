@@ -416,9 +416,14 @@ final coreHeartbeatProvider = Provider<void>((ref) {
       failures = 0;
     } else {
       failures++;
-      if (failures >= 3) {
+      debugPrint('[Heartbeat] API failure #$failures');
+      if (failures >= 5) {
+        debugPrint('[Heartbeat] core appears dead, marking as stopped');
         ref.read(coreStatusProvider.notifier).state = CoreStatus.stopped;
         ref.read(trafficProvider.notifier).state = const Traffic();
+        // Clean up: stop VPN service if core is dead
+        manager.stop().catchError((_) {});
+        failures = 0; // prevent repeated stop calls
       }
     }
   });
