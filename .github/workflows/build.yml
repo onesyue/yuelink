@@ -7,6 +7,11 @@ on:
   pull_request:
     branches: [main, dev]
 
+# Cancel any in-progress run for the same ref (branch or tag) automatically.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   FLUTTER_VERSION: '3.27.4'
   GO_VERSION: '1.23'
