@@ -46,10 +46,12 @@ class ProfileService {
   }
 
   /// Save profiles index.
+  /// JSON encode runs in a background Isolate to avoid jank.
   static Future<void> saveProfiles(List<Profile> profiles) async {
     final file = await _getProfilesFile();
-    await file.writeAsString(
-        json.encode(profiles.map((p) => p.toJson()).toList()));
+    final jsonList = profiles.map((p) => p.toJson()).toList();
+    final encoded = await Isolate.run(() => json.encode(jsonList));
+    await file.writeAsString(encoded);
   }
 
   /// Download a subscription and save the config content.
@@ -69,13 +71,16 @@ class ProfileService {
     final result = await _downloadConfig(url, proxyPort: proxyPort);
     final id = DateTime.now().millisecondsSinceEpoch.toString();
 
-    // Use subscription config directly if complete (normal case).
-    // Only merge with fallback template if subscription has no groups/rules.
-    String finalContent = result.content;
-    if (!ConfigTemplate.isCompleteConfig(result.content)) {
-      final fallback = await ConfigTemplate.loadFallbackTemplate();
-      finalContent = ConfigTemplate.mergeIfNeeded(fallback, result.content);
-    }
+    // Heavy config processing in background isolate to prevent ANR
+    final fallback = ConfigTemplate.isCompleteConfig(result.content)
+        ? null
+        : await ConfigTemplate.loadFallbackTemplate();
+    final finalContent = await Isolate.run(() {
+      if (fallback != null) {
+        return ConfigTemplate.mergeIfNeeded(fallback, result.content);
+      }
+      return result.content;
+    });
 
     final profile = Profile(
       id: id,
@@ -103,13 +108,16 @@ class ProfileService {
   static Future<Profile> updateProfile(Profile profile, {int? proxyPort}) async {
     final result = await _downloadConfig(profile.url, proxyPort: proxyPort);
 
-    // Use subscription config directly if complete (normal case).
-    // Only merge with fallback template if subscription has no groups/rules.
-    String finalContent = result.content;
-    if (!ConfigTemplate.isCompleteConfig(result.content)) {
-      final fallback = await ConfigTemplate.loadFallbackTemplate();
-      finalContent = ConfigTemplate.mergeIfNeeded(fallback, result.content);
-    }
+    // Heavy config processing in background isolate to prevent ANR
+    final fallback = ConfigTemplate.isCompleteConfig(result.content)
+        ? null
+        : await ConfigTemplate.loadFallbackTemplate();
+    final String finalContent = await Isolate.run(() {
+      if (fallback != null) {
+        return ConfigTemplate.mergeIfNeeded(fallback, result.content);
+      }
+      return result.content;
+    });
 
     profile.configContent = finalContent;
     profile.lastUpdated = DateTime.now();

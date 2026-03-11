@@ -173,6 +173,8 @@ class S {
   String get pasteFromClipboard =>
       _e ? 'Paste from clipboard' : '从剪贴板粘贴';
   String get addSubscription => _e ? 'Add Subscription' : '添加订阅';
+  String get downloadingSubscription =>
+      _e ? 'Downloading subscription...' : '正在下载订阅...';
   String get updatingSubscription =>
       _e ? 'Updating subscription...' : '正在更新订阅...';
   String get updateSuccess => _e ? 'Updated successfully' : '更新成功';

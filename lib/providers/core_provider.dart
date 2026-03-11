@@ -100,9 +100,19 @@ class CoreActions {
         try {
           final ok = await manager.api.setRoutingMode(routingMode);
           debugPrint('[CoreActions] setRoutingMode($routingMode): $ok');
+          if (!ok) {
+            debugPrint('[CoreActions] setRoutingMode returned false!');
+          }
+          // Verify
+          final actual = await manager.api.getRoutingMode();
+          debugPrint('[CoreActions] actual routing mode: $actual');
         } catch (e) {
           debugPrint('[CoreActions] setRoutingMode failed: $e');
         }
+      } else {
+        // Even for 'rule', verify the core is actually in rule mode
+        final actual = await manager.api.getRoutingMode();
+        debugPrint('[CoreActions] routing mode: saved=$routingMode, actual=$actual');
       }
 
       // 4. Auto-set system proxy on macOS/Windows

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
@@ -105,18 +106,21 @@ class CoreManager {
     debugPrint('[CoreManager] start() called, running=$_running, mode=$_mode');
     if (_running) return true;
 
-    // Apply overwrite layer on top of base config
+    // Apply overwrite layer on top of base config (heavy regex — use Isolate)
     final overwrite = await OverwriteService.load();
-    final withOverwrite = OverwriteService.apply(configYaml, overwrite);
+    final withOverwrite = await Isolate.run(
+        () => OverwriteService.apply(configYaml, overwrite));
 
     // iOS: Go core runs inside the PacketTunnel extension process.
     // Skip _ensureInit() — the extension calls InitCore in its own process.
     if (Platform.isIOS && !isMockMode) {
-      final processed = ConfigTemplate.process(
-        withOverwrite,
-        apiPort: _apiPort,
-        secret: _apiSecret,
-      );
+      final apiPort = _apiPort;
+      final apiSecret = _apiSecret;
+      final processed = await Isolate.run(() => ConfigTemplate.process(
+            withOverwrite,
+            apiPort: apiPort,
+            secret: apiSecret,
+          ));
       _apiPort = ConfigTemplate.getApiPort(processed);
       _mixedPort = ConfigTemplate.getMixedPort(processed);
       _apiSecret ??= ConfigTemplate.getSecret(processed);
@@ -143,12 +147,15 @@ class CoreManager {
     }
 
     // Process template variables, ensure API access, inject TUN fd
-    final processed = ConfigTemplate.process(
-      withOverwrite,
-      apiPort: _apiPort,
-      secret: _apiSecret,
-      tunFd: tunFd,
-    );
+    // Heavy regex operations — run in background Isolate to prevent ANR
+    final apiPort = _apiPort;
+    final apiSecret = _apiSecret;
+    final processed = await Isolate.run(() => ConfigTemplate.process(
+          withOverwrite,
+          apiPort: apiPort,
+          secret: apiSecret,
+          tunFd: tunFd,
+        ));
 
     // Extract actual port/secret from processed config
     _apiPort = ConfigTemplate.getApiPort(processed);

@@ -13,6 +13,7 @@ import '../services/app_notifier.dart';
 import '../services/profile_service.dart';
 import '../services/subscription_parser.dart';
 import '../theme.dart';
+import '../widgets/loading_overlay.dart';
 
 /// Strip "Exception: " prefix from error strings for user-facing display.
 String _friendlyError(Object e) {
@@ -149,17 +150,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                               .read(activeProfileIdProvider.notifier)
                               .select(profile.id);
                         },
-                        onUpdate: () async {
-                          AppNotifier.info(s.updatingSubscription);
-                          try {
-                            await ref
-                                .read(profilesProvider.notifier)
-                                .update(profile);
-                            AppNotifier.success(s.updateSuccess);
-                          } catch (e) {
-                            AppNotifier.error(s.updateFailed(_friendlyError(e)));
-                          }
-                        },
+                        onUpdate: () => _doUpdateProfile(context, ref, profile),
                         onEdit: () => _showEditDialog(context, ref, profile),
                         onViewConfig: () =>
                             _showConfigViewer(context, profile),
@@ -209,58 +200,35 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       String defaultName, String configContent) {
     final s = S.of(context);
     final nameCtrl = TextEditingController(text: defaultName);
-    bool isLoading = false;
 
     showDialog(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setState) => AlertDialog(
-          title: Text(s.importLocalFile),
-          content: TextField(
-            controller: nameCtrl,
-            autofocus: true,
-            decoration: InputDecoration(
-              labelText: s.nameLabel,
-              hintText: s.importLocalNameHint,
-              prefixIcon: const Icon(Icons.label_outline),
-            ),
+      builder: (ctx) => AlertDialog(
+        title: Text(s.importLocalFile),
+        content: TextField(
+          controller: nameCtrl,
+          autofocus: true,
+          decoration: InputDecoration(
+            labelText: s.nameLabel,
+            hintText: s.importLocalNameHint,
+            prefixIcon: const Icon(Icons.label_outline),
           ),
-          actions: [
-            TextButton(
-              onPressed: isLoading ? null : () => Navigator.pop(ctx),
-              child: Text(s.cancel),
-            ),
-            FilledButton(
-              onPressed: isLoading
-                  ? null
-                  : () async {
-                      final name = nameCtrl.text.trim();
-                      if (name.isEmpty) return;
-                      setState(() => isLoading = true);
-                      try {
-                        final profile = await ProfileService.addLocalProfile(
-                            name: name, configContent: configContent);
-                        ref
-                            .read(activeProfileIdProvider.notifier)
-                            .select(profile.id);
-                        // Add to state in-place
-                        ref.read(profilesProvider.notifier).addLocal(profile);
-                        if (ctx.mounted) Navigator.pop(ctx);
-                        AppNotifier.success(s.importLocalFileSuccess);
-                      } catch (e) {
-                        setState(() => isLoading = false);
-                        AppNotifier.error(s.addFailed(_friendlyError(e)));
-                      }
-                    },
-              child: isLoading
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2))
-                  : Text(s.add),
-            ),
-          ],
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(s.cancel),
+          ),
+          FilledButton(
+            onPressed: () {
+              final name = nameCtrl.text.trim();
+              if (name.isEmpty) return;
+              Navigator.pop(ctx);
+              _doImportLocal(context, ref, name, configContent);
+            },
+            child: Text(s.add),
+          ),
+        ],
       ),
     ).whenComplete(nameCtrl.dispose);
   }
@@ -319,79 +287,106 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     final s = S.of(context);
     final nameCtrl = TextEditingController();
     final urlCtrl = TextEditingController(text: prefilledUrl);
-    bool isLoading = false;
 
     showDialog(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setState) => AlertDialog(
-          title: Text(s.addSubscriptionDialogTitle),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameCtrl,
-                decoration: InputDecoration(
-                  labelText: s.nameLabel,
-                  hintText: s.nameHint,
-                  prefixIcon: const Icon(Icons.label_outline),
-                ),
-                textInputAction: TextInputAction.next,
+      builder: (ctx) => AlertDialog(
+        title: Text(s.addSubscriptionDialogTitle),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameCtrl,
+              decoration: InputDecoration(
+                labelText: s.nameLabel,
+                hintText: s.nameHint,
+                prefixIcon: const Icon(Icons.label_outline),
               ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: urlCtrl,
-                decoration: InputDecoration(
-                  labelText: s.urlLabel,
-                  hintText: 'https://...',
-                  prefixIcon: const Icon(Icons.link),
-                ),
-                maxLines: 2,
-                textInputAction: TextInputAction.done,
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: isLoading ? null : () => Navigator.pop(ctx),
-              child: Text(s.cancel),
+              textInputAction: TextInputAction.next,
             ),
-            FilledButton(
-              onPressed: isLoading
-                  ? null
-                  : () async {
-                      final name = nameCtrl.text.trim();
-                      final url = urlCtrl.text.trim();
-                      if (name.isEmpty || url.isEmpty) return;
-
-                      setState(() => isLoading = true);
-                      try {
-                        final profile = await ref
-                            .read(profilesProvider.notifier)
-                            .add(name: name, url: url);
-                        ref
-                            .read(activeProfileIdProvider.notifier)
-                            .select(profile.id);
-                        if (ctx.mounted) Navigator.pop(ctx);
-                        AppNotifier.success(s.addSuccess);
-                      } catch (e) {
-                        setState(() => isLoading = false);
-                        AppNotifier.error(s.addFailed(_friendlyError(e)));
-                      }
-                    },
-              child: isLoading
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child:
-                          CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Text(s.add),
+            const SizedBox(height: 12),
+            TextField(
+              controller: urlCtrl,
+              decoration: InputDecoration(
+                labelText: s.urlLabel,
+                hintText: 'https://...',
+                prefixIcon: const Icon(Icons.link),
+              ),
+              maxLines: 2,
+              textInputAction: TextInputAction.done,
             ),
           ],
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(s.cancel),
+          ),
+          FilledButton(
+            onPressed: () {
+              final name = nameCtrl.text.trim();
+              final url = urlCtrl.text.trim();
+              if (name.isEmpty || url.isEmpty) return;
+              Navigator.pop(ctx); // close dialog first
+              _doAddProfile(context, ref, name, url);
+            },
+            child: Text(s.add),
+          ),
+        ],
       ),
     );
+  }
+
+  Future<void> _doAddProfile(
+      BuildContext context, WidgetRef ref, String name, String url) async {
+    final s = S.of(context);
+    try {
+      final profile = await LoadingOverlay.run(
+        context,
+        message: s.downloadingSubscription,
+        action: () => ref.read(profilesProvider.notifier).add(name: name, url: url),
+      );
+      ref.read(activeProfileIdProvider.notifier).select(profile.id);
+      AppNotifier.success(s.addSuccess);
+    } catch (e) {
+      AppNotifier.error(s.addFailed(_friendlyError(e)));
+    }
+  }
+
+  Future<void> _doImportLocal(BuildContext context, WidgetRef ref,
+      String name, String configContent) async {
+    final s = S.of(context);
+    try {
+      final profile = await LoadingOverlay.run(
+        context,
+        message: s.downloadingSubscription,
+        action: () async {
+          final p = await ProfileService.addLocalProfile(
+              name: name, configContent: configContent);
+          ref.read(profilesProvider.notifier).addLocal(p);
+          return p;
+        },
+      );
+      ref.read(activeProfileIdProvider.notifier).select(profile.id);
+      AppNotifier.success(s.importLocalFileSuccess);
+    } catch (e) {
+      AppNotifier.error(s.addFailed(_friendlyError(e)));
+    }
+  }
+
+  Future<void> _doUpdateProfile(
+      BuildContext context, WidgetRef ref, Profile profile) async {
+    final s = S.of(context);
+    try {
+      await LoadingOverlay.run(
+        context,
+        message: s.updatingSubscription,
+        action: () => ref.read(profilesProvider.notifier).update(profile),
+      );
+      AppNotifier.success(s.updateSuccess);
+    } catch (e) {
+      AppNotifier.error(s.updateFailed(_friendlyError(e)));
+    }
   }
 
   void _showEditDialog(
@@ -477,9 +472,8 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                 profile.updateInterval = intervalHours == 0
                     ? const Duration(hours: 24)
                     : Duration(hours: intervalHours);
-                ref.read(profilesProvider.notifier).update(profile);
                 Navigator.pop(ctx);
-                AppNotifier.success(s.saved);
+                _doUpdateProfile(context, ref, profile);
               },
               child: Text(s.save),
             ),

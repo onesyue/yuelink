@@ -318,12 +318,31 @@ class _CompactRoutingMode extends ConsumerWidget {
             return Flexible(
               child: GestureDetector(
                 onTap: () async {
-                  ref.read(routingModeProvider.notifier).state = modes[i];
-                  await SettingsService.setRoutingMode(modes[i]);
+                  final mode = modes[i];
+                  ref.read(routingModeProvider.notifier).state = mode;
+                  await SettingsService.setRoutingMode(mode);
                   if (status == CoreStatus.running) {
                     try {
-                      await CoreManager.instance.api.setRoutingMode(modes[i]);
-                    } catch (_) {}
+                      final ok = await CoreManager.instance.api.setRoutingMode(mode);
+                      if (ok) {
+                        // Verify mode actually changed
+                        final actual = await CoreManager.instance.api.getRoutingMode();
+                        debugPrint('[RoutingMode] set=$mode, actual=$actual');
+                        if (actual != mode) {
+                          AppNotifier.warning('${s.routeModeRule}: $actual ≠ $mode');
+                        }
+                        // Refresh proxy groups to reflect new mode
+                        ref.read(proxyGroupsProvider.notifier).refresh();
+                      } else {
+                        AppNotifier.error('切换模式失败');
+                        // Revert UI state
+                        ref.read(routingModeProvider.notifier).state = routingMode;
+                      }
+                    } catch (e) {
+                      debugPrint('[RoutingMode] error: $e');
+                      AppNotifier.error('切换模式失败: $e');
+                      ref.read(routingModeProvider.notifier).state = routingMode;
+                    }
                   }
                 },
                 child: AnimatedContainer(
