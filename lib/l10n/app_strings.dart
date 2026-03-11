@@ -97,6 +97,7 @@ class S {
   String get trafficUpload => _e ? 'Upload' : '上传';
   String get trafficDownload => _e ? 'Download' : '下载';
   String get trafficMemory => _e ? 'Memory' : '内存';
+  String get activeConns => _e ? 'Connections' : '活跃连接';
 
   // ── Mock mode ─────────────────────────────────────────────────────
   String get mockModeBanner => _e ? 'Dev Mode · Mock Data' : '开发模式 · 模拟数据';
