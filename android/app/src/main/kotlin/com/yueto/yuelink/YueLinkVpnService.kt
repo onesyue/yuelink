@@ -73,7 +73,10 @@ class YueLinkVpnService : VpnService() {
             .setSession("YueLink")
             .addAddress("172.19.0.1", 30)
             .addRoute("0.0.0.0", 0)
-            .addRoute("::", 0)
+            // Do NOT add IPv6 route — mihomo TUN only has inet4-address.
+            // Routing IPv6 to TUN without inet6-address creates a black hole:
+            // Android prefers IPv6, packets go to TUN, mihomo can't process them,
+            // connections hang. IPv6 traffic bypasses VPN and goes direct instead.
             .addDnsServer("223.5.5.5")
             .addDnsServer("8.8.8.8")
             .setMtu(9000)

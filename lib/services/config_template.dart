@@ -70,6 +70,12 @@ class ConfigTemplate {
     // Ensure allow-lan for mixed-port to listen on all interfaces
     config = _ensureAllowLan(config);
 
+    // Disable IPv6 — mihomo TUN only has inet4-address, and Android
+    // VpnService only routes IPv4. Enabling IPv6 causes resolution failures.
+    if (!_hasKey(config, 'ipv6')) {
+      config += '\nipv6: false\n';
+    }
+
     // Platform-specific: find-process-mode
     config = _ensureFindProcessMode(config);
 
