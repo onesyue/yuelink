@@ -1,40 +1,9 @@
-import 'dart:isolate';
+import 'dart:ffi';
 
 import 'package:ffi/ffi.dart';
 
 import 'core_bindings.dart';
 import 'core_mock.dart';
-
-/// Top-level functions for Isolate.run — cannot be closures or instance methods.
-/// Each isolate loads its own CoreBindings handle, but the OS shares the same
-/// underlying native library, so Go global state is accessible from any thread.
-String? _ffiInit(String homeDir) {
-  final bindings = CoreBindings.instance;
-  final ptr = homeDir.toNativeUtf8();
-  try {
-    final resultPtr = bindings.initCore(ptr);
-    if (resultPtr.address == 0) return null; // NULL => success
-    final result = resultPtr.toDartString();
-    bindings.freeCString(resultPtr);
-    return result.isEmpty ? null : result;
-  } finally {
-    calloc.free(ptr);
-  }
-}
-
-String? _ffiStart(String configYaml) {
-  final bindings = CoreBindings.instance;
-  final ptr = configYaml.toNativeUtf8();
-  try {
-    final resultPtr = bindings.startCore(ptr);
-    if (resultPtr.address == 0) return null; // NULL => success
-    final result = resultPtr.toDartString();
-    bindings.freeCString(resultPtr);
-    return result.isEmpty ? null : result;
-  } finally {
-    calloc.free(ptr);
-  }
-}
 
 /// High-level Dart wrapper around the mihomo Go core.
 ///
@@ -65,15 +34,13 @@ class CoreController {
   // Lifecycle
   // ------------------------------------------------------------------
 
-  /// Initialize the core. Returns null on success, error message on failure.
-  String? init(String homeDir) {
-    if (_useMock) {
-      _mock.init(homeDir);
-      return null;
-    }
-    final ptr = homeDir.toNativeUtf8();
+  /// Call an FFI function that returns a C string.
+  /// Handles: nullptr (treated as success), empty string (success),
+  /// non-empty string (error message). Frees the C string after reading.
+  String? _callStringFn(Pointer<Utf8> Function(Pointer<Utf8>) fn, String arg) {
+    final ptr = arg.toNativeUtf8();
     try {
-      final resultPtr = _bindings!.initCore(ptr);
+      final resultPtr = fn(ptr);
       if (resultPtr.address == 0) return null; // NULL => success
       final result = resultPtr.toDartString();
       _bindings!.freeCString(resultPtr);
@@ -83,16 +50,19 @@ class CoreController {
     }
   }
 
-  /// Async init — runs FFI in a separate isolate to avoid blocking the UI thread.
-  /// InitCore typically takes 100-500ms (directory setup, GeoIP loading).
-  Future<String?> initAsync(String homeDir) async {
+  /// Initialize the core. Returns null on success, error message on failure.
+  String? init(String homeDir) {
     if (_useMock) {
       _mock.init(homeDir);
       return null;
     }
-    return Isolate.run(() => _ffiInit(homeDir))
-        .timeout(const Duration(seconds: 30),
-            onTimeout: () => 'InitCore timed out after 30s');
+    return _callStringFn(_bindings!.initCore, homeDir);
+  }
+
+  /// Async init — wraps sync FFI call in a Future.
+  /// InitCore typically takes 100-500ms (directory setup, config init).
+  Future<String?> initAsync(String homeDir) async {
+    return init(homeDir);
   }
 
   /// Start the core. Returns null on success, error message on failure.
@@ -101,28 +71,13 @@ class CoreController {
       _mock.start(configYaml);
       return null;
     }
-    final ptr = configYaml.toNativeUtf8();
-    try {
-      final resultPtr = _bindings!.startCore(ptr);
-      if (resultPtr.address == 0) return null; // NULL => success
-      final result = resultPtr.toDartString();
-      _bindings!.freeCString(resultPtr);
-      return result.isEmpty ? null : result;
-    } finally {
-      calloc.free(ptr);
-    }
+    return _callStringFn(_bindings!.startCore, configYaml);
   }
 
-  /// Async start — runs FFI in a separate isolate to avoid blocking the UI thread.
-  /// StartCore calls hub.Parse() which takes 500ms-2s (YAML parsing, DNS setup, listener startup).
+  /// Async start — wraps sync FFI call in a Future.
+  /// StartCore calls hub.Parse() which takes 500ms-2s.
   Future<String?> startAsync(String configYaml) async {
-    if (_useMock) {
-      _mock.start(configYaml);
-      return null;
-    }
-    return Isolate.run(() => _ffiStart(configYaml))
-        .timeout(const Duration(seconds: 30),
-            onTimeout: () => 'StartCore timed out after 30s');
+    return start(configYaml);
   }
 
   void stop() {
@@ -160,16 +115,7 @@ class CoreController {
       _mock.updateConfig(configYaml);
       return null;
     }
-    final ptr = configYaml.toNativeUtf8();
-    try {
-      final resultPtr = _bindings!.updateConfig(ptr);
-      if (resultPtr.address == 0) return null; // NULL => success
-      final result = resultPtr.toDartString();
-      _bindings!.freeCString(resultPtr);
-      return result.isEmpty ? null : result;
-    } finally {
-      calloc.free(ptr);
-    }
+    return _callStringFn(_bindings!.updateConfig, configYaml);
   }
 
   // ------------------------------------------------------------------
