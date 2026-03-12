@@ -7,7 +7,8 @@ import '../core/ffi/core_controller.dart';
 import '../domain/models/proxy.dart';
 import '../providers/profile_provider.dart';
 import '../core/kernel/core_manager.dart';
-import '../services/profile_service.dart';
+import '../infrastructure/repositories/profile_repository.dart';
+import '../infrastructure/repositories/proxy_repository.dart';
 
 /// Custom URL used for latency testing. Defaults to the standard gstatic URL.
 final testUrlProvider = StateProvider<String>(
@@ -34,7 +35,8 @@ final nodeViewModeProvider =
 final offlineProxyGroupsProvider = FutureProvider<List<ProxyGroup>>((ref) async {
   final activeId = ref.watch(activeProfileIdProvider);
   if (activeId == null) return [];
-  final config = await ProfileService.loadConfig(activeId);
+  final config =
+      await ref.read(profileRepositoryProvider).loadConfig(activeId);
   if (config == null || config.isEmpty) return [];
   try {
     final yaml = loadYaml(config);
@@ -80,6 +82,7 @@ class ProxyGroupsNotifier extends StateNotifier<List<ProxyGroup>> {
   ProxyGroupsNotifier(this._ref) : super([]);
   final Ref _ref;
 
+  ProxyRepository get _repo => _ref.read(proxyRepositoryProvider);
 
   /// Refresh proxy data from the running mihomo instance.
   ///
@@ -92,7 +95,7 @@ class ProxyGroupsNotifier extends StateNotifier<List<ProxyGroup>> {
       data = CoreController.instance.getProxies();
     } else {
       try {
-        data = await manager.api.getProxies();
+        data = await _repo.getProxies();
       } catch (_) {
         return; // API not available
       }
@@ -153,7 +156,7 @@ class ProxyGroupsNotifier extends StateNotifier<List<ProxyGroup>> {
     if (manager.isMockMode) {
       ok = CoreController.instance.changeProxy(groupName, proxyName);
     } else {
-      ok = await manager.api.changeProxy(groupName, proxyName);
+      ok = await _repo.changeProxy(groupName, proxyName);
     }
 
     if (ok) await refresh();
@@ -175,6 +178,8 @@ class DelayTestActions {
   final Ref ref;
   DelayTestActions(this.ref);
 
+  ProxyRepository get _repo => ref.read(proxyRepositoryProvider);
+
   /// Test delay for a single proxy node.
   Future<int> testDelay(String proxyName) async {
     final testing = Set<String>.from(ref.read(delayTestingProvider));
@@ -190,10 +195,20 @@ class DelayTestActions {
         return CoreController.instance.testDelay(proxyName);
       });
     } else {
-      delay = await manager.api.testDelay(proxyName, url: testUrl);
+      delay = await _repo.testDelayWithBatch(
+        proxyName,
+        url: testUrl,
+        onResult: (name, d) {
+          final current =
+              Map<String, int>.from(ref.read(delayResultsProvider));
+          current[name] = d;
+          ref.read(delayResultsProvider.notifier).state = current;
+        },
+      );
     }
 
-    // Update results
+    // Update results directly (batcher may also fire, but this ensures
+    // immediate update for the single-node case)
     final current = Map<String, int>.from(ref.read(delayResultsProvider));
     current[proxyName] = delay;
     ref.read(delayResultsProvider.notifier).state = current;
@@ -220,7 +235,8 @@ class DelayTestActions {
 
       final testUrl = ref.read(testUrlProvider);
       try {
-        final results = await manager.api.testGroupDelay(groupName, url: testUrl);
+        final results =
+            await _repo.testGroupDelay(groupName, url: testUrl);
         // Results: {proxyName: {delay: int}, ...} or {proxyName: int}
         final current = Map<String, int>.from(ref.read(delayResultsProvider));
         for (final entry in results.entries) {

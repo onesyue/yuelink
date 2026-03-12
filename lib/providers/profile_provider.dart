@@ -2,7 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../domain/models/profile.dart';
 import '../core/kernel/core_manager.dart';
-import '../services/profile_service.dart';
+import '../infrastructure/repositories/profile_repository.dart';
 import '../core/storage/settings_service.dart';
 
 // ------------------------------------------------------------------
@@ -39,10 +39,12 @@ class ProfilesNotifier extends StateNotifier<AsyncValue<List<Profile>>> {
 
   final Ref _ref;
 
+  ProfileRepository get _repo => _ref.read(profileRepositoryProvider);
+
   Future<void> load() async {
     state = const AsyncValue.loading();
     try {
-      final profiles = await ProfileService.loadProfiles();
+      final profiles = await _repo.loadProfiles();
       state = AsyncValue.data(profiles);
     } catch (e, st) {
       state = AsyncValue.error(e, st);
@@ -53,8 +55,8 @@ class ProfilesNotifier extends StateNotifier<AsyncValue<List<Profile>>> {
     final proxyPort = CoreManager.instance.isRunning
         ? CoreManager.instance.mixedPort
         : null;
-    final profile = await ProfileService.addProfile(
-        name: name, url: url, proxyPort: proxyPort);
+    final profile =
+        await _repo.addProfile(name: name, url: url, proxyPort: proxyPort);
     state.whenData((list) {
       state = AsyncValue.data([...list, profile]);
     });
@@ -73,7 +75,7 @@ class ProfilesNotifier extends StateNotifier<AsyncValue<List<Profile>>> {
     final proxyPort = CoreManager.instance.isRunning
         ? CoreManager.instance.mixedPort
         : null;
-    await ProfileService.updateProfile(profile, proxyPort: proxyPort);
+    await _repo.updateProfile(profile, proxyPort: proxyPort);
     state.whenData((list) {
       final idx = list.indexWhere((p) => p.id == profile.id);
       if (idx == -1) return;
@@ -84,7 +86,7 @@ class ProfilesNotifier extends StateNotifier<AsyncValue<List<Profile>>> {
   }
 
   Future<void> delete(String id) async {
-    await ProfileService.deleteProfile(id);
+    await _repo.deleteProfile(id);
     // Clear active profile selection if we deleted the active one
     if (_ref.read(activeProfileIdProvider) == id) {
       _ref.read(activeProfileIdProvider.notifier).select(null);

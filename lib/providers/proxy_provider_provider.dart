@@ -2,28 +2,29 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../domain/models/proxy_provider.dart';
 import '../core/kernel/core_manager.dart';
+import '../infrastructure/repositories/proxy_repository.dart';
 
 final proxyProvidersProvider =
     StateNotifierProvider<ProxyProvidersNotifier, List<ProxyProviderInfo>>(
-  (ref) => ProxyProvidersNotifier(),
+  (ref) => ProxyProvidersNotifier(ref.read(proxyRepositoryProvider)),
 );
 
 class ProxyProvidersNotifier
     extends StateNotifier<List<ProxyProviderInfo>> {
-  ProxyProvidersNotifier() : super([]);
+  final ProxyRepository _repo;
+
+  ProxyProvidersNotifier(this._repo) : super([]);
 
   Future<void> refresh() async {
-    final manager = CoreManager.instance;
-    if (manager.isMockMode) return;
+    if (CoreManager.instance.isMockMode) return;
 
     try {
-      final data = await manager.api.getProxyProviders();
+      final data = await _repo.getProxyProviders();
       final providersMap =
           data['providers'] as Map<String, dynamic>? ?? {};
       final list = <ProxyProviderInfo>[];
       for (final entry in providersMap.entries) {
         final info = entry.value as Map<String, dynamic>;
-        // Skip default provider
         if (info['vehicleType'] == 'Compatible') continue;
         list.add(ProxyProviderInfo.fromJson(entry.key, info));
       }
@@ -35,7 +36,7 @@ class ProxyProvidersNotifier
 
   Future<bool> update(String name) async {
     try {
-      return await CoreManager.instance.api.updateProxyProvider(name);
+      return await _repo.updateProxyProvider(name);
     } catch (_) {
       return false;
     }
@@ -43,7 +44,7 @@ class ProxyProvidersNotifier
 
   Future<void> healthCheck(String name) async {
     try {
-      await CoreManager.instance.api.healthCheckProvider(name);
+      await _repo.healthCheckProvider(name);
     } catch (_) {}
   }
 }

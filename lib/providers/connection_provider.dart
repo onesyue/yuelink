@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../domain/models/connection.dart';
 import '../core/kernel/core_manager.dart';
+import '../infrastructure/repositories/connection_repository.dart';
 import 'core_provider.dart';
 
 // ------------------------------------------------------------------
@@ -46,28 +47,12 @@ final connectionsStreamProvider = Provider<void>((ref) {
     return;
   }
 
-  // Real mode: WebSocket stream with 500ms throttle to prevent UI overload
-  // (e.g. hundreds of connections during BT download)
-  ConnectionsSnapshot? pending;
-  Timer? throttle;
-
-  final sub = manager.stream.connectionsStream().listen((data) {
-    try {
-      pending = ConnectionsSnapshot.fromJson(data);
-      throttle ??= Timer(const Duration(milliseconds: 500), () {
-        final snap = pending;
-        if (snap != null) {
-          ref.read(connectionsSnapshotProvider.notifier).state = snap;
-          pending = null;
-        }
-        throttle = null;
-      });
-    } catch (_) {}
+  // Real mode: use ConnectionRepository's throttled stream
+  final repo = ref.watch(connectionRepositoryProvider);
+  final sub = repo.connectionsStream().listen((snap) {
+    ref.read(connectionsSnapshotProvider.notifier).state = snap;
   });
-  ref.onDispose(() {
-    sub.cancel();
-    throttle?.cancel();
-  });
+  ref.onDispose(() => sub.cancel());
 });
 
 // Derived count — cheap int comparison avoids rebuilds on every connection update
@@ -108,12 +93,14 @@ class ConnectionActions {
   ConnectionActions(this.ref);
 
   Future<bool> close(String id) async {
-    final ok = await CoreManager.instance.api.closeConnection(id);
+    final ok =
+        await ref.read(connectionRepositoryProvider).closeConnection(id);
     return ok;
   }
 
   Future<bool> closeAll() async {
-    final ok = await CoreManager.instance.api.closeAllConnections();
+    final ok =
+        await ref.read(connectionRepositoryProvider).closeAllConnections();
     if (ok) {
       ref.read(connectionsSnapshotProvider.notifier).state =
           const ConnectionsSnapshot(

@@ -11,6 +11,7 @@ import '../l10n/app_strings.dart';
 import '../shared/app_notifier.dart';
 import '../core/kernel/core_manager.dart';
 import '../infrastructure/datasources/mihomo_api.dart';
+import '../infrastructure/repositories/traffic_repository.dart';
 import '../core/storage/settings_service.dart';
 import '../core/platform/vpn_service.dart';
 
@@ -465,15 +466,20 @@ final trafficStreamProvider = Provider<void>((ref) {
     });
     ref.onDispose(() => timer.cancel());
   } else {
-    final sub = manager.stream.trafficStream().listen((t) {
-      ref.read(trafficProvider.notifier).state =
-          Traffic(up: t.up, down: t.down);
-      final history = ref.read(trafficHistoryProvider);
-      history.add(t.up, t.down);
-      ref.read(trafficHistoryProvider.notifier).state = history.copy();
+    final repo = ref.watch(trafficRepositoryProvider);
+    // Traffic ticks → trafficProvider + dailyTrafficProvider
+    final trafficSub = repo.trafficStream().listen((t) {
+      ref.read(trafficProvider.notifier).state = t;
       ref.read(dailyTrafficProvider.notifier).add(t.up, t.down);
     });
-    ref.onDispose(() => sub.cancel());
+    // History ticks → trafficHistoryProvider
+    final historySub = repo.historyStream().listen((history) {
+      ref.read(trafficHistoryProvider.notifier).state = history;
+    });
+    ref.onDispose(() {
+      trafficSub.cancel();
+      historySub.cancel();
+    });
   }
 });
 
@@ -490,21 +496,10 @@ final memoryStreamProvider = Provider<void>((ref) {
   final manager = CoreManager.instance;
   if (manager.isMockMode) return;
 
-  // Throttle to 5s — memory fluctuates every ~1s but we don't need sub-second UI updates
-  int? pending;
-  Timer? throttle;
-
-  final sub = manager.stream.memoryStream().listen((bytes) {
-    pending = bytes;
-    throttle ??= Timer(const Duration(seconds: 5), () {
-      final v = pending;
-      if (v != null) ref.read(memoryUsageProvider.notifier).state = v;
-      pending = null;
-      throttle = null;
-    });
+  // Throttle is handled inside TrafficRepository.memoryStream() (5 s window)
+  final repo = ref.watch(trafficRepositoryProvider);
+  final sub = repo.memoryStream().listen((bytes) {
+    ref.read(memoryUsageProvider.notifier).state = bytes;
   });
-  ref.onDispose(() {
-    sub.cancel();
-    throttle?.cancel();
-  });
+  ref.onDispose(() => sub.cancel());
 });
