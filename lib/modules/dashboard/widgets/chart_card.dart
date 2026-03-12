@@ -140,10 +140,11 @@ class _ChartCardState extends ConsumerState<ChartCard> {
           show: true,
           drawHorizontalLine: true,
           drawVerticalLine: false,
-          // 4 intervals → gridlines at maxY/4, maxY/2, 3*maxY/4, maxY.
-          // The maxY line is hidden in getTitlesWidget so the top label
-          // never floats above the chart area and overlaps the header.
-          horizontalInterval: maxY / 4,
+          // Exactly 2 interior gridlines at maxY/3 and 2*maxY/3.
+          // The 0 and maxY boundary lines are suppressed in getTitlesWidget
+          // so labels only appear in the safe interior — 60px apart on a
+          // 120px chart, guaranteed no overlap at any font scaling.
+          horizontalInterval: maxY / 3,
           getDrawingHorizontalLine: (value) => FlLine(
             color: Theme.of(context).dividerColor.withValues(alpha: 0.2),
             strokeWidth: 0.5,
@@ -159,16 +160,21 @@ class _ChartCardState extends ConsumerState<ChartCard> {
             sideTitles: SideTitles(
               showTitles: true,
               reservedSize: 48,
-              interval: maxY / 4,
+              interval: maxY / 3,
               getTitlesWidget: (value, meta) {
-                // Hide 0 (bottom edge) and maxY (top edge) to prevent labels
-                // from overflowing outside the chart and overlapping other text.
                 if (value <= 0 || value >= meta.max * 0.99) {
                   return const SizedBox.shrink();
                 }
-                return Text(
-                  _fmtSpeed(value),
-                  style: YLText.caption.copyWith(fontSize: 9, color: YLColors.zinc400),
+                return Align(
+                  alignment: Alignment.centerRight,
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: 4),
+                    child: Text(
+                      _fmtSpeed(value),
+                      style: YLText.caption
+                          .copyWith(fontSize: 9, color: YLColors.zinc400),
+                    ),
+                  ),
                 );
               },
             ),
@@ -208,10 +214,14 @@ class _ChartCardState extends ConsumerState<ChartCard> {
   }
 
   static String _fmtSpeed(double bps) {
-    if (bps < 1024 * 1024 * 1024) {
-      return '${(bps / (1024 * 1024)).toStringAsFixed(2)}MB';
+    if (bps >= 1024 * 1024 * 1024) {
+      return '${(bps / (1024 * 1024 * 1024)).toStringAsFixed(1)}GB';
     }
-    return '${(bps / (1024 * 1024 * 1024)).toStringAsFixed(1)}GB';
+    final mb = bps / (1024 * 1024);
+    // Adaptive precision: always show at least 1 significant digit.
+    if (mb >= 10) return '${mb.toStringAsFixed(1)}MB';
+    if (mb >= 0.01) return '${mb.toStringAsFixed(2)}MB';
+    return '${mb.toStringAsFixed(3)}MB'; // < 10 KB/s
   }
 }
 
