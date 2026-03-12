@@ -140,10 +140,6 @@ class _ChartCardState extends ConsumerState<ChartCard> {
           show: true,
           drawHorizontalLine: true,
           drawVerticalLine: false,
-          // Exactly 2 interior gridlines at maxY/3 and 2*maxY/3.
-          // The 0 and maxY boundary lines are suppressed in getTitlesWidget
-          // so labels only appear in the safe interior — 60px apart on a
-          // 120px chart, guaranteed no overlap at any font scaling.
           horizontalInterval: maxY / 3,
           getDrawingHorizontalLine: (value) => FlLine(
             color: Theme.of(context).dividerColor.withValues(alpha: 0.2),
@@ -162,11 +158,14 @@ class _ChartCardState extends ConsumerState<ChartCard> {
               reservedSize: 48,
               interval: maxY / 3,
               getTitlesWidget: (value, meta) {
-                if (value <= 0 || value >= meta.max * 0.99) {
-                  return const SizedBox.shrink();
-                }
+                // Hide the 0 baseline label.
+                if (value <= 0) return const SizedBox.shrink();
+                // Top label (maxY): anchor to topRight so the text sits
+                // entirely inside the chart and never bleeds above it.
+                final isTop = value >= meta.max * 0.99;
                 return Align(
-                  alignment: Alignment.centerRight,
+                  alignment:
+                      isTop ? Alignment.topRight : Alignment.centerRight,
                   child: Padding(
                     padding: const EdgeInsets.only(right: 4),
                     child: Text(
@@ -215,13 +214,9 @@ class _ChartCardState extends ConsumerState<ChartCard> {
 
   static String _fmtSpeed(double bps) {
     if (bps >= 1024 * 1024 * 1024) {
-      return '${(bps / (1024 * 1024 * 1024)).toStringAsFixed(1)}GB';
+      return '${(bps / (1024 * 1024 * 1024)).toStringAsFixed(2)}GB';
     }
-    final mb = bps / (1024 * 1024);
-    // Adaptive precision: always show at least 1 significant digit.
-    if (mb >= 10) return '${mb.toStringAsFixed(1)}MB';
-    if (mb >= 0.01) return '${mb.toStringAsFixed(2)}MB';
-    return '${mb.toStringAsFixed(3)}MB'; // < 10 KB/s
+    return '${(bps / (1024 * 1024)).toStringAsFixed(2)}MB';
   }
 }
 
