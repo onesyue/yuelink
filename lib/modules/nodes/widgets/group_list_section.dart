@@ -16,10 +16,12 @@ class GroupListSection extends ConsumerWidget {
     super.key,
     required this.group,
     this.sortMode = NodeSortMode.defaultOrder,
+    this.searchQuery = '',
   });
 
   final ProxyGroup group;
   final NodeSortMode sortMode;
+  final String searchQuery;
 
   List<String> _sortedNodes(
       List<String> nodes, NodeSortMode mode, Map<String, int> delays) {
@@ -65,7 +67,12 @@ class GroupListSection extends ConsumerWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     // Read delays for sort order only; NodeTile handles rendering.
     final delays = ref.read(delayResultsProvider);
-    final nodeList = _sortedNodes(group.all, sortMode, delays);
+    final sorted = _sortedNodes(group.all, sortMode, delays);
+    final query = searchQuery.trim().toLowerCase();
+    final nodeList = query.isEmpty
+        ? sorted
+        : sorted.where((n) => n.toLowerCase().contains(query)).toList();
+    final isFiltered = query.isNotEmpty;
 
     return Container(
       decoration: BoxDecoration(
@@ -107,8 +114,13 @@ class GroupListSection extends ConsumerWidget {
                 ),
                 const Spacer(),
                 Text(
-                  S.of(context).nodesCountLabel(nodeList.length),
-                  style: YLText.caption.copyWith(color: YLColors.zinc500),
+                  isFiltered
+                      ? '${nodeList.length}/${group.all.length}'
+                      : S.of(context).nodesCountLabel(nodeList.length),
+                  style: YLText.caption.copyWith(
+                    color:
+                        isFiltered ? YLColors.connected : YLColors.zinc500,
+                  ),
                 ),
               ],
             ),

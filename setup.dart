@@ -54,6 +54,10 @@ const Map<String, Map<String, String>> outputNames = {
     'amd64': 'windows-amd64/libclash.dll',
     'arm64': 'windows-arm64/libclash.dll',
   },
+  'linux': {
+    'amd64': 'linux-amd64/libclash.so',
+    'arm64': 'linux-arm64/libclash.so',
+  },
 };
 
 /// Android NDK triple for each architecture.
@@ -296,6 +300,15 @@ Future<void> buildCore({
       buildMode = 'c-shared';
       break;
 
+    // -----------------------------------------------------------------
+    // Linux
+    // -----------------------------------------------------------------
+    case 'linux':
+      env['GOOS'] = 'linux';
+      env['GOARCH'] = goArch;
+      buildMode = 'c-shared';
+      break;
+
     default:
       throw Exception('Unknown platform: $platform');
   }
@@ -445,6 +458,20 @@ Future<void> installLibraries(String platform) async {
         }
       }
       break;
+
+    case 'linux':
+      // Install the host-arch .so to linux/libs/ for CMake to bundle.
+      for (final arch in ['amd64', 'arm64']) {
+        final src = '$outputDir/linux-$arch/libclash.so';
+        if (File(src).existsSync()) {
+          const dst = 'linux/libs/libclash.so';
+          File(dst).parent.createSync(recursive: true);
+          File(src).copySync(dst);
+          print('Installed: $dst');
+          break; // one arch per build
+        }
+      }
+      break;
   }
 }
 
@@ -463,6 +490,7 @@ void cleanBuild() {
     'ios/Frameworks',
     'macos/Frameworks',
     'windows/libs',
+    'linux/libs',
   ];
   for (final path in installDirs) {
     final d = Directory(path);

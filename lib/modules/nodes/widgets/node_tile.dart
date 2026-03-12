@@ -50,6 +50,47 @@ class _NodeTileState extends ConsumerState<NodeTile> {
     }
   }
 
+  Widget _buildName(BuildContext context, bool isSelected, bool isDark) {
+    final query =
+        ref.watch(nodeSearchQueryProvider).trim().toLowerCase();
+    final name = widget.name;
+    final baseStyle = YLText.body.copyWith(
+      fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+      color: isSelected
+          ? (isDark ? Colors.white : YLColors.primary)
+          : (isDark ? Colors.white : Colors.black),
+    );
+    if (query.isEmpty) {
+      return Text(name,
+          style: baseStyle, maxLines: 1, overflow: TextOverflow.ellipsis);
+    }
+    final lower = name.toLowerCase();
+    final idx = lower.indexOf(query);
+    if (idx < 0) {
+      return Text(name,
+          style: baseStyle, maxLines: 1, overflow: TextOverflow.ellipsis);
+    }
+    return Text.rich(
+      TextSpan(
+        children: [
+          if (idx > 0) TextSpan(text: name.substring(0, idx)),
+          TextSpan(
+            text: name.substring(idx, idx + query.length),
+            style: baseStyle.copyWith(
+              color: YLColors.connected,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          if (idx + query.length < name.length)
+            TextSpan(text: name.substring(idx + query.length)),
+        ],
+        style: baseStyle,
+      ),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // Granular watches — only this tile rebuilds when its delay/selected/testing changes.
@@ -85,18 +126,7 @@ class _NodeTileState extends ConsumerState<NodeTile> {
               ),
               const SizedBox(width: YLSpacing.xs),
               Expanded(
-                child: Text(
-                  widget.name,
-                  style: YLText.body.copyWith(
-                    fontWeight:
-                        isSelected ? FontWeight.w600 : FontWeight.w400,
-                    color: isSelected
-                        ? (isDark ? Colors.white : YLColors.primary)
-                        : (isDark ? Colors.white : Colors.black),
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
+                child: _buildName(context, isSelected, isDark),
               ),
               const SizedBox(width: YLSpacing.sm),
               InkWell(

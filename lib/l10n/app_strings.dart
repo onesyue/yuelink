@@ -160,7 +160,13 @@ class S {
   String get searchNodesHint => _e ? 'Search nodes...' : '搜索节点...';
   String get sortByDelay => _e ? 'Sort by delay' : '按延迟排序';
   String get cancelSort => _e ? 'Cancel sort' : '取消排序';
-  String get testUrlSettings => _e ? 'Speed test settings' : '测速设置';
+  String get testUrlSettings => _e ? 'Speed Test URL' : '测速 URL';
+  String get resetDefault => _e ? 'Reset to Default' : '恢复默认';
+  String get unsavedChanges => _e ? 'Unsaved Changes' : '有未保存的修改';
+  String get unsavedChangesBody =>
+      _e ? 'Leave and discard unsaved changes?' : '有未保存的修改，确定要离开并放弃吗？';
+  String get discardAndLeave => _e ? 'Discard & Leave' : '放弃并离开';
+  String get stayOnPage => _e ? 'Stay' : '留在当前页';
   String get noMatchingNodes => _e ? 'No matching nodes' : '未找到匹配的节点';
   String get testUrlDialogTitle => _e ? 'Speed Test URL' : '测速 URL';
   String get customUrlLabel => _e ? 'Custom URL' : '自定义 URL';
@@ -369,6 +375,33 @@ class S {
   String get sectionStatus => _e ? 'Status' : '状态';
   String get sectionTools => _e ? 'Tools' : '工具';
   String get sectionAbout => _e ? 'About' : '关于';
+  String get sectionDesktop => _e ? 'Desktop' : '桌面端';
+  String get sectionNetwork => _e ? 'Network' : '网络';
+  // Close window
+  String get closeWindowBehavior => _e ? 'Close Window' : '关闭窗口';
+  String get closeBehaviorTray => _e ? 'Minimize to tray' : '最小化到托盘';
+  String get closeBehaviorExit => _e ? 'Exit application' : '退出应用';
+  // Hotkey
+  String get toggleConnectionHotkey => _e ? 'Toggle Connection Hotkey' : '连接快捷键';
+  String get hotkeyEdit => _e ? 'Edit' : '编辑';
+  String get hotkeyListening => _e ? 'Press a key combination...' : '请按下组合键...';
+  String get hotkeySaved => _e ? 'Hotkey saved' : '快捷键已保存';
+  String get hotkeyFailed => _e ? 'Failed to register hotkey' : '快捷键注册失败';
+  // Geo database
+  String get geoDatabase => _e ? 'Geo Database' : '地理数据库';
+  String get geoUpdateNow => _e ? 'Update Now' : '立即更新';
+  String get geoUpdated => _e ? 'Geo database updated' : '地理数据库已更新';
+  String geoLastUpdated(String date) => _e ? 'Updated: $date' : '更新于 $date';
+  // Linux-specific
+  String get linuxProxyNotice =>
+      _e ? 'System proxy not managed automatically on Linux' : 'Linux 不自动管理系统代理';
+  String get linuxProxyManual => _e ? 'Manual proxy: 127.0.0.1:7890' : '手动代理: 127.0.0.1:7890';
+  String get hotkeyLinuxNotice =>
+      _e ? 'Not supported on all Linux desktops' : '部分 Linux 桌面不支持全局快捷键';
+  // Diagnostics
+  String get diagnostics => _e ? 'Diagnostics' : '诊断';
+  String get viewStartupReport => _e ? 'View startup report' : '查看启动报告';
+  String get copiedToClipboard => _e ? 'Copied to clipboard' : '已复制到剪贴板';
   String get sectionLanguage => _e ? 'Language' : '语言';
   String get connectionMode => _e ? 'Connection Mode' : '接入方式';
   String get modeTun => _e ? 'TUN Mode' : 'TUN 模式';

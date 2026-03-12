@@ -49,11 +49,14 @@ void main() async {
   final savedAutoConnect = await SettingsService.getAutoConnect();
   final savedSystemProxy = await SettingsService.getSystemProxyOnConnect();
   final savedLanguage = await SettingsService.getLanguage();
+  final savedTestUrl = await SettingsService.getTestUrl();
+  final savedCloseBehavior = await SettingsService.getCloseBehavior();
+  final savedToggleHotkey = await SettingsService.getToggleHotkey();
 
   // Apply global strings language before runApp (for tray etc.)
   S.setLanguage(savedLanguage);
 
-  // Configure launch at startup (desktop only)
+  // Configure launch at startup (macOS / Windows only)
   if (Platform.isMacOS || Platform.isWindows) {
     try {
       launchAtStartup.setup(
@@ -61,8 +64,10 @@ void main() async {
         appPath: Platform.resolvedExecutable,
       );
     } catch (_) {}
+  }
 
-    // Initialize window manager
+  // Initialize window manager (macOS, Windows, Linux)
+  if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
     await windowManager.ensureInitialized();
     const windowOptions = WindowOptions(
       size: Size(1280, 720),
@@ -75,6 +80,10 @@ void main() async {
       await windowManager.show();
       await windowManager.focus();
     });
+    // Linux: enforce a slightly tighter minimum to avoid layout breakage
+    if (Platform.isLinux) {
+      await windowManager.setMinimumSize(const Size(900, 600));
+    }
   }
 
   // Initialize core manager
@@ -96,6 +105,9 @@ void main() async {
       logLevelProvider.overrideWith((ref) => savedLogLevel),
       autoConnectProvider.overrideWith((ref) => savedAutoConnect),
       systemProxyOnConnectProvider.overrideWith((ref) => savedSystemProxy),
+      testUrlProvider.overrideWith((ref) => savedTestUrl),
+      closeBehaviorProvider.overrideWith((ref) => savedCloseBehavior),
+      toggleHotkeyProvider.overrideWith((ref) => savedToggleHotkey),
     ],
     child: const YueLinkApp(),
   ));
@@ -116,9 +128,11 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
   @override
   void initState() {
     super.initState();
-    if (Platform.isMacOS || Platform.isWindows) {
+    if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
       windowManager.addListener(this);
       windowManager.setPreventClose(true);
+    }
+    if (Platform.isMacOS || Platform.isWindows) {
       _initTray();
     }
     // Auto-connect and expiry check after first frame is rendered
@@ -135,7 +149,7 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
   @override
   void dispose() {
     if (_trayInitialized) trayManager.removeListener(this);
-    if (Platform.isMacOS || Platform.isWindows) {
+    if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
       windowManager.removeListener(this);
     }
     if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
@@ -172,13 +186,14 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
   // ── Global hotkeys ────────────────────────────────────────────────────────
 
   Future<void> _registerHotkeys() async {
+    // Linux: global hotkeys unreliable under Wayland — skip silently
+    if (Platform.isLinux) {
+      debugPrint('[Hotkey] Skipping global hotkey on Linux (Wayland not supported)');
+      return;
+    }
     try {
-      // Ctrl+Alt+C — toggle connection
-      final toggleKey = HotKey(
-        key: LogicalKeyboardKey.keyC,
-        modifiers: [HotKeyModifier.control, HotKeyModifier.alt],
-        scope: HotKeyScope.system,
-      );
+      final stored = ref.read(toggleHotkeyProvider);
+      final toggleKey = parseStoredHotkey(stored);
       await hotKeyManager.register(toggleKey, keyDownHandler: (_) {
         _handleTrayToggle();
       });
@@ -187,12 +202,32 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
     }
   }
 
+  Future<void> _reregisterHotkeys(String newHotkeyStr) async {
+    if (Platform.isLinux) return;
+    try {
+      await hotKeyManager.unregisterAll();
+      final toggleKey = parseStoredHotkey(newHotkeyStr);
+      await hotKeyManager.register(toggleKey, keyDownHandler: (_) {
+        _handleTrayToggle();
+      });
+    } catch (_) {}
+  }
+
   // ── Window manager callbacks ─────────────────────────────────────
 
   @override
   void onWindowClose() async {
-    // Hide to tray instead of quitting
-    await windowManager.hide();
+    // Linux has no system tray — always quit on close
+    if (Platform.isLinux) {
+      await _handleQuit();
+      return;
+    }
+    final behavior = ref.read(closeBehaviorProvider);
+    if (behavior == 'exit') {
+      await _handleQuit();
+    } else {
+      await windowManager.hide();
+    }
   }
 
   // ── Tray ─────────────────────────────────────────────────────────
@@ -458,6 +493,13 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
     ref.listen(profilesProvider, (prev, next) {
       if (next is AsyncData) _checkSubscriptionExpiry();
     });
+
+    // Re-register hotkey when user changes it in Settings
+    if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
+      ref.listen(toggleHotkeyProvider, (prev, next) {
+        if (prev != null && prev != next) _reregisterHotkeys(next);
+      });
+    }
 
     return MaterialApp(
       title: AppConstants.appName,

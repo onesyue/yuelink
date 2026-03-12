@@ -24,10 +24,18 @@ class NodesPage extends ConsumerStatefulWidget {
 }
 
 class _NodesPageState extends ConsumerState<NodesPage> {
+  final _searchController = TextEditingController();
+
   @override
   void initState() {
     super.initState();
     Future.microtask(() => ref.read(proxyGroupsProvider.notifier).refresh());
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   @override
@@ -125,6 +133,7 @@ class _NodesPageState extends ConsumerState<NodesPage> {
 
     final sortMode = ref.watch(nodeSortModeProvider);
     final viewMode = ref.watch(nodeViewModeProvider);
+    final searchQuery = ref.watch(nodeSearchQueryProvider);
 
     // Global mode: prepend GLOBAL group so user can pick which group handles
     // all traffic; other groups still shown so selections can be made.
@@ -185,6 +194,14 @@ class _NodesPageState extends ConsumerState<NodesPage> {
                   ),
                   const SizedBox(width: YLSpacing.sm),
                 ],
+                bottom: PreferredSize(
+                  preferredSize: const Size.fromHeight(44),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                        YLSpacing.xl, 0, YLSpacing.xl, YLSpacing.sm),
+                    child: _NodeSearchBar(controller: _searchController),
+                  ),
+                ),
               ),
 
               // ── Group list ─────────────────────────────────────────────
@@ -217,10 +234,12 @@ class _NodesPageState extends ConsumerState<NodesPage> {
                             ? GroupListSection(
                                 group: group,
                                 sortMode: sortMode,
+                                searchQuery: searchQuery,
                               )
                             : GroupCard(
                                 group: group,
                                 sortMode: sortMode,
+                                searchQuery: searchQuery,
                               ),
                       );
                     },
@@ -247,6 +266,71 @@ String _sortModeLabel(S s, NodeSortMode mode) {
       return s.sortLatencyDesc;
     case NodeSortMode.nameAsc:
       return s.sortNameAsc;
+  }
+}
+
+// ── Node search bar ────────────────────────────────────────────────────────
+
+class _NodeSearchBar extends ConsumerWidget {
+  const _NodeSearchBar({required this.controller});
+  final TextEditingController controller;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = S.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final query = ref.watch(nodeSearchQueryProvider);
+    return SizedBox(
+      height: 36,
+      child: TextField(
+        controller: controller,
+        onChanged: (v) =>
+            ref.read(nodeSearchQueryProvider.notifier).state = v,
+        decoration: InputDecoration(
+          hintText: s.searchNodesHint,
+          hintStyle: YLText.body.copyWith(
+              color: YLColors.zinc400, fontSize: 13),
+          prefixIcon: const Icon(Icons.search_rounded,
+              size: 16, color: YLColors.zinc400),
+          prefixIconConstraints:
+              const BoxConstraints(minWidth: 36, minHeight: 36),
+          suffixIcon: query.isNotEmpty
+              ? GestureDetector(
+                  onTap: () {
+                    controller.clear();
+                    ref.read(nodeSearchQueryProvider.notifier).state = '';
+                  },
+                  child: const Icon(Icons.close_rounded,
+                      size: 14, color: YLColors.zinc400),
+                )
+              : null,
+          suffixIconConstraints:
+              const BoxConstraints(minWidth: 36, minHeight: 36),
+          filled: true,
+          fillColor: isDark
+              ? Colors.white.withValues(alpha: 0.06)
+              : Colors.black.withValues(alpha: 0.04),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(YLRadius.pill),
+            borderSide: BorderSide.none,
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(YLRadius.pill),
+            borderSide: BorderSide.none,
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(YLRadius.pill),
+            borderSide: BorderSide(
+              color: YLColors.connected.withValues(alpha: 0.4),
+              width: 1,
+            ),
+          ),
+        ),
+        style: YLText.body.copyWith(fontSize: 13),
+      ),
+    );
   }
 }
 

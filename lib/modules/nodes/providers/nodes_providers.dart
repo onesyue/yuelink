@@ -24,6 +24,9 @@ enum NodeViewMode { card, list }
 final nodeViewModeProvider =
     StateProvider<NodeViewMode>((ref) => NodeViewMode.card);
 
+/// Real-time node search query — empty string means no filter.
+final nodeSearchQueryProvider = StateProvider<String>((ref) => '');
+
 // ------------------------------------------------------------------
 // Offline proxy groups (parsed from active profile YAML)
 // ------------------------------------------------------------------

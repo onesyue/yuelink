@@ -29,19 +29,33 @@ class DashboardPage extends ConsumerStatefulWidget {
 class _DashboardPageState extends ConsumerState<DashboardPage> {
   DateTime? _connectedSince;
   Timer? _uptimeTimer;
+  final _uptimeNotifier = ValueNotifier<String>('');
   bool _busy = false;
 
   @override
   void dispose() {
     _uptimeTimer?.cancel();
+    _uptimeNotifier.dispose();
     super.dispose();
   }
 
   void _startUptimeTimer() {
     _connectedSince = DateTime.now();
+    _uptimeNotifier.value = '';
     _uptimeTimer?.cancel();
     _uptimeTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) setState(() {});
+      if (_connectedSince == null) return;
+      final diff = DateTime.now().difference(_connectedSince!);
+      final h = diff.inHours;
+      final m = diff.inMinutes % 60;
+      final sec = diff.inSeconds % 60;
+      if (h > 0) {
+        _uptimeNotifier.value = '${h}h ${m}m ${sec}s';
+      } else if (m > 0) {
+        _uptimeNotifier.value = '${m}m ${sec}s';
+      } else {
+        _uptimeNotifier.value = '${sec}s';
+      }
     });
   }
 
@@ -49,17 +63,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     _uptimeTimer?.cancel();
     _uptimeTimer = null;
     _connectedSince = null;
-  }
-
-  String get _uptimeText {
-    if (_connectedSince == null) return '';
-    final diff = DateTime.now().difference(_connectedSince!);
-    final h = diff.inHours;
-    final m = diff.inMinutes % 60;
-    final sec = diff.inSeconds % 60;
-    if (h > 0) return '${h}h ${m}m ${sec}s';
-    if (m > 0) return '${m}m ${sec}s';
-    return '${sec}s';
+    _uptimeNotifier.value = '';
   }
 
   @override
@@ -79,10 +83,12 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     ref.listen(coreStatusProvider, (prev, next) {
       if (next == CoreStatus.running) {
         _startUptimeTimer();
-        // Reset IP on reconnect
+        // Reset then auto-query exit IP; isLoading guard in query() prevents duplicates
         ref.read(exitIpProvider.notifier).reset();
+        ref.read(exitIpProvider.notifier).query();
       } else if (next == CoreStatus.stopped) {
         _stopUptimeTimer();
+        // Keep last IP visible after disconnect — user can see where they were connected
       }
     });
 
@@ -124,7 +130,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                       // ── Layer 1: Hero Card ──────────────
                       HeroCard(
                         status: status,
-                        uptimeText: _uptimeText,
+                        uptimeNotifier: _uptimeNotifier,
                         onToggle: () => _toggle(context, ref),
                       ),
 

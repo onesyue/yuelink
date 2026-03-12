@@ -13,13 +13,13 @@ import 'traffic_speed_row.dart';
 
 class HeroCard extends ConsumerWidget {
   final CoreStatus status;
-  final String uptimeText;
+  final ValueNotifier<String> uptimeNotifier;
   final VoidCallback onToggle;
 
   const HeroCard({
     super.key,
     required this.status,
-    required this.uptimeText,
+    required this.uptimeNotifier,
     required this.onToggle,
   });
 
@@ -131,18 +131,30 @@ class HeroCard extends ConsumerWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    if (isRunning && uptimeText.isNotEmpty) ...[
-                      const SizedBox(width: 8),
-                      Text(
-                        uptimeText,
-                        style: YLText.caption.copyWith(
-                          color: YLColors.zinc400,
-                          fontFeatures: const [FontFeature.tabularFigures()],
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                    if (isRunning)
+                      ValueListenableBuilder<String>(
+                        valueListenable: uptimeNotifier,
+                        builder: (_, text, __) {
+                          if (text.isEmpty) return const SizedBox.shrink();
+                          return Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const SizedBox(width: 8),
+                              Text(
+                                text,
+                                style: YLText.caption.copyWith(
+                                  color: YLColors.zinc400,
+                                  fontFeatures: const [
+                                    FontFeature.tabularFigures()
+                                  ],
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          );
+                        },
                       ),
-                    ],
                   ],
                 ),
               ),

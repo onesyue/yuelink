@@ -100,10 +100,32 @@ class _OverwritePageState extends State<OverwritePage>
   final _extraCtrl = TextEditingController();
 
   _OverwriteData _data = _OverwriteData();
+  _OverwriteData? _savedData; // snapshot of last saved/loaded state
   bool _loading = true;
   bool _saving = false;
 
   static const _modes = ['', 'rule', 'global', 'direct'];
+
+  // True when current state differs from last saved state.
+  bool get _isDirty {
+    if (_loading || _savedData == null) return false;
+    final sd = _savedData!;
+    if (_data.mode != sd.mode) return true;
+    if (_portCtrl.text.trim() != (sd.mixedPort ?? '')) return true;
+    if (_extraCtrl.text.trim() != sd.extraYaml) return true;
+    if (_data.rules.length != sd.rules.length) return true;
+    for (var i = 0; i < _data.rules.length; i++) {
+      if (_data.rules[i] != sd.rules[i]) return true;
+    }
+    return false;
+  }
+
+  _OverwriteData _snapshotCurrent() => _OverwriteData(
+        mode: _data.mode,
+        mixedPort: _portCtrl.text.trim().isEmpty ? null : _portCtrl.text.trim(),
+        rules: List.from(_data.rules),
+        extraYaml: _extraCtrl.text.trim(),
+      );
 
   @override
   void initState() {
@@ -121,6 +143,7 @@ class _OverwritePageState extends State<OverwritePage>
       _portCtrl.text = parsed.mixedPort ?? '';
       _extraCtrl.text = parsed.extraYaml;
       _loading = false;
+      _savedData = _snapshotCurrent();
     });
   }
 
@@ -152,6 +175,9 @@ class _OverwritePageState extends State<OverwritePage>
     setState(() => _saving = true);
     try {
       await OverwriteService.save(_data.toYaml());
+      if (mounted) {
+        setState(() => _savedData = _snapshotCurrent());
+      }
       AppNotifier.success(s.savedNextConnect);
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -346,49 +372,81 @@ class _OverwritePageState extends State<OverwritePage>
     );
   }
 
+  // ── Discard confirmation ─────────────────────────────────────────────────────
+
+  Future<bool> _showDiscardDialog(S s) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(s.unsavedChanges),
+        content: Text(s.unsavedChangesBody),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(s.stayOnPage),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(s.discardAndLeave),
+          ),
+        ],
+      ),
+    );
+    return result == true;
+  }
+
   // ── Build ────────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
-    return Scaffold(
-      appBar: AppBar(
-        leading: const BackButton(),
-        title: Text(s.overwriteTitle),
-        actions: [
-          if (_saving)
-            const Padding(
-              padding: EdgeInsets.all(16),
-              child: SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2)),
-            )
-          else
-            TextButton(
-              onPressed: _save,
-              child: Text(s.save),
-            ),
-        ],
-        bottom: TabBar(
-          controller: _tabCtrl,
-          tabs: [
-            Tab(text: s.overwriteTabBasic),
-            Tab(text: s.overwriteTabRules),
-            Tab(text: s.overwriteTabAdvanced),
+    return PopScope(
+      canPop: !_isDirty,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        final nav = Navigator.of(context);
+        final confirmed = await _showDiscardDialog(s);
+        if (confirmed && mounted) nav.pop();
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          leading: const BackButton(),
+          title: Text(s.overwriteTitle),
+          actions: [
+            if (_saving)
+              const Padding(
+                padding: EdgeInsets.all(16),
+                child: SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2)),
+              )
+            else
+              TextButton(
+                onPressed: _save,
+                child: Text(s.save),
+              ),
           ],
+          bottom: TabBar(
+            controller: _tabCtrl,
+            tabs: [
+              Tab(text: s.overwriteTabBasic),
+              Tab(text: s.overwriteTabRules),
+              Tab(text: s.overwriteTabAdvanced),
+            ],
+          ),
         ),
+        body: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : TabBarView(
+                controller: _tabCtrl,
+                children: [
+                  _buildBasicTab(s),
+                  _buildRulesTab(s),
+                  _buildAdvancedTab(s),
+                ],
+              ),
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : TabBarView(
-              controller: _tabCtrl,
-              children: [
-                _buildBasicTab(s),
-                _buildRulesTab(s),
-                _buildAdvancedTab(s),
-              ],
-            ),
     );
   }
 }

@@ -37,6 +37,8 @@ class CoreBindings {
       throw Exception('Cannot load libclash.dylib — run: dart setup.dart build -p macos');
     } else if (Platform.isWindows) {
       return _loadWindowsLibrary();
+    } else if (Platform.isLinux) {
+      return _loadLinuxLibrary();
     } else if (Platform.isIOS) {
       // iOS: statically linked, symbols are in the process itself
       return DynamicLibrary.process();
@@ -75,6 +77,27 @@ class CoreBindings {
       'exe directory: $exeDir\n'
       'Searched: ${candidates.join(", ")}\n'
       'Run: dart setup.dart build -p windows && dart setup.dart install -p windows',
+    );
+  }
+
+  static DynamicLibrary _loadLinuxLibrary() {
+    final exeDir = File(Platform.resolvedExecutable).parent.path;
+    // Flutter Linux bundle: executable is in bundle/, .so files are in bundle/lib/
+    final candidates = [
+      '$exeDir/lib/libclash.so',
+      '$exeDir/libclash.so',
+      'libclash.so',
+    ];
+    for (final path in candidates) {
+      if (File(path).existsSync()) {
+        try {
+          return DynamicLibrary.open(path);
+        } catch (_) {}
+      }
+    }
+    throw Exception(
+      'Cannot load libclash.so\n'
+      'Run: dart setup.dart build -p linux && dart setup.dart install -p linux',
     );
   }
 

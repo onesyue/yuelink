@@ -59,10 +59,12 @@ class GroupCard extends ConsumerStatefulWidget {
     super.key,
     required this.group,
     this.sortMode = NodeSortMode.defaultOrder,
+    this.searchQuery = '',
   });
 
   final ProxyGroup group;
   final NodeSortMode sortMode;
+  final String searchQuery;
 
   @override
   ConsumerState<GroupCard> createState() => _GroupCardState();
@@ -109,7 +111,14 @@ class _GroupCardState extends ConsumerState<GroupCard>
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final testing = ref.watch(delayTestingProvider);
     final delays = ref.read(delayResultsProvider);
-    final nodeList = _sortedNodes(group.all, widget.sortMode, delays);
+    final sorted = _sortedNodes(group.all, widget.sortMode, delays);
+    final query = widget.searchQuery.trim().toLowerCase();
+    final nodeList = query.isEmpty
+        ? sorted
+        : sorted
+            .where((n) => n.toLowerCase().contains(query))
+            .toList();
+    final isFiltered = query.isNotEmpty;
 
     return Container(
       decoration: BoxDecoration(
@@ -164,8 +173,14 @@ class _GroupCardState extends ConsumerState<GroupCard>
                   ),
                   const Spacer(),
                   Text(
-                    S.of(context).nodesCountLabel(group.all.length),
-                    style: YLText.caption.copyWith(color: YLColors.zinc500),
+                    isFiltered
+                        ? '${nodeList.length}/${group.all.length}'
+                        : S.of(context).nodesCountLabel(group.all.length),
+                    style: YLText.caption.copyWith(
+                      color: isFiltered
+                          ? YLColors.connected
+                          : YLColors.zinc500,
+                    ),
                   ),
                   const SizedBox(width: YLSpacing.sm),
                   IconButton(
@@ -276,6 +291,48 @@ class _NodeCardItemState extends ConsumerState<NodeCardItem> {
     }
   }
 
+  Widget _buildName(BuildContext context, bool isSelected, bool isDark) {
+    final query =
+        ref.watch(nodeSearchQueryProvider).trim().toLowerCase();
+    final name = widget.name;
+    final baseStyle = YLText.body.copyWith(
+      fontSize: 13,
+      fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+      color: isSelected
+          ? (isDark ? Colors.white : YLColors.primary)
+          : (isDark ? Colors.white70 : YLColors.zinc700),
+    );
+    if (query.isEmpty) {
+      return Text(name,
+          style: baseStyle, maxLines: 1, overflow: TextOverflow.ellipsis);
+    }
+    final lower = name.toLowerCase();
+    final idx = lower.indexOf(query);
+    if (idx < 0) {
+      return Text(name,
+          style: baseStyle, maxLines: 1, overflow: TextOverflow.ellipsis);
+    }
+    return Text.rich(
+      TextSpan(
+        children: [
+          if (idx > 0) TextSpan(text: name.substring(0, idx)),
+          TextSpan(
+            text: name.substring(idx, idx + query.length),
+            style: baseStyle.copyWith(
+              color: YLColors.connected,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          if (idx + query.length < name.length)
+            TextSpan(text: name.substring(idx + query.length)),
+        ],
+        style: baseStyle,
+      ),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final delay = ref.watch(nodeDelayProvider(widget.name));
@@ -311,21 +368,7 @@ class _NodeCardItemState extends ConsumerState<NodeCardItem> {
           children: [
             Row(
               children: [
-                Expanded(
-                  child: Text(
-                    widget.name,
-                    style: YLText.body.copyWith(
-                      fontSize: 13,
-                      fontWeight:
-                          isSelected ? FontWeight.w600 : FontWeight.w400,
-                      color: isSelected
-                          ? (isDark ? Colors.white : YLColors.primary)
-                          : (isDark ? Colors.white70 : YLColors.zinc700),
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
+                Expanded(child: _buildName(context, isSelected, isDark)),
                 if (_isSwitching)
                   const CupertinoActivityIndicator(radius: 6)
                 else if (isSelected)

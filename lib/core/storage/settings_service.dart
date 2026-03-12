@@ -148,6 +148,40 @@ class SettingsService {
     await set('language', langCode);
   }
 
+  // ── Close window behavior (desktop) ─────────────────────────────────────────
+
+  /// Values: 'tray' (default) | 'exit'
+  static Future<String> getCloseBehavior() async {
+    return (await get<String>('closeBehavior')) ?? 'tray';
+  }
+
+  static Future<void> setCloseBehavior(String behavior) async {
+    await set('closeBehavior', behavior);
+  }
+
+  // ── Toggle connection hotkey (desktop) ──────────────────────────────────────
+
+  /// Stored as lowercase plus-separated string, e.g. "ctrl+alt+c".
+  static Future<String> getToggleHotkey() async {
+    return (await get<String>('toggleHotkey')) ?? 'ctrl+alt+c';
+  }
+
+  static Future<void> setToggleHotkey(String hotkey) async {
+    await set('toggleHotkey', hotkey);
+  }
+
+  // ── Latency test URL ────────────────────────────────────────────────────
+
+  static const _defaultTestUrl = 'https://www.gstatic.com/generate_204';
+
+  static Future<String> getTestUrl() async {
+    return (await get<String>('testUrl')) ?? _defaultTestUrl;
+  }
+
+  static Future<void> setTestUrl(String url) async {
+    await set('testUrl', url);
+  }
+
   // ── Daily traffic stats ──────────────────────────────────────────
 
   static String _dateKey(DateTime date) {
@@ -193,16 +227,6 @@ class SettingsService {
 
   static Future<void> setSplitTunnelApps(List<String> apps) async {
     await set('splitTunnelApps', apps);
-  }
-
-  // ── 全局热键 ─────────────────────────────────────────────────────────────
-
-  static Future<String> getToggleHotkey() async {
-    return (await get<String>('toggleHotkey')) ?? 'ctrl+alt+c';
-  }
-
-  static Future<void> setToggleHotkey(String hotkey) async {
-    await set('toggleHotkey', hotkey);
   }
 
   // ── WebDAV (credentials stored in OS secure storage, not plain JSON) ────────

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 // ── Semantic colour tokens (Vercel / Tailwind inspired) ──────────────────────
@@ -162,7 +164,9 @@ ThemeData buildTheme(Brightness brightness) {
     splashColor: Colors.transparent,
     highlightColor: Colors.transparent,
     hoverColor: isDark ? Colors.white.withValues(alpha: 0.04) : Colors.black.withValues(alpha: 0.03),
-    fontFamily: null, // Use platform default font
+    // Linux: prefer Noto Sans for consistent CJK and Latin rendering.
+    // Falls back to system default if Noto Sans is not installed.
+    fontFamily: Platform.isLinux ? 'Noto Sans' : null,
 
     // Surfaces
     cardTheme: CardTheme(

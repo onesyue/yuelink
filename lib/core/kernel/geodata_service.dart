@@ -130,6 +130,40 @@ class GeoDataService {
     }
   }
 
+  /// Force-download all geo files from CDN mirrors, overwriting existing files.
+  ///
+  /// Used for the "Update Now" button in Settings. Skips bundled assets and
+  /// goes directly to CDN so the user always gets the latest version.
+  /// Returns true only when all 4 files were successfully downloaded.
+  static Future<bool> forceUpdate() async {
+    final appDir = await getApplicationSupportDirectory();
+    // Delete existing files so _tryDownload doesn't skip them
+    for (final name in _bundledFiles.keys) {
+      final f = File('${appDir.path}/$name');
+      try {
+        if (f.existsSync()) await f.delete();
+      } catch (_) {}
+    }
+    int downloaded = 0;
+    for (final entry in _remoteNames.entries) {
+      final destFile = File('${appDir.path}/${entry.key}');
+      if (await _downloadFromMirrors(entry.value, destFile)) downloaded++;
+    }
+    return downloaded == _remoteNames.length;
+  }
+
+  /// Returns the last-modified time of GeoIP.dat, or null if not present.
+  static Future<DateTime?> lastUpdated() async {
+    try {
+      final appDir = await getApplicationSupportDirectory();
+      final file = File('${appDir.path}/GeoIP.dat');
+      if (!file.existsSync()) return null;
+      return file.lastModifiedSync();
+    } catch (_) {
+      return null;
+    }
+  }
+
   static Future<bool> _tryDownload(String url, File dest) async {
     try {
       final response = await http.get(
