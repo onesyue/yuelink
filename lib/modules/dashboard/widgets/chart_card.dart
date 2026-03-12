@@ -200,9 +200,10 @@ class _ChartCardState extends ConsumerState<ChartCard> {
   }
 
   static String _fmtSpeed(double bps) {
-    if (bps < 1024) return '${bps.toStringAsFixed(0)}B';
-    if (bps < 1024 * 1024) return '${(bps / 1024).toStringAsFixed(0)}K';
-    return '${(bps / (1024 * 1024)).toStringAsFixed(1)}M';
+    if (bps < 1024 * 1024 * 1024) {
+      return '${(bps / (1024 * 1024)).toStringAsFixed(2)}MB';
+    }
+    return '${(bps / (1024 * 1024 * 1024)).toStringAsFixed(1)}GB';
   }
 }
 
