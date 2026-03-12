@@ -50,6 +50,7 @@ class ExitIpCard extends ConsumerWidget {
       borderRadius: BorderRadius.circular(YLRadius.lg),
       child: Container(
         padding: const EdgeInsets.all(16),
+        constraints: const BoxConstraints(minHeight: 100),
         decoration: BoxDecoration(
           color: isDark ? YLColors.zinc800 : Colors.white,
           borderRadius: BorderRadius.circular(YLRadius.lg),

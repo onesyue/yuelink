@@ -33,8 +33,12 @@ Name: "{group}\YueLink"; Filename: "{app}\yuelink.exe"
 Name: "{group}\{cm:UninstallProgram,YueLink}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\YueLink"; Filename: "{app}\yuelink.exe"; Tasks: desktopicon
 
+; ── Additional Tasks (shown on wizard "Select Additional Tasks" page) ──────────
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
 
+; ── Post-install launch (shown as checkbox on wizard Finish page) ──────────────
+; Note: "postinstall" puts this on the Finish page, NOT the Additional Tasks page.
+; It is intentionally independent of the desktopicon task above.
 [Run]
 Filename: "{app}\yuelink.exe"; Description: "{cm:LaunchProgram,YueLink}"; Flags: nowait postinstall skipifsilent

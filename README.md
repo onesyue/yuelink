@@ -14,7 +14,7 @@ A cross-platform proxy client built with Flutter and the [mihomo](https://github
 |----------|-------------|--------|
 | Android | VpnService + TUN | ✅ |
 | iOS | NetworkExtension (PacketTunnel) | ✅ |
-| macOS | System Proxy (networksetup) | ✅ |
+| macOS | System Proxy (networksetup) | ✅ Apple Silicon (M1–M5) + Intel universal |
 | Windows | System Proxy (registry) | ✅ |
 
 ## Features
@@ -43,8 +43,10 @@ flutter run   # runs in Mock mode — full UI works without the Go core
 ### Build the Go core (optional)
 
 ```bash
-dart setup.dart build -p macos -a arm64   # android | ios | macos | windows
-dart setup.dart install -p macos
+# macOS: build both arches then install the universal binary
+dart setup.dart build -p macos -a arm64   # Apple Silicon (M1–M5)
+dart setup.dart build -p macos -a x86_64  # Intel
+dart setup.dart install -p macos          # lipo-merges into universal dylib
 flutter run -d macos
 ```
 
@@ -117,7 +119,7 @@ flutter build macos        # macOS
 flutter build windows      # Windows
 ```
 
-CI artifacts: `YueLink-Android.apk`, `YueLink-macOS.dmg`, `YueLink-Windows-Setup.exe`.  
+CI artifacts: `YueLink-Android.apk`, `YueLink-macOS.dmg` (universal arm64+x86_64), `YueLink-Windows-Setup.exe`.
 iOS builds use `--no-codesign` for compile verification only; installation requires manual signing.
 
 ## Testing
