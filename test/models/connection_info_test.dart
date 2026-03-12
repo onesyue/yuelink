@@ -93,7 +93,7 @@ void main() {
     });
 
     test('MB range formatting', () {
-      const t = Traffic(down: 1048576); // 1 MB
+      const t = Traffic(down: 1048576); // 1 MB/s
       expect(t.downFormatted, '1.00 MB/s');
     });
   });

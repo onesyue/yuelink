@@ -140,7 +140,10 @@ class _ChartCardState extends ConsumerState<ChartCard> {
           show: true,
           drawHorizontalLine: true,
           drawVerticalLine: false,
-          horizontalInterval: maxY / 3,
+          // 4 intervals → gridlines at maxY/4, maxY/2, 3*maxY/4, maxY.
+          // The maxY line is hidden in getTitlesWidget so the top label
+          // never floats above the chart area and overlaps the header.
+          horizontalInterval: maxY / 4,
           getDrawingHorizontalLine: (value) => FlLine(
             color: Theme.of(context).dividerColor.withValues(alpha: 0.2),
             strokeWidth: 0.5,
@@ -155,9 +158,14 @@ class _ChartCardState extends ConsumerState<ChartCard> {
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
-              reservedSize: 42,
+              reservedSize: 48,
+              interval: maxY / 4,
               getTitlesWidget: (value, meta) {
-                if (value == 0) return const SizedBox.shrink();
+                // Hide 0 (bottom edge) and maxY (top edge) to prevent labels
+                // from overflowing outside the chart and overlapping other text.
+                if (value <= 0 || value >= meta.max * 0.99) {
+                  return const SizedBox.shrink();
+                }
                 return Text(
                   _fmtSpeed(value),
                   style: YLText.caption.copyWith(fontSize: 9, color: YLColors.zinc400),

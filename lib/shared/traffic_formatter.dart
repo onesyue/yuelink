@@ -18,10 +18,10 @@ class TrafficFormatter {
 
   /// Format a total byte count. Always shows MB or GB.
   ///
-  /// Examples: 512 → "0.0 MB", 1536 → "0.0 MB", 2097152 → "2.0 MB"
+  /// Examples: 512 → "0.00 MB", 10485760 → "10.00 MB"
   static String bytes(int b) {
     if (b < 1024 * 1024 * 1024) {
-      return '${(b / (1024 * 1024)).toStringAsFixed(1)} MB';
+      return '${(b / (1024 * 1024)).toStringAsFixed(2)} MB';
     }
     return '${(b / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
   }
