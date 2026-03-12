@@ -50,7 +50,7 @@ class _DnsQueryPageState extends State<DnsQueryPage> {
   Widget build(BuildContext context) {
     final s = S.of(context);
     return Scaffold(
-      appBar: AppBar(title: Text(s.dnsQuery)),
+      appBar: AppBar(leading: const BackButton(), title: Text(s.dnsQuery)),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(

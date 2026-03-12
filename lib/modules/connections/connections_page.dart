@@ -67,7 +67,9 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
 
     if (status != CoreStatus.running) {
       return Scaffold(
-        appBar: _isSubPage ? AppBar(title: Text(s.navConnections)) : null,
+        appBar: _isSubPage
+            ? AppBar(leading: const BackButton(), title: Text(s.navConnections))
+            : null,
         body: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -102,7 +104,9 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
     final actions = ref.read(connectionActionsProvider);
 
     return Scaffold(
-      appBar: _isSubPage ? AppBar(title: Text(s.navConnections)) : null,
+      appBar: _isSubPage
+            ? AppBar(leading: const BackButton(), title: Text(s.navConnections))
+            : null,
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

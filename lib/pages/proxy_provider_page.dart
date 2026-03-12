@@ -31,6 +31,7 @@ class _ProxyProviderPageState extends ConsumerState<ProxyProviderPage> {
 
     return Scaffold(
       appBar: AppBar(
+        leading: const BackButton(),
         title: Text(s.proxyProviderTitle),
         actions: [
           IconButton(

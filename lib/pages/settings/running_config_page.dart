@@ -43,6 +43,7 @@ class _RunningConfigPageState extends State<RunningConfigPage> {
     final s = S.of(context);
     return Scaffold(
       appBar: AppBar(
+        leading: const BackButton(),
         title: Text(s.runningConfig),
         actions: [
           IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),

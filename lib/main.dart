@@ -201,7 +201,10 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
     try {
       await trayManager.setIcon(
         Platform.isWindows
-            ? 'assets/tray_icon_win.png'
+            // Use .ico for Windows — contains 16/32/48px sizes which the
+            // Windows tray API requires. A plain .png falls back to a white
+            // placeholder at the 16×16 tray size.
+            ? 'assets/app_icon.ico'
             : 'assets/tray_icon_macos.png',
       );
       await _updateTrayMenu(isRunning: false);

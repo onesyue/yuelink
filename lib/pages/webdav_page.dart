@@ -102,6 +102,7 @@ class _WebDavPageState extends State<WebDavPage> {
 
     return Scaffold(
       appBar: AppBar(
+        leading: const BackButton(),
         title: Text(s.sectionWebDav),
         backgroundColor: Colors.transparent,
         surfaceTintColor: Colors.transparent,

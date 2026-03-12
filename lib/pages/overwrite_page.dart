@@ -353,6 +353,7 @@ class _OverwritePageState extends State<OverwritePage>
     final s = S.of(context);
     return Scaffold(
       appBar: AppBar(
+        leading: const BackButton(),
         title: Text(s.overwriteTitle),
         actions: [
           if (_saving)

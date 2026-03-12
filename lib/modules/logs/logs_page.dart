@@ -45,7 +45,9 @@ class _LogPageState extends ConsumerState<LogPage>
 
     if (!isRunning) {
       return Scaffold(
-        appBar: _isSubPage ? AppBar(title: Text(s.tabLogs)) : null,
+        appBar: _isSubPage
+            ? AppBar(leading: const BackButton(), title: Text(s.tabLogs))
+            : null,
         body: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -65,7 +67,9 @@ class _LogPageState extends ConsumerState<LogPage>
     }
 
     return Scaffold(
-      appBar: _isSubPage ? AppBar(title: Text(s.tabLogs)) : null,
+      appBar: _isSubPage
+            ? AppBar(leading: const BackButton(), title: Text(s.tabLogs))
+            : null,
       body: Column(
         children: [
           TabBar(

@@ -517,6 +517,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     Navigator.of(context).push(MaterialPageRoute(
       builder: (ctx) => Scaffold(
         appBar: AppBar(
+          leading: const BackButton(),
           title: Text(profile.name),
           actions: [
             if (config != null)
