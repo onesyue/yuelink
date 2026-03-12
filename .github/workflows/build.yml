@@ -506,7 +506,7 @@ jobs:
 
           ln -sf "usr/share/applications/yuelink.desktop" "${APPDIR}/yuelink.desktop"
 
-          ARCH="${ARCH}" appimagetool "${APPDIR}" "${OUTPUT}"
+          APPIMAGE_EXTRACT_AND_RUN=1 ARCH="${ARCH}" appimagetool "${APPDIR}" "${OUTPUT}"
           echo "Created: ${OUTPUT} ($(du -sh "${OUTPUT}" | cut -f1))"
 
       - name: Rename artifact
