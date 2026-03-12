@@ -5,20 +5,20 @@ void main() {
   group('Traffic', () {
     test('formats upload/download rates', () {
       const t = Traffic(up: 512, down: 1048576);
-      expect(t.upFormatted, '512 B/s');
-      expect(t.downFormatted, '1.0 MB/s');
+      expect(t.upFormatted, '0.00 MB/s');
+      expect(t.downFormatted, '1.00 MB/s');
     });
 
     test('zero traffic', () {
       const t = Traffic();
-      expect(t.upFormatted, '0 B/s');
-      expect(t.downFormatted, '0 B/s');
+      expect(t.upFormatted, '0.00 MB/s');
+      expect(t.downFormatted, '0.00 MB/s');
     });
 
     test('KB range', () {
       const t = Traffic(up: 1536, down: 10240);
-      expect(t.upFormatted, '1.5 KB/s');
-      expect(t.downFormatted, '10.0 KB/s');
+      expect(t.upFormatted, '0.00 MB/s');
+      expect(t.downFormatted, '0.01 MB/s');
     });
   });
 

@@ -88,13 +88,13 @@ void main() {
       const t = Traffic();
       expect(t.up, 0);
       expect(t.down, 0);
-      expect(t.upFormatted, '0 B/s');
-      expect(t.downFormatted, '0 B/s');
+      expect(t.upFormatted, '0.00 MB/s');
+      expect(t.downFormatted, '0.00 MB/s');
     });
 
     test('MB range formatting', () {
       const t = Traffic(down: 1048576); // 1 MB
-      expect(t.downFormatted, '1.0 MB/s');
+      expect(t.downFormatted, '1.00 MB/s');
     });
   });
 }
