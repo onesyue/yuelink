@@ -112,8 +112,7 @@ class _ChartCardState extends ConsumerState<ChartCard> {
                     child: Text('—',
                         style: YLText.body.copyWith(color: YLColors.zinc400)),
                   )
-                : _buildChart(context, downHistory, upHistory,
-                    history.p90(seconds: range)),
+                : _buildChart(context, downHistory, upHistory, 0),
           ),
         ],
       ),
@@ -122,7 +121,10 @@ class _ChartCardState extends ConsumerState<ChartCard> {
 
   Widget _buildChart(BuildContext context, List<double> down,
       List<double> up, double p90) {
-    final maxY = p90 > 0 ? p90 * 1.5 : 1024 * 1024.0;
+    // Use actual max of displayed data + 15% headroom so every spike is
+    // fully visible. p90 was used before but caused peaks to be clipped.
+    final maxVal = [...down, ...up].fold(0.0, (a, b) => b > a ? b : a);
+    final maxY = maxVal > 0 ? maxVal * 1.15 : 1024 * 1024.0;
 
     List<FlSpot> toSpots(List<double> data) => data
         .asMap()
