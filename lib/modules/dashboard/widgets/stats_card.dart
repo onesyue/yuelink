@@ -29,7 +29,7 @@ class StatsCard extends ConsumerWidget {
     ];
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: isDark ? YLColors.zinc800 : Colors.white,
         borderRadius: BorderRadius.circular(YLRadius.lg),
@@ -48,7 +48,7 @@ class StatsCard extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Icon(icon, size: 14, color: color),
+                Icon(icon, size: 13, color: color),
                 const SizedBox(height: 4),
                 Text(
                   value,
