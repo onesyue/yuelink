@@ -50,14 +50,41 @@ flutter run -d macos
 
 ## Architecture
 
+YueLink is structured as a **Platform Shell + Generic Proxy Core + Yue.to Business Modules**.
+
 ```
-Flutter UI (Riverpod)
-    ├── CoreController (dart:ffi) ──→ hub.go (CGO) ──→ mihomo engine
-    │       lifecycle: init / start / stop                 ↕
-    └── MihomoApi (REST :9090)  ←────────── mihomo HTTP API
-            proxies / traffic / connections                ↕
-                                          Platform VPN (TUN / system proxy)
+YueLink
+├── core/          Go wrapper around mihomo (FFI lifecycle only)
+├── lib/
+│   ├── app/       Startup, routing, theme
+│   ├── core/      FFI bindings, kernel (CoreManager), platform VPN, storage
+│   ├── domain/    Data models (pure Dart, no Flutter deps)
+│   ├── infrastructure/  Datasources (MihomoApi, MihomoStream) + Repositories
+│   ├── modules/
+│   │   ├── dashboard/     Connect/traffic/status
+│   │   ├── nodes/         Proxy groups + node-level granular refresh
+│   │   ├── profiles/      Subscription management
+│   │   ├── connections/   Active connections
+│   │   ├── logs/          Log viewer
+│   │   ├── settings/      App settings + sub-pages
+│   │   │
+│   │   ├── yue_auth/      [Skeleton] Yue.to authentication
+│   │   ├── yue_account/   [Skeleton] Yue.to account & membership
+│   │   ├── yue_store/     [Skeleton] Yue.to store & subscriptions
+│   │   ├── announcements/ [Skeleton] Announcements & notifications
+│   │   └── updater/       [Skeleton] App version updates
+│   └── shared/    App-wide utilities (AppNotifier, formatters)
+└── android/ios/macos/windows/  Platform runners
 ```
+
+**Layer rules:**
+- `modules/` pages consume `providers/` and `repositories/` only — never datasources or FFI directly
+- `infrastructure/repositories/` mediate between providers and datasources (`MihomoApi`, `MihomoStream`)
+- Business modules (`yue_*`, `announcements`, `updater`) do not touch mihomo core lifecycle
+- `[Skeleton]` modules are directory-only in the current release; business logic not yet implemented
+
+**Refresh model (Nodes page):**
+One node delay update triggers exactly one `NodeTile` rebuild via `nodeDelayProvider(name)` family provider. `_DelayBatcher` in `ProxyRepository` batches delay results with a 300 ms flush window before writing to state.
 
 FFI handles only core lifecycle (init, start, stop). All runtime data — proxies, traffic, connections — flows through the mihomo REST API. This mirrors the architecture of FlClash and Clash Verge Rev.
 
