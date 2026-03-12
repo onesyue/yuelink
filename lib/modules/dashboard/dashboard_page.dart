@@ -68,8 +68,6 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     final status = ref.watch(coreStatusProvider);
     final isMock = ref.watch(isMockModeProvider);
     final isRunning = status == CoreStatus.running;
-    final isTransitioning =
-        status == CoreStatus.starting || status == CoreStatus.stopping;
 
     if (isRunning) {
       ref.watch(trafficStreamProvider);
@@ -130,20 +128,10 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                         onToggle: () => _toggle(context, ref),
                       ),
 
-                      // ── Layer 2: Overview (disconnect only) ──
-                      if (!isRunning && !isTransitioning) ...[
-                        const SizedBox(height: 16),
-                        const OverviewCard(),
-                      ],
-
-                      // ── Layer 3: IP + Chart ───────────
+                      // ── Layer 2: IP + Chart (running only) ──
                       if (isRunning) ...[
                         const SizedBox(height: 16),
                         if (isWide)
-                          // Desktop: side by side.
-                          // CrossAxisAlignment.stretch makes ExitIpCard fill the
-                          // same height as ChartCard without IntrinsicHeight's
-                          // double-layout cost.
                           Row(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
@@ -156,15 +144,20 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                             ],
                           )
                         else ...[
-                          // Mobile: stacked
                           const ExitIpCard(),
                           const SizedBox(height: 12),
                           const RepaintBoundary(child: ChartCard()),
                         ],
-                        // ── Layer 4: Today stats ──────────
+                        // ── Layer 3: Today stats ──────────
                         const SizedBox(height: 12),
                         const StatsCard(),
                       ],
+
+                      // ── Layer 4: Overview (always visible) ──
+                      // Shows active profile, auto-connect status, readiness.
+                      // Visible in both connected and disconnected states.
+                      const SizedBox(height: 16),
+                      const OverviewCard(),
                     ],
                   ),
                 ),

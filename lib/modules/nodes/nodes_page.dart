@@ -36,8 +36,8 @@ class _NodesPageState extends ConsumerState<NodesPage> {
     final status = ref.watch(coreStatusProvider);
     final groups = ref.watch(proxyGroupsProvider);
     final routingMode = ref.watch(routingModeProvider);
-    final globalGroup = ref.watch(globalGroupProvider);
 
+    // ── Offline state ──────────────────────────────────────────────────────
     if (status != CoreStatus.running) {
       final offlineGroups = ref.watch(offlineProxyGroupsProvider);
       return Scaffold(
@@ -78,7 +78,6 @@ class _NodesPageState extends ConsumerState<NodesPage> {
                     }
                     return SliverList(
                       delegate: SliverChildListDelegate([
-                        // Offline preview banner
                         Padding(
                           padding: const EdgeInsets.fromLTRB(
                               YLSpacing.xl, 0, YLSpacing.xl, YLSpacing.md),
@@ -108,122 +107,34 @@ class _NodesPageState extends ConsumerState<NodesPage> {
       );
     }
 
-    if (groups.isEmpty && globalGroup == null) {
+    // ── Loading ────────────────────────────────────────────────────────────
+    if (groups.isEmpty) {
       return const Scaffold(
         body: Center(child: CupertinoActivityIndicator(radius: 14)),
       );
     }
 
-    // ── Direct mode: no proxy group selection needed ──────────────────
-    if (routingMode == 'direct') {
-      return Scaffold(
-        body: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 720),
-            child: CustomScrollView(
-              physics: const BouncingScrollPhysics(
-                  parent: AlwaysScrollableScrollPhysics()),
-              slivers: [
-                SliverAppBar(
-                  backgroundColor: Colors.transparent,
-                  surfaceTintColor: Colors.transparent,
-                  pinned: true,
-                  actions: [
-                    _CompactRoutingMode(),
-                    const SizedBox(width: YLSpacing.sm),
-                  ],
-                ),
-                SliverFillRemaining(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.link_rounded,
-                          size: 56, color: YLColors.zinc300),
-                      const SizedBox(height: YLSpacing.lg),
-                      Text(s.routeModeDirect, style: YLText.titleLarge),
-                      const SizedBox(height: YLSpacing.sm),
-                      Text(
-                        s.directModeDesc,
-                        style:
-                            YLText.body.copyWith(color: YLColors.zinc500),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
+    // ── Unified running UI — identical structure for ALL routing modes ─────
+    //
+    // Routing mode (rule / global / direct) ONLY affects:
+    //   • Which groups appear (global mode prepends the GLOBAL group)
+    //   • A small informational banner for non-rule modes
+    //   • Actual proxy behaviour via the REST API (handled elsewhere)
+    //
+    // The card layout — strategy group card → node card grid — never changes.
 
-    // ── Global mode: show only the GLOBAL group ───────────────────────
-    if (routingMode == 'global') {
-      final globalSortMode = ref.watch(nodeSortModeProvider);
-      return Scaffold(
-        body: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 720),
-            child: CustomScrollView(
-              physics: const BouncingScrollPhysics(
-                  parent: AlwaysScrollableScrollPhysics()),
-              slivers: [
-                SliverAppBar(
-                  backgroundColor: Colors.transparent,
-                  surfaceTintColor: Colors.transparent,
-                  pinned: true,
-                  actions: [
-                    _CompactRoutingMode(),
-                    const SizedBox(width: 4),
-                    IconButton(
-                      icon: const Icon(Icons.sort_rounded),
-                      iconSize: 20,
-                      tooltip: _sortModeLabel(s, globalSortMode),
-                      onPressed: () {
-                        final modes = NodeSortMode.values;
-                        final next = modes[
-                            (globalSortMode.index + 1) % modes.length];
-                        ref.read(nodeSortModeProvider.notifier).state = next;
-                      },
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.refresh_rounded),
-                      onPressed: () =>
-                          ref.read(proxyGroupsProvider.notifier).refresh(),
-                    ),
-                    const SizedBox(width: YLSpacing.sm),
-                  ],
-                ),
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(
-                      YLSpacing.xl, YLSpacing.sm, YLSpacing.xl, 0),
-                  sliver: SliverList(
-                    delegate: SliverChildListDelegate([
-                      _ModeBanner(
-                        icon: Icons.public_rounded,
-                        text: s.globalModeDesc,
-                      ),
-                      const SizedBox(height: YLSpacing.lg),
-                      if (globalGroup != null)
-                        GroupCard(
-                          group: globalGroup,
-                          sortMode: globalSortMode,
-                        ),
-                    ]),
-                  ),
-                ),
-                const SliverToBoxAdapter(child: SizedBox(height: 100)),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-
-    // ── Rule mode: show all groups (default) ──────────────────────────
     final sortMode = ref.watch(nodeSortModeProvider);
     final viewMode = ref.watch(nodeViewModeProvider);
+
+    // Global mode: prepend GLOBAL group so user can pick which group handles
+    // all traffic; other groups still shown so selections can be made.
+    final globalGroup = ref.watch(globalGroupProvider);
+    final displayGroups = routingMode == 'global' && globalGroup != null
+        ? [globalGroup, ...groups]
+        : List<ProxyGroup>.from(groups);
+
+    final bool showBanner = routingMode != 'rule';
+    final int listCount = displayGroups.length + (showBanner ? 1 : 0);
 
     return Scaffold(
       body: Center(
@@ -233,6 +144,7 @@ class _NodesPageState extends ConsumerState<NodesPage> {
             physics: const BouncingScrollPhysics(
                 parent: AlwaysScrollableScrollPhysics()),
             slivers: [
+              // ── App bar: all controls available in every routing mode ──
               SliverAppBar(
                 backgroundColor: Colors.transparent,
                 surfaceTintColor: Colors.transparent,
@@ -274,36 +186,47 @@ class _NodesPageState extends ConsumerState<NodesPage> {
                   const SizedBox(width: YLSpacing.sm),
                 ],
               ),
+
+              // ── Group list ─────────────────────────────────────────────
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(
                     YLSpacing.xl, YLSpacing.sm, YLSpacing.xl, 0),
-                sliver: viewMode == NodeViewMode.list
-                    ? SliverList(
-                        delegate: SliverChildBuilderDelegate(
-                          (context, index) => Padding(
-                            padding:
-                                const EdgeInsets.only(bottom: YLSpacing.lg),
-                            child: GroupListSection(
-                              group: groups[index],
-                              sortMode: sortMode,
-                            ),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) {
+                      if (showBanner && index == 0) {
+                        return Padding(
+                          padding:
+                              const EdgeInsets.only(bottom: YLSpacing.lg),
+                          child: _ModeBanner(
+                            icon: routingMode == 'global'
+                                ? Icons.public_rounded
+                                : Icons.link_rounded,
+                            text: routingMode == 'global'
+                                ? s.globalModeDesc
+                                : s.directModeDesc,
                           ),
-                          childCount: groups.length,
-                        ),
-                      )
-                    : SliverList(
-                        delegate: SliverChildBuilderDelegate(
-                          (context, index) => Padding(
-                            padding:
-                                const EdgeInsets.only(bottom: YLSpacing.lg),
-                            child: GroupCard(
-                              group: groups[index],
-                              sortMode: sortMode,
-                            ),
-                          ),
-                          childCount: groups.length,
-                        ),
-                      ),
+                        );
+                      }
+                      final groupIndex = showBanner ? index - 1 : index;
+                      final group = displayGroups[groupIndex];
+                      return Padding(
+                        padding:
+                            const EdgeInsets.only(bottom: YLSpacing.lg),
+                        child: viewMode == NodeViewMode.list
+                            ? GroupListSection(
+                                group: group,
+                                sortMode: sortMode,
+                              )
+                            : GroupCard(
+                                group: group,
+                                sortMode: sortMode,
+                              ),
+                      );
+                    },
+                    childCount: listCount,
+                  ),
+                ),
               ),
               const SliverToBoxAdapter(child: SizedBox(height: 100)),
             ],
@@ -373,7 +296,6 @@ class _CompactRoutingMode extends ConsumerWidget {
     const modes = ['rule', 'global', 'direct'];
     final labels = [s.routeModeRule, s.routeModeGlobal, s.routeModeDirect];
 
-    // Fixed width ensures all three segments are equal and the pill never jumps.
     return SizedBox(
       width: 186,
       height: 32,
@@ -569,8 +491,7 @@ class _ReadOnlyGroupCard extends StatelessWidget {
           if (group.all.isNotEmpty) ...[
             const Divider(height: 0.5),
             Padding(
-              padding:
-                  const EdgeInsets.symmetric(vertical: YLSpacing.xs),
+              padding: const EdgeInsets.symmetric(vertical: YLSpacing.xs),
               child: Column(
                 children: List.generate(group.all.length, (i) {
                   final name = group.all[i];

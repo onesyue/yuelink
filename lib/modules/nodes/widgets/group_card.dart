@@ -8,12 +8,7 @@ import '../../../shared/app_notifier.dart';
 import '../../../theme.dart';
 import '../providers/node_providers.dart';
 import '../providers/nodes_providers.dart';
-import 'node_tile.dart';
 
-/// Sorted node list helper — no delay map required for sort modes that don't
-/// use delays. For latency sorts the GroupCard reads the full map once to
-/// build the sorted order (this only happens when sort mode changes, not on
-/// every delay update, because NodeTile handles its own delay rendering).
 List<String> _sortedNodes(
     List<String> nodes, NodeSortMode mode, Map<String, int> delays) {
   switch (mode) {
@@ -53,12 +48,12 @@ List<String> _sortedNodes(
   }
 }
 
-/// Expandable card showing a proxy group header and its node list.
+/// Expandable proxy group card.
 ///
-/// Does NOT watch [delayResultsProvider] or [delayTestingProvider] directly.
-/// The header only reads [groupSelectedNodeProvider] for the selected-node
-/// display, and [delayTestingProvider] once to gate the test button.
-/// Each [NodeTile] inside watches its own per-node providers independently.
+/// In card mode nodes are shown in a responsive Wrap grid using [NodeCardItem].
+/// Groups start EXPANDED by default; click the header to collapse/expand.
+/// Each [NodeCardItem] watches its own per-node providers so only the affected
+/// card rebuilds on delay or selection changes.
 class GroupCard extends ConsumerStatefulWidget {
   const GroupCard({
     super.key,
@@ -75,7 +70,7 @@ class GroupCard extends ConsumerStatefulWidget {
 
 class _GroupCardState extends ConsumerState<GroupCard>
     with SingleTickerProviderStateMixin {
-  bool _expanded = false;
+  bool _expanded = true;
   late AnimationController _animController;
   late Animation<double> _expandAnim;
   late Animation<double> _chevronAnim;
@@ -86,7 +81,7 @@ class _GroupCardState extends ConsumerState<GroupCard>
     _animController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 250),
-      value: 0.0,
+      value: 1.0, // start expanded
     );
     _expandAnim =
         CurvedAnimation(parent: _animController, curve: Curves.easeOutCubic);
@@ -112,15 +107,7 @@ class _GroupCardState extends ConsumerState<GroupCard>
   Widget build(BuildContext context) {
     final group = widget.group;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    // Header only watches the "any testing in progress" flag for the button
-    // state, and the delay map only when a latency sort is active. NodeTile
-    // widgets each subscribe to their own per-node providers.
     final testing = ref.watch(delayTestingProvider);
-
-    // Read delays only for computing sort order; this does NOT cause this
-    // widget to rebuild on individual delay updates because the sorted node
-    // list is derived from group.all which only changes on group refresh.
     final delays = ref.read(delayResultsProvider);
     final nodeList = _sortedNodes(group.all, widget.sortMode, delays);
 
@@ -139,7 +126,7 @@ class _GroupCardState extends ConsumerState<GroupCard>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
+          // ── Header (tap to toggle) ──────────────────────────────────
           InkWell(
             onTap: _toggle,
             borderRadius: BorderRadius.vertical(
@@ -203,7 +190,9 @@ class _GroupCardState extends ConsumerState<GroupCard>
             ),
           ),
 
-          // Expandable node list
+          // ── Expandable node grid ────────────────────────────────────
+          // Uses LayoutBuilder + Wrap for responsive column count.
+          // minItemWidth 140px → narrow=1col, medium=2col, wide=3+col.
           SizeTransition(
             sizeFactor: _expandAnim,
             axisAlignment: -1.0,
@@ -211,29 +200,143 @@ class _GroupCardState extends ConsumerState<GroupCard>
               children: [
                 const Divider(height: 0.5),
                 Padding(
-                  padding:
-                      const EdgeInsets.symmetric(vertical: YLSpacing.xs),
-                  child: Column(
-                    children: List.generate(nodeList.length, (i) {
-                      final nodeName = nodeList[i];
-                      return Column(
-                        children: [
-                          // NodeTile watches its own providers independently.
-                          NodeTile(
-                            name: nodeName,
-                            groupName: group.name,
-                          ),
-                          if (i < nodeList.length - 1)
-                            const Divider(height: 1, indent: 48),
-                        ],
+                  padding: const EdgeInsets.all(YLSpacing.sm),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      const minItemWidth = 140.0;
+                      const spacing = 8.0;
+                      final cols =
+                          ((constraints.maxWidth + spacing) /
+                                  (minItemWidth + spacing))
+                              .floor()
+                              .clamp(1, 4);
+                      final itemWidth =
+                          (constraints.maxWidth - spacing * (cols - 1)) /
+                              cols;
+                      return Wrap(
+                        spacing: spacing,
+                        runSpacing: spacing,
+                        children: nodeList
+                            .map((name) => SizedBox(
+                                  width: itemWidth,
+                                  child: NodeCardItem(
+                                    name: name,
+                                    groupName: group.name,
+                                  ),
+                                ))
+                            .toList(),
                       );
-                    }),
+                    },
                   ),
                 ),
               ],
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ── NodeCardItem — compact node card for the responsive grid ────────────────
+
+class NodeCardItem extends ConsumerStatefulWidget {
+  const NodeCardItem({
+    super.key,
+    required this.name,
+    required this.groupName,
+  });
+
+  final String name;
+  final String groupName;
+
+  @override
+  ConsumerState<NodeCardItem> createState() => _NodeCardItemState();
+}
+
+class _NodeCardItemState extends ConsumerState<NodeCardItem> {
+  bool _isSwitching = false;
+
+  Future<void> _handleSelect() async {
+    final isSelected =
+        ref.read(groupSelectedNodeProvider(widget.groupName)) == widget.name;
+    if (_isSwitching || isSelected) return;
+    setState(() => _isSwitching = true);
+    final s = S.of(context);
+    final ok = await ref
+        .read(proxyGroupsProvider.notifier)
+        .changeProxy(widget.groupName, widget.name);
+    if (mounted) {
+      setState(() => _isSwitching = false);
+      if (ok) {
+        AppNotifier.success(s.switchedTo(widget.name));
+      } else {
+        AppNotifier.error(s.switchFailed);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final delay = ref.watch(nodeDelayProvider(widget.name));
+    final isSelected =
+        ref.watch(groupSelectedNodeProvider(widget.groupName)) == widget.name;
+    final isTesting = ref.watch(nodeIsTestingProvider(widget.name));
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return GestureDetector(
+      onTap: _handleSelect,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? (isDark
+                  ? YLColors.connected.withValues(alpha: 0.15)
+                  : YLColors.connected.withValues(alpha: 0.08))
+              : (isDark ? YLColors.zinc800 : YLColors.zinc50),
+          borderRadius: BorderRadius.circular(YLRadius.md),
+          border: Border.all(
+            color: isSelected
+                ? YLColors.connected.withValues(alpha: 0.35)
+                : (isDark
+                    ? Colors.white.withValues(alpha: 0.06)
+                    : Colors.black.withValues(alpha: 0.06)),
+            width: 0.5,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    widget.name,
+                    style: YLText.body.copyWith(
+                      fontSize: 13,
+                      fontWeight:
+                          isSelected ? FontWeight.w600 : FontWeight.w400,
+                      color: isSelected
+                          ? (isDark ? Colors.white : YLColors.primary)
+                          : (isDark ? Colors.white70 : YLColors.zinc700),
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (_isSwitching)
+                  const CupertinoActivityIndicator(radius: 6)
+                else if (isSelected)
+                  Icon(Icons.check_circle_rounded,
+                      size: 13, color: YLColors.connected),
+              ],
+            ),
+            const SizedBox(height: 4),
+            YLDelayBadge(delay: delay, testing: isTesting),
+          ],
+        ),
       ),
     );
   }
