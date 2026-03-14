@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:yaml/yaml.dart';
+import 'package:yaml_writer/yaml_writer.dart';
 
 import '../../constants.dart';
 
@@ -106,6 +108,52 @@ class ConfigTemplate {
     debugPrint('[Config] 13 tunFd done');
 
     return config;
+  }
+
+  /// Inject an upstream proxy (e.g. soft router) so mihomo routes outbound
+  /// connections through it. Adds a `_upstream` proxy entry and sets
+  /// `dialer-proxy: _upstream` on all user-defined proxies.
+  static String injectUpstreamProxy(
+      String config, String type, String server, int port) {
+    try {
+      final yaml = loadYaml(config);
+      if (yaml is! YamlMap) return config;
+      final mutable = _toMutable(yaml) as Map<String, dynamic>;
+
+      final proxies =
+          (mutable['proxies'] as List<dynamic>?)?.cast<dynamic>() ??
+              <dynamic>[];
+      proxies.removeWhere(
+          (p) => p is Map && p['name'] == '_upstream');
+      proxies.insert(0, <String, dynamic>{
+        'name': '_upstream',
+        'type': type,
+        'server': server,
+        'port': port,
+        'udp': true,
+      });
+      for (final proxy in proxies) {
+        if (proxy is Map<String, dynamic> && proxy['name'] != '_upstream') {
+          proxy['dialer-proxy'] = '_upstream';
+        }
+      }
+      mutable['proxies'] = proxies;
+
+      return YamlWriter().write(mutable);
+    } catch (_) {
+      return config;
+    }
+  }
+
+  static dynamic _toMutable(dynamic value) {
+    if (value is YamlMap) {
+      return Map<String, dynamic>.fromEntries(
+        value.entries.map((e) => MapEntry(e.key.toString(), _toMutable(e.value))),
+      );
+    } else if (value is YamlList) {
+      return value.map(_toMutable).toList();
+    }
+    return value;
   }
 
   /// Disable TUN on desktop platforms where system proxy is used instead.

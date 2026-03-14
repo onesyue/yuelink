@@ -77,4 +77,13 @@ class SecureStorageService {
 
   Future<void> setApiSecret(String secret) =>
       _storage.write(key: _kApiSecret, value: secret);
+
+  // ── Generic key-value (for AuthTokenService and future modules) ──────────
+
+  Future<String?> read(String key) => _storage.read(key: key);
+
+  Future<void> write(String key, String value) =>
+      _storage.write(key: key, value: value);
+
+  Future<void> delete(String key) => _storage.delete(key: key);
 }

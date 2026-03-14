@@ -19,6 +19,9 @@ import 'pages/nodes_page.dart';
 import 'pages/profile_page.dart';
 import 'pages/settings_page.dart';
 import 'domain/models/proxy.dart';
+import 'modules/nodes/providers/nodes_providers.dart';
+import 'modules/yue_auth/presentation/yue_auth_page.dart';
+import 'modules/yue_auth/providers/yue_auth_providers.dart';
 import 'providers/core_provider.dart';
 import 'providers/profile_provider.dart';
 import 'providers/proxy_provider.dart';
@@ -52,6 +55,8 @@ void main() async {
   final savedTestUrl = await SettingsService.getTestUrl();
   final savedCloseBehavior = await SettingsService.getCloseBehavior();
   final savedToggleHotkey = await SettingsService.getToggleHotkey();
+  final savedDelayResults = await SettingsService.getDelayResults();
+  final savedExpandedGroups = await SettingsService.getExpandedGroups();
 
   // Apply global strings language before runApp (for tray etc.)
   S.setLanguage(savedLanguage);
@@ -108,6 +113,8 @@ void main() async {
       testUrlProvider.overrideWith((ref) => savedTestUrl),
       closeBehaviorProvider.overrideWith((ref) => savedCloseBehavior),
       toggleHotkeyProvider.overrideWith((ref) => savedToggleHotkey),
+      delayResultsProvider.overrideWith((ref) => savedDelayResults),
+      expandedGroupNamesProvider.overrideWith((ref) => Set<String>.from(savedExpandedGroups)),
     ],
     child: const YueLinkApp(),
   ));
@@ -519,8 +526,32 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
       themeMode: themeMode,
       theme: buildTheme(Brightness.light),
       darkTheme: buildTheme(Brightness.dark),
-      home: const MainShell(),
+      home: const _AuthGate(),
     );
+  }
+}
+
+// ── Auth gate ──────────────────────────────────────────────────────────────────
+
+/// Shows login page when not authenticated, main shell when logged in.
+class _AuthGate extends ConsumerWidget {
+  const _AuthGate();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final authState = ref.watch(authProvider);
+
+    switch (authState.status) {
+      case AuthStatus.unknown:
+        // Still checking saved token
+        return const Scaffold(
+          body: Center(child: CircularProgressIndicator()),
+        );
+      case AuthStatus.loggedOut:
+        return const YueAuthPage();
+      case AuthStatus.loggedIn:
+        return const MainShell();
+    }
   }
 }
 

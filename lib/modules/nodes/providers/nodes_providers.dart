@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:yaml/yaml.dart';
 
 import '../../../core/ffi/core_controller.dart';
+import '../../../core/storage/settings_service.dart';
 import '../../../domain/models/proxy.dart';
 import '../../../providers/profile_provider.dart';
 import '../../../core/kernel/core_manager.dart';
@@ -171,6 +172,8 @@ class ProxyGroupsNotifier extends StateNotifier<List<ProxyGroup>> {
 final testUrlProvider = StateProvider<String>(
     (ref) => 'https://www.gstatic.com/generate_204');
 
+final expandedGroupNamesProvider = StateProvider<Set<String>>((ref) => {});
+
 final delayResultsProvider = StateProvider<Map<String, int>>((ref) => {});
 final delayTestingProvider = StateProvider<Set<String>>((ref) => {});
 
@@ -215,6 +218,7 @@ class DelayTestActions {
     final current = Map<String, int>.from(ref.read(delayResultsProvider));
     current[proxyName] = delay;
     ref.read(delayResultsProvider.notifier).state = current;
+    SettingsService.setDelayResults(current);
 
     // Unmark testing
     final doneSet = Set<String>.from(ref.read(delayTestingProvider));
@@ -251,6 +255,7 @@ class DelayTestActions {
           }
         }
         ref.read(delayResultsProvider.notifier).state = current;
+        SettingsService.setDelayResults(current);
       } catch (_) {
         // API error, mark all as failed
         final current = Map<String, int>.from(ref.read(delayResultsProvider));

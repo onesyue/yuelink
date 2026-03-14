@@ -375,6 +375,24 @@ class S {
   String get sectionStatus => _e ? 'Status' : '状态';
   String get sectionTools => _e ? 'Tools' : '工具';
   String get sectionAbout => _e ? 'About' : '关于';
+  // Upstream proxy
+  String get upstreamProxy => _e ? 'Upstream Proxy' : '上游代理';
+  String get upstreamProxySub =>
+      _e ? 'Route through a local gateway (e.g. soft router)' : '通过本地网关出站（如软路由）';
+  String get upstreamProxyServer => _e ? 'Server' : '服务器地址';
+  String get upstreamProxyPort => _e ? 'Port' : '端口';
+  String get upstreamProxyType => _e ? 'Type' : '类型';
+  String get upstreamProxySaved => _e ? 'Upstream proxy saved' : '上游代理已保存';
+  String get upstreamProxyNotFound =>
+      _e ? 'No proxy detected on gateway' : '未检测到网关代理';
+  String get upstreamProxyHint =>
+      _e ? 'Soft router IP, e.g. 192.168.1.1' : '软路由 IP，如 192.168.1.1';
+  // Export logs
+  String get exportLogs => _e ? 'Export Logs' : '导出日志';
+  String get exportLogsCrash => _e ? 'Crash Log' : '崩溃日志';
+  String get exportLogsCore => _e ? 'Core Log' : '内核日志';
+  String get exportLogsEmpty => _e ? 'No log file found' : '暂无日志文件';
+  String get exportLogsCopied => _e ? 'Log copied to clipboard' : '日志已复制到剪贴板';
   String get sectionDesktop => _e ? 'Desktop' : '桌面端';
   String get sectionNetwork => _e ? 'Network' : '网络';
   // Close window
@@ -572,4 +590,32 @@ class S {
   String get sortNameAsc => _e ? 'Name A-Z' : '名称 A-Z';
   String get nodeViewCard => _e ? 'Card view' : '卡片视图';
   String get nodeViewList => _e ? 'List view' : '列表视图';
+
+  // ── Auth (悦通账号) ──────────────────────────────────────────────
+  String get authLogin => _e ? 'Sign In' : '登录';
+  String get authLogout => _e ? 'Sign Out' : '退出登录';
+  String get authEmail => _e ? 'Email' : '邮箱';
+  String get authPassword => _e ? 'Password' : '密码';
+  String get authEmailHint => _e ? 'your@email.com' : '请输入邮箱';
+  String get authPasswordHint => _e ? 'Enter password' : '请输入密码';
+  String get authLoginSubtitle =>
+      _e ? 'Sign in to your Yue.to account' : '登录悦通账号';
+  String get authLoggingIn => _e ? 'Signing in...' : '登录中...';
+  String get authLoginFailed => _e ? 'Login failed' : '登录失败';
+  String get authLogoutConfirm =>
+      _e ? 'Sign out and clear local data?' : '确定退出登录并清除本地数据？';
+  String get authSyncingSubscription =>
+      _e ? 'Syncing subscription...' : '正在同步订阅...';
+  String get authSyncSuccess =>
+      _e ? 'Subscription synced' : '订阅同步成功';
+  String get authSyncFailed =>
+      _e ? 'Subscription sync failed' : '订阅同步失败';
+  String get authAccountInfo => _e ? 'Account' : '账号信息';
+  String get authPlan => _e ? 'Plan' : '套餐';
+  String get authTraffic => _e ? 'Traffic' : '流量';
+  String get authExpiry => _e ? 'Expiry' : '到期时间';
+  String authDaysRemaining(int days) =>
+      _e ? '$days days remaining' : '剩余 $days 天';
+  String get authExpired => _e ? 'Expired' : '已过期';
+  String get authRefreshInfo => _e ? 'Refresh' : '刷新';
 }

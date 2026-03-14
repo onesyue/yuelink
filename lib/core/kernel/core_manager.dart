@@ -13,6 +13,7 @@ import '../../infrastructure/datasources/mihomo_api.dart';
 import '../../infrastructure/datasources/mihomo_stream.dart';
 import '../../services/overwrite_service.dart';
 import '../../services/process_manager.dart';
+import '../storage/settings_service.dart';
 import '../platform/vpn_service.dart' as vpn;
 
 /// How mihomo is managed.
@@ -157,7 +158,19 @@ class CoreManager {
         debugPrint('[CoreManager] buildConfig 5a: loading overwrite...');
         final overwrite = await OverwriteService.load();
         debugPrint('[CoreManager] buildConfig 5b: applying overwrite...');
-        final withOverwrite = OverwriteService.apply(configYaml, overwrite);
+        var withOverwrite = OverwriteService.apply(configYaml, overwrite);
+
+        // 5a+. Inject upstream proxy (soft router / gateway) if configured
+        final upstream = await SettingsService.getUpstreamProxy();
+        if (upstream != null && (upstream['server'] as String).isNotEmpty) {
+          debugPrint('[CoreManager] buildConfig 5a+: injecting upstream proxy...');
+          withOverwrite = ConfigTemplate.injectUpstreamProxy(
+            withOverwrite,
+            upstream['type'] as String,
+            upstream['server'] as String,
+            upstream['port'] as int,
+          );
+        }
 
         // 5b. Template processing (ports, DNS, sniffer, geo, TUN fd)
         debugPrint('[CoreManager] buildConfig 5c: ConfigTemplate.process...');

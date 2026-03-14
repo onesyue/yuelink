@@ -229,6 +229,61 @@ class SettingsService {
     await set('splitTunnelApps', apps);
   }
 
+  // ── Upstream proxy ───────────────────────────────────────────────────────────
+
+  static Future<Map<String, dynamic>?> getUpstreamProxy() async {
+    final settings = await load();
+    final raw = settings['upstreamProxy'];
+    if (raw is Map && raw['enabled'] == true) {
+      return {
+        'type': raw['type'] as String? ?? 'socks5',
+        'server': raw['server'] as String? ?? '',
+        'port': (raw['port'] as int?) ?? 1080,
+      };
+    }
+    return null;
+  }
+
+  static Future<void> setUpstreamProxy({
+    required bool enabled,
+    required String type,
+    required String server,
+    required int port,
+  }) async {
+    await set('upstreamProxy', {
+      'enabled': enabled,
+      'type': type,
+      'server': server,
+      'port': port,
+    });
+  }
+
+  // ── Expanded proxy groups ────────────────────────────────────────────────────
+
+  static Future<List<String>> getExpandedGroups() async {
+    final settings = await load();
+    final raw = settings['expandedGroups'];
+    if (raw is List) return raw.cast<String>();
+    return [];
+  }
+
+  static Future<void> setExpandedGroups(List<String> groups) async {
+    await set('expandedGroups', groups);
+  }
+
+  // ── Delay test results ───────────────────────────────────────────────────────
+
+  static Future<Map<String, int>> getDelayResults() async {
+    final settings = await load();
+    final raw = settings['delayResults'];
+    if (raw is Map) return raw.cast<String, int>();
+    return {};
+  }
+
+  static Future<void> setDelayResults(Map<String, int> results) async {
+    await set('delayResults', results);
+  }
+
   // ── WebDAV (credentials stored in OS secure storage, not plain JSON) ────────
 
   static Future<Map<String, String>> getWebDavConfig() =>

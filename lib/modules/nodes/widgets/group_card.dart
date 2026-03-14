@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/storage/settings_service.dart';
 import '../../../domain/models/proxy.dart';
 import '../../../l10n/app_strings.dart';
 import '../../../shared/app_notifier.dart';
@@ -80,10 +81,13 @@ class _GroupCardState extends ConsumerState<GroupCard>
   @override
   void initState() {
     super.initState();
+    // Restore persisted expansion state
+    final expandedGroups = ref.read(expandedGroupNamesProvider);
+    _expanded = expandedGroups.contains(widget.group.name);
     _animController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 250),
-      value: 0.0, // start collapsed
+      value: _expanded ? 1.0 : 0.0,
     );
     _expandAnim =
         CurvedAnimation(parent: _animController, curve: Curves.easeOutCubic);
@@ -103,6 +107,15 @@ class _GroupCardState extends ConsumerState<GroupCard>
     } else {
       _animController.reverse();
     }
+    // Persist expansion state
+    final current = Set<String>.from(ref.read(expandedGroupNamesProvider));
+    if (_expanded) {
+      current.add(widget.group.name);
+    } else {
+      current.remove(widget.group.name);
+    }
+    ref.read(expandedGroupNamesProvider.notifier).state = current;
+    SettingsService.setExpandedGroups(current.toList());
   }
 
   @override
@@ -377,7 +390,12 @@ class _NodeCardItemState extends ConsumerState<NodeCardItem> {
               ],
             ),
             const SizedBox(height: 4),
-            YLDelayBadge(delay: delay, testing: isTesting),
+            GestureDetector(
+              onTap: isTesting
+                  ? null
+                  : () => ref.read(delayTestProvider).testDelay(widget.name),
+              child: YLDelayBadge(delay: delay, testing: isTesting),
+            ),
           ],
         ),
       ),

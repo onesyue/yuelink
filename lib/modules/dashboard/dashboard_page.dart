@@ -12,7 +12,6 @@ import '../../providers/profile_provider.dart';
 import '../../shared/app_notifier.dart';
 import '../../core/kernel/core_manager.dart';
 import '../../services/profile_service.dart';
-import 'providers/dashboard_providers.dart';
 import 'widgets/chart_card.dart';
 import 'widgets/exit_ip_card.dart';
 import 'widgets/hero_card.dart';
@@ -83,8 +82,6 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     ref.listen(coreStatusProvider, (prev, next) {
       if (next == CoreStatus.running) {
         _startUptimeTimer();
-        ref.read(exitIpProvider.notifier).reset();
-        ref.read(exitIpProvider.notifier).query();
       } else if (next == CoreStatus.stopped) {
         _stopUptimeTimer();
       }

@@ -74,3 +74,8 @@ assets/geodata/
 *.iml
 android/local.properties
 .aider*
+config.yaml
+
+# Android keystore
+android/app/*.jks
+android/app/*.keystore

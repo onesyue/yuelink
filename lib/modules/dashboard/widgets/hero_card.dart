@@ -9,7 +9,6 @@ import '../../../providers/profile_provider.dart';
 import '../../../providers/proxy_provider.dart';
 import '../../../theme.dart';
 import 'overview_card.dart';
-import 'traffic_speed_row.dart';
 
 class HeroCard extends ConsumerWidget {
   final CoreStatus status;
@@ -190,14 +189,7 @@ class HeroCard extends ConsumerWidget {
             overflow: TextOverflow.ellipsis,
           ),
 
-          // Row 4: Inline traffic speed (only when connected)
-          // Isolated in its own ConsumerWidget so only the speed numbers rebuild
-          if (isRunning) ...[
-            const SizedBox(height: 14),
-            const RepaintBoundary(child: TrafficSpeedRow()),
-          ],
-
-          // Row 5: Pills (routing mode + profile name)
+          // Row 4: Pills (routing mode + profile name)
           if (isRunning) ...[
             const SizedBox(height: 14),
             Wrap(

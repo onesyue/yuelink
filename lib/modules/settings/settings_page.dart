@@ -1,6 +1,8 @@
 import 'dart:io';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
@@ -9,6 +11,8 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../constants.dart';
 import '../../l10n/app_strings.dart';
+import '../../modules/yue_auth/providers/yue_auth_providers.dart';
+import '../../shared/formatters/subscription_parser.dart' show formatBytes;
 import '../../providers/core_provider.dart';
 import '../../providers/split_tunnel_provider.dart';
 import '../../shared/app_notifier.dart';
@@ -280,8 +284,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     // Auto connect
                     YLSettingsRow(
                       title: s.autoConnect,
-                      trailing: Switch(
+                      trailing: CupertinoSwitch(
                         value: autoConnect,
+                        activeTrackColor: YLColors.connected,
                         onChanged: (v) async {
                           ref.read(autoConnectProvider.notifier).state = v;
                           await SettingsService.setAutoConnect(v);
@@ -293,8 +298,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                       YLSettingsRow(
                         title: s.launchAtStartupLabel,
                         description: s.launchAtStartupSub,
-                        trailing: Switch(
+                        trailing: CupertinoSwitch(
                           value: _launchAtStartup,
+                          activeTrackColor: YLColors.connected,
                           onChanged: (v) async {
                             setState(() => _launchAtStartup = v);
                             await SettingsService.setLaunchAtStartup(v);
@@ -401,8 +407,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                         YLSettingsRow(
                           title: s.setSystemProxyOnConnect,
                           description: s.setSystemProxyOnConnectSub,
-                          trailing: Switch(
+                          trailing: CupertinoSwitch(
                             value: systemProxyOnConnect,
+                            activeTrackColor: YLColors.connected,
                             onChanged: (v) async {
                               ref
                                   .read(systemProxyOnConnectProvider.notifier)
@@ -412,6 +419,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                           ),
                         ),
                     ],
+                    // Upstream proxy (soft router / gateway)
+                    Divider(height: 1, thickness: 0.5, color: dividerColor),
+                    const _UpstreamProxyRow(),
                     // Test URL — all platforms
                     Divider(height: 1, thickness: 0.5, color: dividerColor),
                     _TestUrlRow(),
@@ -574,6 +584,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                             builder: (_) => const StartupReportPage()),
                       ),
                     ),
+                    Divider(height: 1, thickness: 0.5, color: dividerColor),
+                    YLInfoRow(
+                      label: s.exportLogs,
+                      trailing: const Icon(Icons.chevron_right, size: 18,
+                          color: YLColors.zinc400),
+                      onTap: () => _ExportLogsSheet.show(context),
+                    ),
                   ],
                 ),
               ),
@@ -584,6 +601,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 const _SplitTunnelSection(),
                 const SizedBox(height: 8),
               ],
+
+              // ══ Account ═══════════════════════════════════════════
+              _SectionTitle(s.authAccountInfo),
+              const _AccountSection(),
+              const SizedBox(height: 8),
 
               // ══ About ═════════════════════════════════════════════
               _SectionTitle(s.sectionAbout),
@@ -681,6 +703,121 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   }
 }
 
+// ── Account section ──────────────────────────────────────────────────────────
+
+class _AccountSection extends ConsumerWidget {
+  const _AccountSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = S.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final authState = ref.watch(authProvider);
+    final profile = authState.userProfile;
+    final dividerColor = isDark
+        ? Colors.white.withValues(alpha: 0.06)
+        : Colors.black.withValues(alpha: 0.06);
+
+    if (!authState.isLoggedIn) {
+      return _SettingsCard(
+        child: YLInfoRow(
+          label: s.authLogin,
+          trailing: const Icon(Icons.chevron_right,
+              size: 18, color: YLColors.zinc400),
+          onTap: () => ref.read(authProvider.notifier).logout(),
+        ),
+      );
+    }
+
+    return _SettingsCard(
+      child: Column(
+        children: [
+          // Email
+          YLInfoRow(
+            label: s.authEmail,
+            value: profile?.email ?? '—',
+          ),
+          Divider(height: 1, thickness: 0.5, color: dividerColor),
+          // Plan
+          if (profile?.planName != null) ...[
+            YLInfoRow(
+              label: s.authPlan,
+              value: profile!.planName!,
+            ),
+            Divider(height: 1, thickness: 0.5, color: dividerColor),
+          ],
+          // Traffic
+          if (profile?.transferEnable != null) ...[
+            YLInfoRow(
+              label: s.authTraffic,
+              value: '${formatBytes(profile!.remaining ?? 0)} / ${formatBytes(profile.transferEnable!)}',
+            ),
+            Divider(height: 1, thickness: 0.5, color: dividerColor),
+          ],
+          // Expiry
+          if (profile != null) ...[
+            YLInfoRow(
+              label: s.authExpiry,
+              value: profile.isExpired
+                  ? s.authExpired
+                  : profile.daysRemaining != null
+                      ? s.authDaysRemaining(profile.daysRemaining!)
+                      : '—',
+            ),
+            Divider(height: 1, thickness: 0.5, color: dividerColor),
+          ],
+          // Refresh
+          YLInfoRow(
+            label: s.authRefreshInfo,
+            trailing: const Icon(Icons.refresh, size: 18, color: YLColors.zinc400),
+            onTap: () => ref.read(authProvider.notifier).refreshUserInfo(),
+          ),
+          Divider(height: 1, thickness: 0.5, color: dividerColor),
+          // Sync subscription
+          YLInfoRow(
+            label: s.authSyncingSubscription.replaceAll('...', '').replaceAll('正在', ''),
+            trailing: const Icon(Icons.sync, size: 18, color: YLColors.zinc400),
+            onTap: () => ref.read(authProvider.notifier).syncSubscription(),
+          ),
+          Divider(height: 1, thickness: 0.5, color: dividerColor),
+          // Logout
+          YLInfoRow(
+            label: s.authLogout,
+            trailing: const Icon(Icons.logout, size: 18, color: YLColors.error),
+            onTap: () => _confirmLogout(context, ref, s),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmLogout(BuildContext context, WidgetRef ref, S s) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(s.authLogout),
+        content: Text(s.authLogoutConfirm),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(s.cancel),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              ref.read(authProvider.notifier).logout();
+            },
+            style: FilledButton.styleFrom(
+              backgroundColor: YLColors.error,
+            ),
+            child: Text(s.authLogout),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 // ── Settings page helper widgets ─────────────────────────────────────────────
 
 /// Section title — matches the dashboard top bar label style.
@@ -747,7 +884,7 @@ class _SplitTunnelSectionState extends ConsumerState<_SplitTunnelSection> {
 
   Future<void> _loadApps() async {
     setState(() => _loading = true);
-    final apps = await VpnService.getInstalledApps(showSystem: false);
+    final apps = await VpnService.getInstalledApps(showSystem: true);
     if (mounted) setState(() { _apps = apps; _loading = false; });
   }
 
@@ -1369,6 +1506,363 @@ class YLSettingsRow extends StatelessWidget {
           trailing,
         ],
       ),
+    );
+  }
+}
+
+// ── Upstream Proxy Row ────────────────────────────────────────────────────────
+
+class _UpstreamProxyRow extends StatefulWidget {
+  const _UpstreamProxyRow();
+
+  @override
+  State<_UpstreamProxyRow> createState() => _UpstreamProxyRowState();
+}
+
+class _UpstreamProxyRowState extends State<_UpstreamProxyRow> {
+  bool _enabled = false;
+  String _type = 'socks5';
+  String _server = '';
+  int _port = 1080;
+  bool _detecting = false;
+  String? _detectedInfo; // e.g. "192.168.1.1:7890"
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final settings = await SettingsService.load();
+    final raw = settings['upstreamProxy'];
+    if (raw is Map) {
+      final enabled = raw['enabled'] == true;
+      final server = raw['server'] as String? ?? '';
+      final port = (raw['port'] as int?) ?? 1080;
+      final type = raw['type'] as String? ?? 'socks5';
+      setState(() {
+        _enabled = enabled;
+        _server = server;
+        _port = port;
+        _type = type;
+        if (enabled && server.isNotEmpty) {
+          _detectedInfo = '$server:$port';
+        }
+      });
+    }
+  }
+
+  Future<String?> _detectGatewayIp() async {
+    final interfaces = await NetworkInterface.list(
+        type: InternetAddressType.IPv4, includeLoopback: false);
+    for (final iface in interfaces) {
+      for (final addr in iface.addresses) {
+        final parts = addr.address.split('.');
+        if (parts.length == 4) {
+          return '${parts[0]}.${parts[1]}.${parts[2]}.1';
+        }
+      }
+    }
+    return null;
+  }
+
+  Future<int?> _detectProxyPort(String host) async {
+    for (final port in [7890, 1080, 7891, 10809, 1081, 8080]) {
+      try {
+        final s = await Socket.connect(host, port,
+            timeout: const Duration(milliseconds: 500));
+        s.destroy();
+        return port;
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  Future<void> _autoDetect() async {
+    setState(() => _detecting = true);
+    try {
+      final gateway = await _detectGatewayIp();
+      if (gateway == null) {
+        if (mounted) AppNotifier.error(S.of(context).upstreamProxyNotFound);
+        setState(() {
+          _enabled = false;
+          _detecting = false;
+        });
+        return;
+      }
+      final port = await _detectProxyPort(gateway);
+      if (port == null) {
+        if (mounted) AppNotifier.error(S.of(context).upstreamProxyNotFound);
+        setState(() {
+          _enabled = false;
+          _detecting = false;
+        });
+        return;
+      }
+      _server = gateway;
+      _port = port;
+      await SettingsService.setUpstreamProxy(
+        enabled: true,
+        type: _type,
+        server: _server,
+        port: _port,
+      );
+      if (mounted) {
+        setState(() {
+          _detectedInfo = '$gateway:$port';
+          _detecting = false;
+        });
+        AppNotifier.success(S.of(context).upstreamProxySaved);
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _enabled = false;
+          _detecting = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _disable() async {
+    await SettingsService.setUpstreamProxy(
+      enabled: false,
+      type: _type,
+      server: _server,
+      port: _port,
+    );
+    setState(() {
+      _enabled = false;
+      _detectedInfo = null;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = S.of(context);
+    final subtitle = _enabled && _detectedInfo != null
+        ? '$_type  $_detectedInfo'
+        : s.upstreamProxySub;
+
+    return YLSettingsRow(
+      title: s.upstreamProxy,
+      description: subtitle,
+      trailing: _detecting
+          ? const SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : CupertinoSwitch(
+              value: _enabled,
+              activeTrackColor: YLColors.connected,
+              onChanged: (v) {
+                if (v) {
+                  setState(() => _enabled = true);
+                  _autoDetect();
+                } else {
+                  _disable();
+                }
+              },
+            ),
+    );
+  }
+}
+
+// ── Export Logs Sheet ─────────────────────────────────────────────────────────
+
+class _ExportLogsSheet {
+  static void show(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => const _ExportLogsContent(),
+    );
+  }
+}
+
+class _ExportLogsContent extends StatefulWidget {
+  const _ExportLogsContent();
+
+  @override
+  State<_ExportLogsContent> createState() => _ExportLogsContentState();
+}
+
+class _ExportLogsContentState extends State<_ExportLogsContent>
+    with SingleTickerProviderStateMixin {
+  late TabController _tab;
+  String? _crashLog;
+  String? _coreLog;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _tab = TabController(length: 2, vsync: this);
+    _loadLogs();
+  }
+
+  @override
+  void dispose() {
+    _tab.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadLogs() async {
+    try {
+      final dir = await getApplicationSupportDirectory();
+      final crashFile = File('${dir.path}/crash.log');
+      final coreFile = File('${dir.path}/core.log');
+      setState(() {
+        _crashLog =
+            crashFile.existsSync() ? crashFile.readAsStringSync() : null;
+        _coreLog = coreFile.existsSync() ? coreFile.readAsStringSync() : null;
+        _loading = false;
+      });
+    } catch (_) {
+      setState(() => _loading = false);
+    }
+  }
+
+  void _copy(String? text) {
+    if (text == null || text.isEmpty) return;
+    Clipboard.setData(ClipboardData(text: text));
+    AppNotifier.success(S.of(context).exportLogsCopied);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = S.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bg = isDark ? YLColors.zinc800 : Colors.white;
+
+    return DraggableScrollableSheet(
+      initialChildSize: 0.75,
+      maxChildSize: 0.95,
+      minChildSize: 0.4,
+      builder: (_, controller) => Container(
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius:
+              const BorderRadius.vertical(top: Radius.circular(YLRadius.xl)),
+        ),
+        child: Column(
+          children: [
+            const SizedBox(height: 8),
+            Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: YLColors.zinc300,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                children: [
+                  Text(s.exportLogs, style: YLText.titleMedium),
+                  const Spacer(),
+                  TabBar(
+                    controller: _tab,
+                    isScrollable: true,
+                    tabAlignment: TabAlignment.start,
+                    labelStyle: YLText.caption
+                        .copyWith(fontWeight: FontWeight.w600),
+                    unselectedLabelStyle: YLText.caption,
+                    indicatorColor: YLColors.connected,
+                    labelColor: YLColors.connected,
+                    unselectedLabelColor: YLColors.zinc500,
+                    tabs: [
+                      Tab(text: s.exportLogsCrash),
+                      Tab(text: s.exportLogsCore),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: _loading
+                  ? const Center(child: CupertinoActivityIndicator())
+                  : TabBarView(
+                      controller: _tab,
+                      children: [
+                        _LogPane(
+                          content: _crashLog,
+                          onCopy: () => _copy(_crashLog),
+                        ),
+                        _LogPane(
+                          content: _coreLog,
+                          onCopy: () => _copy(_coreLog),
+                        ),
+                      ],
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _LogPane extends StatelessWidget {
+  final String? content;
+  final VoidCallback onCopy;
+
+  const _LogPane({required this.content, required this.onCopy});
+
+  @override
+  Widget build(BuildContext context) {
+    final s = S.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final hasContent = content != null && content!.isNotEmpty;
+
+    return Column(
+      children: [
+        if (hasContent)
+          Padding(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            child: Row(
+              children: [
+                const Spacer(),
+                TextButton.icon(
+                  onPressed: onCopy,
+                  icon: const Icon(Icons.copy, size: 14),
+                  label: Text(s.copiedToClipboard.replaceFirst('已', '复制')),
+                  style: TextButton.styleFrom(
+                    foregroundColor: YLColors.connected,
+                    textStyle: YLText.caption,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        Expanded(
+          child: hasContent
+              ? SingleChildScrollView(
+                  padding: const EdgeInsets.all(12),
+                  child: SelectableText(
+                    content!,
+                    style: YLText.caption.copyWith(
+                      fontFamily: 'monospace',
+                      fontSize: 11,
+                      color: isDark ? YLColors.zinc300 : YLColors.zinc700,
+                    ),
+                  ),
+                )
+              : Center(
+                  child: Text(
+                    s.exportLogsEmpty,
+                    style: YLText.body.copyWith(color: YLColors.zinc400),
+                  ),
+                ),
+        ),
+      ],
     );
   }
 }
