@@ -74,7 +74,7 @@ Do not move code between layers without a reason. When adding new features, use 
 
 ### Infrastructure layer (`lib/infrastructure/`)
 
-- **`datasources/xboard_api.dart`** — XBoard panel REST client (cedar2025/Xboard). Endpoint: `https://d7ccm19ki90mg.cloudfront.net`. Methods: `login`, `getSubscribeData` (combined: profile + subscribe URL via `/api/v1/user/getSubscribe`), `fetchSubscribeConfig`, `getEmby`, `getAnnouncements`, plus Store methods (`fetchPlans`, `createOrder`, `checkoutOrder`, `fetchOrderDetail`, `cancelOrder`, `fetchOrders`, `validateCoupon`, `fetchPaymentMethods`). Models: `LoginResponse`, `UserProfile`, `SubscribeData`, `SubscribeResult`, `Announcement`, `EmbyInfo`, `XBoardApiException`. **Critical**: XBoard returns `{"status":"fail","message":"..."}` with HTTP 200 for business-level errors. `_getRawData`/`_postRawData` both call `_assertSuccess(json)` which throws `XBoardApiException` on `status:"fail"` — callers must NOT wrap in try-catch that swallows this. **Traffic units**: `UserProfile.transferEnable`, `uploadUsed` (`u`), `downloadUsed` (`d`) are all in **bytes** — pass directly to `formatBytes()`, do not multiply or divide. `StorePlan.transferEnable` is in **GB** (different table). **Checkout**: `CheckoutResult.type == -1` = free/instant (no URL, `paymentUrl` = `''`); type 0 = QR URL; type 1 = redirect URL. `PaymentMethod.payment` is a `String` (e.g. `"alipay"`), not int. `OrderStatus.isSuccess` includes `processing` (status=1, payment received but activating) in addition to `completed` (3) and `discounted` (4).
+- **`datasources/xboard_api.dart`** — XBoard panel REST client (cedar2025/Xboard). Endpoint: `https://d7ccm19ki90mg.cloudfront.net`. Methods: `login`, `getSubscribeData` (combined: profile + subscribe URL via `/api/v1/user/getSubscribe`), `fetchSubscribeConfig`, `getEmby`, `getAnnouncements`, plus Store methods (`fetchPlans`, `createOrder`, `checkoutOrder`, `fetchOrderDetail`, `cancelOrder`, `fetchOrders`, `validateCoupon`, `fetchPaymentMethods`). Models: `LoginResponse`, `UserProfile`, `SubscribeData`, `SubscribeResult`, `Announcement`, `EmbyInfo`, `XBoardApiException`. **Critical**: XBoard returns `{"status":"fail","message":"..."}` with HTTP 200 for business-level errors. `_getRawData`/`_postRawData` both call `_assertSuccess(json)` which throws `XBoardApiException` on `status:"fail"` — callers must NOT wrap in try-catch that swallows this. **XBoard tinyint(1) bool casting**: PHP encodes `tinyint(1)` columns as JSON `true`/`false` instead of `1`/`0`. Dart `as int?` throws `type 'bool' is not a subtype of type 'int?'`. All store models (`StorePlan`, `StoreOrder`, `CouponResult`, `PaymentMethod`) use `_toInt(dynamic v)` / `_toBool(dynamic v)` helpers that handle `bool`, `int`, and `double` inputs. Never use `json['field'] as int?` directly for XBoard numeric fields. **Traffic units**: `UserProfile.transferEnable`, `uploadUsed` (`u`), `downloadUsed` (`d`) are all in **bytes** — pass directly to `formatBytes()`, do not multiply or divide. `StorePlan.transferEnable` is in **GB** (different table). **Checkout**: `CheckoutResult.type == -1` = free/instant (no URL, `paymentUrl` = `''`); type 0 = QR URL; type 1 = redirect URL. `PaymentMethod.payment` is a `String` (e.g. `"alipay"`), not int. `OrderStatus.isSuccess` includes `processing` (status=1, payment received but activating) in addition to `completed` (3) and `discounted` (4).
 - **`datasources/mihomo_api.dart`** — mihomo REST client (port 9090).
 - **`datasources/mihomo_stream.dart`** — WebSocket for real-time traffic/logs.
 
@@ -111,7 +111,7 @@ client.connectionTimeout = const Duration(seconds: 10);
 | Android | `VpnService` + TUN fd → Go core (always, regardless of connectionMode) | `android/.../YueLinkVpnService.kt` |
 | iOS | `NEPacketTunnelProvider` (separate process, static lib) | `ios/PacketTunnel/` |
 | iOS (TrollStore) | Same as above; minimum iOS 15.0 for PacketTunnel extension | — |
-| macOS | System proxy via `networksetup` | `lib/providers/core_provider.dart` |
+| macOS | System proxy via `networksetup` (sets ALL interfaces; `_verifySystemProxy` checks all and logs which are active vs missing) | `lib/providers/core_provider.dart` |
 | Windows | System proxy via registry | `lib/providers/core_provider.dart` |
 
 ### Native library install paths
@@ -137,7 +137,7 @@ client.connectionTimeout = const Duration(seconds: 10);
 - **Android notification permission**: `POST_NOTIFICATIONS` is requested at runtime in `MainActivity.onStart()` on Android 13+ (API 33+). Without it the foreground VPN notification is silently suppressed, and the service may be killed. The permission is declared in `AndroidManifest.xml` and requested via `checkSelfPermission`/`requestPermissions` (no AndroidX dependency needed).
 - **Android Secure Folder (Samsung)**: Apps installed inside Samsung Secure Folder run as user 95 (not user 0). `VpnService.establish()` always returns null for non-primary users — TUN fd will be -1 and VPN will never work. Only one VPN can be active system-wide; a Secure Folder instance running its VPN blocks the main-space instance. Verify with `adb shell dumpsys package com.yueto.yuelink | grep dataDir` — must show `/data/user/0/`.
 - **Android TUN config**: `ConfigTemplate._injectTunFd()` replaces the entire `tun:` section with Android-safe settings: `stack: gvisor`, `auto-route: false`, `auto-detect-interface: false` (netlink banned on Android 14+), `find-process-mode: off`. Never set `auto-route: true` when using VpnService fd.
-- **iOS TUN config**: `PacketTunnelProvider.injectTunConfig()` uses `stack: gvisor`. Also forces `find-process-mode: off` and injects full DNS fallback config.
+- **iOS TUN config**: `PacketTunnelProvider.injectTunConfig()` uses `stack: gvisor`. Also forces `find-process-mode: off`, injects full DNS fallback config when no dns section exists, and calls `ensureDnsPatched()` when a dns section is present (ensures `enable: true` + `nameserver-policy` for Apple/iCloud — mirrors Dart `_ensureDns` behavior).
 - Connection mode UI is hidden on mobile — only shown on desktop (`isDesktop = Platform.isMacOS || Platform.isWindows`).
 - MethodChannel name: `com.yueto.yuelink/vpn` (consistent across all platforms).
 - Package/Bundle ID: `com.yueto.yuelink`
@@ -147,6 +147,11 @@ client.connectionTimeout = const Duration(seconds: 10);
 - `YLColors.primary` is black (`#000000`) — never use it as foreground in dark mode. Use `isDark ? Colors.white : YLColors.primary` pattern.
 - Android native strings (VPN notification etc.) use Android string resources with `values-zh/` locale variant, not the Dart `S` class.
 - **Sidebar uses instant state switching** (no AnimatedContainer). This is intentional to avoid flicker on Windows. Do not add animation back.
+- **App lifecycle**: `_YueLinkAppState` implements `WidgetsBindingObserver`. On `AppLifecycleState.resumed`, `_onAppResumed()` immediately checks `CoreManager.isRunning` + `api.isAvailable()` and resets state if core died in the background — do NOT wait for the 10s heartbeat. Register/unregister via `WidgetsBinding.instance.addObserver/removeObserver` in `initState`/`dispose`.
+- **Heartbeat scope**: `coreHeartbeatProvider` is `ref.watch`-ed in `_YueLinkAppState.build()` (root widget), not just the Dashboard page. This keeps the 10s crash-detection timer active regardless of which tab is visible. The provider itself guards: `if (status != CoreStatus.running) return` — no timer when stopped.
+- **Auth gate startup flash**: `_AuthGate` returns `const Scaffold()` (blank) during `AuthStatus.unknown`. Do NOT show `CircularProgressIndicator` there — auth resolves in ~100ms from cached storage and the spinner causes a visible white flash before content loads.
+- **Port conflict handling (desktop)**: Before `ConfigTemplate.process()`, `CoreManager` calls `_findAvailablePort(preferred)` for both `mixedPort` and `apiPort`. If the preferred port is busy (other proxy software running), the next free port in range `[preferred, preferred+20)` is used. For `mixedPort`, the config string is patched via `ConfigTemplate.setMixedPort()` before processing. Mobile platforms skip this — VPN replacement is handled at OS level.
+- **Stream subscription lifecycle**: `_appLinks.uriLinkStream.listen()` result must be stored as `_appLinksSub` and cancelled in `dispose()`. `ref.listenManual()` returns a `ProviderSubscription` that must be `.close()`d in `dispose()` — not `.cancel()`. `ref.listen()` in `build()` is managed automatically by Riverpod.
 - **iOS TrollStore distribution**: `ios/PacketTunnel/Info.plist` **must** have `CFBundleExecutable = $(EXECUTABLE_NAME)`. Without it, ldid fails with "Cannot find key CFBundleExecutable" (exit code 1, TrollStore error 175) during recursive bundle signing. `CFBundleDisplayName` should be `悦通`. The entitlements (`application-groups` + `networkextension: packet-tunnel-provider`) are compatible with TrollStore — do NOT add push notifications, iCloud, or `keychain-access-groups`.
 - **macOS secure storage**: `SecureStorageService` uses a JSON file in Application Support directory (`path_provider`) on macOS, NOT `flutter_secure_storage`. The Keychain (both legacy and Data Protection) requires signing entitlements that block `flutter run` without a paid developer account. The JSON-file approach is the standard for non-App-Store macOS apps (used by FlClash etc.). Do NOT switch macOS back to `flutter_secure_storage` or add `keychain-access-groups` to entitlements.
 
@@ -164,8 +169,8 @@ Uses "ensure" pattern: only injects when missing, never overwrites subscription-
 
 1. Replace template variables (`$app_name` → `YueLink`)
 2. `_ensureMixedPort` — without it mihomo silently skips HTTP+SOCKS listener
-3. `_ensureExternalController` — REST API endpoint for data operations
-4. `_ensureDns` — comprehensive fake-ip + fallback + fallback-filter (all modes, not just TUN)
+3. `_ensureExternalController` — REST API endpoint for data operations (always replaces existing value with `127.0.0.1:port`)
+4. `_ensureDns` — two-path logic: (a) **no dns section**: inject full default including expanded `fake-ip-filter` and domestic DoH nameservers; (b) **existing dns section**: ensure `enable: true`, then detect actual indentation from existing keys (`RegExp(r'\n( +)\S').firstMatch(dnsSection)`) and inject `nameserver-policy` + `direct-nameserver` for Apple/iCloud using the detected indent — prevents "dial tcp 0.0.0.0:443" when subscription routes Apple domains DIRECT and UDP DNS returns 0.0.0.0.
 5. `_ensureSniffer` — HTTP/TLS/QUIC domain detection for DOMAIN-type rules
 6. `_ensureGeodata` — geodata-mode + geo URLs + auto-update for GEOIP/GEOSITE rules
 7. `_ensureProfile` — store-selected + store-fake-ip persistence
@@ -173,6 +178,8 @@ Uses "ensure" pattern: only injects when missing, never overwrites subscription-
 9. `_ensureAllowLan` — allow-lan + bind-address for mixed-port
 10. `_ensureFindProcessMode` — `always` on desktop, `off` on mobile (no permission)
 11. `_injectTunFd` — Android TUN fd injection (only when tunFd provided)
+
+**YAML injection safety rule**: Never inject into an existing YAML block with hardcoded indentation. Always detect the actual indent from existing sibling keys first (see `_ensureDns` indent detection pattern). String injection at section boundaries only works safely for top-level keys (0 indent) appended at EOF. `ConfigTemplate.setMixedPort()` is the only method that replaces an existing top-level scalar — it uses a regex on the `mixed-port: N` line.
 
 iOS PacketTunnelProvider has its own `injectTunConfig()` in Swift with equivalent logic (runs in separate process, can't use Dart ConfigTemplate).
 
@@ -186,7 +193,7 @@ iOS PacketTunnelProvider has its own `injectTunConfig()` in Swift with equivalen
 | `initCore` | E002 | Call `InitCore(homeDir)` via FFI, set up Go logrus → `core.log` |
 | `vpnPermission` | E003 | Android only: request VpnService permission |
 | `startVpn` | E004 | Android only: get TUN fd from `VpnService` |
-| `buildConfig` | E005 | `OverwriteService.apply()` + `ConfigTemplate.process()` (sync, no Isolate) |
+| `buildConfig` | E005 | Port conflict check (desktop: scan for free ports) + `OverwriteService.apply()` + `ConfigTemplate.process()` (sync, no Isolate) |
 | `startCore` | E006 | Call `StartCore(configYaml)` via FFI (hub.Parse + listeners) |
 | `waitApi` | E007 | Poll REST API up to 50× × 100ms = 5s |
 | `verify` | E008 | Check `IsRunning` + API available + DNS diagnostic |
@@ -195,7 +202,8 @@ On failure, `StartupReport.failureSummary` returns `"[Exx_CODE] stepName: error"
 
 ### Dashboard data sources
 
-- **出口IP** (`proxyServerIpProvider` in `lib/modules/dashboard/providers/dashboard_providers.dart`): Fetches the real exit IP by routing an HTTP request **through mihomo's mixed port** (`HttpClient.findProxy → 'PROXY 127.0.0.1:$mixedPort'`) to `api.ipify.org`. This is the IP the outside world sees, NOT the proxy server's hostname. Tap on `ExitIpCard` calls `ref.invalidate(proxyServerIpProvider)` to re-fetch.
+- **出口IP** (`exitIpInfoProvider`, aliased as `proxyServerIpProvider`, in `lib/modules/dashboard/providers/dashboard_providers.dart`): Resolves the selected proxy node's exit IP via mihomo REST API — does NOT route through the mixed port. Flow: (1) `GET /proxies` → find first real user group from `GLOBAL.all` order; (2) follow `.now` chain recursively to a leaf proxy with a `server` field; (3) DNS-resolve the hostname via `InternetAddress.lookup`; (4) call `api.ip.sb/geoip/{ip}` **directly** (no proxy) for country/city/ISP. Returns `ExitIpInfo` with `flagEmoji` (Unicode Regional Indicators) and `locationLine`. Tap on `ExitIpCard` → `ref.invalidate(exitIpInfoProvider)`.
+- **Traffic chart** (`ChartCard`): Driven by a **single** WebSocket to mihomo `/traffic`. `trafficStreamProvider` maintains one `trafficSub` that writes both `trafficProvider` (current speed) and a local `TrafficHistory` ring buffer (1800 entries, 1 Hz). Two separate WebSocket connections to the same endpoint are unreliable — mihomo silently drops the second, leaving the chart blank. `trafficHistoryProvider` is reset to an empty `TrafficHistory()` on both manual stop and heartbeat-detected crash.
 - **StatsCard upload/download**: Shows XBoard `userProfileProvider.uploadUsed` / `downloadUsed` (`u`/`d` fields), NOT locally accumulated traffic. `TrafficUsageCard` on Mine page also shows these fields broken out individually — they are always available from the cached profile regardless of VPN state.
 - **ChartCard speed**: Watches `trafficProvider` (1Hz WebSocket ticks) and displays real-time `↓ x.xx MB/s / ↑ x.xx MB/s` in the header alongside the historical curve.
 - **Language detection** in `yue_auth_page.dart`: Use `Localizations.localeOf(context).languageCode == 'en'`, NOT string comparisons like `s.navHome == 'Dashboard'`.
