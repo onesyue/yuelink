@@ -2,10 +2,8 @@ name: Build YueLink
 
 on:
   push:
-    branches: [master, dev, release]
     tags: ['v*']
-  pull_request:
-    branches: [master, dev, release]
+  workflow_dispatch:
 
 # Cancel any in-progress run for the same ref (branch or tag) automatically.
 concurrency:
