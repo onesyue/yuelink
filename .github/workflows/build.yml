@@ -210,8 +210,13 @@ jobs:
           echo "KEY_ALIAS=${{ secrets.KEY_ALIAS }}" >> $GITHUB_ENV
           echo "KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}" >> $GITHUB_ENV
 
+      - name: Extract version from tag
+        run: |
+          VERSION=$(echo "${GITHUB_REF}" | sed 's|refs/tags/v||')
+          echo "APP_VERSION=${VERSION}" >> $GITHUB_ENV
+
       - run: flutter pub get
-      - run: flutter build apk --release
+      - run: flutter build apk --release --build-name=${{ env.APP_VERSION }} --build-number=$(echo ${{ env.APP_VERSION }} | tr -d '.')
 
       - name: Rename artifact
         run: |
@@ -263,8 +268,13 @@ jobs:
           key: pods-ios-${{ hashFiles('ios/Podfile.lock') }}
           restore-keys: pods-ios-
 
+      - name: Extract version from tag
+        run: |
+          VERSION=$(echo "${GITHUB_REF}" | sed 's|refs/tags/v||')
+          echo "APP_VERSION=${VERSION}" >> $GITHUB_ENV
+
       - run: flutter pub get
-      - run: flutter build ios --release --no-codesign
+      - run: flutter build ios --release --no-codesign --build-name=${{ env.APP_VERSION }} --build-number=$(echo ${{ env.APP_VERSION }} | tr -d '.')
 
       - name: Package iOS app
         run: |
@@ -318,9 +328,14 @@ jobs:
           key: pods-macos-${{ hashFiles('macos/Podfile.lock') }}
           restore-keys: pods-macos-
 
+      - name: Extract version from tag
+        run: |
+          VERSION=$(echo "${GITHUB_REF}" | sed 's|refs/tags/v||')
+          echo "APP_VERSION=${VERSION}" >> $GITHUB_ENV
+
       - run: flutter config --enable-macos-desktop
       - run: flutter pub get
-      - run: flutter build macos --release
+      - run: flutter build macos --release --build-name=${{ env.APP_VERSION }} --build-number=$(echo ${{ env.APP_VERSION }} | tr -d '.')
 
       - name: Install create-dmg
         run: brew install create-dmg
@@ -382,9 +397,18 @@ jobs:
           curl -fSL -o assets/geodata/ASN.mmdb      "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/GeoLite2-ASN.mmdb"
           ls -lh assets/geodata/
 
+      - name: Extract version from tag
+        shell: bash
+        run: |
+          VERSION=$(echo "${GITHUB_REF}" | sed 's|refs/tags/v||')
+          echo "APP_VERSION=${VERSION}" >> $GITHUB_ENV
+
       - run: flutter config --enable-windows-desktop
       - run: flutter pub get
-      - run: flutter build windows --release
+      - shell: bash
+        run: |
+          BUILD_NUM=$(echo "${{ env.APP_VERSION }}" | tr -d '.')
+          flutter build windows --release --build-name=${{ env.APP_VERSION }} --build-number=${BUILD_NUM}
 
       - name: Ensure libclash.dll in Release dir
         shell: pwsh
@@ -463,9 +487,14 @@ jobs:
           curl -fSL -o assets/geodata/country.mmdb  "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/country.mmdb"
           curl -fSL -o assets/geodata/ASN.mmdb      "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/GeoLite2-ASN.mmdb"
 
+      - name: Extract version from tag
+        run: |
+          VERSION=$(echo "${GITHUB_REF}" | sed 's|refs/tags/v||')
+          echo "APP_VERSION=${VERSION}" >> $GITHUB_ENV
+
       - run: flutter config --enable-linux-desktop
       - run: flutter pub get
-      - run: flutter build linux --release
+      - run: flutter build linux --release --build-name=${{ env.APP_VERSION }} --build-number=$(echo ${{ env.APP_VERSION }} | tr -d '.')
 
       - name: Download appimagetool
         run: |
