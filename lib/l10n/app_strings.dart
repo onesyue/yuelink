@@ -14,6 +14,9 @@ class S {
 
   bool get _e => _lang == 'en';
 
+  /// Public alias — use in external files where `_e` is not accessible.
+  bool get isEn => _e;
+
   /// Locale-aware lookup from a BuildContext.
   static S of(BuildContext context) {
     final locale = Localizations.maybeLocaleOf(context);
@@ -28,9 +31,11 @@ class S {
   }
 
   // ── Navigation ──────────────────────────────────────────────────
-  String get navHome => _e ? 'Dashboard' : '仪表盘';
-  String get navProxies => _e ? 'Proxies' : '代理';
+  String get navHome => _e ? 'Home' : '首页';
+  String get navProxies => _e ? 'Lines' : '线路';
   String get navProfile => _e ? 'Subscriptions' : '订阅';
+  String get navMine => _e ? 'Me' : '我的';
+  String get navStore => _e ? 'Store' : '商店';
   String get navConnections => _e ? 'Connections' : '连接';
   String get navLog => _e ? 'Logs' : '日志';
   String get navSettings => _e ? 'Settings' : '设置';
@@ -71,8 +76,8 @@ class S {
   String get todayUsage => _e ? 'Today' : '今日用量';
 
   // ── Connection status ─────────────────────────────────────────────
-  String get statusConnected => _e ? 'Connected' : '已连接';
-  String get statusDisconnected => _e ? 'Disconnected' : '未连接';
+  String get statusConnected => _e ? 'Protected' : '保护中';
+  String get statusDisconnected => _e ? 'Not Protected' : '未开启保护';
   String get statusConnecting => _e ? 'Connecting...' : '连接中...';
   String get statusProcessing => _e ? 'Processing...' : '处理中...';
   String get statusDisconnecting => _e ? 'Disconnecting...' : '断开中...';
@@ -140,11 +145,11 @@ class S {
   String get noProfileHint =>
       _e ? 'Add a subscription in the Profiles page first' : '请先在「配置」页面添加订阅';
   String get snackNoProfile =>
-      _e ? 'Please add a subscription first' : '请先在「配置」页面添加订阅';
+      _e ? 'No subscription yet — tap Sync to get started' : '暂无订阅配置，请先同步订阅';
   String get snackConfigMissing =>
-      _e ? 'Config not found, please update subscription' : '配置文件不存在，请更新订阅';
+      _e ? 'Config missing, please sync your subscription' : '配置文件不存在，请重新同步订阅';
   String get snackStartFailed =>
-      _e ? 'Start failed, please check config' : '启动失败，请检查配置';
+      _e ? 'Connection failed, please try again' : '连接失败，请稍后重试';
 
   // ── Proxy page ────────────────────────────────────────────────────
   String get notConnectedHintProxy =>
@@ -375,6 +380,7 @@ class S {
   String get sectionStatus => _e ? 'Status' : '状态';
   String get sectionTools => _e ? 'Tools' : '工具';
   String get sectionAbout => _e ? 'About' : '关于';
+  String get sectionSettings => _e ? 'Settings' : '设置';
   // Upstream proxy
   String get upstreamProxy => _e ? 'Upstream Proxy' : '上游代理';
   String get upstreamProxySub =>
@@ -612,10 +618,112 @@ class S {
       _e ? 'Subscription sync failed' : '订阅同步失败';
   String get authAccountInfo => _e ? 'Account' : '账号信息';
   String get authPlan => _e ? 'Plan' : '套餐';
+  String get dashMyPlan => _e ? 'My Plan' : '我的套餐';
   String get authTraffic => _e ? 'Traffic' : '流量';
   String get authExpiry => _e ? 'Expiry' : '到期时间';
   String authDaysRemaining(int days) =>
       _e ? '$days days remaining' : '剩余 $days 天';
   String get authExpired => _e ? 'Expired' : '已过期';
+  String get authExpiryToday => _e ? 'Expires today' : '今天到期';
   String get authRefreshInfo => _e ? 'Refresh' : '刷新';
+  // Error messages — user-facing, non-technical
+  String get authSessionExpired =>
+      _e ? 'Session expired, please sign in again' : '登录已失效，请重新登录';
+  String get authErrorBadCredentials =>
+      _e ? 'Incorrect email or password' : '账号或密码错误，请重试';
+  String get authErrorNetwork =>
+      _e ? 'Network error, please check your connection' : '网络连接失败，请检查网络后重试';
+  String get authErrorServer =>
+      _e ? 'Service temporarily unavailable, please try again later' : '服务暂时不可用，请稍后重试';
+
+  // ── Mine / Account center ────────────────────────────────────────
+  String get mineTrafficTitle => _e ? 'Traffic Usage' : '流量使用';
+  String get mineSpeedUp => _e ? 'Upload' : '上传';
+  String get mineSpeedDown => _e ? 'Download' : '下载';
+  String get mineRemaining => _e ? 'Remaining' : '剩余';
+  String get mineActions => _e ? 'Quick Actions' : '快捷操作';
+  String get mineChangePassword => _e ? 'Change Password' : '修改密码';
+  String get mineTelegramGroup => _e ? 'Join Telegram Group' : '加入 Telegram 群';
+  String get mineRenew => _e ? 'Plans' : '订阅套餐';
+  String get mineExpiryWarning =>
+      _e ? 'Plan expiring soon — renew now' : '套餐即将到期，请及时续费';
+  String get mineExpiredWarning =>
+      _e ? 'Plan has expired — renew now' : '套餐已到期，请续费';
+  String get mineSyncing => _e ? 'Syncing…' : '同步中…';
+  String get mineSyncDone => _e ? 'Synced' : '同步成功';
+  String get mineSyncFailed => _e ? 'Sync failed' : '同步失败';
+  String get mineNotConnected => _e ? 'Not connected' : '未连接';
+  String get mineEmby => _e ? 'Emby' : 'Emby';
+  String get mineEmbyNoAccess =>
+      _e ? 'No Emby access for this account' : '当前账户暂无 Emby 服务';
+  String get mineEmbyOpening => _e ? 'Opening Emby…' : '正在打开 Emby…';
+  String get mineEmbyOpenFailed =>
+      _e ? 'Unable to open Emby link' : '无法打开 Emby 链接，请稍后重试';
+  String get minePrivacyPolicy => _e ? 'Terms of Service' : '服务条款';
+  String get goToHomeToProtect => _e ? 'Go to Dashboard' : '去首页开启保护';
+  // First-time use
+  String get syncFirstSuccess =>
+      _e ? 'Subscription synced — you\'re ready to connect' : '订阅已同步，现在可以连接了';
+
+  // ── Store / 套餐中心 ─────────────────────────────────────────────
+  String get storeCurrentPlan => _e ? 'Current Plan' : '当前套餐';
+  String get storeAvailablePlans => _e ? 'Available Plans' : '可购套餐';
+  String get storeBuyNow => _e ? 'Buy Now' : '立即购买';
+  String get storeRenew => _e ? 'Renew' : '续费';
+  String get storeUpgrade => _e ? 'Upgrade' : '升级套餐';
+  String get storeNoPlans => _e ? 'No plans available' : '暂无可购套餐';
+  String get storeUnlimited => _e ? 'Unlimited' : '不限';
+  String get storeSelectPeriod => _e ? 'Billing Period' : '计费周期';
+  String get storeConfirmPurchase => _e ? 'Confirm Order' : '确认订单';
+  String get storePayNow => _e ? 'Pay Now' : '前往支付';
+  String get storeOrderCreating => _e ? 'Creating order...' : '创建订单中...';
+  String get storeOrderSuccess => _e ? 'Payment Successful' : '购买成功';
+  String get storeOrderPending => _e ? 'Awaiting Payment' : '等待支付';
+  String get storeOrderFailed => _e ? 'Order Failed' : '订单失败';
+  String get storeOrderCancelled => _e ? 'Order Cancelled' : '订单已取消';
+  String get storeReturnToStore => _e ? 'Back to Store' : '返回套餐中心';
+  String get storeRenewalReminder => _e ? 'Plan expiring soon — renew now' : '套餐即将到期，点击续费';
+  String get storeExpiredReminder => _e ? 'Plan expired — buy now' : '套餐已过期，点击购买';
+  String get storePlanDetail => _e ? 'Plan Details' : '套餐详情';
+  String get storeCheckResult => _e ? 'Check Result' : '查询支付结果';
+  String get storeCancelOrder => _e ? 'Cancel Order' : '取消订单';
+  String get storeOpenPaymentPage => _e ? 'Open Payment Page' : '重新打开支付页';
+
+  // ── Store – Coupon ────────────────────────────────────────────────
+  String get storeCouponExpand => _e ? 'Have a coupon?' : '有优惠码？';
+  String get storeCouponCode => _e ? 'Coupon Code' : '优惠码';
+  String get storeCouponValidate => _e ? 'Apply' : '验证';
+  String get storeCouponValidating => _e ? 'Validating...' : '验证中...';
+  String get storeCouponValid => _e ? 'Coupon applied' : '优惠券已应用';
+  String get storeCouponInvalid => _e ? 'Invalid coupon' : '优惠码无效';
+  String get storeDiscount => _e ? 'Discount' : '优惠';
+  String get storeActualAmount => _e ? 'You Pay' : '实付';
+  String get storeCouponRemove => _e ? 'Remove' : '移除';
+
+  // ── Store – Payment method ────────────────────────────────────────
+  String get storePaymentMethod => _e ? 'Payment Method' : '支付方式';
+  String get storeHandlingFee => _e ? 'Handling fee' : '手续费';
+
+  // ── Store – Order history ─────────────────────────────────────────
+  String get storeOrderHistory => _e ? 'Order History' : '订单记录';
+  String get storeOrderNo => _e ? 'Order No.' : '订单号';
+  String get storeOrderDate => _e ? 'Date' : '下单时间';
+  String get storeNoOrders => _e ? 'No orders yet' : '暂无订单记录';
+  String get storeOrderDetail => _e ? 'Order Detail' : '订单详情';
+  String get storeOrderStatusPending => _e ? 'Pending' : '待支付';
+  String get storeOrderStatusProcessing => _e ? 'Processing' : '处理中';
+  String get storeOrderStatusCancelled => _e ? 'Cancelled' : '已取消';
+  String get storeOrderStatusCompleted => _e ? 'Completed' : '已完成';
+
+  // ── Dashboard – 悦通专属区 ────────────────────────────────────────
+  String get dashSyncLabel => _e ? 'Update Lines' : '更新线路';
+  String get dashAnnouncementsLabel => _e ? 'Announcements' : '最新公告';
+  String get mineSyncLine => _e ? 'Sync Lines' : '同步线路';
+  String get dashAccountLabel => _e ? 'Account' : '账户';
+  String get dashLatestAnnouncement => _e ? 'Latest Announcements' : '最新公告';
+  String get dashGreeting => _e ? 'Hello' : '你好';
+  String get dashGreetingReturning => _e ? 'Welcome back' : '欢迎回来';
+  String get dashNoAnnouncements => _e ? 'No announcements' : '暂无公告';
+  String get dashViewAll => _e ? 'View all' : '查看全部';
+  String get dashNoPlan => _e ? 'No plan info' : '暂无套餐信息';
 }

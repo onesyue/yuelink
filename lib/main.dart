@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:app_links/app_links.dart';
@@ -16,10 +17,10 @@ import 'constants.dart';
 import 'l10n/app_strings.dart';
 import 'pages/dashboard_page.dart';
 import 'pages/nodes_page.dart';
-import 'pages/profile_page.dart';
 import 'pages/settings_page.dart';
 import 'domain/models/proxy.dart';
 import 'modules/nodes/providers/nodes_providers.dart';
+import 'modules/store/store_page.dart';
 import 'modules/yue_auth/presentation/yue_auth_page.dart';
 import 'modules/yue_auth/providers/yue_auth_providers.dart';
 import 'providers/core_provider.dart';
@@ -128,13 +129,15 @@ class YueLinkApp extends ConsumerStatefulWidget {
 }
 
 class _YueLinkAppState extends ConsumerState<YueLinkApp>
-    with TrayListener, WindowListener {
+    with TrayListener, WindowListener, WidgetsBindingObserver {
   bool _trayInitialized = false;
   final _appLinks = AppLinks();
+  StreamSubscription<Uri>? _appLinksSub;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
       windowManager.addListener(this);
       windowManager.setPreventClose(true);
@@ -155,6 +158,8 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _appLinksSub?.cancel();
     if (_trayInitialized) trayManager.removeListener(this);
     if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
       windowManager.removeListener(this);
@@ -165,6 +170,31 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
     super.dispose();
   }
 
+  // ── App lifecycle ─────────────────────────────────────────────────
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _onAppResumed();
+    }
+  }
+
+  /// Validate core state immediately when app returns from background.
+  /// Avoids waiting up to 10s for the heartbeat to detect a crashed core.
+  Future<void> _onAppResumed() async {
+    final status = ref.read(coreStatusProvider);
+    if (status != CoreStatus.running) return;
+    final manager = CoreManager.instance;
+    if (manager.isMockMode) return;
+    final running = manager.isRunning;
+    final apiOk = await manager.api.isAvailable();
+    if (!running || !apiOk) {
+      debugPrint('[AppLifecycle] core dead after resume — resetting state');
+      ref.read(coreStatusProvider.notifier).state = CoreStatus.stopped;
+      manager.stop().catchError((_) {});
+    }
+  }
+
   // ── Deep links ────────────────────────────────────────────────────────────
 
   void _initDeepLinks() {
@@ -172,8 +202,8 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
     _appLinks.getInitialLink().then((uri) {
       if (uri != null) _handleDeepLink(uri);
     });
-    // Handle links while app is already running
-    _appLinks.uriLinkStream.listen(_handleDeepLink);
+    // Handle links while app is already running — store to cancel in dispose()
+    _appLinksSub = _appLinks.uriLinkStream.listen(_handleDeepLink);
   }
 
   /// Parses clash://install-config?url=... or mihomo://install-config?url=...
@@ -461,6 +491,10 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
     final themeMode = ref.watch(themeProvider);
     final language = ref.watch(languageProvider);
 
+    // Activate heartbeat at root level so it runs regardless of active tab.
+    // The provider itself guards: only runs while CoreStatus.running.
+    ref.watch(coreHeartbeatProvider);
+
     // Keep S.current in sync with language provider
     ref.listen(languageProvider, (_, lang) {
       S.setLanguage(lang);
@@ -543,10 +577,8 @@ class _AuthGate extends ConsumerWidget {
 
     switch (authState.status) {
       case AuthStatus.unknown:
-        // Still checking saved token
-        return const Scaffold(
-          body: Center(child: CircularProgressIndicator()),
-        );
+        // Auth resolves within ~100ms; show blank to avoid a flash.
+        return const Scaffold();
       case AuthStatus.loggedOut:
         return const YueAuthPage();
       case AuthStatus.loggedIn:
@@ -561,7 +593,7 @@ class MainShell extends ConsumerStatefulWidget {
   /// Tab indices for programmatic navigation.
   static const tabDashboard = 0;
   static const tabProxies   = 1;
-  static const tabProfiles  = 2;
+  static const tabStore     = 2;
   static const tabSettings  = 3;
 
   static void switchToTab(BuildContext context, int index) {
@@ -582,21 +614,14 @@ class _MainShellState extends ConsumerState<MainShell> {
   static const _pages = [
     DashboardPage(),
     NodesPage(),
-    ProfilePage(),
+    StorePage(),
     SettingsPage(),
   ];
 
   @override
   void initState() {
     super.initState();
-    Future.microtask(() {
-      final profiles = ref.read(profilesProvider);
-      profiles.whenData((list) {
-        if (list.isEmpty && mounted) {
-          setState(() => _currentIndex = MainShell.tabProfiles);
-        }
-      });
-    });
+    // Profile management is handled automatically via YueAuth auto-sync.
   }
 
   @override
@@ -645,10 +670,10 @@ class _MainShellState extends ConsumerState<MainShell> {
        const Icon(Icons.home_filled, size: 20), s.navHome),
       (const Icon(Icons.public_outlined, size: 20),
        const Icon(Icons.public, size: 20), s.navProxies),
-      (const Icon(Icons.folder_outlined, size: 20),
-       const Icon(Icons.folder, size: 20), s.navProfile),
-      (const Icon(Icons.settings_outlined, size: 20),
-       const Icon(Icons.settings, size: 20), s.navSettings),
+      (const Icon(Icons.storefront_outlined, size: 20),
+       const Icon(Icons.storefront_rounded, size: 20), s.navStore),
+      (const Icon(Icons.person_outline_rounded, size: 20),
+       const Icon(Icons.person_rounded, size: 20), s.navMine),
     ];
 
     return Scaffold(
@@ -693,7 +718,7 @@ class _Sidebar extends StatelessWidget {
     final navItems = [
       (Icons.home_outlined, Icons.home_filled, s.navHome),
       (Icons.public_outlined, Icons.public, s.navProxies),
-      (Icons.folder_outlined, Icons.folder, s.navProfile),
+      (Icons.storefront_outlined, Icons.storefront_rounded, s.navStore),
     ];
 
     return Container(
@@ -720,11 +745,11 @@ class _Sidebar extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text('YueLink',
+                    Text('悦通',
                         style: YLText.titleMedium.copyWith(
                           fontWeight: FontWeight.w700,
                         )),
-                    Text('Proxy Client',
+                    Text('AI · 全球加速',
                         style: YLText.caption.copyWith(
                           color: YLColors.zinc400,
                         )),
@@ -757,9 +782,9 @@ class _Sidebar extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
             child: _SidebarItem(
               icon: currentIndex == MainShell.tabSettings
-                  ? Icons.settings
-                  : Icons.settings_outlined,
-              label: s.navSettings,
+                  ? Icons.person_rounded
+                  : Icons.person_outline_rounded,
+              label: s.navMine,
               isActive: currentIndex == MainShell.tabSettings,
               onTap: () => onSelect(MainShell.tabSettings),
             ),

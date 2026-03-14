@@ -71,8 +71,8 @@ class TrafficHistory {
 
   /// Returns the last [seconds] raw samples in chronological order (oldest first).
   List<double> _slice(List<double> buf, int seconds) {
+    if (count == 0) return [];
     final n = seconds.clamp(1, count);
-    if (n == 0) return [];
     final result = <double>[];
     // Walk backwards from current write head to collect `n` samples,
     // then reverse to get oldest-first order.

@@ -6,6 +6,7 @@ import NetworkExtension
 @objc class AppDelegate: FlutterAppDelegate {
     private let appGroup = "group.com.yueto.yuelink"
     private var vpnManager: NETunnelProviderManager?
+    private var vpnStatusObserver: NSObjectProtocol?
 
     override func application(
         _ application: UIApplication,
@@ -48,6 +49,8 @@ import NetworkExtension
         }
 
         NETunnelProviderManager.loadAllFromPreferences { [weak self] managers, error in
+            guard let self = self else { return }
+
             if let error = error {
                 result(FlutterError(code: "VPN_LOAD_ERROR",
                                     message: error.localizedDescription, details: nil))
@@ -55,7 +58,7 @@ import NetworkExtension
             }
 
             let manager = managers?.first ?? NETunnelProviderManager()
-            self?.vpnManager = manager
+            self.vpnManager = manager
 
             let proto = NETunnelProviderProtocol()
             proto.providerBundleIdentifier = "com.yueto.yuelink.PacketTunnel"
@@ -66,14 +69,16 @@ import NetworkExtension
             manager.localizedDescription = "YueLink"
             manager.isEnabled = true
 
-            manager.saveToPreferences { error in
+            manager.saveToPreferences { [weak self] error in
+                guard let self = self else { return }
                 if let error = error {
                     result(FlutterError(code: "VPN_SAVE_ERROR",
                                         message: error.localizedDescription, details: nil))
                     return
                 }
 
-                manager.loadFromPreferences { error in
+                manager.loadFromPreferences { [weak self] error in
+                    guard let self = self else { return }
                     if let error = error {
                         result(FlutterError(code: "VPN_RELOAD_ERROR",
                                             message: error.localizedDescription, details: nil))
@@ -85,10 +90,78 @@ import NetworkExtension
                                             message: "Failed to get tunnel session", details: nil))
                         return
                     }
+
+                    // Remove any stale observer from a previous attempt
+                    if let old = self.vpnStatusObserver {
+                        NotificationCenter.default.removeObserver(old)
+                        self.vpnStatusObserver = nil
+                    }
+
+                    // Guard against result() being called more than once
+                    var done = false
+
+                    // Timeout: if the tunnel does not connect within 20 seconds,
+                    // report an error. The PacketTunnel extension startup can be
+                    // slow on first launch (Go core init + provisioning prompt).
+                    let timeoutWork = DispatchWorkItem { [weak self] in
+                        guard !done else { return }
+                        done = true
+                        if let obs = self?.vpnStatusObserver {
+                            NotificationCenter.default.removeObserver(obs)
+                            self?.vpnStatusObserver = nil
+                        }
+                        result(FlutterError(
+                            code: "VPN_TIMEOUT_ERROR",
+                            message: "VPN tunnel did not connect within 20 seconds",
+                            details: nil
+                        ))
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 20, execute: timeoutWork)
+
+                    // Watch for status changes; resolve the Flutter result once
+                    // we reach a terminal state (.connected or .disconnected).
+                    self.vpnStatusObserver = NotificationCenter.default.addObserver(
+                        forName: .NEVPNStatusDidChange,
+                        object: session,
+                        queue: .main
+                    ) { [weak self] _ in
+                        guard !done else { return }
+                        let status = session.status
+                        switch status {
+                        case .connected:
+                            done = true
+                            timeoutWork.cancel()
+                            if let obs = self?.vpnStatusObserver {
+                                NotificationCenter.default.removeObserver(obs)
+                                self?.vpnStatusObserver = nil
+                            }
+                            result(true)
+                        case .disconnected, .invalid:
+                            done = true
+                            timeoutWork.cancel()
+                            if let obs = self?.vpnStatusObserver {
+                                NotificationCenter.default.removeObserver(obs)
+                                self?.vpnStatusObserver = nil
+                            }
+                            result(FlutterError(
+                                code: "VPN_CONNECT_ERROR",
+                                message: "VPN tunnel disconnected unexpectedly (status=\(status.rawValue))",
+                                details: nil
+                            ))
+                        default:
+                            break // .connecting / .reasserting — keep waiting
+                        }
+                    }
+
                     do {
                         try session.startTunnel()
-                        result(true)
                     } catch {
+                        done = true
+                        timeoutWork.cancel()
+                        if let obs = self.vpnStatusObserver {
+                            NotificationCenter.default.removeObserver(obs)
+                            self.vpnStatusObserver = nil
+                        }
                         result(FlutterError(code: "VPN_START_ERROR",
                                             message: error.localizedDescription, details: nil))
                     }

@@ -9,6 +9,7 @@ import '../domain/models/traffic_history.dart';
 import '../providers/proxy_provider.dart';
 import '../l10n/app_strings.dart';
 import '../shared/app_notifier.dart';
+import '../shared/event_log.dart';
 import '../core/kernel/core_manager.dart';
 import '../infrastructure/datasources/mihomo_api.dart';
 import '../core/platform/vpn_service.dart';
@@ -95,11 +96,13 @@ class CoreActions {
         final report = manager.lastReport;
         final detail = report?.failureSummary ?? S.current.errCoreStartFailed;
         ref.read(coreStartupErrorProvider.notifier).state = detail;
+        EventLog.write('[Core] connect_fail detail=${detail.split('\n').first}');
         AppNotifier.error(detail);
         return false;
       }
 
       ref.read(coreStatusProvider.notifier).state = CoreStatus.running;
+      EventLog.write('[Core] connect_ok');
       AppNotifier.success(S.current.msgConnected);
 
       // 3. Apply routing mode (non-blocking — errors logged, not thrown)
@@ -162,6 +165,7 @@ class CoreActions {
 
       ref.read(coreStatusProvider.notifier).state = CoreStatus.stopped;
       ref.read(trafficProvider.notifier).state = const Traffic();
+      ref.read(trafficHistoryProvider.notifier).state = TrafficHistory();
       AppNotifier.info(S.current.msgDisconnected);
     } catch (e) {
       ref.read(coreStatusProvider.notifier).state = CoreStatus.stopped;
@@ -363,6 +367,7 @@ final coreHeartbeatProvider = Provider<void>((ref) {
         debugPrint('[Heartbeat] core dead, cleaning up');
         ref.read(coreStatusProvider.notifier).state = CoreStatus.stopped;
         ref.read(trafficProvider.notifier).state = const Traffic();
+        ref.read(trafficHistoryProvider.notifier).state = TrafficHistory();
         manager.stop().catchError((_) {});
         failures = 0;
       }

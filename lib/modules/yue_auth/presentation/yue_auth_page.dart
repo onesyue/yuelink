@@ -90,9 +90,7 @@ class _YueAuthPageState extends ConsumerState<YueAuthPage> {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  _e(context)
-                      ? 'Sign in to your Yue.to account'
-                      : '登录悦通账号',
+                  S.of(context).authLoginSubtitle,
                   textAlign: TextAlign.center,
                   style: YLText.body.copyWith(color: YLColors.zinc500),
                 ),
@@ -294,5 +292,5 @@ class _YueAuthPageState extends ConsumerState<YueAuthPage> {
     );
   }
 
-  bool _e(BuildContext context) => S.of(context).navHome == 'Dashboard';
+  bool _e(BuildContext context) => Localizations.localeOf(context).languageCode == 'en';
 }

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../domain/models/traffic_history.dart';
 import '../../../l10n/app_strings.dart';
 import '../../../providers/core_provider.dart';
+import '../../../shared/traffic_formatter.dart';
 import '../../../theme.dart';
 import '../providers/traffic_providers.dart';
 
@@ -29,6 +30,7 @@ class _ChartCardState extends ConsumerState<ChartCard> {
     final liveHistory = ref.watch(trafficHistoryProvider);
     final range = ref.watch(trafficChartRangeProvider);
     final locked = ref.watch(trafficChartLockedProvider);
+    final traffic = ref.watch(trafficProvider);
 
     // When lock toggles on, capture snapshot; when off, clear it
     if (locked && _frozenHistory == null) {
@@ -98,9 +100,17 @@ class _ChartCardState extends ConsumerState<ChartCard> {
                 ),
               ),
               const SizedBox(width: 6),
-              _LegendDot(color: YLColors.accent, label: '↓'),
-              const SizedBox(width: 10),
-              _LegendDot(color: YLColors.connected, label: '↑'),
+              _SpeedLabel(
+                color: YLColors.accent,
+                arrow: '↓',
+                bps: traffic.down,
+              ),
+              const SizedBox(width: 8),
+              _SpeedLabel(
+                color: YLColors.connected,
+                arrow: '↑',
+                bps: traffic.up,
+              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -257,10 +267,11 @@ class _RangeButton extends StatelessWidget {
   }
 }
 
-class _LegendDot extends StatelessWidget {
+class _SpeedLabel extends StatelessWidget {
   final Color color;
-  final String label;
-  const _LegendDot({required this.color, required this.label});
+  final String arrow;
+  final int bps;
+  const _SpeedLabel({required this.color, required this.arrow, required this.bps});
 
   @override
   Widget build(BuildContext context) {
@@ -272,7 +283,14 @@ class _LegendDot extends StatelessWidget {
           decoration: BoxDecoration(shape: BoxShape.circle, color: color),
         ),
         const SizedBox(width: 4),
-        Text(label, style: YLText.caption.copyWith(color: YLColors.zinc400)),
+        Text(
+          '$arrow ${TrafficFormatter.speed(bps)}/s',
+          style: YLText.caption.copyWith(
+            fontSize: 9,
+            color: YLColors.zinc400,
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
+        ),
       ],
     );
   }

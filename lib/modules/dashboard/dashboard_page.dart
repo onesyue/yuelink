@@ -5,18 +5,21 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/app_strings.dart';
-import '../../main.dart';
+import '../../modules/yue_auth/providers/yue_auth_providers.dart';
 import '../../providers/connection_provider.dart';
 import '../../providers/core_provider.dart';
 import '../../providers/profile_provider.dart';
 import '../../shared/app_notifier.dart';
 import '../../core/kernel/core_manager.dart';
 import '../../services/profile_service.dart';
+import '../../theme.dart';
+import '../announcements/providers/announcements_providers.dart';
+import 'widgets/announcement_banner.dart';
 import 'widgets/chart_card.dart';
 import 'widgets/exit_ip_card.dart';
 import 'widgets/hero_card.dart';
-import 'widgets/overview_card.dart';
 import 'widgets/stats_card.dart';
+import 'widgets/subscription_card.dart';
 
 class DashboardPage extends ConsumerStatefulWidget {
   const DashboardPage({super.key});
@@ -72,10 +75,11 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     final isMock = ref.watch(isMockModeProvider);
     final isRunning = status == CoreStatus.running;
 
+    // coreHeartbeatProvider is watched globally in _YueLinkAppState so it
+    // stays active on all tabs. Traffic/connection streams only needed here.
     if (isRunning) {
       ref.watch(trafficStreamProvider);
       ref.watch(memoryStreamProvider);
-      ref.watch(coreHeartbeatProvider);
       ref.watch(connectionsStreamProvider);
     }
 
@@ -87,21 +91,17 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
       }
     });
 
-    // Use LayoutBuilder to get the ACTUAL available width (content area,
-    // not full window width — matters on desktop with sidebar).
     return Scaffold(
       body: SafeArea(
         bottom: false,
         child: LayoutBuilder(
           builder: (context, constraints) {
-            // isWide uses the actual available content-area width,
-            // not MediaQuery window width (which includes the sidebar).
             final isWide = constraints.maxWidth > 560;
 
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // ── Mock mode banner ────────────────────────────────
+                // ── Mock mode banner ──────────────────────────────────
                 if (isMock)
                   Container(
                     color: Colors.amber.withValues(alpha: 0.12),
@@ -118,32 +118,43 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                     ),
                   ),
 
-                // ── Scrollable card stack ────────────────────────────
+                // ── Scrollable content ────────────────────────────────
                 Expanded(
-                  child: ListView(
+                  child: RefreshIndicator(
+                    onRefresh: () async {
+                      await ref
+                          .read(authProvider.notifier)
+                          .refreshUserInfo();
+                      ref.invalidate(announcementsProvider);
+                    },
+                    child: ListView(
                     padding: EdgeInsets.symmetric(
-                      // Centre content at max 720px on wide screens.
                       horizontal: constraints.maxWidth > 720 + 48
                           ? (constraints.maxWidth - 720) / 2
                           : 24.0,
                       vertical: 24,
                     ),
                     children: [
-                      // Layer 1: Hero card (ALWAYS visible)
+                      // ── User greeting header ─────────────────────────
+                      _DashboardHeader(),
+
+                      const SizedBox(height: 16),
+
+                      // ── Hero card: connect/status ────────────────────
                       HeroCard(
                         status: status,
                         uptimeNotifier: _uptimeNotifier,
                         onToggle: () => _toggle(context, ref),
                       ),
 
-                      // Layer 2+3: visible only when connected
+                      // ── Latest announcement (always visible) ────────
+                      const SizedBox(height: 12),
+                      const AnnouncementBanner(),
+
+                      // ── Running: exit IP, chart, stats ──────────────
                       if (isRunning) ...[
                         const SizedBox(height: 16),
                         if (isWide)
-                          // SizedBox gives the Row a finite height so
-                          // CrossAxisAlignment.stretch works correctly.
-                          // IntrinsicHeight + Flexible collapses to 0px because
-                          // Row skips flex children in intrinsic height queries.
                           SizedBox(
                             height: 190,
                             child: Row(
@@ -153,7 +164,8 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                                 SizedBox(width: 12),
                                 Expanded(
                                   flex: 2,
-                                  child: RepaintBoundary(child: ChartCard()),
+                                  child:
+                                      RepaintBoundary(child: ChartCard()),
                                 ),
                               ],
                             ),
@@ -167,11 +179,13 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                         const StatsCard(),
                       ],
 
-                      // Layer 4: Overview (ALWAYS visible)
+                      // ── Subscription info ───────────────────────────
                       const SizedBox(height: 16),
-                      const OverviewCard(),
+                      const SubscriptionCard(),
+
                       const SizedBox(height: 8),
                     ],
+                  ),
                   ),
                 ),
               ],
@@ -236,7 +250,6 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
       final activeId = ref.read(activeProfileIdProvider);
       if (activeId == null) {
         AppNotifier.warning(s.snackNoProfile);
-        MainShell.switchToTab(context, MainShell.tabProfiles);
         return;
       }
 
@@ -257,5 +270,66 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     } finally {
       _busy = false;
     }
+  }
+}
+
+// ── Dashboard header: greeting + user email ─────────────────────────────────
+
+class _DashboardHeader extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = S.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final profile = ref.watch(userProfileProvider);
+    final email = profile?.email;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        // Brand mark
+        Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            color: isDark ? YLColors.zinc700 : YLColors.zinc100,
+            borderRadius: BorderRadius.circular(YLRadius.md),
+            border: Border.all(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : Colors.black.withValues(alpha: 0.06),
+              width: 0.5,
+            ),
+          ),
+          child: Icon(
+            Icons.link_rounded,
+            size: 16,
+            color: isDark ? Colors.white70 : YLColors.zinc700,
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                email != null ? s.dashGreetingReturning : s.dashGreeting,
+                style: YLText.titleMedium.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: isDark ? Colors.white : YLColors.zinc900,
+                ),
+              ),
+              if (email != null)
+                Text(
+                  email,
+                  style: YLText.caption.copyWith(color: YLColors.zinc400),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 }

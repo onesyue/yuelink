@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../l10n/app_strings.dart';
+import '../../../modules/dashboard/providers/traffic_providers.dart';
+import '../../../modules/yue_auth/providers/yue_auth_providers.dart';
 import '../../../providers/connection_provider.dart';
 import '../../../providers/core_provider.dart';
 import '../../../shared/traffic_formatter.dart';
 import '../../../theme.dart';
-import '../providers/traffic_providers.dart';
 
 // ── Today stats card ──────────────────────────────────────────────────────────
 
@@ -17,15 +18,22 @@ class StatsCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final s = S.of(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final daily = ref.watch(dailyTrafficProvider);
+    final profile = ref.watch(userProfileProvider);
     final connCount = ref.watch(connectionCountProvider);
     final mem = ref.watch(memoryUsageProvider);
 
+    // Ensure streams are active even if Dashboard is not the current tab
+    ref.watch(trafficStreamProvider);
+    ref.watch(connectionsStreamProvider);
+
+    final downloadUsed = profile?.downloadUsed ?? 0;
+    final uploadUsed = profile?.uploadUsed ?? 0;
+
     final items = [
-      (s.trafficDownload, TrafficFormatter.bytes(daily.$2), Icons.arrow_downward_rounded, YLColors.accent),
-      (s.trafficUpload,   TrafficFormatter.bytes(daily.$1), Icons.arrow_upward_rounded,   YLColors.connected),
-      (s.activeConns,     '$connCount',                     Icons.swap_horiz_rounded,     YLColors.zinc500),
-      (s.trafficMemory,   TrafficFormatter.bytes(mem),      Icons.memory_rounded,         YLColors.zinc500),
+      (s.trafficDownload, TrafficFormatter.bytes(downloadUsed), Icons.arrow_downward_rounded, YLColors.accent),
+      (s.trafficUpload,   TrafficFormatter.bytes(uploadUsed),   Icons.arrow_upward_rounded,   YLColors.connected),
+      (s.activeConns,     '$connCount',                         Icons.swap_horiz_rounded,     YLColors.zinc500),
+      (s.trafficMemory,   TrafficFormatter.bytes(mem),          Icons.memory_rounded,         YLColors.zinc500),
     ];
 
     return Container(

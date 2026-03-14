@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-YueLink (by Yue.to) is a cross-platform proxy client built with Flutter + mihomo (Clash.Meta) Go core.
+YueLink (悦通) is a cross-platform proxy client built with Flutter + mihomo (Clash.Meta) Go core.
 Supports: Android, iOS, macOS, Windows. (No Linux support.)
 
 ## Build Commands
@@ -31,19 +31,78 @@ Flutter UI (Dart, Riverpod) → CoreController (dart:ffi) → hub.go (CGO //expo
                               MihomoApi (REST :9090) ← ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ mihomo HTTP API
                                                                                        ↕
                                                               Platform VPN service (TUN/system proxy)
+
+XBoardApi (HTTPS) ← ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ CloudFront → XBoard panel
 ```
 
 **Critical split**: FFI is for lifecycle only (init/start/stop). All data operations (proxies, traffic, connections, rules) go through the REST API (`MihomoApi`), never FFI. This matches FlClash/Clash Verge Rev architecture.
 
+### Directory structure (dual-layer — in transition)
+
+The codebase has two parallel layers. Both are active; `main.dart` imports from both:
+
+- **`lib/pages/` + `lib/providers/` + `lib/services/`** — original layer, still used for Dashboard, Nodes, Settings shell pages and core Riverpod providers (core_provider, proxy_provider, profile_provider).
+- **`lib/modules/` + `lib/infrastructure/` + `lib/core/` + `lib/domain/`** — newer modular layer. New features go here.
+
+Do not move code between layers without a reason. When adding new features, use the `lib/modules/` pattern.
+
 ### Key layers
 
 - **`core/`** — Go wrapper around mihomo. Exports C functions via `//export` (CGO). Compiled to `.so`/`.dylib`/`.dll` (dynamic) or `.a` (static, iOS only) via `setup.dart`. Android builds use `-tags with_gvisor` (required for TUN fd/file-descriptor mode — without it mihomo fails with "gVisor is not included in this build").
-- **`lib/ffi/`** — Dart FFI bindings. `CoreBindings` has raw FFI (8 lifecycle symbols: InitCore, StartCore, StopCore, Shutdown, IsRunning, ValidateConfig, UpdateConfig, FreeCString). `CoreController` is the high-level wrapper; data methods (getProxies, changeProxy, testDelay, getTraffic) always delegate to `CoreMock` — they exist only for mock mode UI development.
+- **`lib/ffi/`** (old) / **`lib/core/ffi/`** (new) — Dart FFI bindings. `CoreBindings` has raw FFI (8 lifecycle symbols: InitCore, StartCore, StopCore, Shutdown, IsRunning, ValidateConfig, UpdateConfig, FreeCString). `CoreController` is the high-level wrapper; data methods (getProxies, changeProxy, testDelay, getTraffic) always delegate to `CoreMock` — they exist only for mock mode UI development.
 - **`lib/providers/`** — Riverpod state management. `core_provider.dart` (lifecycle, traffic, heartbeat), `proxy_provider.dart` (nodes, groups, delay tests), `profile_provider.dart` (subscriptions), `proxy_provider_provider.dart` (remote proxy providers).
-- **`lib/pages/`** — 4-tab layout: Dashboard (connect/traffic/status), Nodes (proxy groups + routing mode), Subscriptions (profiles), Settings. Settings sub-pages: connections, logs, overwrite, proxy providers.
+- **`lib/pages/`** — Shell pages: Dashboard, Nodes, Settings (now repurposed as 我的/Mine account center). **4-tab nav**: 首页 | 线路 | 商店 | 我的. Tab constants in `MainShell`: `tabDashboard=0`, `tabProxies=1`, `tabStore=2`, `tabSettings=3`. The Profiles/Subscriptions tab has been removed from the nav (profiles still managed internally via auth sync).
 - **`lib/services/`** — `VpnService` (MethodChannel), `MihomoApi` (REST on port 9090), `MihomoStream` (WebSocket for traffic/logs), `CoreManager` (lifecycle singleton — handles VPN internally per platform), `ProfileService` (static methods for profile CRUD + config loading), `OverwriteService` (config merging), `ConfigTemplate` (config processing with ensure-pattern injection), `SettingsService` (SharedPreferences wrapper), `GeoDataService` (pre-downloads GeoIP/GeoSite files before core start), `AppNotifier` (global toast/snackbar), `AutoUpdateService`/`UpdateChecker` (app updates), `WebdavService` (backup/sync).
 - **`lib/theme.dart`** — Design system: `YLColors` (zinc palette + semantic colors), `YLText` (typography), `YLSpacing`/`YLRadius`, `YLShadow` (context-aware for dark mode), reusable widgets (`YLSurface`, `YLStatusDot`, `YLChip`, `YLDelayBadge`, `YLPillSegmentedControl`, etc.).
 - **`lib/l10n/app_strings.dart`** — Hand-written `S` class for i18n. Both Chinese and English via `_e ? 'en' : 'zh'` ternaries. No code generation. Use `S.of(context)` in widgets, `S.current` in providers/services without BuildContext.
+
+### Modules layer (`lib/modules/`)
+
+| Module | Contents |
+|--------|----------|
+| `yue_auth/` | Login page, `AuthNotifier` (StateNotifier), `AuthState`, `xboardApiProvider` |
+| `announcements/` | `AnnouncementBanner` widget, `AnnouncementsPage`, `AnnouncementReadService`, `announcementsProvider`, `readAnnouncementIdsProvider` |
+| `emby/` | `embyProvider` (FutureProvider<EmbyInfo?>) — placeholder feature |
+| `mine/` | `AccountCard`, `TrafficUsageCard` (always shows XBoard `u`/`d`/`transfer_enable` — no VPN required), `AccountActionsCard` — the 我的 page widgets |
+| `store/` | `StorePage`, `PlanCard`, `PlanDetailSheet`, `CurrentPlanCard`, `PurchaseNotifier` (state machine: Idle→Loading→AwaitingPayment→Polling→Success/Failed; `payExistingOrder()` skips `createOrder` for pending orders from history), `OrderHistoryPage` (pending orders show Pay Now + `PaymentMethodSelector` + Cancel) |
+| `dashboard/` | `HeroCard`, `QuickActionsCard`, `AnnouncementBanner`, `SubscriptionCard` (tappable → StorePage), `ExitIpCard`, `ChartCard`, `StatsCard` |
+| `nodes/` | Proxy group UI (`GroupCard` + `GroupListSection` with pill badges for type+count, `NodeTile`, sort chip) |
+| `profiles/` | Profile list page + providers |
+| `connections/`, `logs/`, `settings/` | Sub-pages / providers |
+
+**Node count display**: Both `GroupCard` and `GroupListSection` use a `_Badge` widget (pill style, same as type badge) placed immediately after the type badge. Shows plain count (`23`) normally, filtered count (`3/23`) in accent color when search is active. The sort button in the nodes app bar is a chip showing the current `NodeSortMode` label — tap cycles through modes.
+
+### Infrastructure layer (`lib/infrastructure/`)
+
+- **`datasources/xboard_api.dart`** — XBoard panel REST client (cedar2025/Xboard). Endpoint: `https://d7ccm19ki90mg.cloudfront.net`. Methods: `login`, `getSubscribeData` (combined: profile + subscribe URL via `/api/v1/user/getSubscribe`), `fetchSubscribeConfig`, `getEmby`, `getAnnouncements`, plus Store methods (`fetchPlans`, `createOrder`, `checkoutOrder`, `fetchOrderDetail`, `cancelOrder`, `fetchOrders`, `validateCoupon`, `fetchPaymentMethods`). Models: `LoginResponse`, `UserProfile`, `SubscribeData`, `SubscribeResult`, `Announcement`, `EmbyInfo`, `XBoardApiException`. **Critical**: XBoard returns `{"status":"fail","message":"..."}` with HTTP 200 for business-level errors. `_getRawData`/`_postRawData` both call `_assertSuccess(json)` which throws `XBoardApiException` on `status:"fail"` — callers must NOT wrap in try-catch that swallows this. **Traffic units**: `UserProfile.transferEnable`, `uploadUsed` (`u`), `downloadUsed` (`d`) are all in **bytes** — pass directly to `formatBytes()`, do not multiply or divide. `StorePlan.transferEnable` is in **GB** (different table). **Checkout**: `CheckoutResult.type == -1` = free/instant (no URL, `paymentUrl` = `''`); type 0 = QR URL; type 1 = redirect URL. `PaymentMethod.payment` is a `String` (e.g. `"alipay"`), not int. `OrderStatus.isSuccess` includes `processing` (status=1, payment received but activating) in addition to `completed` (3) and `discounted` (4).
+- **`datasources/mihomo_api.dart`** — mihomo REST client (port 9090).
+- **`datasources/mihomo_stream.dart`** — WebSocket for real-time traffic/logs.
+
+### XBoard auth flow
+
+1. User logs in via `AuthNotifier.login(email, password)` → `XBoardApi.login()` → saves `auth_data` token + api host via `AuthTokenService`. **Important**: XBoard login returns two token fields: `auth_data` (Sanctum token, already has `Bearer ` prefix — use this for API Authorization header) and `token` (raw database token, only for subscription download URLs via Client middleware). Always use `auth_data` for API calls, matching both reference clients (ClashMetaForAndroid, clash-verge-rev).
+2. `AuthNotifier` fetches `UserProfile` and subscribe URL on login; caches profile in secure storage.
+3. `syncSubscription()`: downloads Clash YAML from subscribe URL → `ProfileService.addProfile/updateProfile()` with name `'悦通'`. Auto-selects the profile on first create.
+4. On app start, `AuthNotifier._init()` restores token from secure storage and shows cached profile while refreshing in background. Token expired (401/403) triggers auto-logout.
+5. `AuthTokenService` (`lib/core/storage/auth_token_service.dart`) is the single source of truth for: token, subscribe URL, cached UserProfile JSON, api host.
+
+### TLS / HTTP client requirement
+
+**Always use `XBoardApi._buildClient()`** (returns `IOClient(HttpClient())`) for all HTTP calls to the CloudFront endpoint. The plain `http.Client` from the `http` package does not reliably send TLS SNI on all platforms; CloudFront rejects connections without SNI with `HandshakeException: Connection terminated during handshake`. Every `_get`/`_post` call creates a fresh client and closes it in `finally`.
+
+**dart:io `HttpClient` cascade + arrow function bug**: Do NOT use cascade (`..`) to set `findProxy` and other properties on the same `HttpClient` in a single chain when any assigned value is an arrow function. Dart's parser misattributes the type after `..findProxy = (_) => '...'`, causing downstream cascade setters to fail with "setter not defined for class String". Always set `HttpClient` properties as separate statements:
+```dart
+// WRONG — Dart parse bug
+final client = HttpClient()..findProxy = (_) => 'PROXY ...'..connectionTimeout = ...;
+// CORRECT
+final client = HttpClient();
+client.findProxy = (uri) => 'PROXY 127.0.0.1:$port';
+client.connectionTimeout = const Duration(seconds: 10);
+```
+
+### Announcements read state
+
+`AnnouncementReadService` persists read announcement IDs as a JSON array in `read_announcement_ids.json` (via `path_provider` app documents directory). Do not use SharedPreferences or SecureStorage for this — it is non-sensitive and needs to survive app reinstalls on the same device without re-prompting.
 
 ### Platform VPN implementations
 
@@ -51,6 +110,7 @@ Flutter UI (Dart, Riverpod) → CoreController (dart:ffi) → hub.go (CGO //expo
 |----------|-----------|----------|
 | Android | `VpnService` + TUN fd → Go core (always, regardless of connectionMode) | `android/.../YueLinkVpnService.kt` |
 | iOS | `NEPacketTunnelProvider` (separate process, static lib) | `ios/PacketTunnel/` |
+| iOS (TrollStore) | Same as above; minimum iOS 15.0 for PacketTunnel extension | — |
 | macOS | System proxy via `networksetup` | `lib/providers/core_provider.dart` |
 | Windows | System proxy via registry | `lib/providers/core_provider.dart` |
 
@@ -87,6 +147,8 @@ Flutter UI (Dart, Riverpod) → CoreController (dart:ffi) → hub.go (CGO //expo
 - `YLColors.primary` is black (`#000000`) — never use it as foreground in dark mode. Use `isDark ? Colors.white : YLColors.primary` pattern.
 - Android native strings (VPN notification etc.) use Android string resources with `values-zh/` locale variant, not the Dart `S` class.
 - **Sidebar uses instant state switching** (no AnimatedContainer). This is intentional to avoid flicker on Windows. Do not add animation back.
+- **iOS TrollStore distribution**: `ios/PacketTunnel/Info.plist` **must** have `CFBundleExecutable = $(EXECUTABLE_NAME)`. Without it, ldid fails with "Cannot find key CFBundleExecutable" (exit code 1, TrollStore error 175) during recursive bundle signing. `CFBundleDisplayName` should be `悦通`. The entitlements (`application-groups` + `networkextension: packet-tunnel-provider`) are compatible with TrollStore — do NOT add push notifications, iCloud, or `keychain-access-groups`.
+- **macOS secure storage**: `SecureStorageService` uses a JSON file in Application Support directory (`path_provider`) on macOS, NOT `flutter_secure_storage`. The Keychain (both legacy and Data Protection) requires signing entitlements that block `flutter run` without a paid developer account. The JSON-file approach is the standard for non-App-Store macOS apps (used by FlClash etc.). Do NOT switch macOS back to `flutter_secure_storage` or add `keychain-access-groups` to entitlements.
 
 ### FFI symbol alignment
 
@@ -130,6 +192,13 @@ iOS PacketTunnelProvider has its own `injectTunConfig()` in Swift with equivalen
 | `verify` | E008 | Check `IsRunning` + API available + DNS diagnostic |
 
 On failure, `StartupReport.failureSummary` returns `"[Exx_CODE] stepName: error"` — shown in `_StartupErrorBanner` on dashboard (expandable: shows all steps + last 20 lines of Go `core.log`). Report saved to `startup_report.json`. Go side logs tagged `[BOOT]`/`[CORE]` via logrus redirected to `core.log`; Dart reads this after startup in `_finishReport()`.
+
+### Dashboard data sources
+
+- **出口IP** (`proxyServerIpProvider` in `lib/modules/dashboard/providers/dashboard_providers.dart`): Fetches the real exit IP by routing an HTTP request **through mihomo's mixed port** (`HttpClient.findProxy → 'PROXY 127.0.0.1:$mixedPort'`) to `api.ipify.org`. This is the IP the outside world sees, NOT the proxy server's hostname. Tap on `ExitIpCard` calls `ref.invalidate(proxyServerIpProvider)` to re-fetch.
+- **StatsCard upload/download**: Shows XBoard `userProfileProvider.uploadUsed` / `downloadUsed` (`u`/`d` fields), NOT locally accumulated traffic. `TrafficUsageCard` on Mine page also shows these fields broken out individually — they are always available from the cached profile regardless of VPN state.
+- **ChartCard speed**: Watches `trafficProvider` (1Hz WebSocket ticks) and displays real-time `↓ x.xx MB/s / ↑ x.xx MB/s` in the header alongside the historical curve.
+- **Language detection** in `yue_auth_page.dart`: Use `Localizations.localeOf(context).languageCode == 'en'`, NOT string comparisons like `s.navHome == 'Dashboard'`.
 
 ### Proxy group ordering
 

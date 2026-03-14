@@ -5,9 +5,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/storage/auth_token_service.dart';
 import '../../../infrastructure/datasources/xboard_api.dart';
+import '../../../l10n/app_strings.dart';
 import '../../../modules/profiles/providers/profiles_providers.dart';
 import '../../../core/kernel/core_manager.dart';
 import '../../../services/profile_service.dart';
+import '../../../shared/app_notifier.dart';
+import '../../../shared/event_log.dart';
 
 // ------------------------------------------------------------------
 // Auth state
@@ -54,7 +57,8 @@ class AuthState {
 // ------------------------------------------------------------------
 
 /// Default XBoard panel URL — override via AuthTokenService.saveApiHost().
-const _kDefaultApiHost = 'https://yueto.app';
+/// Must match the CloudFront custom domain so TLS SNI handshake succeeds.
+const _kDefaultApiHost = 'https://d7ccm19ki90mg.cloudfront.net';
 
 final xboardApiProvider = Provider<XBoardApi>((ref) {
   // The actual host will be resolved asynchronously in AuthNotifier.
@@ -111,24 +115,23 @@ class AuthNotifier extends StateNotifier<AuthState> {
       // 2. Save token and host
       await _authService.saveToken(token);
       await _authService.saveApiHost(host);
+      EventLog.write('[Auth] login_ok');
 
-      // 3. Get user info
+      // 3. Get subscribe data (profile + URL) in one request.
+      //    /api/v1/user/getSubscribe returns plan name, u/d traffic, expiry, subscribe_url.
+      //    /api/v1/user/info does NOT return u/d or nested plan object — do not use it.
       UserProfile? profile;
       try {
-        profile = await api.getUserInfo(token);
+        final sub = await api.getSubscribeData(token);
+        profile = sub.profile;
         await _authService.cacheProfile(profile);
+        await _authService.saveSubscribeUrl(sub.subscribeUrl);
+        // Auto-sync subscription config in background (errors handled inside)
+        _syncSubscription(sub.subscribeUrl).catchError((e) {
+          debugPrint('[Auth] Background sync failed: $e');
+        });
       } catch (e) {
-        debugPrint('[Auth] Failed to fetch user info: $e');
-      }
-
-      // 4. Get subscribe URL and sync subscription
-      try {
-        final subscribeUrl = await api.getSubscribeUrl(token);
-        await _authService.saveSubscribeUrl(subscribeUrl);
-        // Auto-sync subscription in background
-        _syncSubscription(subscribeUrl);
-      } catch (e) {
-        debugPrint('[Auth] Failed to get subscribe URL: $e');
+        debugPrint('[Auth] Failed to fetch subscribe data: $e');
       }
 
       state = AuthState(
@@ -139,24 +142,61 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
       return true;
     } on XBoardApiException catch (e) {
+      EventLog.write('[Auth] login_fail status=${e.statusCode}');
       state = state.copyWith(
         isLoading: false,
-        error: e.message,
+        error: _friendlyLoginError(e),
       );
       return false;
     } catch (e) {
+      EventLog.write('[Auth] login_fail error=${e.runtimeType}');
       state = state.copyWith(
         isLoading: false,
-        error: e.toString(),
+        error: _friendlyNetworkError(e),
       );
       return false;
     }
+  }
+
+  /// Maps API/network exceptions to user-friendly login error messages.
+  static String _friendlyLoginError(XBoardApiException e) {
+    if (e.statusCode == 401 || e.statusCode == 422 || e.statusCode == 400) {
+      // Check if server sent a readable message (XBoard often does)
+      final msg = e.message;
+      if (msg.isNotEmpty && msg.length < 80 && !msg.startsWith('{')) return msg;
+      return S.current.authErrorBadCredentials;
+    }
+    if (e.statusCode >= 500) return S.current.authErrorServer;
+    if (e.statusCode == 0) return S.current.authErrorNetwork;
+    final msg = e.message;
+    if (msg.isNotEmpty && msg.length < 80) return msg;
+    return S.current.authErrorServer;
+  }
+
+  static String _friendlyNetworkError(dynamic e) {
+    final s = e.toString();
+    if (s.contains('SocketException') ||
+        s.contains('HandshakeException') ||
+        s.contains('TimeoutException') ||
+        s.contains('NetworkException')) {
+      return S.current.authErrorNetwork;
+    }
+    return S.current.authErrorNetwork;
   }
 
   /// Logout and clear all auth data.
   Future<void> logout() async {
     await _authService.clearAll();
     state = const AuthState(status: AuthStatus.loggedOut);
+  }
+
+  /// Called when any API returns 401/403. Shows a toast and logs out.
+  /// Call this from any provider that detects token expiry.
+  Future<void> handleUnauthenticated() async {
+    if (state.status != AuthStatus.loggedIn) return; // already logged out
+    EventLog.write('[Auth] session_expired auto_logout');
+    AppNotifier.warning(S.current.authSessionExpired);
+    await logout();
   }
 
   /// Refresh user info from server.
@@ -170,78 +210,86 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       final host = await _authService.getApiHost() ?? _kDefaultApiHost;
       final api = XBoardApi(baseUrl: host);
-      final profile = await api.getUserInfo(token);
-      await _authService.cacheProfile(profile);
+      final sub = await api.getSubscribeData(token);
+      await _authService.cacheProfile(sub.profile);
+      // Also update subscribe URL in case it changed
+      await _authService.saveSubscribeUrl(sub.subscribeUrl);
       if (mounted) {
-        state = state.copyWith(userProfile: profile);
+        state = state.copyWith(userProfile: sub.profile);
       }
     } catch (e) {
       debugPrint('[Auth] Failed to refresh user info: $e');
-      // If 401/403, token may be expired
       if (e is XBoardApiException && (e.statusCode == 401 || e.statusCode == 403)) {
-        await logout();
+        await handleUnauthenticated();
       }
     }
   }
 
-  /// Sync subscription: download config and create/update profile.
+  /// Sync subscription: refresh profile data and download proxy config.
   Future<void> syncSubscription() async {
-    final subscribeUrl = await _authService.getSubscribeUrl();
-    if (subscribeUrl == null) {
-      // Try to fetch subscribe URL first
-      final token = state.token;
-      if (token == null) return;
-      try {
-        final host = await _authService.getApiHost() ?? _kDefaultApiHost;
-        final api = XBoardApi(baseUrl: host);
-        final url = await api.getSubscribeUrl(token);
-        await _authService.saveSubscribeUrl(url);
-        await _syncSubscription(url);
-      } catch (e) {
-        debugPrint('[Auth] Failed to sync subscription: $e');
+    final token = state.token;
+    if (token == null) return;
+    try {
+      final host = await _authService.getApiHost() ?? _kDefaultApiHost;
+      final api = XBoardApi(baseUrl: host);
+      // Always fetch fresh from server — also updates profile data
+      final sub = await api.getSubscribeData(token);
+      await _authService.cacheProfile(sub.profile);
+      await _authService.saveSubscribeUrl(sub.subscribeUrl);
+      if (mounted) state = state.copyWith(userProfile: sub.profile);
+      await _syncSubscription(sub.subscribeUrl);
+    } catch (e) {
+      debugPrint('[Auth] Failed to sync subscription: $e');
+      if (e is XBoardApiException && (e.statusCode == 401 || e.statusCode == 403)) {
+        await handleUnauthenticated();
+        return; // after logout, don't rethrow
       }
-    } else {
-      await _syncSubscription(subscribeUrl);
+      rethrow;
     }
   }
 
   /// Internal: download and save subscription config.
   Future<void> _syncSubscription(String subscribeUrl) async {
-    try {
-      debugPrint('[Auth] Syncing subscription from: ${subscribeUrl.substring(0, subscribeUrl.length.clamp(0, 50))}...');
+    debugPrint('[Auth] Syncing subscription from: ${subscribeUrl.substring(0, subscribeUrl.length.clamp(0, 50))}...');
 
-      // Use ProfileService.addProfile for consistent config processing.
-      // Check if we already have a "悦通" profile — update it instead of adding.
-      final profiles = await ProfileService.loadProfiles();
-      final existing = profiles.where((p) => p.name == '悦通').toList();
+    // Use ProfileService.addProfile for consistent config processing.
+    // Check if we already have a "悦通" profile — update it instead of adding.
+    final profiles = await ProfileService.loadProfiles();
+    final existing = profiles.where((p) => p.name == '悦通').toList();
+    final isFirstTime = existing.isEmpty;
 
-      final proxyPort = CoreManager.instance.isRunning
-          ? CoreManager.instance.mixedPort
-          : null;
+    final proxyPort = CoreManager.instance.isRunning
+        ? CoreManager.instance.mixedPort
+        : null;
 
-      if (existing.isNotEmpty) {
-        // Update existing profile
-        final profile = existing.first;
-        profile.url = subscribeUrl;
-        await ProfileService.updateProfile(profile, proxyPort: proxyPort);
-        debugPrint('[Auth] Updated existing 悦通 profile: ${profile.id}');
-      } else {
-        // Create new profile
-        final profile = await ProfileService.addProfile(
-          name: '悦通',
-          url: subscribeUrl,
-          proxyPort: proxyPort,
-        );
-        debugPrint('[Auth] Created new 悦通 profile: ${profile.id}');
+    if (existing.isNotEmpty) {
+      // Update existing profile
+      final profile = existing.first;
+      profile.url = subscribeUrl;
+      await ProfileService.updateProfile(profile, proxyPort: proxyPort);
+      debugPrint('[Auth] Updated existing 悦通 profile: ${profile.id}');
+    } else {
+      // Create new profile
+      final profile = await ProfileService.addProfile(
+        name: '悦通',
+        url: subscribeUrl,
+        proxyPort: proxyPort,
+      );
+      debugPrint('[Auth] Created new 悦通 profile: ${profile.id}');
 
-        // Auto-select the new profile
-        _ref.read(activeProfileIdProvider.notifier).select(profile.id);
-      }
+      // Auto-select the new profile
+      _ref.read(activeProfileIdProvider.notifier).select(profile.id);
+    }
 
-      // Refresh profiles list in UI
-      _ref.read(profilesProvider.notifier).load();
-    } catch (e) {
-      debugPrint('[Auth] Subscription sync failed: $e');
+    // Refresh profiles list in UI
+    _ref.read(profilesProvider.notifier).load();
+
+    // First-time sync: welcome the user
+    if (isFirstTime) {
+      EventLog.write('[Sync] sync_ok first_time=true');
+      AppNotifier.success(S.current.syncFirstSuccess);
+    } else {
+      EventLog.write('[Sync] sync_ok update=true');
     }
   }
 }

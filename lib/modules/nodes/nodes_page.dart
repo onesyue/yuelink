@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/models/proxy.dart';
 import '../../l10n/app_strings.dart';
+import '../../main.dart';
 import '../../providers/core_provider.dart';
 import '../../core/kernel/core_manager.dart';
 import '../../core/storage/settings_service.dart';
@@ -73,6 +74,12 @@ class _NodesPageState extends ConsumerState<NodesPage> {
                           style:
                               YLText.body.copyWith(color: YLColors.zinc500),
                           textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: YLSpacing.lg),
+                        FilledButton(
+                          onPressed: () => MainShell.switchToTab(
+                              context, MainShell.tabDashboard),
+                          child: Text(s.goToHomeToProtect),
                         ),
                       ],
                     ),
@@ -159,19 +166,39 @@ class _NodesPageState extends ConsumerState<NodesPage> {
                 surfaceTintColor: Colors.transparent,
                 pinned: true,
                 actions: [
-                  _CompactRoutingMode(),
-                  const SizedBox(width: 4),
-                  IconButton(
-                    icon: const Icon(Icons.sort_rounded),
-                    iconSize: 20,
-                    tooltip: _sortModeLabel(s, sortMode),
-                    onPressed: () {
+                  // Sort chip — shows current mode, taps to cycle
+                  GestureDetector(
+                    onTap: () {
                       final modes = NodeSortMode.values;
                       final next =
                           modes[(sortMode.index + 1) % modes.length];
                       ref.read(nodeSortModeProvider.notifier).state = next;
                     },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).brightness == Brightness.dark
+                            ? YLColors.zinc700
+                            : YLColors.zinc100,
+                        borderRadius: BorderRadius.circular(YLRadius.sm),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.sort_rounded,
+                              size: 13, color: YLColors.zinc500),
+                          const SizedBox(width: 4),
+                          Text(
+                            _sortModeLabel(s, sortMode),
+                            style: YLText.caption.copyWith(
+                                fontSize: 11, color: YLColors.zinc500),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
+                  const SizedBox(width: 2),
                   IconButton(
                     icon: Icon(viewMode == NodeViewMode.card
                         ? Icons.view_list_rounded
@@ -201,6 +228,15 @@ class _NodesPageState extends ConsumerState<NodesPage> {
                         YLSpacing.xl, 0, YLSpacing.xl, YLSpacing.sm),
                     child: _NodeSearchBar(controller: _searchController),
                   ),
+                ),
+              ),
+
+              // ── Routing mode pill ──────────────────────────────────────
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                      YLSpacing.xl, YLSpacing.sm, YLSpacing.xl, 0),
+                  child: _FullWidthRoutingMode(),
                 ),
               ),
 
@@ -367,9 +403,9 @@ class _ModeBanner extends StatelessWidget {
   }
 }
 
-// ── Compact Routing Mode (AppBar) ────────────────────────────────────────────
+// ── Full-width Routing Mode Pill ─────────────────────────────────────────────
 
-class _CompactRoutingMode extends ConsumerWidget {
+class _FullWidthRoutingMode extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final s = S.of(context);
@@ -381,8 +417,7 @@ class _CompactRoutingMode extends ConsumerWidget {
     final labels = [s.routeModeRule, s.routeModeGlobal, s.routeModeDirect];
 
     return SizedBox(
-      width: 186,
-      height: 32,
+      height: 34,
       child: Container(
         padding: const EdgeInsets.all(2),
         decoration: BoxDecoration(

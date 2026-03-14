@@ -22,14 +22,11 @@ import '../../core/kernel/geodata_service.dart';
 import '../../core/storage/settings_service.dart';
 import '../../core/platform/vpn_service.dart';
 import '../../modules/nodes/providers/nodes_providers.dart';
-import 'startup_report_page.dart';
 import '../../services/update_checker.dart';
 import '../../theme.dart';
-import 'sub/connections_sub_page.dart';
-import 'sub/logs_sub_page.dart';
-import 'sub/overwrite_sub_page.dart';
-import 'sub/proxy_providers_sub_page.dart';
-import 'sub/webdav_sub_page.dart';
+import '../mine/widgets/account_actions_card.dart';
+import '../mine/widgets/account_card.dart';
+import '../mine/widgets/traffic_usage_card.dart';
 
 // ── Settings-level providers ─────────────────────────────────────────────────
 
@@ -178,7 +175,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final language = ref.watch(languageProvider);
     final autoConnect = ref.watch(autoConnectProvider);
     final connectionMode = ref.watch(connectionModeProvider);
-    final logLevel = ref.watch(logLevelProvider);
+    ref.watch(logLevelProvider); // retained for hidden Core section
     final systemProxyOnConnect = ref.watch(systemProxyOnConnectProvider);
     final status = ref.watch(coreStatusProvider);
     final routingMode = ref.watch(routingModeProvider);
@@ -197,7 +194,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           Padding(
             padding: EdgeInsets.fromLTRB(32, MediaQuery.of(context).padding.top + 16, 32, 20),
             child: Text(
-              s.navSettings,
+              s.navMine,
               style: TextStyle(
                 fontSize: 28,
                 fontWeight: FontWeight.w600,
@@ -219,6 +216,16 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
                   children: [
+
+              // ══ 0. Account center (top) ═══════════════════════════
+              const AccountCard(),
+              const SizedBox(height: 12),
+              if (status == CoreStatus.running) ...[
+                const TrafficUsageCard(),
+                const SizedBox(height: 12),
+              ],
+              const AccountActionsCard(),
+              const SizedBox(height: 8),
 
               // ══ 1. General ════════════════════════════════════════
               _SectionTitle(s.sectionAppearance),
@@ -281,19 +288,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                         ),
                       ),
                     ),
-                    Divider(height: 1, thickness: 0.5, color: dividerColor),
-                    // Auto connect
-                    YLSettingsRow(
-                      title: s.autoConnect,
-                      trailing: CupertinoSwitch(
-                        value: autoConnect,
-                        activeTrackColor: YLColors.connected,
-                        onChanged: (v) async {
-                          ref.read(autoConnectProvider.notifier).state = v;
-                          await SettingsService.setAutoConnect(v);
-                        },
-                      ),
-                    ),
                     if (isDesktop) ...[
                       Divider(height: 1, thickness: 0.5, color: dividerColor),
                       YLSettingsRow(
@@ -340,6 +334,19 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               _SettingsCard(
                 child: Column(
                   children: [
+                    // Auto connect
+                    YLSettingsRow(
+                      title: s.autoConnect,
+                      trailing: CupertinoSwitch(
+                        value: autoConnect,
+                        activeTrackColor: YLColors.connected,
+                        onChanged: (v) async {
+                          ref.read(autoConnectProvider.notifier).state = v;
+                          await SettingsService.setAutoConnect(v);
+                        },
+                      ),
+                    ),
+                    Divider(height: 1, thickness: 0.5, color: dividerColor),
                     // Routing mode — all platforms
                     YLInfoRow(
                       label: s.routingModeSetting,
@@ -420,58 +427,18 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                           ),
                         ),
                     ],
-                    // Upstream proxy (soft router / gateway)
-                    Divider(height: 1, thickness: 0.5, color: dividerColor),
-                    const _UpstreamProxyRow(),
-                    // Test URL — all platforms
-                    Divider(height: 1, thickness: 0.5, color: dividerColor),
-                    _TestUrlRow(),
+                    // Hidden for 悦通 client: upstream proxy, test URL
                   ],
                 ),
               ),
 
               // ══ 3. Subscription & Config ══════════════════════════
-              _SectionTitle(s.sectionSubscription),
-              _SettingsCard(
-                child: Column(
-                  children: [
-                    YLInfoRow(
-                      label: s.configOverwrite,
-                      trailing: const Icon(Icons.chevron_right, size: 18,
-                          color: YLColors.zinc400),
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) => const OverwriteSubPage()),
-                      ),
-                    ),
-                    Divider(height: 1, thickness: 0.5, color: dividerColor),
-                    YLInfoRow(
-                      label: s.proxyProviderTitle,
-                      trailing: const Icon(Icons.chevron_right, size: 18,
-                          color: YLColors.zinc400),
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) => const ProxyProvidersSubPage()),
-                      ),
-                    ),
-                    Divider(height: 1, thickness: 0.5, color: dividerColor),
-                    YLInfoRow(
-                      label: 'WebDAV',
-                      trailing: const Icon(Icons.chevron_right,
-                          size: 18, color: YLColors.zinc400),
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) => const WebDavSubPage()),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              // Hidden: Config Overwrite, Proxy Providers, WebDAV
+              // (underlying code retained; UI entry removed for 悦通 client)
 
-              // ══ 3b. Network ═══════════════════════════════════════
+              // Hidden for 悦通 client: Network (GeoData), Core, Diagnostics
+
+              /* ══ 3b. Network ══════════════════════════════════════
               _SectionTitle(s.sectionNetwork),
               _SettingsCard(child: _GeoDataRow()),
 
@@ -594,19 +561,14 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     ),
                   ],
                 ),
-              ),
-              const SizedBox(height: 8),
+              */ // end hidden sections
 
               // Split tunnel (Android only)
               if (Platform.isAndroid) ...[
+                _SectionTitle(s.sectionSplitTunnel),
                 const _SplitTunnelSection(),
                 const SizedBox(height: 8),
               ],
-
-              // ══ Account ═══════════════════════════════════════════
-              _SectionTitle(s.authAccountInfo),
-              const _AccountSection(),
-              const SizedBox(height: 8),
 
               // ══ About ═════════════════════════════════════════════
               _SectionTitle(s.sectionAbout),
@@ -614,25 +576,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 child: Column(
                   children: [
                     YLInfoRow(
-                      label: s.versionLabel,
-                      value: AppConstants.appVersion,
-                    ),
-                    Divider(height: 1, thickness: 0.5, color: dividerColor),
-                    YLInfoRow(
-                      label: s.coreLabel,
-                      value: 'mihomo',
-                    ),
-                    Divider(height: 1, thickness: 0.5, color: dividerColor),
-                    YLInfoRow(
-                      label: s.projectHome,
-                      trailing: const Icon(Icons.open_in_new,
-                          size: 14, color: YLColors.zinc400),
-                      onTap: () =>
-                          _launchUrl('https://github.com/onesyue/yuelink'),
-                    ),
-                    Divider(height: 1, thickness: 0.5, color: dividerColor),
-                    YLInfoRow(
                       label: s.checkUpdate,
+                      value: AppConstants.appVersion,
                       trailing: _checkingUpdate
                           ? const SizedBox(
                               width: 14, height: 14,
@@ -673,6 +618,19 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     ),
                     Divider(height: 1, thickness: 0.5, color: dividerColor),
                     YLInfoRow(
+                      label: s.minePrivacyPolicy,
+                      trailing: const Icon(Icons.chevron_right,
+                          size: 18, color: YLColors.zinc400),
+                      onTap: () async {
+                        final uri = Uri.parse('https://yue.to/tos.html');
+                        if (await canLaunchUrl(uri)) {
+                          await launchUrl(uri,
+                              mode: LaunchMode.externalApplication);
+                        }
+                      },
+                    ),
+                    Divider(height: 1, thickness: 0.5, color: dividerColor),
+                    YLInfoRow(
                       label: s.openSourceLicense,
                       trailing: const Icon(Icons.chevron_right,
                           size: 18, color: YLColors.zinc400),
@@ -696,16 +654,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     );
   }
 
-  Future<void> _launchUrl(String url) async {
-    final uri = Uri.parse(url);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    }
-  }
 }
 
-// ── Account section ──────────────────────────────────────────────────────────
+// ── Account section (superseded by AccountCard; retained for reference) ────────
 
+// ignore: unused_element
 class _AccountSection extends ConsumerWidget {
   const _AccountSection();
 
@@ -967,8 +920,11 @@ class _SplitTunnelSectionState extends ConsumerState<_SplitTunnelSection> {
     );
   }
 
-  void _showAppPicker(BuildContext context, List<String> selected) {
+  void _showAppPicker(BuildContext context, List<String> initialSelected) {
     final s = S.of(context);
+    // Local mutable copy — updated together with the provider so the
+    // StatefulBuilder can reflect changes without re-reading the provider.
+    final localSelected = Set<String>.from(initialSelected);
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -1017,7 +973,7 @@ class _SplitTunnelSectionState extends ConsumerState<_SplitTunnelSection> {
                           itemBuilder: (_, i) {
                             final app = filtered[i];
                             final pkg = app['packageName'] ?? '';
-                            final isSelected = selected.contains(pkg);
+                            final isSelected = localSelected.contains(pkg);
                             return CheckboxListTile(
                               dense: true,
                               title: Text(app['appName'] ?? pkg),
@@ -1025,10 +981,16 @@ class _SplitTunnelSectionState extends ConsumerState<_SplitTunnelSection> {
                                   style: const TextStyle(fontSize: 11)),
                               value: isSelected,
                               onChanged: (_) {
+                                setModal(() {
+                                  if (localSelected.contains(pkg)) {
+                                    localSelected.remove(pkg);
+                                  } else {
+                                    localSelected.add(pkg);
+                                  }
+                                });
                                 ref
                                     .read(splitTunnelAppsProvider.notifier)
                                     .toggle(pkg);
-                                setModal(() {});
                               },
                             );
                           },
@@ -1363,8 +1325,9 @@ class _GeoDataRowState extends State<_GeoDataRow> {
   }
 }
 
-// ── Test URL row ──────────────────────────────────────────────────────────────
+// ── Test URL row (hidden for 悦通 client; retained for future use) ─────────────
 
+// ignore: unused_element
 class _TestUrlRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -1703,9 +1666,11 @@ class _UpstreamProxyRowState extends State<_UpstreamProxyRow> {
   }
 }
 
-// ── Export Logs Sheet ─────────────────────────────────────────────────────────
+// ── Export Logs Sheet (hidden for 悦通 client; retained for future use) ────────
 
+// ignore: unused_element
 class _ExportLogsSheet {
+  // ignore: unused_element
   static void show(BuildContext context) {
     showModalBottomSheet(
       context: context,

@@ -1,25 +1,96 @@
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'dart:convert';
+import 'dart:io';
 
-/// Stores sensitive credentials in OS-native secure storage:
-/// - macOS / iOS   → Keychain
-/// - Android       → Keystore-backed EncryptedSharedPreferences
-/// - Windows       → Credential Locker (DPAPI)
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:path_provider/path_provider.dart';
+
+/// Stores credentials in OS-native secure storage.
 ///
-/// Only store fields that are truly sensitive (passwords, auth secrets).
-/// Non-sensitive settings continue to live in SettingsService (plain JSON).
+/// Platform strategy:
+/// - Android  → Keystore-backed EncryptedSharedPreferences
+/// - iOS      → Data Protection Keychain
+/// - macOS    → JSON file in Application Support directory
+///              (Keychain requires Developer ID cert even in legacy mode for
+///               unsigned debug builds; path_provider JSON is the standard
+///               approach for non-App-Store macOS apps — used by FlClash, etc.)
+/// - Windows  → Credential Locker (DPAPI)
 class SecureStorageService {
   SecureStorageService._();
   static final instance = SecureStorageService._();
 
+  // ── Non-macOS: flutter_secure_storage ─────────────────────────────────────
+
   static const _storage = FlutterSecureStorage(
-    // Android: encrypt with AES-256 key stored in Android Keystore
     aOptions: AndroidOptions(encryptedSharedPreferences: true),
-    // macOS/iOS: use Keychain with accessible-when-unlocked attribute
     iOptions: IOSOptions(accessibility: KeychainAccessibility.unlocked),
-    mOptions: MacOsOptions(accessibility: KeychainAccessibility.unlocked),
-    // Windows: DPAPI (system-user-scoped encryption)
     wOptions: WindowsOptions(),
   );
+
+  // ── macOS: path_provider JSON file ────────────────────────────────────────
+
+  static const _kFileName = '.yuetong_cred.json';
+  static File? _macosFile;
+  static Map<String, String>? _macosCache;
+
+  static Future<File> _getFile() async {
+    _macosFile ??= File(
+      '${(await getApplicationSupportDirectory()).path}/$_kFileName',
+    );
+    return _macosFile!;
+  }
+
+  static Future<Map<String, String>> _loadMacos() async {
+    if (_macosCache != null) return _macosCache!;
+    try {
+      final f = await _getFile();
+      if (!f.existsSync()) {
+        _macosCache = {};
+        return _macosCache!;
+      }
+      final raw = jsonDecode(await f.readAsString()) as Map<String, dynamic>;
+      _macosCache = raw.map((k, v) => MapEntry(k, v.toString()));
+    } catch (_) {
+      _macosCache = {};
+    }
+    return _macosCache!;
+  }
+
+  static Future<void> _saveMacos(Map<String, String> data) async {
+    try {
+      final f = await _getFile();
+      await f.writeAsString(jsonEncode(data));
+      _macosCache = data;
+    } catch (_) {}
+  }
+
+  // ── Public API ────────────────────────────────────────────────────────────
+
+  Future<String?> read(String key) async {
+    if (Platform.isMacOS) {
+      return (await _loadMacos())[key];
+    }
+    return _storage.read(key: key);
+  }
+
+  Future<void> write(String key, String value) async {
+    if (Platform.isMacOS) {
+      final data = await _loadMacos();
+      data[key] = value;
+      await _saveMacos(data);
+      return;
+    }
+    await _storage.write(key: key, value: value);
+  }
+
+  Future<void> delete(String key) async {
+    if (Platform.isMacOS) {
+      final data = await _loadMacos();
+      data.remove(key);
+      await _saveMacos(data);
+      return;
+    }
+    await _storage.delete(key: key);
+  }
 
   // ── WebDAV credentials ────────────────────────────────────────────────────
 
@@ -27,63 +98,45 @@ class SecureStorageService {
   static const _kWebDavUsername = 'webdav_username';
   static const _kWebDavPassword = 'webdav_password';
 
-  Future<Map<String, String>> getWebDavConfig() async {
-    return {
-      'url':      await _storage.read(key: _kWebDavUrl)      ?? '',
-      'username': await _storage.read(key: _kWebDavUsername) ?? '',
-      'password': await _storage.read(key: _kWebDavPassword) ?? '',
-    };
-  }
+  Future<Map<String, String>> getWebDavConfig() async => {
+        'url':      await read(_kWebDavUrl)      ?? '',
+        'username': await read(_kWebDavUsername) ?? '',
+        'password': await read(_kWebDavPassword) ?? '',
+      };
 
   Future<void> setWebDavConfig({
     required String url,
     required String username,
     required String password,
   }) async {
-    await _storage.write(key: _kWebDavUrl,      value: url);
-    await _storage.write(key: _kWebDavUsername, value: username);
-    await _storage.write(key: _kWebDavPassword, value: password);
+    await write(_kWebDavUrl,      url);
+    await write(_kWebDavUsername, username);
+    await write(_kWebDavPassword, password);
   }
 
   Future<void> clearWebDavConfig() async {
-    await _storage.delete(key: _kWebDavUrl);
-    await _storage.delete(key: _kWebDavUsername);
-    await _storage.delete(key: _kWebDavPassword);
+    await delete(_kWebDavUrl);
+    await delete(_kWebDavUsername);
+    await delete(_kWebDavPassword);
   }
 
   // ── Subscription URL tokens ───────────────────────────────────────────────
-  // Subscription URLs often contain auth tokens (e.g. ?token=xxx).
-  // We store them keyed by profile ID so they never land in plain JSON.
 
   static String _subKey(String profileId) => 'sub_url_$profileId';
 
-  Future<String?> getSubscriptionUrl(String profileId) async {
-    return _storage.read(key: _subKey(profileId));
-  }
+  Future<String?> getSubscriptionUrl(String profileId) =>
+      read(_subKey(profileId));
 
-  Future<void> setSubscriptionUrl(String profileId, String url) async {
-    await _storage.write(key: _subKey(profileId), value: url);
-  }
+  Future<void> setSubscriptionUrl(String profileId, String url) =>
+      write(_subKey(profileId), url);
 
-  Future<void> deleteSubscriptionUrl(String profileId) async {
-    await _storage.delete(key: _subKey(profileId));
-  }
+  Future<void> deleteSubscriptionUrl(String profileId) =>
+      delete(_subKey(profileId));
 
   // ── API secret ────────────────────────────────────────────────────────────
 
   static const _kApiSecret = 'mihomo_api_secret';
 
-  Future<String?> getApiSecret() => _storage.read(key: _kApiSecret);
-
-  Future<void> setApiSecret(String secret) =>
-      _storage.write(key: _kApiSecret, value: secret);
-
-  // ── Generic key-value (for AuthTokenService and future modules) ──────────
-
-  Future<String?> read(String key) => _storage.read(key: key);
-
-  Future<void> write(String key, String value) =>
-      _storage.write(key: key, value: value);
-
-  Future<void> delete(String key) => _storage.delete(key: key);
+  Future<String?> getApiSecret() => read(_kApiSecret);
+  Future<void> setApiSecret(String secret) => write(_kApiSecret, secret);
 }

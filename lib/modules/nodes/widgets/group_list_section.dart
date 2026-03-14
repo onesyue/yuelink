@@ -1,8 +1,10 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../domain/models/proxy.dart';
 import '../../../l10n/app_strings.dart';
+import '../../../shared/app_notifier.dart';
 import '../../../theme.dart';
 import '../providers/nodes_providers.dart';
 import 'node_tile.dart';
@@ -65,6 +67,7 @@ class GroupListSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final testing = ref.watch(delayTestingProvider);
     // Read delays for sort order only; NodeTile handles rendering.
     final delays = ref.read(delayResultsProvider);
     final sorted = _sortedNodes(group.all, sortMode, delays);
@@ -95,32 +98,41 @@ class GroupListSection extends ConsumerWidget {
                 horizontal: YLSpacing.md, vertical: YLSpacing.sm),
             child: Row(
               children: [
-                Text(group.name, style: YLText.titleMedium),
-                const SizedBox(width: YLSpacing.sm),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: isDark ? YLColors.zinc800 : YLColors.zinc100,
-                    borderRadius: BorderRadius.circular(YLRadius.sm),
-                  ),
+                Expanded(
                   child: Text(
-                    group.type,
-                    style: YLText.caption.copyWith(
-                        fontSize: 10,
-                        color: YLColors.zinc500,
-                        fontWeight: FontWeight.w600),
+                    group.name,
+                    style: YLText.titleMedium,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                const Spacer(),
-                Text(
-                  isFiltered
+                const SizedBox(width: YLSpacing.sm),
+                _Badge(label: group.type, isDark: isDark),
+                const SizedBox(width: YLSpacing.sm),
+                _Badge(
+                  label: isFiltered
                       ? '${nodeList.length}/${group.all.length}'
-                      : S.of(context).nodesCountLabel(nodeList.length),
-                  style: YLText.caption.copyWith(
-                    color:
-                        isFiltered ? YLColors.connected : YLColors.zinc500,
-                  ),
+                      : '${group.all.length}',
+                  isDark: isDark,
+                  accent: isFiltered,
+                ),
+                const SizedBox(width: 4),
+                IconButton(
+                  onPressed: testing.isNotEmpty
+                      ? null
+                      : () {
+                          ref
+                              .read(delayTestProvider)
+                              .testGroup(group.name, group.all);
+                          AppNotifier.info(
+                              S.of(context).testingGroup(group.name));
+                        },
+                  icon: testing.isNotEmpty
+                      ? const CupertinoActivityIndicator(radius: 7)
+                      : const Icon(Icons.bolt_rounded),
+                  iconSize: 18,
+                  color: isDark ? Colors.white : YLColors.primary,
+                  visualDensity: VisualDensity.compact,
                 ),
               ],
             ),
@@ -143,6 +155,36 @@ class GroupListSection extends ConsumerWidget {
             }),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _Badge extends StatelessWidget {
+  final String label;
+  final bool isDark;
+  final bool accent;
+  const _Badge({required this.label, required this.isDark, this.accent = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final bg = accent
+        ? YLColors.connected.withValues(alpha: 0.12)
+        : (isDark ? YLColors.zinc700 : YLColors.zinc100);
+    final fg = accent ? YLColors.connected : YLColors.zinc500;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(YLRadius.sm),
+      ),
+      child: Text(
+        label,
+        style: YLText.caption.copyWith(
+          fontSize: 10,
+          color: fg,
+          fontWeight: FontWeight.w600,
+        ),
       ),
     );
   }

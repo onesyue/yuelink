@@ -30,18 +30,28 @@ class ProfilePage extends ConsumerStatefulWidget {
 }
 
 class _ProfilePageState extends ConsumerState<ProfilePage> {
+  ProviderSubscription<String?>? _deepLinkSub;
+
   @override
   void initState() {
     super.initState();
-    // Handle deep links that arrive while this page is active
+    // Handle deep links that arrive while this page is active.
+    // Store subscription so it is cancelled when the page is disposed.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.listenManual(deepLinkUrlProvider, (_, url) {
+      if (!mounted) return;
+      _deepLinkSub = ref.listenManual(deepLinkUrlProvider, (_, url) {
         if (url != null && url.isNotEmpty && mounted) {
           ref.read(deepLinkUrlProvider.notifier).state = null; // consume
           _showAddDialog(context, ref, prefilledUrl: url);
         }
       });
     });
+  }
+
+  @override
+  void dispose() {
+    _deepLinkSub?.close();
+    super.dispose();
   }
 
   @override

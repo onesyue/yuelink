@@ -77,12 +77,11 @@ class VpnService {
   /// PacketTunnel extension can load it on startup.
   static Future<bool> startIosVpn({required String configYaml}) async {
     assert(Platform.isIOS);
-    try {
-      final result = await _channel.invokeMethod<bool>('startVpn', configYaml);
-      return result ?? false;
-    } on PlatformException catch (_) {
-      return false;
-    }
+    // Do NOT catch PlatformException here — let it propagate so _step
+    // records the actual iOS error code (VPN_SAVE_ERROR, VPN_START_ERROR, etc.)
+    // in the startup report instead of the opaque "returned false" message.
+    final result = await _channel.invokeMethod<bool>('startVpn', configYaml);
+    return result ?? false;
   }
 
   /// Start the platform VPN tunnel (iOS / generic path).
