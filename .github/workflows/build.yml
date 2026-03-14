@@ -202,21 +202,31 @@ jobs:
           ls -lh assets/geodata/
 
       - name: Decode keystore
-        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/app/yuelink.jks
-          echo "KEYSTORE_PATH=${{ github.workspace }}/android/app/yuelink.jks" >> $GITHUB_ENV
-          echo "KEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}" >> $GITHUB_ENV
-          echo "KEY_ALIAS=${{ secrets.KEY_ALIAS }}" >> $GITHUB_ENV
-          echo "KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}" >> $GITHUB_ENV
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 --decode > android/app/yuelink.jks
+            echo "KEYSTORE_PATH=${{ github.workspace }}/android/app/yuelink.jks" >> $GITHUB_ENV
+            echo "KEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}" >> $GITHUB_ENV
+            echo "KEY_ALIAS=${{ secrets.KEY_ALIAS }}" >> $GITHUB_ENV
+            echo "KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}" >> $GITHUB_ENV
+          fi
 
       - name: Extract version from tag
         run: |
           VERSION=$(echo "${GITHUB_REF}" | sed 's|refs/tags/v||')
+          BUILD_NUM=$(echo "${VERSION}" | tr -d '.')
           echo "APP_VERSION=${VERSION}" >> $GITHUB_ENV
+          echo "BUILD_NUM=${BUILD_NUM}" >> $GITHUB_ENV
 
       - run: flutter pub get
-      - run: flutter build apk --release --build-name=${{ env.APP_VERSION }} --build-number=$(echo ${{ env.APP_VERSION }} | tr -d '.')
+
+      - name: Build APK
+        run: |
+          flutter build apk --release \
+            --build-name=${{ env.APP_VERSION }} \
+            --build-number=${{ env.BUILD_NUM }}
 
       - name: Rename artifact
         run: |
@@ -271,10 +281,17 @@ jobs:
       - name: Extract version from tag
         run: |
           VERSION=$(echo "${GITHUB_REF}" | sed 's|refs/tags/v||')
+          BUILD_NUM=$(echo "${VERSION}" | tr -d '.')
           echo "APP_VERSION=${VERSION}" >> $GITHUB_ENV
+          echo "BUILD_NUM=${BUILD_NUM}" >> $GITHUB_ENV
 
       - run: flutter pub get
-      - run: flutter build ios --release --no-codesign --build-name=${{ env.APP_VERSION }} --build-number=$(echo ${{ env.APP_VERSION }} | tr -d '.')
+
+      - name: Build iOS
+        run: |
+          flutter build ios --release --no-codesign \
+            --build-name=${{ env.APP_VERSION }} \
+            --build-number=${{ env.BUILD_NUM }}
 
       - name: Package iOS app
         run: |
@@ -331,11 +348,18 @@ jobs:
       - name: Extract version from tag
         run: |
           VERSION=$(echo "${GITHUB_REF}" | sed 's|refs/tags/v||')
+          BUILD_NUM=$(echo "${VERSION}" | tr -d '.')
           echo "APP_VERSION=${VERSION}" >> $GITHUB_ENV
+          echo "BUILD_NUM=${BUILD_NUM}" >> $GITHUB_ENV
 
       - run: flutter config --enable-macos-desktop
       - run: flutter pub get
-      - run: flutter build macos --release --build-name=${{ env.APP_VERSION }} --build-number=$(echo ${{ env.APP_VERSION }} | tr -d '.')
+
+      - name: Build macOS
+        run: |
+          flutter build macos --release \
+            --build-name=${{ env.APP_VERSION }} \
+            --build-number=${{ env.BUILD_NUM }}
 
       - name: Install create-dmg
         run: brew install create-dmg
@@ -401,14 +425,19 @@ jobs:
         shell: bash
         run: |
           VERSION=$(echo "${GITHUB_REF}" | sed 's|refs/tags/v||')
+          BUILD_NUM=$(echo "${VERSION}" | tr -d '.')
           echo "APP_VERSION=${VERSION}" >> $GITHUB_ENV
+          echo "BUILD_NUM=${BUILD_NUM}" >> $GITHUB_ENV
 
       - run: flutter config --enable-windows-desktop
       - run: flutter pub get
-      - shell: bash
+
+      - name: Build Windows
+        shell: bash
         run: |
-          BUILD_NUM=$(echo "${{ env.APP_VERSION }}" | tr -d '.')
-          flutter build windows --release --build-name=${{ env.APP_VERSION }} --build-number=${BUILD_NUM}
+          flutter build windows --release \
+            --build-name=${{ env.APP_VERSION }} \
+            --build-number=${{ env.BUILD_NUM }}
 
       - name: Ensure libclash.dll in Release dir
         shell: pwsh
@@ -490,11 +519,18 @@ jobs:
       - name: Extract version from tag
         run: |
           VERSION=$(echo "${GITHUB_REF}" | sed 's|refs/tags/v||')
+          BUILD_NUM=$(echo "${VERSION}" | tr -d '.')
           echo "APP_VERSION=${VERSION}" >> $GITHUB_ENV
+          echo "BUILD_NUM=${BUILD_NUM}" >> $GITHUB_ENV
 
       - run: flutter config --enable-linux-desktop
       - run: flutter pub get
-      - run: flutter build linux --release --build-name=${{ env.APP_VERSION }} --build-number=$(echo ${{ env.APP_VERSION }} | tr -d '.')
+
+      - name: Build Linux
+        run: |
+          flutter build linux --release \
+            --build-name=${{ env.APP_VERSION }} \
+            --build-number=${{ env.BUILD_NUM }}
 
       - name: Download appimagetool
         run: |
