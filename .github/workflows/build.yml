@@ -204,7 +204,7 @@ jobs:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         run: |
           if [ -n "$KEYSTORE_BASE64" ]; then
-            echo "$KEYSTORE_BASE64" | base64 --decode > android/app/yuelink.jks
+            printf '%s' "$KEYSTORE_BASE64" | tr -d ' \r\n' | base64 -d > android/app/yuelink.jks
             echo "KEYSTORE_PATH=${{ github.workspace }}/android/app/yuelink.jks" >> $GITHUB_ENV
             echo "KEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}" >> $GITHUB_ENV
             echo "KEY_ALIAS=${{ secrets.KEY_ALIAS }}" >> $GITHUB_ENV
