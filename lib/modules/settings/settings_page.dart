@@ -12,6 +12,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../constants.dart';
 import '../../l10n/app_strings.dart';
+import '../../modules/profiles/profiles_page.dart';
 import '../../modules/yue_auth/providers/yue_auth_providers.dart';
 import '../../shared/formatters/subscription_parser.dart' show formatBytes;
 import '../../providers/core_provider.dart';
@@ -220,6 +221,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               // ══ 0. Account center (top) ═══════════════════════════
               if (ref.watch(authProvider).isGuest) ...[
                 _GuestLoginCard(isDark: isDark),
+                const SizedBox(height: 12),
+                _GuestActionsCard(isDark: isDark),
                 const SizedBox(height: 8),
               ] else ...[
                 const AccountCard(),
@@ -813,6 +816,95 @@ class _GuestLoginCard extends ConsumerWidget {
                 child: Text(isEn ? 'Go to Login' : '前往登录'),
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Actions available in guest mode (no login required).
+class _GuestActionsCard extends StatelessWidget {
+  final bool isDark;
+  const _GuestActionsCard({required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    final isEn = S.of(context).isEn;
+    final s = S.of(context);
+
+    final divider = Divider(
+      height: 1,
+      thickness: 0.5,
+      color: isDark
+          ? Colors.white.withValues(alpha: 0.06)
+          : Colors.black.withValues(alpha: 0.06),
+    );
+
+    return _SettingsCard(
+      child: Column(
+        children: [
+          // Subscription management
+          _GuestActionRow(
+            icon: Icons.cloud_sync_outlined,
+            label: s.mineSubscriptionManage,
+            isDark: isDark,
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const ProfilePage()),
+            ),
+          ),
+          divider,
+          // Telegram group
+          _GuestActionRow(
+            icon: Icons.telegram,
+            label: isEn ? 'Telegram Group' : '电报群',
+            isDark: isDark,
+            onTap: () async {
+              final tgUri = Uri.parse('tg://resolve?domain=yue_to');
+              if (await canLaunchUrl(tgUri)) {
+                await launchUrl(tgUri);
+              } else {
+                await launchUrl(
+                  Uri.parse('https://t.me/yue_to'),
+                  mode: LaunchMode.externalApplication,
+                );
+              }
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _GuestActionRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool isDark;
+  final VoidCallback? onTap;
+
+  const _GuestActionRow({
+    required this.icon,
+    required this.label,
+    required this.isDark,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          children: [
+            Icon(icon, size: 20, color: YLColors.zinc500),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(label, style: YLText.body),
+            ),
+            const Icon(Icons.chevron_right,
+                size: 18, color: YLColors.zinc400),
           ],
         ),
       ),
