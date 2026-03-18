@@ -2,7 +2,7 @@ name: Build YueLink
 
 on:
   push:
-    tags: ['v*']
+    tags: ['v*', 'alpha.*']
   workflow_dispatch:
 
 # Cancel any in-progress run for the same ref (branch or tag) automatically.
@@ -207,10 +207,10 @@ jobs:
           echo "KEY_ALIAS=${{ secrets.KEY_ALIAS }}" >> $GITHUB_ENV
           echo "KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}" >> $GITHUB_ENV
 
-      - name: Extract version from tag
+      - name: Extract version from pubspec
         run: |
-          VERSION=$(echo "${GITHUB_REF}" | sed 's|refs/tags/v||')
-          BUILD_NUM=$(echo "${VERSION}" | tr -d '.')
+          VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f1)
+          BUILD_NUM=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f2)
           echo "APP_VERSION=${VERSION}" >> $GITHUB_ENV
           echo "BUILD_NUM=${BUILD_NUM}" >> $GITHUB_ENV
 
@@ -272,10 +272,10 @@ jobs:
           key: pods-ios-${{ hashFiles('ios/Podfile.lock') }}
           restore-keys: pods-ios-
 
-      - name: Extract version from tag
+      - name: Extract version from pubspec
         run: |
-          VERSION=$(echo "${GITHUB_REF}" | sed 's|refs/tags/v||')
-          BUILD_NUM=$(echo "${VERSION}" | tr -d '.')
+          VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f1)
+          BUILD_NUM=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f2)
           echo "APP_VERSION=${VERSION}" >> $GITHUB_ENV
           echo "BUILD_NUM=${BUILD_NUM}" >> $GITHUB_ENV
 
@@ -339,10 +339,10 @@ jobs:
           key: pods-macos-${{ hashFiles('macos/Podfile.lock') }}
           restore-keys: pods-macos-
 
-      - name: Extract version from tag
+      - name: Extract version from pubspec
         run: |
-          VERSION=$(echo "${GITHUB_REF}" | sed 's|refs/tags/v||')
-          BUILD_NUM=$(echo "${VERSION}" | tr -d '.')
+          VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f1)
+          BUILD_NUM=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f2)
           echo "APP_VERSION=${VERSION}" >> $GITHUB_ENV
           echo "BUILD_NUM=${BUILD_NUM}" >> $GITHUB_ENV
 
@@ -365,11 +365,11 @@ jobs:
             --window-pos 200 120 \
             --window-size 660 400 \
             --icon-size 80 \
-            --icon "yuelink.app" 180 170 \
+            --icon "YueLink.app" 180 170 \
             --app-drop-link 480 170 \
-            --hide-extension "yuelink.app" \
+            --hide-extension "YueLink.app" \
             "YueLink-macOS.dmg" \
-            "build/macos/Build/Products/Release/yuelink.app" \
+            "build/macos/Build/Products/Release/YueLink.app" \
           || true
           # create-dmg exits 2 on success when no code signing identity found
           if [ ! -f YueLink-macOS.dmg ]; then
@@ -415,11 +415,11 @@ jobs:
           curl -fSL -o assets/geodata/ASN.mmdb      "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/GeoLite2-ASN.mmdb"
           ls -lh assets/geodata/
 
-      - name: Extract version from tag
+      - name: Extract version from pubspec
         shell: bash
         run: |
-          VERSION=$(echo "${GITHUB_REF}" | sed 's|refs/tags/v||')
-          BUILD_NUM=$(echo "${VERSION}" | tr -d '.')
+          VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f1)
+          BUILD_NUM=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f2)
           echo "APP_VERSION=${VERSION}" >> $GITHUB_ENV
           echo "BUILD_NUM=${BUILD_NUM}" >> $GITHUB_ENV
 
@@ -461,7 +461,7 @@ jobs:
       - name: Build installer with Inno Setup
         shell: pwsh
         run: |
-          $version = if ($env:GITHUB_REF -match 'refs/tags/v(.+)') { $Matches[1] } else { '0.0.0' }
+          $version = (Select-String -Path pubspec.yaml -Pattern '^version: (.+)\+').Matches[0].Groups[1].Value
           iscc "/DMyAppVersion=$version" windows\installer.iss
 
       - uses: actions/upload-artifact@v4
@@ -510,10 +510,10 @@ jobs:
           curl -fSL -o assets/geodata/country.mmdb  "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/country.mmdb"
           curl -fSL -o assets/geodata/ASN.mmdb      "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/GeoLite2-ASN.mmdb"
 
-      - name: Extract version from tag
+      - name: Extract version from pubspec
         run: |
-          VERSION=$(echo "${GITHUB_REF}" | sed 's|refs/tags/v||')
-          BUILD_NUM=$(echo "${VERSION}" | tr -d '.')
+          VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f1)
+          BUILD_NUM=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f2)
           echo "APP_VERSION=${VERSION}" >> $GITHUB_ENV
           echo "BUILD_NUM=${BUILD_NUM}" >> $GITHUB_ENV
 
@@ -534,7 +534,7 @@ jobs:
 
       - name: Package AppImage
         run: |
-          VERSION=$(echo "${GITHUB_REF}" | sed 's|refs/tags/v||')
+          VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f1)
           ARCH="$(uname -m)"
           BUNDLE_DIR="build/linux/x64/release/bundle"
           APPDIR="build/AppDir"
