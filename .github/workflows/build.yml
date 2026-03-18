@@ -588,16 +588,18 @@ jobs:
           path: YueLink-Linux-x86_64.AppImage
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Job 4: Release (only on version tags)
+# Job 4: Release (all tags — alpha.* as pre-release, v* as stable)
 # ─────────────────────────────────────────────────────────────────────────────
   release:
     name: Create Release
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/')
     needs: [build-android, build-ios, build-macos, build-windows, build-linux]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
           path: artifacts/
@@ -612,10 +614,43 @@ jobs:
           cp artifacts/yuelink-linux/YueLink-Linux-x86_64.AppImage release/
           ls -lh release/
 
+      - name: Generate release notes
+        run: |
+          VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f1)
+          TAG="${GITHUB_REF_NAME}"
+          IS_PRE=${{ startsWith(github.ref, 'refs/tags/alpha') }}
+
+          if [ "$IS_PRE" = "true" ]; then
+            TITLE="YueLink v${VERSION} Pre-release (${TAG})"
+          else
+            TITLE="YueLink v${VERSION}"
+          fi
+
+          # Collect commits since last tag
+          PREV_TAG=$(git tag --sort=-creatordate | grep -v "^${TAG}$" | head -1)
+          if [ -n "$PREV_TAG" ]; then
+            CHANGES=$(git log --pretty=format:"- %s" "${PREV_TAG}..HEAD" -- | head -50)
+          else
+            CHANGES=$(git log --pretty=format:"- %s" -20)
+          fi
+
+          cat > release_notes.md << NOTES
+          ## ${TITLE}
+
+          ### Changes
+          ${CHANGES}
+
+          ---
+          *Build: ${TAG} | Version: ${VERSION}*
+          NOTES
+
+          echo "RELEASE_TITLE=${TITLE}" >> $GITHUB_ENV
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          name: ${{ env.RELEASE_TITLE }}
+          body_path: release_notes.md
           files: release/*
-          generate_release_notes: true
-          # beta/rc tags → prerelease=true; vX.Y.Z stable → prerelease=false
-          prerelease: ${{ contains(github.ref_name, '-beta') || contains(github.ref_name, '-rc') }}
+          # alpha.* → pre-release; v* stable → release
+          prerelease: ${{ startsWith(github.ref, 'refs/tags/alpha') }}
