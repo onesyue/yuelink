@@ -824,13 +824,12 @@ class _GuestLoginCard extends ConsumerWidget {
 }
 
 /// Actions available in guest mode (no login required).
-class _GuestActionsCard extends StatelessWidget {
+class _GuestActionsCard extends ConsumerWidget {
   final bool isDark;
   const _GuestActionsCard({required this.isDark});
 
   @override
-  Widget build(BuildContext context) {
-    final isEn = S.of(context).isEn;
+  Widget build(BuildContext context, WidgetRef ref) {
     final s = S.of(context);
 
     final divider = Divider(
@@ -854,10 +853,26 @@ class _GuestActionsCard extends StatelessWidget {
             ),
           ),
           divider,
+          // Appearance
+          _GuestActionRow(
+            icon: Icons.palette_outlined,
+            label: s.sectionAppearance,
+            isDark: isDark,
+            onTap: () => _showAppearanceSheet(context, ref),
+          ),
+          divider,
+          // Connection
+          _GuestActionRow(
+            icon: Icons.cable_outlined,
+            label: s.sectionConnection,
+            isDark: isDark,
+            onTap: () => _showConnectionSheet(context, ref),
+          ),
+          divider,
           // Telegram group
           _GuestActionRow(
             icon: Icons.telegram,
-            label: isEn ? 'Telegram Group' : '电报群',
+            label: s.mineTelegramGroup,
             isDark: isDark,
             onTap: () async {
               final tgUri = Uri.parse('tg://resolve?domain=yue_to');
@@ -871,6 +886,237 @@ class _GuestActionsCard extends StatelessWidget {
               }
             },
           ),
+        ],
+      ),
+    );
+  }
+
+  void _showAppearanceSheet(BuildContext context, WidgetRef ref) {
+    final s = S.of(context);
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _AppearanceSheet(title: s.sectionAppearance),
+    );
+  }
+
+  void _showConnectionSheet(BuildContext context, WidgetRef ref) {
+    final s = S.of(context);
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _ConnectionSheet(title: s.sectionConnection),
+    );
+  }
+}
+
+/// Bottom sheet for appearance settings.
+class _AppearanceSheet extends ConsumerWidget {
+  final String title;
+  const _AppearanceSheet({required this.title});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = S.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final theme = ref.watch(themeProvider);
+    final language = ref.watch(languageProvider);
+    final dividerColor = isDark
+        ? Colors.white.withValues(alpha: 0.06)
+        : Colors.black.withValues(alpha: 0.06);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? YLColors.zinc900 : Colors.white,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom +
+            MediaQuery.of(context).padding.bottom + 16,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(height: 12),
+          Container(
+            width: 36, height: 4,
+            decoration: BoxDecoration(
+              color: YLColors.zinc400,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(title, style: YLText.titleMedium),
+          const SizedBox(height: 16),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: _SettingsCard(
+              child: Column(
+                children: [
+                  YLInfoRow(
+                    label: s.themeLabel,
+                    trailing: SizedBox(
+                      width: 240,
+                      child: SegmentedButton<ThemeMode>(
+                        showSelectedIcon: false,
+                        style: SegmentedButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          textStyle: const TextStyle(fontSize: 12),
+                        ),
+                        segments: [
+                          ButtonSegment(
+                              value: ThemeMode.system,
+                              label: Text(s.themeSystem)),
+                          ButtonSegment(
+                              value: ThemeMode.light,
+                              label: Text(s.themeLight)),
+                          ButtonSegment(
+                              value: ThemeMode.dark,
+                              label: Text(s.themeDark)),
+                        ],
+                        selected: {theme},
+                        onSelectionChanged: (v) {
+                          ref.read(themeProvider.notifier).state = v.first;
+                          SettingsService.setThemeMode(v.first);
+                        },
+                      ),
+                    ),
+                  ),
+                  Divider(height: 1, thickness: 0.5, color: dividerColor),
+                  YLInfoRow(
+                    label: s.sectionLanguage,
+                    trailing: SizedBox(
+                      width: 160,
+                      child: SegmentedButton<String>(
+                        showSelectedIcon: false,
+                        style: SegmentedButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          textStyle: const TextStyle(fontSize: 12),
+                        ),
+                        segments: [
+                          ButtonSegment(
+                              value: 'zh', label: Text(s.languageChinese)),
+                          ButtonSegment(
+                              value: 'en', label: Text(s.languageEnglish)),
+                        ],
+                        selected: {language},
+                        onSelectionChanged: (v) async {
+                          ref.read(languageProvider.notifier).state = v.first;
+                          await SettingsService.setLanguage(v.first);
+                        },
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+        ],
+      ),
+    );
+  }
+}
+
+/// Bottom sheet for connection settings.
+class _ConnectionSheet extends ConsumerWidget {
+  final String title;
+  const _ConnectionSheet({required this.title});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = S.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final autoConnect = ref.watch(autoConnectProvider);
+    final routingMode = ref.watch(routingModeProvider);
+    final status = ref.watch(coreStatusProvider);
+    final dividerColor = isDark
+        ? Colors.white.withValues(alpha: 0.06)
+        : Colors.black.withValues(alpha: 0.06);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? YLColors.zinc900 : Colors.white,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom +
+            MediaQuery.of(context).padding.bottom + 16,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(height: 12),
+          Container(
+            width: 36, height: 4,
+            decoration: BoxDecoration(
+              color: YLColors.zinc400,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(title, style: YLText.titleMedium),
+          const SizedBox(height: 16),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: _SettingsCard(
+              child: Column(
+                children: [
+                  YLSettingsRow(
+                    title: s.autoConnect,
+                    trailing: CupertinoSwitch(
+                      value: autoConnect,
+                      activeTrackColor: YLColors.connected,
+                      onChanged: (v) async {
+                        ref.read(autoConnectProvider.notifier).state = v;
+                        await SettingsService.setAutoConnect(v);
+                      },
+                    ),
+                  ),
+                  Divider(height: 1, thickness: 0.5, color: dividerColor),
+                  YLInfoRow(
+                    label: s.routingModeSetting,
+                    trailing: SizedBox(
+                      width: 200,
+                      child: SegmentedButton<String>(
+                        showSelectedIcon: false,
+                        style: SegmentedButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          textStyle: const TextStyle(fontSize: 12),
+                        ),
+                        segments: [
+                          ButtonSegment(
+                              value: 'rule',
+                              label: Text(s.routeModeRule)),
+                          ButtonSegment(
+                              value: 'global',
+                              label: Text(s.routeModeGlobal)),
+                          ButtonSegment(
+                              value: 'direct',
+                              label: Text(s.routeModeDirect)),
+                        ],
+                        selected: {routingMode},
+                        onSelectionChanged: (v) async {
+                          final mode = v.first;
+                          ref.read(routingModeProvider.notifier).state = mode;
+                          await SettingsService.setRoutingMode(mode);
+                          if (status == CoreStatus.running) {
+                            try {
+                              await CoreManager.instance.api
+                                  .setRoutingMode(mode);
+                            } catch (_) {}
+                          }
+                        },
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
         ],
       ),
     );
