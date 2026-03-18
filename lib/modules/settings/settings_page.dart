@@ -233,7 +233,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 ],
                 const AccountActionsCard(),
                 const SizedBox(height: 8),
-              ],
 
               // ══ 1. General ════════════════════════════════════════
               _SectionTitle(s.sectionAppearance),
@@ -439,6 +438,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   ],
                 ),
               ),
+              ], // end of logged-in only sections (appearance, desktop, connection)
 
               // ══ 3. Subscription & Config ══════════════════════════
               // Hidden: Config Overwrite, Proxy Providers, WebDAV
