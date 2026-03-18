@@ -7,7 +7,7 @@ on:
 
 # Cancel any in-progress run for the same ref (branch or tag) automatically.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}
   cancel-in-progress: true
 
 env:
