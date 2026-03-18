@@ -41,7 +41,6 @@ class _ChartCardState extends ConsumerState<ChartCard> {
 
     final history = locked && _frozenHistory != null ? _frozenHistory! : liveHistory;
     final downHistory = history.downSampled(seconds: range);
-    final upHistory = history.upSampled(seconds: range);
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -122,18 +121,17 @@ class _ChartCardState extends ConsumerState<ChartCard> {
                     child: Text('—',
                         style: YLText.body.copyWith(color: YLColors.zinc400)),
                   )
-                : _buildChart(context, downHistory, upHistory, 0),
+                : _buildChart(context, downHistory, 0),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildChart(BuildContext context, List<double> down,
-      List<double> up, double p90) {
+  Widget _buildChart(BuildContext context, List<double> down, double p90) {
     // Use actual max of displayed data + 15% headroom so every spike is
     // fully visible. p90 was used before but caused peaks to be clipped.
-    final maxVal = [...down, ...up].fold(0.0, (a, b) => b > a ? b : a);
+    final maxVal = down.fold(0.0, (a, b) => b > a ? b : a);
     final maxY = maxVal > 0 ? maxVal * 1.15 : 1024 * 1024.0;
 
     List<FlSpot> toSpots(List<double> data) => data
@@ -193,7 +191,6 @@ class _ChartCardState extends ConsumerState<ChartCard> {
         lineTouchData: const LineTouchData(enabled: false),
         lineBarsData: [
           _line(toSpots(down), YLColors.accent),
-          _line(toSpots(up), YLColors.connected),
         ],
       ),
       duration: Duration.zero,
@@ -208,17 +205,7 @@ class _ChartCardState extends ConsumerState<ChartCard> {
       color: color,
       barWidth: 1.5,
       dotData: const FlDotData(show: false),
-      belowBarData: BarAreaData(
-        show: true,
-        gradient: LinearGradient(
-          colors: [
-            color.withValues(alpha: 0.10),
-            color.withValues(alpha: 0.0),
-          ],
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-        ),
-      ),
+      belowBarData: BarAreaData(show: false),
     );
   }
 

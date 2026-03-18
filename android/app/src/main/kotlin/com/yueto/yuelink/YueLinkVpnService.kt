@@ -154,13 +154,21 @@ class YueLinkVpnService : VpnService() {
         startNetworkMonitor()
     }
 
+    private var stopped = false
+
     private fun stopTunnel() {
+        // Guard against double-call from onStartCommand(STOP) + onDestroy/onRevoke
+        if (stopped) return
+        stopped = true
+
         tunSetupFailed = false
         stopNetworkMonitor()
         try {
             nativeStopProtect()
-        } catch (_: UnsatisfiedLinkError) {}
-        // Close the raw fd we own (adopted back into PFD for safe close)
+        } catch (_: Exception) {}
+        // Close the raw fd we own (adopted back into PFD for safe close).
+        // The Go core's Shutdown() may have already closed the fd via
+        // sing-tun — catch all exceptions to handle double-close safely.
         if (tunFd >= 0) {
             try {
                 ParcelFileDescriptor.adoptFd(tunFd).close()
@@ -168,7 +176,9 @@ class YueLinkVpnService : VpnService() {
             tunFd = -1
         }
         onTunReady = null
-        stopForeground(STOP_FOREGROUND_REMOVE)
+        try {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        } catch (_: Exception) {}
         stopSelf()
     }
 

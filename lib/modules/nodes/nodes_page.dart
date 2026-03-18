@@ -10,7 +10,11 @@ import '../../core/kernel/core_manager.dart';
 import '../../core/storage/settings_service.dart';
 import '../../shared/app_notifier.dart';
 import '../../theme.dart';
+import '../../services/profile_service.dart';
+import '../../modules/yue_auth/providers/yue_auth_providers.dart';
+import '../../modules/profiles/providers/profiles_providers.dart';
 import 'providers/nodes_providers.dart';
+import 'group_type_label.dart';
 import 'widgets/group_card.dart';
 import 'widgets/group_list_section.dart';
 
@@ -26,6 +30,7 @@ class NodesPage extends ConsumerStatefulWidget {
 
 class _NodesPageState extends ConsumerState<NodesPage> {
   final _searchController = TextEditingController();
+  bool _isSyncing = false;
 
   @override
   void initState() {
@@ -37,6 +42,58 @@ class _NodesPageState extends ConsumerState<NodesPage> {
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  Future<void> _syncAndReconnect() async {
+    if (_isSyncing) return;
+    setState(() => _isSyncing = true);
+    final s = S.of(context);
+
+    try {
+      // 1. Sync subscription: re-download config from remote
+      final authState = ref.read(authProvider);
+      if (authState.isLoggedIn) {
+        // Logged-in user: sync via XBoard
+        await ref.read(authProvider.notifier).syncSubscription();
+      } else {
+        // Guest / third-party airport: update active profile directly
+        final activeId = ref.read(activeProfileIdProvider);
+        if (activeId != null) {
+          final profiles = await ProfileService.loadProfiles();
+          final profile = profiles.where((p) => p.id == activeId).firstOrNull;
+          if (profile != null && profile.url.isNotEmpty) {
+            final proxyPort = CoreManager.instance.isRunning
+                ? CoreManager.instance.mixedPort
+                : null;
+            await ProfileService.updateProfile(profile, proxyPort: proxyPort);
+            ref.read(profilesProvider.notifier).load();
+          }
+        }
+      }
+
+      // 2. If core is running, stop → reload config → restart
+      final status = ref.read(coreStatusProvider);
+      if (status == CoreStatus.running) {
+        final activeId = ref.read(activeProfileIdProvider);
+        if (activeId != null) {
+          final configYaml = await ProfileService.loadConfig(activeId);
+          if (configYaml != null) {
+            await ref.read(coreActionsProvider).stop();
+            await ref.read(coreActionsProvider).start(configYaml);
+          }
+        }
+      }
+
+      // 3. Refresh proxy groups
+      ref.read(proxyGroupsProvider.notifier).refresh();
+
+      if (mounted) AppNotifier.success(s.syncComplete);
+    } catch (e) {
+      debugPrint('[NodesPage] _syncAndReconnect error: $e');
+      if (mounted) AppNotifier.error('${s.syncFailed}: $e');
+    } finally {
+      if (mounted) setState(() => _isSyncing = false);
+    }
   }
 
   @override
@@ -215,9 +272,15 @@ class _NodesPageState extends ConsumerState<NodesPage> {
                     },
                   ),
                   IconButton(
-                    icon: const Icon(Icons.refresh_rounded),
-                    onPressed: () =>
-                        ref.read(proxyGroupsProvider.notifier).refresh(),
+                    icon: _isSyncing
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2),
+                          )
+                        : const Icon(Icons.sync_rounded),
+                    onPressed: _isSyncing ? null : _syncAndReconnect,
                   ),
                   const SizedBox(width: YLSpacing.sm),
                 ],
@@ -592,7 +655,7 @@ class _ReadOnlyGroupCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(YLRadius.sm),
                   ),
                   child: Text(
-                    group.type,
+                    groupTypeLabel(context, group.type),
                     style: YLText.caption.copyWith(
                         fontSize: 10,
                         color: YLColors.zinc500,

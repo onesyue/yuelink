@@ -257,12 +257,22 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun stopVpnService(result: MethodChannel.Result) {
-        val serviceIntent = Intent(this, YueLinkVpnService::class.java).apply {
-            action = YueLinkVpnService.ACTION_STOP
+        try {
+            val serviceIntent = Intent(this, YueLinkVpnService::class.java).apply {
+                action = YueLinkVpnService.ACTION_STOP
+            }
+            startService(serviceIntent)
+        } catch (e: Exception) {
+            // startService can throw on Android 12+ background restrictions
+            android.util.Log.w("YueLinkVpn", "startService(STOP) failed: ${e.message}")
         }
-        startService(serviceIntent)
         if (serviceBound) {
-            unbindService(serviceConnection)
+            try {
+                unbindService(serviceConnection)
+            } catch (e: Exception) {
+                // IllegalArgumentException if service not registered
+                android.util.Log.w("YueLinkVpn", "unbindService failed: ${e.message}")
+            }
             serviceBound = false
             vpnService = null
         }

@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../core/storage/auth_token_service.dart';
+import '../../../infrastructure/datasources/xboard_api.dart';
 import '../../../l10n/app_strings.dart';
 import '../../../modules/emby/emby_providers.dart';
 import '../../../modules/store/order_history_page.dart';
+import '../../../modules/profiles/profiles_page.dart';
 import '../../../modules/store/store_page.dart';
 import '../../../modules/yue_auth/providers/yue_auth_providers.dart';
 import '../../../shared/app_notifier.dart';
@@ -67,6 +70,16 @@ class _AccountActionsCardState extends ConsumerState<AccountActionsCard> {
         onTap: _syncing ? null : () => _syncSubscription(s),
       ),
 
+      // ── Subscription management ─────────────────────────────
+      _ActionRow(
+        icon: Icons.cloud_sync_outlined,
+        label: s.mineSubscriptionManage,
+        isDark: isDark,
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const ProfilePage()),
+        ),
+      ),
+
       // ── Emby (only when user has confirmed access) ─────────
       if (hasEmby)
         _ActionRow(
@@ -91,7 +104,7 @@ class _AccountActionsCardState extends ConsumerState<AccountActionsCard> {
         icon: Icons.lock_outline_rounded,
         label: s.mineChangePassword,
         isDark: isDark,
-        onTap: () => _launch('https://yue.to/#/profile'),
+        onTap: () => _showChangePasswordDialog(context, s),
       ),
 
       // ── TG group ──────────────────────────────────────────
@@ -99,7 +112,7 @@ class _AccountActionsCardState extends ConsumerState<AccountActionsCard> {
         icon: Icons.telegram,
         label: s.mineTelegramGroup,
         isDark: isDark,
-        onTap: () => _launch('https://t.me/yue_to'),
+        onTap: () => _launchTelegram(),
       ),
 
       // ── Logout ────────────────────────────────────────────
@@ -172,6 +185,96 @@ class _AccountActionsCardState extends ConsumerState<AccountActionsCard> {
       await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
     } catch (_) {
       AppNotifier.error(S.current.mineEmbyOpenFailed);
+    }
+  }
+
+  Future<void> _launchTelegram() async {
+    final tgUri = Uri.parse('tg://resolve?domain=yue_to');
+    try {
+      if (await canLaunchUrl(tgUri)) {
+        await launchUrl(tgUri);
+        return;
+      }
+    } catch (_) {}
+    // Fallback to web URL
+    try {
+      await launchUrl(
+        Uri.parse('https://t.me/yue_to'),
+        mode: LaunchMode.externalApplication,
+      );
+    } catch (_) {
+      AppNotifier.error(S.current.operationFailed);
+    }
+  }
+
+  void _showChangePasswordDialog(BuildContext context, S s) {
+    final oldPwCtrl = TextEditingController();
+    final newPwCtrl = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(s.mineChangePassword),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: oldPwCtrl,
+              obscureText: true,
+              decoration: InputDecoration(labelText: s.oldPassword),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: newPwCtrl,
+              obscureText: true,
+              decoration: InputDecoration(labelText: s.newPassword),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(s.cancel),
+          ),
+          FilledButton(
+            onPressed: () async {
+              final oldPw = oldPwCtrl.text.trim();
+              final newPw = newPwCtrl.text.trim();
+              if (oldPw.isEmpty || newPw.isEmpty) return;
+              Navigator.pop(ctx);
+              await _doChangePassword(oldPw, newPw);
+            },
+            child: Text(s.confirm),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _doChangePassword(
+      String oldPassword, String newPassword) async {
+    final s = S.current;
+    final token = ref.read(authProvider).token;
+    if (token == null) return;
+    try {
+      final host = await AuthTokenService.instance.getApiHost() ??
+          'https://d7ccm19ki90mg.cloudfront.net';
+      final api = XBoardApi(baseUrl: host);
+      await api.changePassword(
+        token: token,
+        oldPassword: oldPassword,
+        newPassword: newPassword,
+      );
+      AppNotifier.success(s.passwordChangedSuccess);
+    } on XBoardApiException catch (e) {
+      final msg = e.message;
+      AppNotifier.error(
+        msg.isNotEmpty && msg.length < 80 && !msg.startsWith('{')
+            ? msg
+            : s.passwordChangeFailed,
+      );
+    } catch (_) {
+      AppNotifier.error(s.passwordChangeFailed);
     }
   }
 

@@ -287,6 +287,28 @@ jobs:
             --build-name=${{ env.APP_VERSION }} \
             --build-number=${{ env.BUILD_NUM }}
 
+      - name: Sign with entitlements for TrollStore
+        run: |
+          # Sign inner binaries first, then the main app (order matters for TrollStore)
+
+          # 1. Sign PacketTunnel extension with its entitlements
+          codesign --force --sign - \
+            --entitlements ios/PacketTunnel/PacketTunnel.entitlements \
+            build/ios/iphoneos/Runner.app/PlugIns/PacketTunnel.appex
+
+          # 2. Sign all embedded frameworks (no special entitlements)
+          for fw in build/ios/iphoneos/Runner.app/Frameworks/*.framework; do
+            codesign --force --sign - "$fw"
+          done
+          for dylib in build/ios/iphoneos/Runner.app/Frameworks/*.dylib; do
+            [ -e "$dylib" ] && codesign --force --sign - "$dylib"
+          done
+
+          # 3. Sign the main app with its entitlements
+          codesign --force --sign - \
+            --entitlements ios/Runner/Runner.entitlements \
+            build/ios/iphoneos/Runner.app
+
       - name: Package iOS app
         run: |
           cd build/ios/iphoneos

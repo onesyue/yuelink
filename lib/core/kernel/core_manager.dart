@@ -382,33 +382,57 @@ class CoreManager {
   Future<void> stop() async {
     if (!_running) return;
 
-    switch (_mode) {
-      case CoreMode.mock:
-        _core.stop();
-
-      case CoreMode.ffi:
-        try {
-          await api.closeAllConnections();
-        } catch (e) {
-          debugPrint('[CoreManager] closeAllConnections: $e');
-        }
-        // On iOS, Go core runs in the PacketTunnel extension — FFI StopCore
-        // only affects the main process (no-op). VPN stop is handled below.
-        if (!Platform.isIOS) _core.stop();
-
-      case CoreMode.subprocess:
-        try {
-          await api.closeAllConnections();
-        } catch (e) {
-          debugPrint('[CoreManager] closeAllConnections: $e');
-        }
-        await ProcessManager.instance.stop();
-    }
-
+    // Mark as stopped FIRST to prevent re-entry and ensure consistent state
+    // even if the shutdown steps below crash or throw.
     _running = false;
 
+    try {
+      switch (_mode) {
+        case CoreMode.mock:
+          _core.stop();
+
+        case CoreMode.ffi:
+          // Close active connections with a timeout — the REST API may already
+          // be unresponsive if the core is in a bad state.
+          try {
+            await api.closeAllConnections()
+                .timeout(const Duration(seconds: 2));
+          } catch (e) {
+            debugPrint('[CoreManager] closeAllConnections: $e');
+          }
+          // On iOS, Go core runs in the PacketTunnel extension — FFI StopCore
+          // only affects the main process (no-op). VPN stop is handled below.
+          if (!Platform.isIOS) {
+            try {
+              _core.stop();
+            } catch (e) {
+              // FFI call can throw if Go runtime is in a bad state.
+              // Catch to ensure VPN cleanup still happens below.
+              debugPrint('[CoreManager] core.stop() error: $e');
+            }
+          }
+
+        case CoreMode.subprocess:
+          try {
+            await api.closeAllConnections()
+                .timeout(const Duration(seconds: 2));
+          } catch (e) {
+            debugPrint('[CoreManager] closeAllConnections: $e');
+          }
+          await ProcessManager.instance.stop();
+      }
+    } catch (e) {
+      debugPrint('[CoreManager] stop error: $e');
+    }
+
+    // Always stop VPN regardless of core stop result — the VPN service must
+    // be cleaned up (notification removed, TUN fd closed) even if FFI crashed.
     if (Platform.isAndroid || Platform.isIOS) {
-      await vpn.VpnService.stopVpn();
+      try {
+        await vpn.VpnService.stopVpn();
+      } catch (e) {
+        debugPrint('[CoreManager] stopVpn error: $e');
+      }
     }
   }
 

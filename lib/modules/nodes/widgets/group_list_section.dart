@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../domain/models/proxy.dart';
 import '../../../l10n/app_strings.dart';
+import '../group_type_label.dart';
 import '../../../shared/app_notifier.dart';
 import '../../../theme.dart';
 import '../providers/nodes_providers.dart';
@@ -107,7 +108,7 @@ class GroupListSection extends ConsumerWidget {
                   ),
                 ),
                 const SizedBox(width: YLSpacing.sm),
-                _Badge(label: group.type, isDark: isDark),
+                _Badge(label: groupTypeLabel(context, group.type), isDark: isDark),
                 const SizedBox(width: YLSpacing.sm),
                 _Badge(
                   label: isFiltered

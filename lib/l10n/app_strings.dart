@@ -719,6 +719,8 @@ class S {
   String get dashSyncLabel => _e ? 'Update Lines' : '更新线路';
   String get dashAnnouncementsLabel => _e ? 'Announcements' : '最新公告';
   String get mineSyncLine => _e ? 'Sync Lines' : '同步线路';
+  String get mineSubscriptionManage =>
+      _e ? 'Subscription Management' : '订阅管理';
   String get dashAccountLabel => _e ? 'Account' : '账户';
   String get dashLatestAnnouncement => _e ? 'Latest Announcements' : '最新公告';
   String get dashGreeting => _e ? 'Hello' : '你好';
@@ -726,4 +728,18 @@ class S {
   String get dashNoAnnouncements => _e ? 'No announcements' : '暂无公告';
   String get dashViewAll => _e ? 'View all' : '查看全部';
   String get dashNoPlan => _e ? 'No plan info' : '暂无套餐信息';
+
+  // ── Change password dialog ──────────────────────────────────────
+  String get oldPassword => _e ? 'Old Password' : '旧密码';
+  String get newPassword => _e ? 'New Password' : '新密码';
+  String get passwordChangedSuccess =>
+      _e ? 'Password changed successfully' : '密码修改成功';
+  String get passwordChangeFailed =>
+      _e ? 'Password change failed' : '密码修改失败';
+
+  // ── Sync subscription (nodes page) ─────────────────────────────
+  String get syncing => _e ? 'Syncing...' : '同步中...';
+  String get syncComplete => _e ? 'Sync complete' : '同步完成';
+  String get syncFailed => _e ? 'Sync failed' : '同步失败';
+  String get notConnected => _e ? 'Not connected' : '未连接';
 }

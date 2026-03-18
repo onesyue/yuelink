@@ -7,6 +7,7 @@ import '../../../domain/models/proxy.dart';
 import '../../../l10n/app_strings.dart';
 import '../../../shared/app_notifier.dart';
 import '../../../theme.dart';
+import '../group_type_label.dart';
 import '../providers/node_providers.dart';
 import '../providers/nodes_providers.dart';
 
@@ -177,7 +178,7 @@ class _GroupCardState extends ConsumerState<GroupCard>
                   ),
                   const SizedBox(width: YLSpacing.sm),
                   // Type badge — stays near name
-                  _Badge(label: group.type, isDark: isDark),
+                  _Badge(label: groupTypeLabel(context, group.type), isDark: isDark),
                   const SizedBox(width: YLSpacing.sm),
                   // Count badge — far right before lightning
                   _Badge(

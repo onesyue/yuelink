@@ -78,6 +78,27 @@ class XBoardApi {
   }
 
   // ------------------------------------------------------------------
+  // Password
+  // ------------------------------------------------------------------
+
+  /// Change the user's password.
+  /// POST /api/v1/user/changePassword
+  Future<void> changePassword({
+    required String token,
+    required String oldPassword,
+    required String newPassword,
+  }) async {
+    await _postRawData(
+      '/api/v1/user/changePassword',
+      token: token,
+      body: {
+        'old_password': oldPassword,
+        'new_password': newPassword,
+      },
+    );
+  }
+
+  // ------------------------------------------------------------------
   // Subscription
   // ------------------------------------------------------------------
 

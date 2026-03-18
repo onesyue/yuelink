@@ -170,13 +170,16 @@ class CoreActions {
       final manager = CoreManager.instance;
       await manager.stop();
 
+      AppNotifier.info(S.current.msgDisconnected);
+    } catch (e) {
+      debugPrint('[CoreActions] stop error: $e');
+      AppNotifier.error(S.current.errStopFailed);
+    } finally {
+      // Always reset state — even if stop() throws, the core is no longer
+      // in a usable running state and the UI must reflect that.
       ref.read(coreStatusProvider.notifier).state = CoreStatus.stopped;
       ref.read(trafficProvider.notifier).state = const Traffic();
       ref.read(trafficHistoryProvider.notifier).state = TrafficHistory();
-      AppNotifier.info(S.current.msgDisconnected);
-    } catch (e) {
-      ref.read(coreStatusProvider.notifier).state = CoreStatus.stopped;
-      AppNotifier.error(S.current.errStopFailed);
     }
   }
 

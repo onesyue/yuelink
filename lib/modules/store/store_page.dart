@@ -134,13 +134,25 @@ class StorePage extends ConsumerWidget {
                   );
                 }
 
+                // Pin the user's current plan to the top of the list
+                final sortedPlans = [...plans];
+                if (profile?.planId != null) {
+                  sortedPlans.sort((a, b) {
+                    final aIsCurrent = a.id == profile!.planId;
+                    final bIsCurrent = b.id == profile!.planId;
+                    if (aIsCurrent && !bIsCurrent) return -1;
+                    if (!aIsCurrent && bIsCurrent) return 1;
+                    return 0;
+                  });
+                }
+
                 return SliverPadding(
                   padding: const EdgeInsets.symmetric(
                       horizontal: YLSpacing.md),
                   sliver: SliverList(
                     delegate: SliverChildBuilderDelegate(
                       (context, i) {
-                        final plan = plans[i];
+                        final plan = sortedPlans[i];
                         final isCurrentPlan =
                             profile?.planId == plan.id;
 
@@ -153,7 +165,7 @@ class StorePage extends ConsumerWidget {
                           ),
                         );
                       },
-                      childCount: plans.length,
+                      childCount: sortedPlans.length,
                     ),
                   ),
                 );
