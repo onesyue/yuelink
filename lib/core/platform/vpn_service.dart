@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../storage/settings_service.dart';
@@ -54,7 +55,11 @@ class VpnService {
                 'appName': m['appName'] as String? ?? '',
               })
           .toList();
-    } on PlatformException catch (_) {
+    } on PlatformException catch (e) {
+      debugPrint('[VpnService] getInstalledApps PlatformException: $e');
+      return [];
+    } catch (e) {
+      debugPrint('[VpnService] getInstalledApps error: $e');
       return [];
     }
   }

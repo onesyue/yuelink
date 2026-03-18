@@ -344,12 +344,12 @@ class _NodeCardItemState extends ConsumerState<NodeCardItem> {
     final isSelected =
         ref.watch(groupSelectedNodeProvider(widget.groupName)) == widget.name;
     final isTesting = ref.watch(nodeIsTestingProvider(widget.name));
+    final nodeType = ref.watch(nodeTypeProvider(widget.name));
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return GestureDetector(
       onTap: _handleSelect,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
+      child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         decoration: BoxDecoration(
           color: isSelected
@@ -382,11 +382,19 @@ class _NodeCardItemState extends ConsumerState<NodeCardItem> {
               ],
             ),
             const SizedBox(height: 4),
-            GestureDetector(
-              onTap: isTesting
-                  ? null
-                  : () => ref.read(delayTestProvider).testDelay(widget.name),
-              child: YLDelayBadge(delay: delay, testing: isTesting),
+            Row(
+              children: [
+                if (nodeType != null) ...[
+                  _Badge(label: nodeType, isDark: isDark),
+                  const SizedBox(width: 4),
+                ],
+                GestureDetector(
+                  onTap: isTesting
+                      ? null
+                      : () => ref.read(delayTestProvider).testDelay(widget.name),
+                  child: YLDelayBadge(delay: delay, testing: isTesting),
+                ),
+              ],
             ),
           ],
         ),

@@ -155,10 +155,12 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                       const SizedBox(height: 16),
 
                       // ── Hero card: connect/status ────────────────────
-                      HeroCard(
-                        status: status,
-                        uptimeNotifier: _uptimeNotifier,
-                        onToggle: () => _toggle(context, ref),
+                      RepaintBoundary(
+                        child: HeroCard(
+                          status: status,
+                          uptimeNotifier: _uptimeNotifier,
+                          onToggle: () => _toggle(context, ref),
+                        ),
                       ),
 
                       // ── Latest announcement (always visible) ────────
@@ -174,7 +176,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                             child: Row(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: const [
-                                Expanded(flex: 1, child: ExitIpCard()),
+                                Expanded(flex: 1, child: RepaintBoundary(child: ExitIpCard())),
                                 SizedBox(width: 12),
                                 Expanded(
                                   flex: 2,
@@ -185,17 +187,17 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                             ),
                           )
                         else ...[
-                          const ExitIpCard(),
+                          const RepaintBoundary(child: ExitIpCard()),
                           const SizedBox(height: 12),
                           const RepaintBoundary(child: ChartCard()),
                         ],
                         const SizedBox(height: 12),
-                        const StatsCard(),
+                        const RepaintBoundary(child: StatsCard()),
                       ],
 
                       // ── Subscription info ───────────────────────────
                       const SizedBox(height: 16),
-                      const SubscriptionCard(),
+                      const RepaintBoundary(child: SubscriptionCard()),
 
                       const SizedBox(height: 8),
                     ],

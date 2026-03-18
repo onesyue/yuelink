@@ -259,6 +259,11 @@ class ConfigTemplate {
           '    - "+.cdn-apple.com"\n'
           '    - "+.mzstatic.com"\n'
           '    - "+.push.apple.com"\n'
+          // Android connectivity check domains — must resolve to real IPs
+          // to avoid "no internet" / WiFi exclamation mark on Samsung etc.
+          '    - "connectivitycheck.gstatic.com"\n'
+          '    - "+.connectivitycheck.android.com"\n'
+          '    - "clients3.google.com"\n'
           '  default-nameserver:\n'
           '    - 223.5.5.5\n'
           '    - 119.29.29.29\n'

@@ -98,6 +98,7 @@ class _NodeTileState extends ConsumerState<NodeTile> {
     final isSelected =
         ref.watch(groupSelectedNodeProvider(widget.groupName)) == widget.name;
     final isTesting = ref.watch(nodeIsTestingProvider(widget.name));
+    final nodeType = ref.watch(nodeTypeProvider(widget.name));
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Material(
@@ -125,6 +126,10 @@ class _NodeTileState extends ConsumerState<NodeTile> {
                         : null),
               ),
               const SizedBox(width: YLSpacing.xs),
+              if (nodeType != null) ...[
+                _NodeTypeBadge(label: nodeType, isDark: isDark),
+                const SizedBox(width: YLSpacing.xs),
+              ],
               Expanded(
                 child: _buildName(context, isSelected, isDark),
               ),
@@ -142,6 +147,31 @@ class _NodeTileState extends ConsumerState<NodeTile> {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _NodeTypeBadge extends StatelessWidget {
+  final String label;
+  final bool isDark;
+  const _NodeTypeBadge({required this.label, required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+      decoration: BoxDecoration(
+        color: isDark ? YLColors.zinc700 : YLColors.zinc100,
+        borderRadius: BorderRadius.circular(YLRadius.sm),
+      ),
+      child: Text(
+        label,
+        style: YLText.caption.copyWith(
+          fontSize: 9,
+          color: YLColors.zinc500,
+          fontWeight: FontWeight.w600,
         ),
       ),
     );

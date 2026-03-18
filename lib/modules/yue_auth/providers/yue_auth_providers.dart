@@ -16,7 +16,7 @@ import '../../../shared/event_log.dart';
 // Auth state
 // ------------------------------------------------------------------
 
-enum AuthStatus { unknown, loggedOut, loggedIn }
+enum AuthStatus { unknown, loggedOut, loggedIn, guest }
 
 class AuthState {
   final AuthStatus status;
@@ -50,6 +50,7 @@ class AuthState {
   }
 
   bool get isLoggedIn => status == AuthStatus.loggedIn && token != null;
+  bool get isGuest => status == AuthStatus.guest;
 }
 
 // ------------------------------------------------------------------
@@ -184,8 +185,27 @@ class AuthNotifier extends StateNotifier<AuthState> {
     return S.current.authErrorNetwork;
   }
 
-  /// Logout and clear all auth data.
+  /// Enter guest mode (skip login). User can import profiles manually.
+  void skipLogin() {
+    state = const AuthState(status: AuthStatus.guest);
+  }
+
+  /// Logout and clear all auth data, profiles, and stop VPN.
   Future<void> logout() async {
+    // Stop running VPN/core before clearing data
+    try {
+      final manager = CoreManager.instance;
+      if (manager.isRunning) await manager.stop();
+    } catch (_) {}
+
+    // Clear all subscription profiles
+    try {
+      final profiles = await ProfileService.loadProfiles();
+      for (final p in profiles) {
+        await ProfileService.deleteProfile(p.id);
+      }
+    } catch (_) {}
+
     await _authService.clearAll();
     state = const AuthState(status: AuthStatus.loggedOut);
   }

@@ -28,6 +28,10 @@ final nodeViewModeProvider =
 /// Real-time node search query — empty string means no filter.
 final nodeSearchQueryProvider = StateProvider<String>((ref) => '');
 
+/// Maps proxy node names to their protocol type (ss, vmess, trojan, etc.).
+/// Populated from the /proxies API response during ProxyGroupsNotifier.refresh().
+final nodeTypeMapProvider = StateProvider<Map<String, String>>((ref) => {});
+
 // ------------------------------------------------------------------
 // Offline proxy groups (parsed from active profile YAML)
 // ------------------------------------------------------------------
@@ -103,19 +107,25 @@ class ProxyGroupsNotifier extends StateNotifier<List<ProxyGroup>> {
 
     final proxiesMap = data['proxies'] as Map<String, dynamic>? ?? {};
 
-    // Build groups map first
+    // Build groups map and extract per-node types
     final groupsMap = <String, ProxyGroup>{};
+    final nodeTypes = <String, String>{};
     for (final entry in proxiesMap.entries) {
       final info = entry.value as Map<String, dynamic>;
+      final type = info['type'] as String? ?? '';
       if (info.containsKey('all')) {
         groupsMap[entry.key] = ProxyGroup(
           name: entry.key,
-          type: info['type'] as String? ?? '',
+          type: type,
           all: (info['all'] as List?)?.cast<String>() ?? [],
           now: info['now'] as String? ?? '',
         );
+      } else if (type.isNotEmpty) {
+        // Individual proxy node (not a group)
+        nodeTypes[entry.key] = type;
       }
     }
+    _ref.read(nodeTypeMapProvider.notifier).state = nodeTypes;
 
     // Extract and store the GLOBAL group (for global routing mode display).
     final globalInfo = proxiesMap['GLOBAL'] as Map<String, dynamic>?;

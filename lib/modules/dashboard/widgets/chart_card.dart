@@ -196,7 +196,7 @@ class _ChartCardState extends ConsumerState<ChartCard> {
           _line(toSpots(up), YLColors.connected),
         ],
       ),
-      duration: const Duration(milliseconds: 100),
+      duration: Duration.zero,
     );
   }
 

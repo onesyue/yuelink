@@ -59,6 +59,11 @@ final systemProxyOnConnectProvider = StateProvider<bool>((ref) => true);
 /// Whether to auto-connect on startup
 final autoConnectProvider = StateProvider<bool>((ref) => true);
 
+/// Set to true when the user explicitly stops the VPN.
+/// Prevents auto-connect from re-enabling on app resume.
+/// Reset on next explicit start.
+final userStoppedProvider = StateProvider<bool>((ref) => false);
+
 // ------------------------------------------------------------------
 // Core actions
 // ------------------------------------------------------------------
@@ -71,6 +76,7 @@ class CoreActions {
 
   Future<bool> start(String configYaml) async {
     debugPrint('[CoreActions] start() called, config length: ${configYaml.length}');
+    ref.read(userStoppedProvider.notifier).state = false;
     ref.read(coreStatusProvider.notifier).state = CoreStatus.starting;
     ref.read(coreStartupErrorProvider.notifier).state = null;
 
@@ -151,6 +157,7 @@ class CoreActions {
   }
 
   Future<void> stop() async {
+    ref.read(userStoppedProvider.notifier).state = true;
     ref.read(coreStatusProvider.notifier).state = CoreStatus.stopping;
 
     try {
@@ -367,8 +374,10 @@ final coreHeartbeatProvider = Provider<void>((ref) {
 
   var failures = 0;
   final timer = Timer.periodic(const Duration(seconds: 10), (_) async {
-    // Check both FFI isRunning AND HTTP API
-    final ffiRunning = CoreController.instance.isRunning;
+    // On iOS, Go core runs in the PacketTunnel extension process — FFI
+    // isRunning only reflects the main process and is always false.
+    // Use API availability as the sole health indicator on iOS.
+    final ffiRunning = Platform.isIOS || CoreController.instance.isRunning;
     final apiOk = await manager.api.isAvailable();
 
     if (apiOk && ffiRunning) {

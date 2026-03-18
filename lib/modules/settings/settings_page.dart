@@ -218,14 +218,19 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   children: [
 
               // ══ 0. Account center (top) ═══════════════════════════
-              const AccountCard(),
-              const SizedBox(height: 12),
-              if (status == CoreStatus.running) ...[
-                const TrafficUsageCard(),
+              if (ref.watch(authProvider).isGuest) ...[
+                _GuestLoginCard(isDark: isDark),
+                const SizedBox(height: 8),
+              ] else ...[
+                const AccountCard(),
                 const SizedBox(height: 12),
+                if (status == CoreStatus.running) ...[
+                  const TrafficUsageCard(),
+                  const SizedBox(height: 12),
+                ],
+                const AccountActionsCard(),
+                const SizedBox(height: 8),
               ],
-              const AccountActionsCard(),
-              const SizedBox(height: 8),
 
               // ══ 1. General ════════════════════════════════════════
               _SectionTitle(s.sectionAppearance),
@@ -772,6 +777,49 @@ class _AccountSection extends ConsumerWidget {
   }
 }
 
+/// Guest mode login prompt card for the Mine page.
+class _GuestLoginCard extends ConsumerWidget {
+  final bool isDark;
+  const _GuestLoginCard({required this.isDark});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isEn = S.of(context).isEn;
+    return _SettingsCard(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+        child: Column(
+          children: [
+            Icon(Icons.account_circle_outlined,
+                size: 48, color: YLColors.zinc400),
+            const SizedBox(height: 12),
+            Text(
+              isEn ? 'Not logged in' : '未登录',
+              style: YLText.label.copyWith(
+                fontWeight: FontWeight.w600,
+                color: isDark ? Colors.white : YLColors.zinc900,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              isEn ? 'Login to access all features' : '登录以使用全部功能',
+              style: YLText.caption.copyWith(color: YLColors.zinc500),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: () => ref.read(authProvider.notifier).logout(),
+                child: Text(isEn ? 'Go to Login' : '前往登录'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 // ── Settings page helper widgets ─────────────────────────────────────────────
 
 /// Section title — matches the dashboard top bar label style.
@@ -804,7 +852,7 @@ class _SettingsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
-      clipBehavior: Clip.antiAlias,
+      clipBehavior: Clip.hardEdge,
       decoration: BoxDecoration(
         color: isDark ? YLColors.zinc800 : Colors.white,
         borderRadius: BorderRadius.circular(YLRadius.xl),
@@ -835,11 +883,34 @@ class _SplitTunnelSectionState extends ConsumerState<_SplitTunnelSection> {
   List<Map<String, String>>? _apps;
   String _search = '';
   bool _loading = false;
+  String? _loadError;
 
   Future<void> _loadApps() async {
-    setState(() => _loading = true);
-    final apps = await VpnService.getInstalledApps(showSystem: true);
-    if (mounted) setState(() { _apps = apps; _loading = false; });
+    setState(() { _loading = true; _loadError = null; });
+    try {
+      final apps = await VpnService.getInstalledApps(showSystem: true);
+      if (mounted) {
+        setState(() {
+          _apps = apps;
+          _loading = false;
+          if (apps.isEmpty) {
+            _loadError = S.of(context).isEn
+                ? 'No apps found. Your device may restrict app visibility.'
+                : '未获取到应用列表，可能受系统权限限制。';
+          }
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _apps = [];
+          _loading = false;
+          _loadError = S.of(context).isEn
+              ? 'Failed to load apps: $e'
+              : '加载应用列表失败: $e';
+        });
+      }
+    }
   }
 
   @override
@@ -889,9 +960,10 @@ class _SplitTunnelSectionState extends ConsumerState<_SplitTunnelSection> {
               trailing: TextButton.icon(
                 icon: const Icon(Icons.apps, size: 14),
                 label: Text(s.splitTunnelManage),
-                onPressed: () {
-                  if (_apps == null) _loadApps();
-                  _showAppPicker(context, selectedPkgs);
+                onPressed: () async {
+                  if (_apps == null) await _loadApps();
+                  if (!mounted) return;
+                  _showAppPicker(context, selectedPkgs); // ignore: use_build_context_synchronously
                 },
               ),
             ),
@@ -967,34 +1039,63 @@ class _SplitTunnelSectionState extends ConsumerState<_SplitTunnelSection> {
                 Expanded(
                   child: _loading
                       ? const Center(child: CircularProgressIndicator())
-                      : ListView.builder(
-                          controller: sc,
-                          itemCount: filtered.length,
-                          itemBuilder: (_, i) {
-                            final app = filtered[i];
-                            final pkg = app['packageName'] ?? '';
-                            final isSelected = localSelected.contains(pkg);
-                            return CheckboxListTile(
-                              dense: true,
-                              title: Text(app['appName'] ?? pkg),
-                              subtitle: Text(pkg,
-                                  style: const TextStyle(fontSize: 11)),
-                              value: isSelected,
-                              onChanged: (_) {
-                                setModal(() {
-                                  if (localSelected.contains(pkg)) {
-                                    localSelected.remove(pkg);
-                                  } else {
-                                    localSelected.add(pkg);
-                                  }
-                                });
-                                ref
-                                    .read(splitTunnelAppsProvider.notifier)
-                                    .toggle(pkg);
+                      : filtered.isEmpty
+                          ? Center(
+                              child: Padding(
+                                padding: const EdgeInsets.all(24),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.apps_outlined, size: 40, color: YLColors.zinc400),
+                                    const SizedBox(height: 12),
+                                    Text(
+                                      _loadError ?? (_search.isNotEmpty
+                                          ? (S.of(context).isEn ? 'No matching apps' : '未找到匹配应用')
+                                          : (S.of(context).isEn ? 'No apps found' : '未获取到应用')),
+                                      textAlign: TextAlign.center,
+                                      style: YLText.body.copyWith(color: YLColors.zinc500),
+                                    ),
+                                    if (_loadError != null) ...[
+                                      const SizedBox(height: 12),
+                                      TextButton(
+                                        onPressed: () {
+                                          _loadApps().then((_) => setModal(() {}));
+                                        },
+                                        child: Text(S.of(context).isEn ? 'Retry' : '重试'),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            )
+                          : ListView.builder(
+                              controller: sc,
+                              itemCount: filtered.length,
+                              itemBuilder: (_, i) {
+                                final app = filtered[i];
+                                final pkg = app['packageName'] ?? '';
+                                final isSelected = localSelected.contains(pkg);
+                                return CheckboxListTile(
+                                  dense: true,
+                                  title: Text(app['appName'] ?? pkg),
+                                  subtitle: Text(pkg,
+                                      style: const TextStyle(fontSize: 11)),
+                                  value: isSelected,
+                                  onChanged: (_) {
+                                    setModal(() {
+                                      if (localSelected.contains(pkg)) {
+                                        localSelected.remove(pkg);
+                                      } else {
+                                        localSelected.add(pkg);
+                                      }
+                                    });
+                                    ref
+                                        .read(splitTunnelAppsProvider.notifier)
+                                        .toggle(pkg);
+                                  },
+                                );
                               },
-                            );
-                          },
-                        ),
+                            ),
                 ),
               ],
             ),

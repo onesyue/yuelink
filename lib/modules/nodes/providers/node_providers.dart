@@ -22,3 +22,8 @@ final groupSelectedNodeProvider = Provider.family<String, String>((ref, groupNam
 final nodeIsTestingProvider = Provider.family<bool, String>((ref, nodeName) {
   return ref.watch(delayTestingProvider).contains(nodeName);
 });
+
+/// Protocol type for a single node (e.g. "ss", "vmess", "trojan").
+final nodeTypeProvider = Provider.family<String?, String>((ref, nodeName) {
+  return ref.watch(nodeTypeMapProvider)[nodeName];
+});

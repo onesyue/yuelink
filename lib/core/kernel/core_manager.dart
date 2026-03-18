@@ -300,10 +300,10 @@ class CoreManager {
       if (_running) {
         _running = false;
         try {
-          _core.stop();
+          if (!Platform.isIOS) _core.stop();
         } catch (_) {}
       }
-      if (Platform.isAndroid) {
+      if (Platform.isAndroid || Platform.isIOS) {
         try {
           await vpn.VpnService.stopVpn();
         } catch (_) {}
@@ -356,6 +356,21 @@ class CoreManager {
       return 'ok';
     });
 
+    // ── Step 3: waitApi (iOS) ──────────────────────────────────────
+    // The Go core runs inside the PacketTunnel extension process.
+    // Its REST API on 127.0.0.1:apiPort may take a moment to bind
+    // after the VPN reports .connected. Poll until reachable.
+    await _step(steps, 'waitApi', StartupError.apiTimeout, () async {
+      for (var i = 1; i <= 50; i++) {
+        if (await api.isAvailable()) {
+          return 'ready after $i attempts';
+        }
+        await Future.delayed(const Duration(milliseconds: 100));
+      }
+      _running = false;
+      throw Exception('API not available after 50 attempts (5s)');
+    });
+
     await _finishReport(steps, true, null);
     return true;
   }
@@ -377,7 +392,9 @@ class CoreManager {
         } catch (e) {
           debugPrint('[CoreManager] closeAllConnections: $e');
         }
-        _core.stop();
+        // On iOS, Go core runs in the PacketTunnel extension — FFI StopCore
+        // only affects the main process (no-op). VPN stop is handled below.
+        if (!Platform.isIOS) _core.stop();
 
       case CoreMode.subprocess:
         try {

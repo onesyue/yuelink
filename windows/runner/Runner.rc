@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "com.yueto" "\0"
-            VALUE "FileDescription", "yuelink" "\0"
+            VALUE "FileDescription", "YueLink" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "yuelink" "\0"
+            VALUE "InternalName", "YueLink" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 com.yueto. All rights reserved." "\0"
             VALUE "OriginalFilename", "yuelink.exe" "\0"
-            VALUE "ProductName", "yuelink" "\0"
+            VALUE "ProductName", "YueLink" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

@@ -168,10 +168,9 @@ class _AccountActionsCardState extends ConsumerState<AccountActionsCard> {
   }
 
   Future<void> _launch(String url) async {
-    final uri = Uri.parse(url);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } else {
+    try {
+      await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+    } catch (_) {
       AppNotifier.error(S.current.mineEmbyOpenFailed);
     }
   }

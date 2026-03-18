@@ -78,7 +78,10 @@ class YueLinkVpnService : VpnService() {
             }
             ACTION_STOP -> stopTunnel()
         }
-        return START_STICKY
+        // START_NOT_STICKY: do not auto-restart after user stops VPN.
+        // START_STICKY caused the service to resurrect after user explicitly
+        // disconnected, making the toggle feel broken.
+        return START_NOT_STICKY
     }
 
     private fun startTunnel(mixedPort: Int, mode: String, apps: List<String>) {
@@ -242,7 +245,9 @@ class YueLinkVpnService : VpnService() {
         val channel = NotificationChannel(
             CHANNEL_ID,
             "YueLink VPN",
-            NotificationManager.IMPORTANCE_LOW
+            // IMPORTANCE_MIN: notification only visible when shade is pulled down,
+            // no status bar icon from the app (system VPN key icon remains).
+            NotificationManager.IMPORTANCE_MIN
         ).apply { description = "YueLink VPN service status" }
         getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
     }
@@ -263,7 +268,7 @@ class YueLinkVpnService : VpnService() {
             .setContentText(modeText)
             .setSmallIcon(android.R.drawable.ic_lock_lock)
             .setContentIntent(pendingIntent)
-            .setOngoing(true)
+            // Do not set ongoing — let user swipe away if desired
             .build()
     }
 }

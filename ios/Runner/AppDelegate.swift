@@ -52,9 +52,12 @@ import NetworkExtension
             guard let self = self else { return }
 
             if let error = error {
-                result(FlutterError(code: "VPN_LOAD_ERROR",
-                                    message: error.localizedDescription, details: nil))
-                return
+                // loadAllFromPreferences can fail on first install, after re-sign
+                // (TrollStore/AltStore), or when VPN profile was removed from
+                // Settings. Fall through and create a fresh manager instead of
+                // treating this as fatal — saveToPreferences will establish the
+                // profile.
+                NSLog("[VPN] loadAllFromPreferences error (non-fatal): %@", error.localizedDescription)
             }
 
             let manager = managers?.first ?? NETunnelProviderManager()

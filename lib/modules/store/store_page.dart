@@ -20,6 +20,36 @@ class StorePage extends ConsumerWidget {
     final s = S.of(context);
     final isEn = s.isEn;
 
+    // Guest mode: show login prompt instead of store
+    final authState = ref.watch(authProvider);
+    if (authState.isGuest) {
+      return Scaffold(
+        backgroundColor: isDark ? YLColors.bgDark : YLColors.bgLight,
+        appBar: AppBar(
+          backgroundColor: isDark ? YLColors.bgDark : YLColors.bgLight,
+          elevation: 0,
+          title: Text(isEn ? 'Plans' : '订阅套餐',
+              style: YLText.titleMedium.copyWith(fontWeight: FontWeight.w700)),
+        ),
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.lock_outline_rounded, size: 48, color: YLColors.zinc400),
+              const SizedBox(height: 16),
+              Text(isEn ? 'Login to view plans' : '请先登录查看套餐',
+                  style: YLText.body.copyWith(color: YLColors.zinc500)),
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: () => ref.read(authProvider.notifier).logout(),
+                child: Text(isEn ? 'Go to Login' : '前往登录'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     final profile = ref.watch(userProfileProvider); // for isCurrentPlan badge
     final plansAsync = ref.watch(storePlansProvider);
 

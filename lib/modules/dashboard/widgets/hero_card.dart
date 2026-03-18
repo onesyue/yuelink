@@ -241,8 +241,7 @@ class PowerButton extends StatelessWidget {
 
     return GestureDetector(
       onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 250),
+      child: Container(
         width: 44,
         height: 44,
         decoration: BoxDecoration(
@@ -258,15 +257,6 @@ class PowerButton extends StatelessWidget {
                       : Colors.black.withValues(alpha: 0.10),
                   width: 0.5,
                 ),
-          boxShadow: isRunning
-              ? [
-                  BoxShadow(
-                    color: YLColors.connected.withValues(alpha: 0.35),
-                    blurRadius: 12,
-                    offset: const Offset(0, 3),
-                  ),
-                ]
-              : [],
         ),
         child: Icon(
           Icons.power_settings_new_rounded,

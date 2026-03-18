@@ -158,12 +158,16 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
     }
     // Auto-connect and expiry check after first frame is rendered
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      _initListeners();
-      await _maybeAutoConnect();
-      _checkSubscriptionExpiry();
-      _initDeepLinks();
-      if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
-        _registerHotkeys();
+      try {
+        _initListeners();
+        await _maybeAutoConnect();
+        _checkSubscriptionExpiry();
+        _initDeepLinks();
+        if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
+          _registerHotkeys();
+        }
+      } catch (e) {
+        debugPrint('[Init] post-frame init error (non-fatal): $e');
       }
     });
   }
@@ -540,29 +544,39 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
       debugPrint('[AutoConnect] disabled by user setting');
       return;
     }
-
-    final isMock = ref.read(isMockModeProvider);
-    if (isMock) {
-      debugPrint('[AutoConnect] mock mode → starting');
-      await ref.read(coreActionsProvider).start('');
+    // Don't auto-reconnect if the user explicitly stopped the VPN
+    if (ref.read(userStoppedProvider)) {
+      debugPrint('[AutoConnect] skipped — user explicitly stopped');
       return;
     }
 
-    final activeId = ref.read(activeProfileIdProvider);
-    if (activeId == null) {
-      debugPrint('[AutoConnect] no active profile selected');
-      return;
-    }
+    try {
+      final isMock = ref.read(isMockModeProvider);
+      if (isMock) {
+        debugPrint('[AutoConnect] mock mode → starting');
+        await ref.read(coreActionsProvider).start('');
+        return;
+      }
 
-    final config = await ProfileService.loadConfig(activeId);
-    if (config == null) {
-      debugPrint('[AutoConnect] config file not found for profile: $activeId');
-      return;
-    }
+      final activeId = ref.read(activeProfileIdProvider);
+      if (activeId == null) {
+        debugPrint('[AutoConnect] no active profile selected');
+        return;
+      }
 
-    debugPrint('[AutoConnect] starting with profile: $activeId (${config.length} bytes)');
-    final ok = await ref.read(coreActionsProvider).start(config);
-    debugPrint('[AutoConnect] result: $ok');
+      final config = await ProfileService.loadConfig(activeId);
+      if (config == null) {
+        debugPrint('[AutoConnect] config file not found for profile: $activeId');
+        return;
+      }
+
+      debugPrint('[AutoConnect] starting with profile: $activeId (${config.length} bytes)');
+      final ok = await ref.read(coreActionsProvider).start(config);
+      debugPrint('[AutoConnect] result: $ok');
+    } catch (e) {
+      debugPrint('[AutoConnect] startup failed: $e');
+      // Don't crash — user can start manually from dashboard
+    }
   }
 
   void _checkSubscriptionExpiry() {
@@ -632,6 +646,7 @@ class _AuthGate extends ConsumerWidget {
       case AuthStatus.loggedOut:
         return const YueAuthPage();
       case AuthStatus.loggedIn:
+      case AuthStatus.guest:
         return const MainShell();
     }
   }
@@ -918,7 +933,10 @@ void _setupCrashLogging() {
   };
   PlatformDispatcher.instance.onError = (error, stack) {
     _writeCrashLog(error.toString(), stack.toString());
-    return false; // let the platform handle it too
+    // On mobile, return true to absorb unhandled async errors and prevent
+    // the OS from killing the app. On desktop, return false so the platform
+    // can present the error.
+    return Platform.isAndroid || Platform.isIOS;
   };
 }
 

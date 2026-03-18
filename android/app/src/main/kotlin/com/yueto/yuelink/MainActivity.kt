@@ -52,14 +52,11 @@ class MainActivity : FlutterActivity() {
 
     override fun onStart() {
         super.onStart()
-        // Android 13+ requires runtime POST_NOTIFICATIONS permission for foreground
-        // service notifications (including the VPN ongoing notification).
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            val perm = android.Manifest.permission.POST_NOTIFICATIONS
-            if (checkSelfPermission(perm) != PackageManager.PERMISSION_GRANTED) {
-                requestPermissions(arrayOf(perm), NOTIFICATION_REQUEST_CODE)
-            }
-        }
+        // POST_NOTIFICATIONS is no longer requested eagerly on startup.
+        // The foreground VPN service works without the permission — the
+        // notification is simply suppressed by the system. This avoids
+        // confusing permission dialogs on first launch and makes the app
+        // functional even when the user denies notification access.
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -91,8 +88,13 @@ class MainActivity : FlutterActivity() {
                         // Run on background thread to avoid blocking the main thread.
                         // PackageManager queries can take 500ms-2s on devices with many apps.
                         Thread {
-                            val apps = getInstalledApps(showSystem)
-                            mainExecutor.execute { result.success(apps) }
+                            try {
+                                val apps = getInstalledApps(showSystem)
+                                mainExecutor.execute { result.success(apps) }
+                            } catch (e: Exception) {
+                                android.util.Log.e("YueLinkApps", "getInstalledApps thread failed", e)
+                                mainExecutor.execute { result.success(emptyList<Map<String, String>>()) }
+                            }
                         }.start()
                     }
                     else -> result.notImplemented()
@@ -104,21 +106,44 @@ class MainActivity : FlutterActivity() {
 
     private fun getInstalledApps(showSystem: Boolean): List<Map<String, String>> {
         val pm = packageManager
-        val flags = PackageManager.GET_META_DATA
-        return pm.getInstalledApplications(flags)
-            .filter { app ->
-                val isSystem = (app.flags and ApplicationInfo.FLAG_SYSTEM) != 0
-                if (!showSystem && isSystem) return@filter false
-                // Exclude ourselves
-                app.packageName != packageName
-            }
-            .map { app ->
-                mapOf(
-                    "packageName" to app.packageName,
-                    "appName"     to (pm.getApplicationLabel(app).toString()),
+        try {
+            // Android 13+ (API 33): getInstalledApplications(ApplicationInfoFlags)
+            // Older: getInstalledApplications(int flags)
+            @Suppress("DEPRECATION")
+            val allApps = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                pm.getInstalledApplications(
+                    PackageManager.ApplicationInfoFlags.of(0)
                 )
+            } else {
+                pm.getInstalledApplications(0)
             }
-            .sortedBy { it["appName"] }
+            android.util.Log.i("YueLinkApps", "getInstalledApplications returned ${allApps.size} apps")
+            return allApps
+                .filter { app ->
+                    val isSystem = (app.flags and ApplicationInfo.FLAG_SYSTEM) != 0
+                    if (!showSystem && isSystem) return@filter false
+                    // Exclude ourselves
+                    app.packageName != packageName
+                }
+                .mapNotNull { app ->
+                    try {
+                        mapOf(
+                            "packageName" to app.packageName,
+                            "appName"     to (pm.getApplicationLabel(app).toString()),
+                        )
+                    } catch (e: Exception) {
+                        // Some ROMs throw on getApplicationLabel for certain packages
+                        mapOf(
+                            "packageName" to app.packageName,
+                            "appName"     to app.packageName,
+                        )
+                    }
+                }
+                .sortedBy { it["appName"]?.lowercase() }
+        } catch (e: Exception) {
+            android.util.Log.e("YueLinkApps", "getInstalledApps failed", e)
+            return emptyList()
+        }
     }
 
     // ── VPN helpers ───────────────────────────────────────────────────────────

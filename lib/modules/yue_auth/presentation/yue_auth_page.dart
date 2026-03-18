@@ -206,7 +206,22 @@ class _YueAuthPageState extends ConsumerState<YueAuthPage> {
                   ),
                 ),
 
-                const SizedBox(height: 32),
+                const SizedBox(height: 14),
+
+                // ── Skip login (guest mode) ──────────────────────
+                Center(
+                  child: TextButton(
+                    onPressed: authState.isLoading
+                        ? null
+                        : () => ref.read(authProvider.notifier).skipLogin(),
+                    child: Text(
+                      _e(context) ? 'Skip Login' : '跳过登录',
+                      style: YLText.body.copyWith(color: YLColors.zinc500),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 20),
 
                 // ── Footer ───────────────────────────────────────
                 Text(

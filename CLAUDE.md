@@ -69,6 +69,9 @@ Do not move code between layers without a reason. When adding new features, use 
 | `nodes/` | Proxy group UI (`GroupCard` + `GroupListSection` with pill badges for type+count, `NodeTile`, sort chip) |
 | `profiles/` | Profile list page + providers |
 | `connections/`, `logs/`, `settings/` | Sub-pages / providers |
+| `updater/` | Version checking & update UI (skeleton, migrating from `lib/services/update_checker.dart`) |
+| `yue_account/` | Account details, member status, device list (skeleton, future repository layer) |
+| `yue_store/` | Shop UI refactor (skeleton, future repository layer — current store logic in `store/`) |
 
 **Node count display**: Both `GroupCard` and `GroupListSection` use a `_Badge` widget (pill style, same as type badge) placed immediately after the type badge. Shows plain count (`23`) normally, filtered count (`3/23`) in accent color when search is active. The sort button in the nodes app bar is a chip showing the current `NodeSortMode` label — tap cycles through modes.
 

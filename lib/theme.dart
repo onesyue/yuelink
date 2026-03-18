@@ -108,27 +108,27 @@ class YLShadow {
 
   /// Card: standard content cards across all pages.
   static List<BoxShadow> card(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    if (Theme.of(context).brightness == Brightness.dark) return const [];
     return [BoxShadow(
-      color: Colors.black.withValues(alpha: isDark ? 0.10 : 0.06),
-      blurRadius: isDark ? 6 : 10,
-      offset: Offset(0, isDark ? 2 : 3),
+      color: Colors.black.withValues(alpha: 0.05),
+      blurRadius: 6,
+      offset: const Offset(0, 2),
     )];
   }
 
   /// Hero: primary visual anchor (HeroCard only).
   static List<BoxShadow> hero(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    if (Theme.of(context).brightness == Brightness.dark) return const [];
     return [BoxShadow(
-      color: Colors.black.withValues(alpha: isDark ? 0.18 : 0.08),
-      blurRadius: isDark ? 12 : 16,
-      offset: Offset(0, isDark ? 3 : 4),
+      color: Colors.black.withValues(alpha: 0.07),
+      blurRadius: 8,
+      offset: const Offset(0, 3),
     )];
   }
 
   /// Overlay: bottom sheets, floating panels.
   static List<BoxShadow> overlay(BuildContext context) {
-    return [BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 24, offset: const Offset(0, -4))];
+    return [BoxShadow(color: Colors.black.withValues(alpha: 0.12), blurRadius: 12, offset: const Offset(0, -2))];
   }
 }
 
@@ -275,11 +275,8 @@ class YLStatusDot extends StatelessWidget {
     return Container(
       width: size, height: size,
       decoration: BoxDecoration(
-        shape: BoxShape.circle, 
+        shape: BoxShape.circle,
         color: color,
-        boxShadow: glow ? [
-          BoxShadow(color: color.withValues(alpha: 0.4), blurRadius: 6, spreadRadius: 1)
-        ] : null,
       ),
     );
   }
@@ -486,16 +483,13 @@ class YLPillSegmentedControl<T> extends StatelessWidget {
             child: GestureDetector(
               onTap: () => onChanged(values[index]),
               behavior: HitTestBehavior.opaque,
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                curve: Curves.easeOutCubic,
+              child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 decoration: BoxDecoration(
                   color: isSelected
                       ? (isDark ? YLColors.surfaceDark : YLColors.surfaceLight)
                       : Colors.transparent,
                   borderRadius: BorderRadius.circular(YLRadius.pill),
-                  boxShadow: isSelected ? YLShadow.sm(context) : [],
                 ),
                 alignment: Alignment.center,
                 child: Text(
