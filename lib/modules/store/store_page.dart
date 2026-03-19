@@ -142,8 +142,8 @@ class StorePage extends ConsumerWidget {
                 final sortedPlans = [...plans];
                 if (profile?.planId != null) {
                   sortedPlans.sort((a, b) {
-                    final aIsCurrent = a.id == profile!.planId;
-                    final bIsCurrent = b.id == profile!.planId;
+                    final aIsCurrent = a.id == profile?.planId;
+                    final bIsCurrent = b.id == profile?.planId;
                     if (aIsCurrent && !bIsCurrent) return -1;
                     if (!aIsCurrent && bIsCurrent) return 1;
                     return 0;
