@@ -14,18 +14,24 @@ class ExitIpCard extends ConsumerWidget {
     final s = S.of(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final async = ref.watch(exitIpInfoProvider);
+    final aiAsync = ref.watch(aiUnlockTestProvider);
 
     final isLoading = async.isLoading;
     final info = async.valueOrNull;
     final hasInfo = info != null;
     final hasGeo = hasInfo && info.country.isNotEmpty;
 
+    final aiInfo = aiAsync.valueOrNull;
+
     final Color headerIconColor = hasInfo
         ? YLColors.connected
         : (async.hasError ? YLColors.error : YLColors.zinc400);
 
     return GestureDetector(
-      onTap: () => ref.invalidate(exitIpInfoProvider),
+      onTap: () {
+        ref.invalidate(exitIpInfoProvider);
+        ref.invalidate(aiUnlockTestProvider);
+      },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         constraints: const BoxConstraints(minHeight: 100),
@@ -60,6 +66,8 @@ class ExitIpCard extends ConsumerWidget {
                     style: YLText.caption.copyWith(color: YLColors.zinc500),
                   ),
                 ),
+                // AI unlock badge
+                if (aiInfo != null) _AiBadge(aiInfo: aiInfo, isDark: isDark),
               ],
             ),
 
@@ -106,14 +114,35 @@ class ExitIpCard extends ConsumerWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
 
-                  // ISP
-                  if (hasGeo && info.isp.isNotEmpty)
+                  // ISP + AI node info
+                  Row(
+                    children: [
+                      if (hasGeo && info.isp.isNotEmpty)
+                        Expanded(
+                          child: Text(
+                            info.isp,
+                            style: YLText.caption.copyWith(
+                              color: YLColors.zinc400,
+                              height: 1.2,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                    ],
+                  ),
+
+                  // AI group selected node
+                  if (aiInfo != null && aiInfo.nodeName.isNotEmpty)
                     Padding(
-                      padding: const EdgeInsets.only(top: 1),
+                      padding: const EdgeInsets.only(top: 3),
                       child: Text(
-                        info.isp,
+                        'AI: ${aiInfo.nodeName}',
                         style: YLText.caption.copyWith(
-                          color: YLColors.zinc400,
+                          fontSize: 10,
+                          color: aiInfo.unlocked == true
+                              ? YLColors.connected
+                              : YLColors.zinc400,
                           height: 1.2,
                         ),
                         maxLines: 1,
@@ -124,6 +153,63 @@ class ExitIpCard extends ConsumerWidget {
               ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _AiBadge extends StatelessWidget {
+  final AiUnlockInfo aiInfo;
+  final bool isDark;
+  const _AiBadge({required this.aiInfo, required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    final unlocked = aiInfo.unlocked;
+    final Color bg;
+    final Color fg;
+    final String label;
+
+    if (unlocked == null) {
+      // Testing
+      bg = YLColors.zinc500.withValues(alpha: 0.12);
+      fg = YLColors.zinc400;
+      label = 'AI ...';
+    } else if (unlocked) {
+      bg = YLColors.connected.withValues(alpha: isDark ? 0.15 : 0.10);
+      fg = YLColors.connected;
+      label = 'AI';
+    } else {
+      bg = YLColors.error.withValues(alpha: isDark ? 0.15 : 0.10);
+      fg = YLColors.error;
+      label = 'AI';
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (unlocked != null)
+            Icon(
+              unlocked ? Icons.check_rounded : Icons.close_rounded,
+              size: 10,
+              color: fg,
+            ),
+          if (unlocked != null) const SizedBox(width: 2),
+          Text(
+            label,
+            style: YLText.caption.copyWith(
+              fontSize: 9,
+              color: fg,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
       ),
     );
   }

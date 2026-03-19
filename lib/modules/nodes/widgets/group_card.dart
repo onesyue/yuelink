@@ -125,6 +125,7 @@ class _GroupCardState extends ConsumerState<GroupCard>
     final group = widget.group;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final testing = ref.watch(delayTestingProvider);
+    final isGroupTesting = testing.any((n) => group.all.contains(n));
     final delays = ref.watch(delayResultsProvider);
     final sorted = _sortedNodes(group.all, widget.sortMode, delays);
     final query = widget.searchQuery.trim().toLowerCase();
@@ -191,7 +192,7 @@ class _GroupCardState extends ConsumerState<GroupCard>
                   ),
                   const SizedBox(width: 4),
                   IconButton(
-                    onPressed: testing.any((n) => group.all.contains(n))
+                    onPressed: isGroupTesting
                         ? null
                         : () {
                             ref
@@ -200,7 +201,7 @@ class _GroupCardState extends ConsumerState<GroupCard>
                             AppNotifier.info(
                                 S.of(context).testingGroup(group.name));
                           },
-                    icon: testing.any((n) => group.all.contains(n))
+                    icon: isGroupTesting
                         ? const CupertinoActivityIndicator(radius: 7)
                         : const Icon(Icons.bolt_rounded),
                     iconSize: 18,

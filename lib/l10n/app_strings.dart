@@ -285,7 +285,11 @@ class S {
   // ── Update checker ────────────────────────────────────────────────
   String get checkUpdate => _e ? 'Check for Updates' : '检查更新';
   String get updateAvailable => _e ? 'New version available' : '发现新版本';
-  String get updateDownload => _e ? 'Download' : '下载';
+  String get updateDownload => _e ? 'Download & Install' : '下载安装';
+  String get updateDownloading => _e ? 'Downloading...' : '正在下载...';
+  String get updateDownloadComplete => _e ? 'Download complete' : '下载完成';
+  String get updateDownloadFailed => _e ? 'Download failed' : '下载失败';
+  String get updateInstalling => _e ? 'Opening installer...' : '正在打开安装包...';
   String get alreadyLatest => _e ? 'Already up to date' : '已是最新版本';
   String get updateCheckFailed => _e ? 'Failed to check for updates' : '检查更新失败';
 
@@ -380,9 +384,10 @@ class S {
   String get sectionStatus => _e ? 'Status' : '状态';
   String get sectionTools => _e ? 'Tools' : '工具';
   String get sectionAbout => _e ? 'About' : '关于';
-  String get sectionSettings => _e ? 'Settings' : '设置';
-  String get sectionService => _e ? 'Service' : '服务';
+  String get sectionSettings => _e ? 'General' : '通用';
+  String get sectionService => _e ? 'My Subscription' : '我的订阅';
   String get sectionSupport => _e ? 'Support' : '支持';
+  String get preferencesLabel => _e ? 'Preferences' : '偏好设置';
   String get sectionAccountActions => _e ? 'Account' : '账号';
   // Upstream proxy
   String get upstreamProxy => _e ? 'Upstream Proxy' : '上游代理';

@@ -30,6 +30,23 @@ final nodeViewModeProvider =
 /// Real-time node search query — empty string means no filter.
 final nodeSearchQueryProvider = StateProvider<String>((ref) => '');
 
+/// Derived: the "main" proxy group (PROXIES/GLOBAL/节点选择/Proxy) + its
+/// currently selected node. HeroCard watches this instead of the full
+/// proxyGroupsProvider, so it only rebuilds when the active selection changes.
+final activeProxyInfoProvider = Provider<({String nodeName, String groupName})?>((ref) {
+  final groups = ref.watch(proxyGroupsProvider);
+  if (groups.isEmpty) return null;
+  try {
+    final g = groups.firstWhere(
+      (g) => g.name == 'PROXIES' || g.name == 'GLOBAL' || g.name == '节点选择' || g.name == 'Proxy',
+      orElse: () => groups.firstWhere((g) => g.type == 'Selector', orElse: () => groups.first),
+    );
+    return (nodeName: g.now, groupName: g.name);
+  } catch (_) {
+    return null;
+  }
+});
+
 /// Maps proxy node names to their protocol type (ss, vmess, trojan, etc.).
 /// Populated from the /proxies API response during ProxyGroupsNotifier.refresh().
 final nodeTypeMapProvider = StateProvider<Map<String, String>>((ref) => {});

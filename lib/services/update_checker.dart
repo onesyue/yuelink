@@ -1,7 +1,9 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:path_provider/path_provider.dart';
 
 /// Checks GitHub releases for a newer version of YueLink.
 class UpdateChecker {
@@ -35,15 +37,81 @@ class UpdateChecker {
 
       if (!_isNewer(latestVersion, currentVersion)) return null;
 
+      // Parse assets for direct download URL
+      final assets = data['assets'] as List<dynamic>? ?? [];
+      final downloadUrl = _findAssetUrl(assets);
+
       return UpdateInfo(
         currentVersion: currentVersion,
         latestVersion: latestVersion,
         releaseNotes: body,
         releaseUrl: htmlUrl,
+        downloadUrl: downloadUrl,
         publishedAt: publishedAt != null ? DateTime.tryParse(publishedAt) : null,
       );
     } catch (_) {
       return null;
+    }
+  }
+
+  /// Find the download URL for the current platform from release assets.
+  static String? _findAssetUrl(List<dynamic> assets) {
+    final suffix = _platformSuffix();
+    if (suffix == null) return null;
+
+    for (final asset in assets) {
+      final name = (asset as Map<String, dynamic>)['name'] as String? ?? '';
+      if (name.toLowerCase().contains(suffix.toLowerCase())) {
+        return asset['browser_download_url'] as String?;
+      }
+    }
+    return null;
+  }
+
+  /// Returns the expected asset filename suffix for the current platform.
+  static String? _platformSuffix() {
+    if (Platform.isAndroid) return '.apk';
+    if (Platform.isMacOS) return '.dmg';
+    if (Platform.isWindows) return 'Setup.exe';
+    if (Platform.isIOS) return '.ipa';
+    return null;
+  }
+
+  /// Download update file with progress callback.
+  /// Returns the local file path on success.
+  static Future<String> download(
+    String url, {
+    void Function(int received, int total)? onProgress,
+  }) async {
+    final client = HttpClient();
+    client.connectionTimeout = const Duration(seconds: 30);
+    try {
+      final request = await client.getUrl(Uri.parse(url));
+      final response = await request.close();
+
+      if (response.statusCode != 200) {
+        throw Exception('HTTP ${response.statusCode}');
+      }
+
+      final total = response.contentLength;
+      final fileName = Uri.parse(url).pathSegments.last;
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/$fileName');
+
+      final sink = file.openWrite();
+      var received = 0;
+
+      await for (final chunk in response) {
+        sink.add(chunk);
+        received += chunk.length;
+        onProgress?.call(received, total);
+      }
+
+      await sink.flush();
+      await sink.close();
+      return file.path;
+    } finally {
+      client.close();
     }
   }
 
@@ -70,6 +138,7 @@ class UpdateInfo {
   final String latestVersion;
   final String releaseNotes;
   final String releaseUrl;
+  final String? downloadUrl;
   final DateTime? publishedAt;
 
   const UpdateInfo({
@@ -77,6 +146,7 @@ class UpdateInfo {
     required this.latestVersion,
     required this.releaseNotes,
     required this.releaseUrl,
+    this.downloadUrl,
     this.publishedAt,
   });
 }

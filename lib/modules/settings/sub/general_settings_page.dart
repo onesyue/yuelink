@@ -1,0 +1,685 @@
+import 'dart:io';
+
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:launch_at_startup/launch_at_startup.dart';
+
+import '../../../core/kernel/core_manager.dart';
+import '../../../core/platform/vpn_service.dart';
+import '../../../core/storage/settings_service.dart';
+import '../../../l10n/app_strings.dart';
+import '../../../providers/core_provider.dart';
+import '../../../providers/split_tunnel_provider.dart';
+import '../../../theme.dart';
+import '../settings_page.dart';
+
+/// Standalone settings sub-page — displays all general settings
+/// (theme, language, auto-connect, routing, connection mode, etc.)
+/// as a secondary page with an AppBar, consistent with other sub-pages.
+class GeneralSettingsPage extends ConsumerStatefulWidget {
+  const GeneralSettingsPage({super.key});
+
+  @override
+  ConsumerState<GeneralSettingsPage> createState() =>
+      _GeneralSettingsPageState();
+}
+
+class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
+  bool _launchAtStartup = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSettings();
+  }
+
+  Future<void> _loadSettings() async {
+    final startup = await SettingsService.getLaunchAtStartup();
+    if (mounted) {
+      setState(() => _launchAtStartup = startup);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = S.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final theme = ref.watch(themeProvider);
+    final language = ref.watch(languageProvider);
+    final autoConnect = ref.watch(autoConnectProvider);
+    final connectionMode = ref.watch(connectionModeProvider);
+    final systemProxyOnConnect = ref.watch(systemProxyOnConnectProvider);
+    final status = ref.watch(coreStatusProvider);
+    final routingMode = ref.watch(routingModeProvider);
+    final isDesktop =
+        Platform.isMacOS || Platform.isWindows || Platform.isLinux;
+
+    final dividerColor = isDark
+        ? Colors.white.withValues(alpha: 0.06)
+        : Colors.black.withValues(alpha: 0.06);
+
+    return Scaffold(
+      appBar: AppBar(
+        leading: const BackButton(),
+        title: Text(s.preferencesLabel),
+      ),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 720),
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
+            children: [
+              _Card(
+                child: Column(
+                  children: [
+                    // Theme
+                    YLInfoRow(
+                      label: s.themeLabel,
+                      trailing: SizedBox(
+                        width: 240,
+                        child: SegmentedButton<ThemeMode>(
+                          showSelectedIcon: false,
+                          style: SegmentedButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                            textStyle: const TextStyle(fontSize: 12),
+                          ),
+                          segments: [
+                            ButtonSegment(
+                                value: ThemeMode.system,
+                                label: Text(s.themeSystem)),
+                            ButtonSegment(
+                                value: ThemeMode.light,
+                                label: Text(s.themeLight)),
+                            ButtonSegment(
+                                value: ThemeMode.dark,
+                                label: Text(s.themeDark)),
+                          ],
+                          selected: {theme},
+                          onSelectionChanged: (v) {
+                            ref.read(themeProvider.notifier).state = v.first;
+                            SettingsService.setThemeMode(v.first);
+                          },
+                        ),
+                      ),
+                    ),
+                    Divider(height: 1, thickness: 0.5, color: dividerColor),
+                    // Language
+                    YLInfoRow(
+                      label: s.sectionLanguage,
+                      trailing: SizedBox(
+                        width: 160,
+                        child: SegmentedButton<String>(
+                          showSelectedIcon: false,
+                          style: SegmentedButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                            textStyle: const TextStyle(fontSize: 12),
+                          ),
+                          segments: [
+                            ButtonSegment(
+                                value: 'zh', label: Text(s.languageChinese)),
+                            ButtonSegment(
+                                value: 'en', label: Text(s.languageEnglish)),
+                          ],
+                          selected: {language},
+                          onSelectionChanged: (v) async {
+                            ref.read(languageProvider.notifier).state = v.first;
+                            await SettingsService.setLanguage(v.first);
+                          },
+                        ),
+                      ),
+                    ),
+                    Divider(height: 1, thickness: 0.5, color: dividerColor),
+                    // Auto connect
+                    YLSettingsRow(
+                      title: s.autoConnect,
+                      trailing: CupertinoSwitch(
+                        value: autoConnect,
+                        activeTrackColor: YLColors.connected,
+                        onChanged: (v) async {
+                          ref.read(autoConnectProvider.notifier).state = v;
+                          await SettingsService.setAutoConnect(v);
+                        },
+                      ),
+                    ),
+                    Divider(height: 1, thickness: 0.5, color: dividerColor),
+                    // Routing mode
+                    YLInfoRow(
+                      label: s.routingModeSetting,
+                      trailing: SizedBox(
+                        width: 200,
+                        child: SegmentedButton<String>(
+                          showSelectedIcon: false,
+                          style: SegmentedButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                            textStyle: const TextStyle(fontSize: 12),
+                          ),
+                          segments: [
+                            ButtonSegment(
+                                value: 'rule', label: Text(s.routeModeRule)),
+                            ButtonSegment(
+                                value: 'global',
+                                label: Text(s.routeModeGlobal)),
+                            ButtonSegment(
+                                value: 'direct',
+                                label: Text(s.routeModeDirect)),
+                          ],
+                          selected: {routingMode},
+                          onSelectionChanged: (v) async {
+                            final mode = v.first;
+                            ref.read(routingModeProvider.notifier).state = mode;
+                            await SettingsService.setRoutingMode(mode);
+                            if (status == CoreStatus.running) {
+                              try {
+                                await CoreManager.instance.api
+                                    .setRoutingMode(mode);
+                              } catch (_) {}
+                            }
+                          },
+                        ),
+                      ),
+                    ),
+                    if (isDesktop) ...[
+                      Divider(height: 1, thickness: 0.5, color: dividerColor),
+                      YLInfoRow(
+                        label: s.connectionMode,
+                        trailing: DropdownButton<String>(
+                          value: connectionMode,
+                          underline: const SizedBox.shrink(),
+                          style: YLText.body.copyWith(
+                            color:
+                                isDark ? YLColors.zinc200 : YLColors.zinc700,
+                          ),
+                          dropdownColor:
+                              isDark ? YLColors.zinc800 : Colors.white,
+                          items: [
+                            DropdownMenuItem(
+                                value: 'tun', child: Text(s.modeTun)),
+                            DropdownMenuItem(
+                                value: 'systemProxy',
+                                child: Text(s.modeSystemProxy)),
+                          ],
+                          onChanged: (v) async {
+                            if (v == null) return;
+                            ref.read(connectionModeProvider.notifier).state = v;
+                            await SettingsService.setConnectionMode(v);
+                          },
+                        ),
+                      ),
+                      Divider(height: 1, thickness: 0.5, color: dividerColor),
+                      YLSettingsRow(
+                        title: s.setSystemProxyOnConnect,
+                        description: s.setSystemProxyOnConnectSub,
+                        trailing: CupertinoSwitch(
+                          value: systemProxyOnConnect,
+                          activeTrackColor: YLColors.connected,
+                          onChanged: (v) async {
+                            ref
+                                .read(systemProxyOnConnectProvider.notifier)
+                                .state = v;
+                            await SettingsService.setSystemProxyOnConnect(v);
+                          },
+                        ),
+                      ),
+                      Divider(height: 1, thickness: 0.5, color: dividerColor),
+                      YLSettingsRow(
+                        title: s.launchAtStartupLabel,
+                        description: s.launchAtStartupSub,
+                        trailing: CupertinoSwitch(
+                          value: _launchAtStartup,
+                          activeTrackColor: YLColors.connected,
+                          onChanged: (v) async {
+                            setState(() => _launchAtStartup = v);
+                            await SettingsService.setLaunchAtStartup(v);
+                            if (v) {
+                              await launchAtStartup.enable();
+                            } else {
+                              await launchAtStartup.disable();
+                            }
+                          },
+                        ),
+                      ),
+                      Divider(height: 1, thickness: 0.5, color: dividerColor),
+                      if (!Platform.isLinux) ...[
+                        _CloseBehaviorRow(),
+                        Divider(
+                            height: 1, thickness: 0.5, color: dividerColor),
+                      ],
+                      _HotkeyRow(),
+                    ],
+                  ],
+                ),
+              ),
+              if (Platform.isAndroid) ...[
+                const SizedBox(height: 16),
+                const _SplitTunnelSection(),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _Card extends StatelessWidget {
+  final Widget child;
+  const _Card({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      clipBehavior: Clip.hardEdge,
+      decoration: BoxDecoration(
+        color: isDark ? YLColors.zinc800 : Colors.white,
+        borderRadius: BorderRadius.circular(YLRadius.xl),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.black.withValues(alpha: 0.08),
+          width: 0.5,
+        ),
+        boxShadow: YLShadow.card(context),
+      ),
+      child: child,
+    );
+  }
+}
+
+class _CloseBehaviorRow extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = S.of(context);
+    final behavior = ref.watch(closeBehaviorProvider);
+    return YLInfoRow(
+      label: s.closeWindowBehavior,
+      trailing: SizedBox(
+        width: 260,
+        child: SegmentedButton<String>(
+          showSelectedIcon: false,
+          style: SegmentedButton.styleFrom(
+            visualDensity: VisualDensity.compact,
+            textStyle: const TextStyle(fontSize: 12),
+          ),
+          segments: [
+            ButtonSegment(value: 'tray', label: Text(s.closeBehaviorTray)),
+            ButtonSegment(value: 'exit', label: Text(s.closeBehaviorExit)),
+          ],
+          selected: {behavior},
+          onSelectionChanged: (v) async {
+            final val = v.first;
+            ref.read(closeBehaviorProvider.notifier).state = val;
+            await SettingsService.setCloseBehavior(val);
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class _HotkeyRow extends ConsumerStatefulWidget {
+  @override
+  ConsumerState<_HotkeyRow> createState() => _HotkeyRowState();
+}
+
+class _HotkeyRowState extends ConsumerState<_HotkeyRow> {
+  bool _registering = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = S.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final stored = ref.watch(toggleHotkeyProvider);
+    final display = displayHotkey(stored);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(s.toggleConnectionHotkey,
+                    style: YLText.body.copyWith(
+                        color: isDark ? YLColors.zinc200 : YLColors.zinc700)),
+              ),
+              Text(
+                display,
+                style: YLText.body.copyWith(
+                  fontFamily: 'monospace',
+                  color: isDark ? YLColors.zinc300 : YLColors.zinc600,
+                ),
+              ),
+              const SizedBox(width: 8),
+              TextButton(
+                onPressed: _registering ? null : () => _startRecording(s),
+                child: Text(
+                    _registering ? s.hotkeyListening : s.hotkeyEdit),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _startRecording(S s) {
+    setState(() => _registering = true);
+    final focusNode = FocusNode();
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: Text(s.hotkeyListening),
+        content: KeyboardListener(
+          focusNode: focusNode..requestFocus(),
+          autofocus: true,
+          onKeyEvent: (event) {
+            if (event is! KeyDownEvent) return;
+            if (_isModifierOnly(event.logicalKey)) return;
+
+            final parts = <String>[];
+            if (HardwareKeyboard.instance.isControlPressed) parts.add('ctrl');
+            if (HardwareKeyboard.instance.isAltPressed) parts.add('alt');
+            if (HardwareKeyboard.instance.isShiftPressed) parts.add('shift');
+            if (HardwareKeyboard.instance.isMetaPressed) parts.add('meta');
+
+            final label = event.logicalKey.keyLabel.toLowerCase();
+            if (label.isNotEmpty && !parts.contains(label)) parts.add(label);
+
+            if (parts.length >= 2) {
+              final combo = parts.join('+');
+              ref.read(toggleHotkeyProvider.notifier).state = combo;
+              SettingsService.setToggleHotkey(combo);
+              Navigator.pop(ctx);
+            }
+          },
+          child: SizedBox(
+            height: 60,
+            child: Center(
+              child: Text(
+                s.isEn ? 'Press your shortcut...' : '请按下快捷键...',
+                style: YLText.body.copyWith(color: YLColors.zinc500),
+              ),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(s.cancel),
+          ),
+        ],
+      ),
+    ).whenComplete(() {
+      setState(() => _registering = false);
+      focusNode.dispose();
+    });
+  }
+
+  bool _isModifierOnly(LogicalKeyboardKey key) {
+    final modifiers = {
+      LogicalKeyboardKey.control,
+      LogicalKeyboardKey.controlLeft,
+      LogicalKeyboardKey.controlRight,
+      LogicalKeyboardKey.shift,
+      LogicalKeyboardKey.shiftLeft,
+      LogicalKeyboardKey.shiftRight,
+      LogicalKeyboardKey.alt,
+      LogicalKeyboardKey.altLeft,
+      LogicalKeyboardKey.altRight,
+      LogicalKeyboardKey.meta,
+      LogicalKeyboardKey.metaLeft,
+      LogicalKeyboardKey.metaRight,
+      LogicalKeyboardKey.capsLock,
+      LogicalKeyboardKey.fn,
+    };
+    return modifiers.contains(key);
+  }
+}
+
+// ── Split Tunnel (Android only) ──────────────────────────────────────────────
+
+class _SplitTunnelSection extends ConsumerStatefulWidget {
+  const _SplitTunnelSection();
+
+  @override
+  ConsumerState<_SplitTunnelSection> createState() =>
+      _SplitTunnelSectionState();
+}
+
+class _SplitTunnelSectionState extends ConsumerState<_SplitTunnelSection> {
+  List<Map<String, String>>? _apps;
+  String _search = '';
+  bool _loading = false;
+  String? _loadError;
+
+  Future<void> _loadApps() async {
+    setState(() { _loading = true; _loadError = null; });
+    try {
+      final apps = await VpnService.getInstalledApps(showSystem: true);
+      if (mounted) {
+        setState(() {
+          _apps = apps;
+          _loading = false;
+          if (apps.isEmpty) {
+            _loadError = S.of(context).isEn
+                ? 'No apps found. Your device may restrict app visibility.'
+                : '未获取到应用列表，可能受系统权限限制。';
+          }
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _apps = [];
+          _loading = false;
+          _loadError = S.of(context).isEn
+              ? 'Failed to load apps: $e'
+              : '加载应用列表失败: $e';
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = S.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final mode = ref.watch(splitTunnelModeProvider);
+    final selectedPkgs = ref.watch(splitTunnelAppsProvider);
+    final dividerColor = isDark
+        ? Colors.white.withValues(alpha: 0.06)
+        : Colors.black.withValues(alpha: 0.06);
+
+    return _Card(
+      child: Column(
+        children: [
+          // Mode selector
+          YLInfoRow(
+            label: s.splitTunnelMode,
+            trailing: DropdownButton<SplitTunnelMode>(
+              value: mode,
+              underline: const SizedBox.shrink(),
+              style: YLText.body.copyWith(
+                color: isDark ? YLColors.zinc200 : YLColors.zinc700,
+              ),
+              dropdownColor: isDark ? YLColors.zinc800 : Colors.white,
+              items: [
+                DropdownMenuItem(
+                    value: SplitTunnelMode.all,
+                    child: Text(s.splitTunnelModeAll)),
+                DropdownMenuItem(
+                    value: SplitTunnelMode.whitelist,
+                    child: Text(s.splitTunnelModeWhitelist)),
+                DropdownMenuItem(
+                    value: SplitTunnelMode.blacklist,
+                    child: Text(s.splitTunnelModeBlacklist)),
+              ],
+              onChanged: (v) {
+                if (v != null) ref.read(splitTunnelModeProvider.notifier).set(v);
+              },
+            ),
+          ),
+          if (mode != SplitTunnelMode.all) ...[
+            Divider(height: 1, thickness: 0.5, color: dividerColor),
+            YLSettingsRow(
+              title: s.splitTunnelApps,
+              description: s.splitTunnelEffectHint,
+              trailing: TextButton.icon(
+                icon: const Icon(Icons.apps, size: 14),
+                label: Text(s.splitTunnelManage),
+                onPressed: () async {
+                  if (_apps == null) await _loadApps();
+                  if (!mounted) return;
+                  _showAppPicker(context, selectedPkgs); // ignore: use_build_context_synchronously
+                },
+              ),
+            ),
+            if (selectedPkgs.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                child: Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: selectedPkgs
+                      .map((pkg) => Chip(
+                            label: Text(pkg,
+                                style: const TextStyle(fontSize: 11)),
+                            deleteIcon:
+                                const Icon(Icons.close, size: 14),
+                            onDeleted: () => ref
+                                .read(splitTunnelAppsProvider.notifier)
+                                .remove(pkg),
+                          ))
+                      .toList(),
+                ),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  void _showAppPicker(BuildContext context, List<String> initialSelected) {
+    final s = S.of(context);
+    final localSelected = Set<String>.from(initialSelected);
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModal) {
+          final apps = _apps ?? [];
+          final filtered = _search.isEmpty
+              ? List<Map<String, String>>.from(apps)
+              : apps
+                  .where((a) =>
+                      (a['appName'] ?? '').toLowerCase().contains(_search) ||
+                      (a['packageName'] ?? '').toLowerCase().contains(_search))
+                  .toList();
+          filtered.sort((a, b) {
+            final aSelected = localSelected.contains(a['packageName']);
+            final bSelected = localSelected.contains(b['packageName']);
+            if (aSelected != bSelected) return aSelected ? -1 : 1;
+            return (a['appName'] ?? '').compareTo(b['appName'] ?? '');
+          });
+
+          return DraggableScrollableSheet(
+            initialChildSize: 0.85,
+            expand: false,
+            builder: (_, sc) => Column(
+              children: [
+                const SizedBox(height: 8),
+                Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                        color: Colors.grey.shade300,
+                        borderRadius: BorderRadius.circular(2))),
+                Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: TextField(
+                    autofocus: false,
+                    decoration: InputDecoration(
+                      hintText: s.splitTunnelSearchHint,
+                      prefixIcon: const Icon(Icons.search, size: 18),
+                      isDense: true,
+                      border: const OutlineInputBorder(),
+                    ),
+                    onChanged: (v) => setModal(() => _search = v.toLowerCase()),
+                  ),
+                ),
+                Expanded(
+                  child: _loading
+                      ? const Center(child: CircularProgressIndicator())
+                      : filtered.isEmpty
+                          ? Center(
+                              child: Padding(
+                                padding: const EdgeInsets.all(24),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.apps_outlined, size: 40, color: YLColors.zinc400),
+                                    const SizedBox(height: 12),
+                                    Text(
+                                      _loadError ?? (_search.isNotEmpty
+                                          ? (S.of(context).isEn ? 'No matching apps' : '未找到匹配应用')
+                                          : (S.of(context).isEn ? 'No apps found' : '未获取到应用')),
+                                      textAlign: TextAlign.center,
+                                      style: YLText.body.copyWith(color: YLColors.zinc500),
+                                    ),
+                                    if (_loadError != null) ...[
+                                      const SizedBox(height: 12),
+                                      TextButton(
+                                        onPressed: () {
+                                          _loadApps().then((_) => setModal(() {}));
+                                        },
+                                        child: Text(S.of(context).isEn ? 'Retry' : '重试'),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            )
+                          : ListView.builder(
+                              controller: sc,
+                              itemCount: filtered.length,
+                              itemBuilder: (_, i) {
+                                final app = filtered[i];
+                                final pkg = app['packageName'] ?? '';
+                                final isSelected = localSelected.contains(pkg);
+                                return CheckboxListTile(
+                                  dense: true,
+                                  title: Text(app['appName'] ?? pkg),
+                                  subtitle: Text(pkg,
+                                      style: const TextStyle(fontSize: 11)),
+                                  value: isSelected,
+                                  onChanged: (_) {
+                                    setModal(() {
+                                      if (localSelected.contains(pkg)) {
+                                        localSelected.remove(pkg);
+                                      } else {
+                                        localSelected.add(pkg);
+                                      }
+                                    });
+                                    ref
+                                        .read(splitTunnelAppsProvider.notifier)
+                                        .toggle(pkg);
+                                  },
+                                );
+                              },
+                            ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+}

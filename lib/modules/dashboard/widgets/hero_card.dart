@@ -6,8 +6,8 @@ import '../../../l10n/app_strings.dart';
 import '../../../main.dart';
 import '../../../providers/core_provider.dart';
 import '../../../providers/profile_provider.dart';
-import '../../../providers/proxy_provider.dart';
 import '../../../theme.dart';
+import '../../nodes/providers/nodes_providers.dart';
 import 'overview_card.dart';
 
 class HeroCard extends ConsumerWidget {
@@ -30,23 +30,15 @@ class HeroCard extends ConsumerWidget {
     final isTransitioning =
         status == CoreStatus.starting || status == CoreStatus.stopping;
 
-    // Active node
+    // Active node — uses derived provider so HeroCard only rebuilds when
+    // the main group's selected node changes, not on any group mutation.
     String activeNodeName = s.dashDisconnectedTitle;
     String activeNodeGroup = s.dashDisconnectedDesc;
     if (isRunning) {
-      final groups = ref.watch(proxyGroupsProvider);
-      if (groups.isNotEmpty) {
-        try {
-          final mainGroup = groups.firstWhere(
-            (g) => g.name == 'PROXIES' || g.name == 'GLOBAL' || g.name == '节点选择' || g.name == 'Proxy',
-            orElse: () => groups.firstWhere((g) => g.type == 'Selector', orElse: () => groups.first),
-          );
-          activeNodeName = mainGroup.now.isNotEmpty ? mainGroup.now : s.directAuto;
-          activeNodeGroup = mainGroup.name;
-        } catch (_) {
-          activeNodeName = s.statusConnected;
-          activeNodeGroup = '';
-        }
+      final info = ref.watch(activeProxyInfoProvider);
+      if (info != null) {
+        activeNodeName = info.nodeName.isNotEmpty ? info.nodeName : s.directAuto;
+        activeNodeGroup = info.groupName;
       }
     }
 

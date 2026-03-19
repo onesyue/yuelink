@@ -6,7 +6,6 @@ import '../../../core/ffi/core_controller.dart';
 import '../../../core/kernel/core_manager.dart';
 import '../../../core/storage/settings_service.dart';
 import '../../../domain/models/traffic.dart';
-import '../../../domain/models/traffic_history.dart';
 import '../../../infrastructure/repositories/traffic_repository.dart';
 import '../../../providers/core_provider.dart';
 
@@ -93,15 +92,16 @@ final trafficStreamProvider = Provider<void>((ref) {
   if (status != CoreStatus.running) return;
 
   final manager = CoreManager.instance;
+  // Shared history instance — mutated in-place, version bump triggers rebuilds.
+  final history = ref.read(trafficHistoryProvider);
 
   if (manager.isMockMode) {
     final timer = Timer.periodic(const Duration(seconds: 1), (_) {
       final t = CoreController.instance.getTraffic();
       final traffic = Traffic(up: t.up, down: t.down);
       ref.read(trafficProvider.notifier).state = traffic;
-      final history = ref.read(trafficHistoryProvider);
       history.add(t.up, t.down);
-      ref.read(trafficHistoryProvider.notifier).state = history.copy();
+      ref.read(trafficHistoryVersionProvider.notifier).state = history.version;
       ref.read(dailyTrafficProvider.notifier).add(t.up, t.down);
     });
     ref.onDispose(() => timer.cancel());
@@ -111,12 +111,11 @@ final trafficStreamProvider = Provider<void>((ref) {
     // Two separate WebSocket connections to the same mihomo /traffic endpoint
     // is unreliable — mihomo may silently drop the second connection, leaving
     // trafficHistoryProvider empty and the chart blank.
-    final trafficHistory = TrafficHistory();
     final trafficSub = repo.trafficStream().listen((t) {
       ref.read(trafficProvider.notifier).state = t;
       ref.read(dailyTrafficProvider.notifier).add(t.up, t.down);
-      trafficHistory.add(t.up, t.down);
-      ref.read(trafficHistoryProvider.notifier).state = trafficHistory.copy();
+      history.add(t.up, t.down);
+      ref.read(trafficHistoryVersionProvider.notifier).state = history.version;
     });
     ref.onDispose(() => trafficSub.cancel());
   }

@@ -95,25 +95,9 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                   ),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.content_paste, size: 18),
-                  tooltip: s.pasteFromClipboard,
-                  onPressed: () => _pasteFromClipboard(context, ref),
-                  style: IconButton.styleFrom(
-                    foregroundColor: YLColors.zinc500,
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.folder_open, size: 18),
-                  tooltip: s.importLocalFile,
-                  onPressed: () => _importLocalFile(context, ref),
-                  style: IconButton.styleFrom(
-                    foregroundColor: YLColors.zinc500,
-                  ),
-                ),
-                IconButton(
                   icon: const Icon(Icons.add, size: 20),
                   tooltip: s.addSubscription,
-                  onPressed: () => _showAddDialog(context, ref),
+                  onPressed: () => _autoAddFromClipboard(context, ref),
                   style: IconButton.styleFrom(
                     foregroundColor: isDark ? Colors.white : YLColors.primary,
                   ),
@@ -274,17 +258,20 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     ).whenComplete(nameCtrl.dispose);
   }
 
-  Future<void> _pasteFromClipboard(
+  /// Auto-read clipboard for URL, fetch subscription name, and show add dialog.
+  Future<void> _autoAddFromClipboard(
       BuildContext context, WidgetRef ref) async {
-    final s = S.of(context);
     final data = await Clipboard.getData(Clipboard.kTextPlain);
     final text = data?.text?.trim() ?? '';
-    if (text.isEmpty || !text.startsWith('http')) {
-      AppNotifier.warning(s.clipboardNoUrl);
-      return;
-    }
+    final hasUrl = text.isNotEmpty && text.startsWith('http');
+
     if (context.mounted) {
-      _showAddDialog(context, ref, prefilledUrl: text);
+      _showAddDialog(
+        context,
+        ref,
+        prefilledUrl: hasUrl ? text : null,
+        autoFetchName: hasUrl,
+      );
     }
   }
 
@@ -363,56 +350,92 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   }
 
   void _showAddDialog(BuildContext context, WidgetRef ref,
-      {String? prefilledUrl}) {
+      {String? prefilledUrl, bool autoFetchName = false}) {
     final s = S.of(context);
     final nameCtrl = TextEditingController();
     final urlCtrl = TextEditingController(text: prefilledUrl);
+    String? fetchedName;
+    bool fetchingName = false;
 
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(s.addSubscriptionDialogTitle),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameCtrl,
-              decoration: InputDecoration(
-                labelText: s.nameLabel,
-                hintText: s.nameHint,
-                prefixIcon: const Icon(Icons.label_outline),
-              ),
-              textInputAction: TextInputAction.next,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          // Auto-fetch name when URL is pre-filled
+          if (autoFetchName && prefilledUrl != null && !fetchingName && fetchedName == null) {
+            fetchingName = true;
+            ProfileService.fetchSubscriptionName(prefilledUrl).then((name) {
+              if (ctx.mounted) {
+                setDialogState(() {
+                  fetchedName = name;
+                  fetchingName = false;
+                  // Only set if user hasn't typed a name
+                  if (name != null && nameCtrl.text.trim().isEmpty) {
+                    nameCtrl.text = name;
+                  }
+                });
+              }
+            });
+          }
+
+          return AlertDialog(
+            title: Text(s.addSubscriptionDialogTitle),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nameCtrl,
+                  decoration: InputDecoration(
+                    labelText: s.nameLabel,
+                    hintText: fetchingName
+                        ? (s.isEn ? 'Fetching name...' : '正在获取名称...')
+                        : s.nameHint,
+                    prefixIcon: const Icon(Icons.label_outline),
+                    suffixIcon: fetchingName
+                        ? const Padding(
+                            padding: EdgeInsets.all(12),
+                            child: SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          )
+                        : null,
+                  ),
+                  textInputAction: TextInputAction.next,
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: urlCtrl,
+                  decoration: InputDecoration(
+                    labelText: s.urlLabel,
+                    hintText: 'https://...',
+                    prefixIcon: const Icon(Icons.link),
+                  ),
+                  maxLines: 2,
+                  textInputAction: TextInputAction.done,
+                ),
+              ],
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: urlCtrl,
-              decoration: InputDecoration(
-                labelText: s.urlLabel,
-                hintText: 'https://...',
-                prefixIcon: const Icon(Icons.link),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: Text(s.cancel),
               ),
-              maxLines: 2,
-              textInputAction: TextInputAction.done,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text(s.cancel),
-          ),
-          FilledButton(
-            onPressed: () {
-              final name = nameCtrl.text.trim();
-              final url = urlCtrl.text.trim();
-              if (name.isEmpty || url.isEmpty) return;
-              Navigator.pop(ctx); // close dialog first
-              _doAddProfile(context, ref, name, url);
-            },
-            child: Text(s.add),
-          ),
-        ],
+              FilledButton(
+                onPressed: () {
+                  final name = nameCtrl.text.trim();
+                  final url = urlCtrl.text.trim();
+                  if (url.isEmpty) return;
+                  Navigator.pop(ctx); // close dialog first
+                  // Name can be empty — ProfileService will use header name or URL hostname
+                  _doAddProfile(context, ref, name, url);
+                },
+                child: Text(s.add),
+              ),
+            ],
+          );
+        },
       ),
     ).whenComplete(() {
       nameCtrl.dispose();

@@ -34,6 +34,7 @@ import 'providers/profile_provider.dart';
 import 'providers/proxy_provider.dart';
 import 'shared/app_notifier.dart';
 import 'core/kernel/core_manager.dart';
+import 'core/storage/auth_token_service.dart';
 import 'services/profile_service.dart';
 import 'core/storage/settings_service.dart';
 import 'theme.dart';
@@ -46,6 +47,12 @@ final deepLinkUrlProvider = StateProvider<String?>((ref) => null);
 
 /// Initial tab index restored from SettingsService (Android process restore).
 final initialTabIndexProvider = Provider<int>((ref) => 0);
+
+/// Pre-loaded onboarding flag (avoids async blank flash in _AuthGate).
+final hasSeenOnboardingProvider = StateProvider<bool>((ref) => false);
+
+/// Pre-loaded built tabs (avoids SizedBox.shrink for previously visited tabs).
+final initialBuiltTabsProvider = Provider<List<int>>((ref) => [0]);
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -67,6 +74,17 @@ void main() async {
   final savedToggleHotkey = await SettingsService.getToggleHotkey();
   final savedDelayResults = await SettingsService.getDelayResults();
   final savedTabIndex = await SettingsService.getLastTabIndex();
+  final savedBuiltTabs = await SettingsService.getBuiltTabs();
+  final savedOnboarding = await SettingsService.getHasSeenOnboarding();
+
+  // Pre-load auth state to eliminate blank screen flash on Android resume.
+  // AuthNotifier._init() is async and shows AuthStatus.unknown (blank) until done.
+  // By pre-reading token + cached profile here, we can pass them as initial state.
+  final authService = AuthTokenService.instance;
+  final savedToken = await authService.getToken();
+  final savedProfile = (savedToken != null && savedToken.isNotEmpty)
+      ? await authService.getCachedProfile()
+      : null;
 
   // Apply global strings language before runApp (for tray etc.)
   S.setLanguage(savedLanguage);
@@ -126,6 +144,19 @@ void main() async {
       delayResultsProvider.overrideWith((ref) => savedDelayResults),
       expandedGroupNamesProvider.overrideWith((ref) => <String>{}),
       initialTabIndexProvider.overrideWithValue(savedTabIndex),
+      hasSeenOnboardingProvider.overrideWith((ref) => savedOnboarding),
+      initialBuiltTabsProvider.overrideWithValue(savedBuiltTabs),
+      // Pre-loaded auth state: eliminates blank screen from async AuthNotifier._init()
+      authProvider.overrideWith((ref) => AuthNotifier(
+        ref,
+        initial: (savedToken != null && savedToken.isNotEmpty)
+            ? AuthState(
+                status: AuthStatus.loggedIn,
+                token: savedToken,
+                userProfile: savedProfile,
+              )
+            : const AuthState(status: AuthStatus.loggedOut),
+      )),
     ],
     child: const YueLinkApp(),
   ));
@@ -170,6 +201,13 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       try {
         _initListeners();
+        // On Android engine recreate, didChangeAppLifecycleState(resumed) may
+        // NOT fire (it only triggers on transitions, not initial state).
+        // Run the recovery check here to detect a surviving Go core immediately
+        // instead of waiting up to 10s for the heartbeat.
+        if (Platform.isAndroid) {
+          await _onAppResumed();
+        }
         await _maybeAutoConnect();
         _checkSubscriptionExpiry();
         _initDeepLinks();
@@ -332,6 +370,7 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
         ref.read(coreStatusProvider.notifier).state = CoreStatus.stopped;
         ref.read(trafficProvider.notifier).state = const Traffic();
         ref.read(trafficHistoryProvider.notifier).state = TrafficHistory();
+        ref.read(trafficHistoryVersionProvider.notifier).state = 0;
         // Clear desktop system proxy to prevent dead-proxy network blackout
         if (Platform.isMacOS || Platform.isWindows) {
           CoreActions.clearSystemProxyStatic().catchError((_) {});
@@ -612,6 +651,11 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
   }
 
   Future<void> _maybeAutoConnect() async {
+    // Skip if core is already running (e.g. recovered from Android engine recreate)
+    if (ref.read(coreStatusProvider) == CoreStatus.running) {
+      debugPrint('[AutoConnect] core already running — skipping');
+      return;
+    }
     final autoConnect = ref.read(autoConnectProvider);
     if (!autoConnect) {
       debugPrint('[AutoConnect] disabled by user setting');
@@ -704,39 +748,30 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
 
 /// Shows login page when not authenticated, main shell when logged in.
 /// On first login, shows onboarding before main shell.
-class _AuthGate extends ConsumerStatefulWidget {
+///
+/// Auth state and onboarding flag are pre-loaded in main() to eliminate
+/// blank screen flashes on Android engine recreate (background→foreground).
+class _AuthGate extends ConsumerWidget {
   const _AuthGate();
 
   @override
-  ConsumerState<_AuthGate> createState() => _AuthGateState();
-}
-
-class _AuthGateState extends ConsumerState<_AuthGate> {
-  bool? _hasSeenOnboarding;
-
-  @override
-  void initState() {
-    super.initState();
-    SettingsService.getHasSeenOnboarding().then((v) {
-      if (mounted) setState(() => _hasSeenOnboarding = v);
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final authState = ref.watch(authProvider);
+    final hasSeenOnboarding = ref.watch(hasSeenOnboardingProvider);
 
     switch (authState.status) {
       case AuthStatus.unknown:
+        // With pre-loaded auth, this should never show. Keep as safety fallback.
         return const SizedBox.shrink();
       case AuthStatus.loggedOut:
         return const YueAuthPage();
       case AuthStatus.loggedIn:
       case AuthStatus.guest:
-        if (_hasSeenOnboarding == null) return const SizedBox.shrink();
-        if (_hasSeenOnboarding == false) {
+        if (!hasSeenOnboarding) {
           return OnboardingPage(
-            onComplete: () => setState(() => _hasSeenOnboarding = true),
+            onComplete: () {
+              ref.read(hasSeenOnboardingProvider.notifier).state = true;
+            },
           );
         }
         return const MainShell();
@@ -763,7 +798,7 @@ class MainShell extends ConsumerStatefulWidget {
 
 class _MainShellState extends ConsumerState<MainShell> {
   late int _currentIndex;
-  final _builtTabs = <int, bool>{0: true};
+  late final Map<int, bool> _builtTabs;
 
   void switchTab(int index) {
     setState(() {
@@ -771,6 +806,9 @@ class _MainShellState extends ConsumerState<MainShell> {
       _builtTabs[index] = true;
     });
     SettingsService.setLastTabIndex(index);
+    SettingsService.setBuiltTabs(
+      _builtTabs.keys.where((k) => _builtTabs[k] == true).toList(),
+    );
   }
 
   static const _pages = [
@@ -784,6 +822,12 @@ class _MainShellState extends ConsumerState<MainShell> {
   void initState() {
     super.initState();
     _currentIndex = ref.read(initialTabIndexProvider).clamp(0, _pages.length - 1);
+    // Restore previously visited tabs from persistence (Android process restore)
+    final savedTabs = ref.read(initialBuiltTabsProvider);
+    _builtTabs = <int, bool>{
+      for (final i in savedTabs)
+        if (i >= 0 && i < _pages.length) i: true,
+    };
     _builtTabs[_currentIndex] = true;
   }
 

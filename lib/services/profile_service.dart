@@ -82,9 +82,14 @@ class ProfileService {
       return result.content;
     });
 
+    // Use fetched name from headers if user didn't provide one
+    final effectiveName = name.isNotEmpty
+        ? name
+        : (result.subInfo.profileTitle ?? _nameFromUrl(url));
+
     final profile = Profile(
       id: id,
-      name: name,
+      name: effectiveName,
       url: url,
       configContent: finalContent,
       lastUpdated: DateTime.now(),
@@ -247,6 +252,43 @@ class ProfileService {
 
     final subInfo = SubscriptionInfo.fromHeaders(response.headers);
     return _DownloadResult(content: response.body, subInfo: subInfo);
+  }
+
+  /// Fallback name from URL hostname when headers don't provide a name.
+  static String _nameFromUrl(String url) {
+    try {
+      final uri = Uri.parse(url);
+      // Use hostname without common prefixes
+      var host = uri.host;
+      if (host.startsWith('www.')) host = host.substring(4);
+      if (host.isNotEmpty) return host;
+    } catch (_) {}
+    return 'Subscription';
+  }
+
+  /// Fetch subscription name from URL headers without downloading the full config.
+  /// Returns the name from `profile-title` or `content-disposition`, or null.
+  static Future<String?> fetchSubscriptionName(String url) async {
+    try {
+      final client = HttpClient();
+      client.connectionTimeout = const Duration(seconds: 10);
+      try {
+        final request = await client.getUrl(Uri.parse(url));
+        request.headers.set('User-Agent', AppConstants.userAgent);
+        final response = await request.close().timeout(const Duration(seconds: 10));
+        final headers = <String, String>{};
+        response.headers.forEach((name, values) {
+          headers[name] = values.join(', ');
+        });
+        await response.drain<void>();
+        final info = SubscriptionInfo.fromHeaders(headers);
+        return info.profileTitle;
+      } finally {
+        client.close(force: true);
+      }
+    } catch (_) {
+      return null;
+    }
   }
 }
 

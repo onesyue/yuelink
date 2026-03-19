@@ -27,7 +27,10 @@ class _ChartCardState extends ConsumerState<ChartCard> {
   Widget build(BuildContext context) {
     final s = S.of(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final liveHistory = ref.watch(trafficHistoryProvider);
+    // Watch the version counter to trigger rebuilds — avoids copying 3600
+    // doubles every second. The history object is mutated in-place.
+    ref.watch(trafficHistoryVersionProvider);
+    final liveHistory = ref.read(trafficHistoryProvider);
     final range = ref.watch(trafficChartRangeProvider);
     final locked = ref.watch(trafficChartLockedProvider);
     final traffic = ref.watch(trafficProvider);
@@ -116,12 +119,13 @@ class _ChartCardState extends ConsumerState<ChartCard> {
           // Chart
           SizedBox(
             height: 120,
-            child: downHistory.isEmpty
-                ? Center(
-                    child: Text('—',
-                        style: YLText.body.copyWith(color: YLColors.zinc400)),
-                  )
-                : _buildChart(context, downHistory, 0),
+            child: _buildChart(
+              context,
+              downHistory.isEmpty
+                  ? List.filled(60, 0.0)
+                  : downHistory,
+              0,
+            ),
           ),
         ],
       ),
@@ -166,8 +170,20 @@ class _ChartCardState extends ConsumerState<ChartCard> {
               reservedSize: 48,
               interval: maxY / 3,
               getTitlesWidget: (value, meta) {
-                // Hide the 0 baseline label.
-                if (value <= 0) return const SizedBox.shrink();
+                // Show 0 baseline label.
+                if (value <= 0) {
+                  return Align(
+                    alignment: Alignment.centerRight,
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 4),
+                      child: Text(
+                        '0',
+                        style: YLText.caption
+                            .copyWith(fontSize: 9, color: YLColors.zinc400),
+                      ),
+                    ),
+                  );
+                }
                 // Top label (maxY): anchor to topRight so the text sits
                 // entirely inside the chart and never bleeds above it.
                 final isTop = value >= meta.max * 0.99;
@@ -187,7 +203,7 @@ class _ChartCardState extends ConsumerState<ChartCard> {
             ),
           ),
         ),
-        clipData: const FlClipData.all(),
+        clipData: const FlClipData.none(),
         lineTouchData: const LineTouchData(enabled: false),
         lineBarsData: [
           _line(toSpots(down), YLColors.accent),
@@ -205,7 +221,10 @@ class _ChartCardState extends ConsumerState<ChartCard> {
       color: color,
       barWidth: 1.5,
       dotData: const FlDotData(show: false),
-      belowBarData: BarAreaData(show: false),
+      belowBarData: BarAreaData(
+        show: true,
+        color: color.withValues(alpha: 0.08),
+      ),
     );
   }
 

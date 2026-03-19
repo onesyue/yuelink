@@ -299,6 +299,16 @@ class SettingsService {
     await set('lastTabIndex', index);
   }
 
+  static Future<List<int>> getBuiltTabs() async {
+    final list = await get<List>('builtTabs');
+    if (list == null) return [0];
+    return list.cast<int>();
+  }
+
+  static Future<void> setBuiltTabs(List<int> tabs) async {
+    await set('builtTabs', tabs);
+  }
+
   // ── Onboarding ─────────────────────────────────────────────────────────────
 
   static Future<bool> getHasSeenOnboarding() async {

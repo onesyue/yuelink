@@ -168,6 +168,7 @@ class CoreActions {
       ref.read(coreStatusProvider.notifier).state = CoreStatus.stopped;
       ref.read(trafficProvider.notifier).state = const Traffic();
       ref.read(trafficHistoryProvider.notifier).state = TrafficHistory();
+      ref.read(trafficHistoryVersionProvider.notifier).state = 0;
     }
   }
 
@@ -420,6 +421,7 @@ final coreHeartbeatProvider = Provider<void>((ref) {
         ref.read(coreStatusProvider.notifier).state = CoreStatus.stopped;
         ref.read(trafficProvider.notifier).state = const Traffic();
         ref.read(trafficHistoryProvider.notifier).state = TrafficHistory();
+        ref.read(trafficHistoryVersionProvider.notifier).state = 0;
         // Clear desktop system proxy to prevent dead-proxy network blackout
         if (Platform.isMacOS || Platform.isWindows) {
           CoreActions.clearSystemProxyStatic().catchError((_) {});
@@ -440,6 +442,11 @@ final trafficProvider = StateProvider<Traffic>((ref) => const Traffic());
 
 final trafficHistoryProvider =
     StateProvider<TrafficHistory>((ref) => TrafficHistory());
+
+/// Monotonically increasing version counter for [trafficHistoryProvider].
+/// Bumped on every sample add — ChartCard watches this instead of a full
+/// TrafficHistory copy, saving ~3600 double copies per second.
+final trafficHistoryVersionProvider = StateProvider<int>((ref) => 0);
 
 // ------------------------------------------------------------------
 // Memory usage state

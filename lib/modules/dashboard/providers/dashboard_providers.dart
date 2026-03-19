@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/kernel/core_manager.dart';
 import '../../../providers/core_provider.dart';
+import '../../nodes/providers/nodes_providers.dart';
 
 class ExitIpInfo {
   const ExitIpInfo({
@@ -136,3 +137,87 @@ Future<ExitIpInfo> _fetchPublicIp() async {
 
 // Keep legacy alias so any remaining references compile
 final proxyServerIpProvider = exitIpInfoProvider;
+
+// ── AI Unlock Detection ─────────────────────────────────────────────────────
+
+/// Common AI proxy group name patterns.
+const _aiGroupPatterns = ['ai', 'chatgpt', 'openai', 'gpt', 'claude', '人工智能'];
+
+class AiUnlockInfo {
+  final String groupName;
+  final String nodeName;
+  final bool? unlocked; // null = testing
+  const AiUnlockInfo({
+    required this.groupName,
+    required this.nodeName,
+    this.unlocked,
+  });
+}
+
+/// Finds the AI proxy group and its selected node.
+final aiGroupInfoProvider = Provider<AiUnlockInfo?>((ref) {
+  final groups = ref.watch(proxyGroupsProvider);
+  if (groups.isEmpty) return null;
+
+  for (final g in groups) {
+    final lower = g.name.toLowerCase();
+    if (_aiGroupPatterns.any((p) => lower.contains(p))) {
+      return AiUnlockInfo(
+        groupName: g.name,
+        nodeName: g.now,
+      );
+    }
+  }
+  return null;
+});
+
+/// Tests if AI services are accessible through the proxy.
+/// Makes a lightweight request to chat.openai.com through mihomo's mixed-port.
+/// Any successful response (even 403/401) means the endpoint is reachable.
+final aiUnlockTestProvider = FutureProvider.autoDispose<AiUnlockInfo?>((ref) async {
+  final status = ref.watch(coreStatusProvider);
+  if (status != CoreStatus.running) return null;
+
+  final aiInfo = ref.watch(aiGroupInfoProvider);
+  if (aiInfo == null) return null;
+
+  if (CoreManager.instance.isMockMode) {
+    // Mock: simulate unlock
+    return AiUnlockInfo(
+      groupName: aiInfo.groupName,
+      nodeName: aiInfo.nodeName,
+      unlocked: true,
+    );
+  }
+
+  final port = CoreManager.instance.mixedPort;
+  try {
+    final client = HttpClient();
+    client.findProxy = (uri) => 'PROXY 127.0.0.1:$port';
+    client.connectionTimeout = const Duration(seconds: 8);
+    client.badCertificateCallback = (_, __, ___) => true;
+    try {
+      final req = await client.getUrl(
+          Uri.parse('https://chat.openai.com/cdn-cgi/trace'));
+      req.headers.set('User-Agent', 'YueLink/1.0');
+      final resp = await req.close().timeout(const Duration(seconds: 8));
+      await resp.drain<void>();
+      // Any HTTP response (200, 403, etc.) means the node can reach OpenAI
+      final ok = resp.statusCode > 0 && resp.statusCode < 500;
+      return AiUnlockInfo(
+        groupName: aiInfo.groupName,
+        nodeName: aiInfo.nodeName,
+        unlocked: ok,
+      );
+    } finally {
+      client.close(force: true);
+    }
+  } catch (e) {
+    debugPrint('[AiUnlock] test failed: $e');
+    return AiUnlockInfo(
+      groupName: aiInfo.groupName,
+      nodeName: aiInfo.nodeName,
+      unlocked: false,
+    );
+  }
+});

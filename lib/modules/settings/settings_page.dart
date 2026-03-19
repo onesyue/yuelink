@@ -7,13 +7,13 @@ import 'package:path_provider/path_provider.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
-import 'package:launch_at_startup/launch_at_startup.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../constants.dart';
 import 'web_page.dart';
 import '../../l10n/app_strings.dart';
 import '../../modules/profiles/profiles_page.dart';
+import 'sub/general_settings_page.dart';
 import '../../modules/store/store_page.dart';
 import '../../modules/store/order_history_page.dart';
 import '../../modules/yue_auth/providers/yue_auth_providers.dart';
@@ -21,12 +21,9 @@ import '../../core/storage/auth_token_service.dart';
 import '../../infrastructure/datasources/xboard_api.dart';
 import '../../shared/formatters/subscription_parser.dart' show formatBytes;
 import '../../providers/core_provider.dart';
-import '../../providers/split_tunnel_provider.dart';
 import '../../shared/app_notifier.dart';
-import '../../core/kernel/core_manager.dart';
 import '../../core/kernel/geodata_service.dart';
 import '../../core/storage/settings_service.dart';
-import '../../core/platform/vpn_service.dart';
 import '../../modules/nodes/providers/nodes_providers.dart';
 import '../../services/update_checker.dart';
 import '../../theme.dart';
@@ -146,23 +143,12 @@ class SettingsPage extends ConsumerStatefulWidget {
 }
 
 class _SettingsPageState extends ConsumerState<SettingsPage> {
-  bool _launchAtStartup = false;
   UpdateInfo? _pendingUpdate;
   bool _checkingUpdate = false;
 
   @override
   void initState() {
     super.initState();
-    _loadSettings();
-  }
-
-  Future<void> _loadSettings() async {
-    final startup = await SettingsService.getLaunchAtStartup();
-    if (mounted) {
-      setState(() {
-        _launchAtStartup = startup;
-      });
-    }
     _checkForUpdate();
   }
 
@@ -173,18 +159,143 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     }
   }
 
+  void _showUpdateDialog(BuildContext context, UpdateInfo info) {
+    final s = S.of(context);
+    var downloading = false;
+    double progress = 0;
+    String? error;
+
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialog) {
+          return AlertDialog(
+            title: Text('${s.updateAvailable} v${info.latestVersion}'),
+            content: SizedBox(
+              width: 340,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (info.releaseNotes.isNotEmpty) ...[
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 200),
+                      child: SingleChildScrollView(
+                        child: Text(
+                          info.releaseNotes,
+                          style: YLText.body.copyWith(color: YLColors.zinc500),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  if (downloading) ...[
+                    LinearProgressIndicator(value: progress > 0 ? progress : null),
+                    const SizedBox(height: 8),
+                    Text(
+                      progress > 0
+                          ? '${(progress * 100).toStringAsFixed(0)}%'
+                          : s.updateDownloading,
+                      style: YLText.caption.copyWith(color: YLColors.zinc500),
+                    ),
+                  ],
+                  if (error != null) ...[
+                    Text(error!,
+                        style: YLText.caption.copyWith(color: YLColors.error)),
+                  ],
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: downloading ? null : () => Navigator.pop(ctx),
+                child: Text(s.cancel),
+              ),
+              if (info.downloadUrl != null)
+                FilledButton(
+                  onPressed: downloading
+                      ? null
+                      : () async {
+                          setDialog(() {
+                            downloading = true;
+                            error = null;
+                            progress = 0;
+                          });
+                          try {
+                            final path = await UpdateChecker.download(
+                              info.downloadUrl!,
+                              onProgress: (received, total) {
+                                if (total > 0) {
+                                  setDialog(() =>
+                                      progress = received / total);
+                                }
+                              },
+                            );
+                            if (ctx.mounted) Navigator.pop(ctx);
+                            _openDownloadedFile(path);
+                          } catch (e) {
+                            if (ctx.mounted) {
+                              setDialog(() {
+                                downloading = false;
+                                error = '${s.updateDownloadFailed}: $e';
+                              });
+                            }
+                          }
+                        },
+                  child: Text(s.updateDownload),
+                )
+              else
+                // Fallback: open GitHub release page if no asset found
+                FilledButton(
+                  onPressed: () async {
+                    Navigator.pop(ctx);
+                    final uri = Uri.parse(info.releaseUrl);
+                    if (await canLaunchUrl(uri)) {
+                      await launchUrl(uri,
+                          mode: LaunchMode.externalApplication);
+                    }
+                  },
+                  child: Text(s.updateDownload),
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _openDownloadedFile(String path) async {
+    final s = S.of(context);
+    try {
+      if (Platform.isAndroid) {
+        // Use platform channel to install APK
+        const channel = MethodChannel('com.yueto.yuelink/vpn');
+        await channel.invokeMethod('installApk', {'path': path});
+      } else if (Platform.isMacOS || Platform.isWindows) {
+        // Open DMG/EXE via system default handler
+        final uri = Uri.file(path);
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(uri);
+        } else {
+          // Fallback: use Process to open
+          if (Platform.isMacOS) {
+            await Process.run('open', [path]);
+          } else {
+            await Process.run('cmd', ['/c', 'start', '', path]);
+          }
+        }
+      }
+      AppNotifier.success(s.updateInstalling);
+    } catch (e) {
+      AppNotifier.error('${s.updateDownloadFailed}: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
-    final theme = ref.watch(themeProvider);
-    final language = ref.watch(languageProvider);
-    final autoConnect = ref.watch(autoConnectProvider);
-    final connectionMode = ref.watch(connectionModeProvider);
-    ref.watch(logLevelProvider); // retained for hidden Core section
-    final systemProxyOnConnect = ref.watch(systemProxyOnConnectProvider);
     final status = ref.watch(coreStatusProvider);
-    final routingMode = ref.watch(routingModeProvider);
-    final isDesktop = Platform.isMacOS || Platform.isWindows || Platform.isLinux;
     final isGuest = ref.watch(authProvider).isGuest;
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -273,372 +384,25 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 ),
               ),
 
-              // ══ 2. Settings (设置) ═════════════════════════════════
+              // ══ 2. 通用 ══════════════════════════════════════════
               _SectionTitle(s.sectionSettings),
               _SettingsCard(
                 child: Column(
                   children: [
-                    // Theme
                     YLInfoRow(
-                      label: s.themeLabel,
-                      trailing: SizedBox(
-                        width: 240,
-                        child: SegmentedButton<ThemeMode>(
-                          showSelectedIcon: false,
-                          style: SegmentedButton.styleFrom(
-                            visualDensity: VisualDensity.compact,
-                            textStyle: const TextStyle(fontSize: 12),
-                          ),
-                          segments: [
-                            ButtonSegment(
-                                value: ThemeMode.system,
-                                label: Text(s.themeSystem)),
-                            ButtonSegment(
-                                value: ThemeMode.light,
-                                label: Text(s.themeLight)),
-                            ButtonSegment(
-                                value: ThemeMode.dark,
-                                label: Text(s.themeDark)),
-                          ],
-                          selected: {theme},
-                          onSelectionChanged: (v) {
-                            ref.read(themeProvider.notifier).state = v.first;
-                            SettingsService.setThemeMode(v.first);
-                          },
-                        ),
-                      ),
-                    ),
-                    Divider(height: 1, thickness: 0.5, color: dividerColor),
-                    // Language
-                    YLInfoRow(
-                      label: s.sectionLanguage,
-                      trailing: SizedBox(
-                        width: 160,
-                        child: SegmentedButton<String>(
-                          showSelectedIcon: false,
-                          style: SegmentedButton.styleFrom(
-                            visualDensity: VisualDensity.compact,
-                            textStyle: const TextStyle(fontSize: 12),
-                          ),
-                          segments: [
-                            ButtonSegment(
-                                value: 'zh', label: Text(s.languageChinese)),
-                            ButtonSegment(
-                                value: 'en', label: Text(s.languageEnglish)),
-                          ],
-                          selected: {language},
-                          onSelectionChanged: (v) async {
-                            ref.read(languageProvider.notifier).state = v.first;
-                            await SettingsService.setLanguage(v.first);
-                          },
-                        ),
-                      ),
-                    ),
-                    Divider(height: 1, thickness: 0.5, color: dividerColor),
-                    // Auto connect
-                    YLSettingsRow(
-                      title: s.autoConnect,
-                      trailing: CupertinoSwitch(
-                        value: autoConnect,
-                        activeTrackColor: YLColors.connected,
-                        onChanged: (v) async {
-                          ref.read(autoConnectProvider.notifier).state = v;
-                          await SettingsService.setAutoConnect(v);
-                        },
-                      ),
-                    ),
-                    Divider(height: 1, thickness: 0.5, color: dividerColor),
-                    // Routing mode
-                    YLInfoRow(
-                      label: s.routingModeSetting,
-                      trailing: SizedBox(
-                        width: 200,
-                        child: SegmentedButton<String>(
-                          showSelectedIcon: false,
-                          style: SegmentedButton.styleFrom(
-                            visualDensity: VisualDensity.compact,
-                            textStyle: const TextStyle(fontSize: 12),
-                          ),
-                          segments: [
-                            ButtonSegment(
-                                value: 'rule',
-                                label: Text(s.routeModeRule)),
-                            ButtonSegment(
-                                value: 'global',
-                                label: Text(s.routeModeGlobal)),
-                            ButtonSegment(
-                                value: 'direct',
-                                label: Text(s.routeModeDirect)),
-                          ],
-                          selected: {routingMode},
-                          onSelectionChanged: (v) async {
-                            final mode = v.first;
-                            ref.read(routingModeProvider.notifier).state = mode;
-                            await SettingsService.setRoutingMode(mode);
-                            if (status == CoreStatus.running) {
-                              try {
-                                await CoreManager.instance.api.setRoutingMode(mode);
-                              } catch (_) {}
-                            }
-                          },
-                        ),
-                      ),
-                    ),
-                    if (isDesktop) ...[
-                      Divider(height: 1, thickness: 0.5, color: dividerColor),
-                      YLInfoRow(
-                        label: s.connectionMode,
-                        trailing: DropdownButton<String>(
-                          value: connectionMode,
-                          underline: const SizedBox.shrink(),
-                          style: YLText.body.copyWith(
-                            color: isDark ? YLColors.zinc200 : YLColors.zinc700,
-                          ),
-                          dropdownColor: isDark ? YLColors.zinc800 : Colors.white,
-                          items: [
-                            DropdownMenuItem(
-                                value: 'tun', child: Text(s.modeTun)),
-                            DropdownMenuItem(
-                                value: 'systemProxy',
-                                child: Text(s.modeSystemProxy)),
-                          ],
-                          onChanged: (v) async {
-                            if (v == null) return;
-                            ref.read(connectionModeProvider.notifier).state = v;
-                            await SettingsService.setConnectionMode(v);
-                          },
-                        ),
-                      ),
-                      Divider(height: 1, thickness: 0.5, color: dividerColor),
-                      if (Platform.isLinux)
-                        const _LinuxProxyNoticeRow()
-                      else
-                        YLSettingsRow(
-                          title: s.setSystemProxyOnConnect,
-                          description: s.setSystemProxyOnConnectSub,
-                          trailing: CupertinoSwitch(
-                            value: systemProxyOnConnect,
-                            activeTrackColor: YLColors.connected,
-                            onChanged: (v) async {
-                              ref
-                                  .read(systemProxyOnConnectProvider.notifier)
-                                  .state = v;
-                              await SettingsService.setSystemProxyOnConnect(v);
-                            },
-                          ),
-                        ),
-                      Divider(height: 1, thickness: 0.5, color: dividerColor),
-                      YLSettingsRow(
-                        title: s.launchAtStartupLabel,
-                        description: s.launchAtStartupSub,
-                        trailing: CupertinoSwitch(
-                          value: _launchAtStartup,
-                          activeTrackColor: YLColors.connected,
-                          onChanged: (v) async {
-                            setState(() => _launchAtStartup = v);
-                            await SettingsService.setLaunchAtStartup(v);
-                            if (v) {
-                              await launchAtStartup.enable();
-                            } else {
-                              await launchAtStartup.disable();
-                            }
-                          },
-                        ),
-                      ),
-                      Divider(height: 1, thickness: 0.5, color: dividerColor),
-                      if (!Platform.isLinux) ...[
-                        _CloseBehaviorRow(),
-                        Divider(height: 1, thickness: 0.5, color: dividerColor),
-                      ],
-                      _HotkeyRow(),
-                    ],
-                  ],
-                ),
-              ),
-
-              /* ══ 3b. Network ══════════════════════════════════════
-              _SectionTitle(s.sectionNetwork),
-              _SettingsCard(child: _GeoDataRow()),
-
-              // ══ 4. Core ═══════════════════════════════════════════
-              _SectionTitle(s.sectionCore),
-              _SettingsCard(
-                child: Column(
-                  children: [
-                    YLInfoRow(
-                      label: s.coreStatus,
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          YLStatusDot(
-                            color: status == CoreStatus.running
-                                ? YLColors.connected
-                                : YLColors.disconnected,
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            status == CoreStatus.running
-                                ? s.coreRunning
-                                : s.coreStopped,
-                            style: YLText.body.copyWith(
-                              color: status == CoreStatus.running
-                                  ? YLColors.connected
-                                  : YLColors.zinc500,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Divider(height: 1, thickness: 0.5, color: dividerColor),
-                    YLInfoRow(
-                      label: s.logLevelSetting,
-                      trailing: DropdownButton<String>(
-                        value: logLevel,
-                        underline: const SizedBox.shrink(),
-                        style: YLText.body.copyWith(
-                          color: isDark ? YLColors.zinc200 : YLColors.zinc700,
-                        ),
-                        dropdownColor: isDark ? YLColors.zinc800 : Colors.white,
-                        items: const [
-                          DropdownMenuItem(
-                              value: 'debug', child: Text('Debug')),
-                          DropdownMenuItem(
-                              value: 'info', child: Text('Info')),
-                          DropdownMenuItem(
-                              value: 'warning', child: Text('Warning')),
-                          DropdownMenuItem(
-                              value: 'error', child: Text('Error')),
-                          DropdownMenuItem(
-                              value: 'silent', child: Text('Silent')),
-                        ],
-                        onChanged: (v) async {
-                          if (v == null) return;
-                          ref.read(logLevelProvider.notifier).state = v;
-                          await SettingsService.setLogLevel(v);
-                          if (status == CoreStatus.running) {
-                            try {
-                              await CoreManager.instance.api.setLogLevel(v);
-                            } catch (_) {}
-                          }
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              // ══ 5. Diagnostics ════════════════════════════════════
-              _SectionTitle(s.sectionTools),
-              _SettingsCard(
-                child: Column(
-                  children: [
-                    YLInfoRow(
-                      label: s.navConnections,
-                      trailing: const Icon(Icons.chevron_right, size: 18,
-                          color: YLColors.zinc400),
-                      enabled: status == CoreStatus.running,
-                      onTap: status == CoreStatus.running
-                          ? () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                    builder: (_) => const ConnectionsSubPage()),
-                              )
-                          : null,
-                    ),
-                    Divider(height: 1, thickness: 0.5, color: dividerColor),
-                    YLInfoRow(
-                      label: s.tabLogs,
-                      trailing: const Icon(Icons.chevron_right, size: 18,
-                          color: YLColors.zinc400),
-                      enabled: status == CoreStatus.running,
-                      onTap: status == CoreStatus.running
-                          ? () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                    builder: (_) => const LogsSubPage()),
-                              )
-                          : null,
-                    ),
-                    Divider(height: 1, thickness: 0.5, color: dividerColor),
-                    YLInfoRow(
-                      label: s.diagnostics,
-                      trailing: const Icon(Icons.chevron_right, size: 18,
-                          color: YLColors.zinc400),
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) => const StartupReportPage()),
-                      ),
-                    ),
-                    Divider(height: 1, thickness: 0.5, color: dividerColor),
-                    YLInfoRow(
-                      label: s.exportLogs,
-                      trailing: const Icon(Icons.chevron_right, size: 18,
-                          color: YLColors.zinc400),
-                      onTap: () => _ExportLogsSheet.show(context),
-                    ),
-                  ],
-                ),
-              */ // end hidden sections
-
-              // ══ 3. Support (支持) ═════════════════════════════════
-              _SectionTitle(s.sectionSupport),
-              _SettingsCard(
-                child: Column(
-                  children: [
-                    YLInfoRow(
-                      label: s.mineTelegramGroup,
+                      label: s.preferencesLabel,
                       trailing: const Icon(Icons.chevron_right,
                           size: 18, color: YLColors.zinc400),
-                      onTap: () async {
-                        final tgUri = Uri.parse('tg://resolve?domain=yue_to');
-                        if (await canLaunchUrl(tgUri)) {
-                          await launchUrl(tgUri);
-                        } else {
-                          await launchUrl(
-                            Uri.parse('https://t.me/yue_to'),
-                            mode: LaunchMode.externalApplication,
-                          );
-                        }
-                      },
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                            builder: (_) => const GeneralSettingsPage()),
+                      ),
                     ),
                   ],
                 ),
               ),
 
-              // ══ 4. Account actions (仅登录) ════════════════════════
-              if (!isGuest) ...[
-                _SectionTitle(s.sectionAccountActions),
-                _SettingsCard(
-                  child: Column(
-                    children: [
-                      YLInfoRow(
-                        label: s.mineChangePassword,
-                        trailing: const Icon(Icons.chevron_right,
-                            size: 18, color: YLColors.zinc400),
-                        onTap: () => _showChangePasswordDialog(context, s),
-                      ),
-                      Divider(height: 1, thickness: 0.5, color: dividerColor),
-                      YLInfoRow(
-                        label: s.authLogout,
-                        labelStyle: YLText.body.copyWith(color: YLColors.error),
-                        trailing: const Icon(Icons.chevron_right,
-                            size: 18, color: YLColors.error),
-                        onTap: () => _confirmLogout(context, s, ref),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-
-              // Split tunnel (Android only)
-              if (Platform.isAndroid) ...[
-                _SectionTitle(s.sectionSplitTunnel),
-                const _SplitTunnelSection(),
-                const SizedBox(height: 8),
-              ],
-
-              // ══ About ═════════════════════════════════════════════
+              // ══ 关于 ═════════════════════════════════════════════
               _SectionTitle(s.sectionAbout),
               _SettingsCard(
                 child: Column(
@@ -661,14 +425,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                       onTap: _checkingUpdate
                           ? null
                           : _pendingUpdate != null
-                              ? () async {
-                                  final uri = Uri.parse(
-                                      _pendingUpdate!.releaseUrl);
-                                  if (await canLaunchUrl(uri)) {
-                                    await launchUrl(uri,
-                                        mode: LaunchMode.externalApplication);
-                                  }
-                                }
+                              ? () => _showUpdateDialog(context, _pendingUpdate!)
                               : () async {
                                   setState(() => _checkingUpdate = true);
                                   final info =
@@ -680,9 +437,28 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                                     });
                                     if (info == null) {
                                       AppNotifier.info(s.alreadyLatest);
+                                    } else {
+                                      _showUpdateDialog(context, info);
                                     }
                                   }
                                 },
+                    ),
+                    Divider(height: 1, thickness: 0.5, color: dividerColor),
+                    YLInfoRow(
+                      label: s.mineTelegramGroup,
+                      trailing: const Icon(Icons.chevron_right,
+                          size: 18, color: YLColors.zinc400),
+                      onTap: () async {
+                        final tgUri = Uri.parse('tg://resolve?domain=yue_to');
+                        if (await canLaunchUrl(tgUri)) {
+                          await launchUrl(tgUri);
+                        } else {
+                          await launchUrl(
+                            Uri.parse('https://t.me/yue_to'),
+                            mode: LaunchMode.externalApplication,
+                          );
+                        }
+                      },
                     ),
                     Divider(height: 1, thickness: 0.5, color: dividerColor),
                     YLInfoRow(
@@ -1038,247 +814,6 @@ class _SettingsCard extends StatelessWidget {
 
 // ── Split Tunnel Section (Android) ────────────────────────────────────────────
 
-class _SplitTunnelSection extends ConsumerStatefulWidget {
-  const _SplitTunnelSection();
-
-  @override
-  ConsumerState<_SplitTunnelSection> createState() =>
-      _SplitTunnelSectionState();
-}
-
-class _SplitTunnelSectionState extends ConsumerState<_SplitTunnelSection> {
-  List<Map<String, String>>? _apps;
-  String _search = '';
-  bool _loading = false;
-  String? _loadError;
-
-  Future<void> _loadApps() async {
-    setState(() { _loading = true; _loadError = null; });
-    try {
-      final apps = await VpnService.getInstalledApps(showSystem: true);
-      if (mounted) {
-        setState(() {
-          _apps = apps;
-          _loading = false;
-          if (apps.isEmpty) {
-            _loadError = S.of(context).isEn
-                ? 'No apps found. Your device may restrict app visibility.'
-                : '未获取到应用列表，可能受系统权限限制。';
-          }
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _apps = [];
-          _loading = false;
-          _loadError = S.of(context).isEn
-              ? 'Failed to load apps: $e'
-              : '加载应用列表失败: $e';
-        });
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final s = S.of(context);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final mode = ref.watch(splitTunnelModeProvider);
-    final selectedPkgs = ref.watch(splitTunnelAppsProvider);
-    final dividerColor = isDark
-        ? Colors.white.withValues(alpha: 0.06)
-        : Colors.black.withValues(alpha: 0.06);
-
-    return _SettingsCard(
-      child: Column(
-        children: [
-          // Mode selector
-          YLInfoRow(
-            label: s.splitTunnelMode,
-            trailing: DropdownButton<SplitTunnelMode>(
-              value: mode,
-              underline: const SizedBox.shrink(),
-              style: YLText.body.copyWith(
-                color: isDark ? YLColors.zinc200 : YLColors.zinc700,
-              ),
-              dropdownColor: isDark ? YLColors.zinc800 : Colors.white,
-              items: [
-                DropdownMenuItem(
-                    value: SplitTunnelMode.all,
-                    child: Text(s.splitTunnelModeAll)),
-                DropdownMenuItem(
-                    value: SplitTunnelMode.whitelist,
-                    child: Text(s.splitTunnelModeWhitelist)),
-                DropdownMenuItem(
-                    value: SplitTunnelMode.blacklist,
-                    child: Text(s.splitTunnelModeBlacklist)),
-              ],
-              onChanged: (v) {
-                if (v != null) ref.read(splitTunnelModeProvider.notifier).set(v);
-              },
-            ),
-          ),
-          if (mode != SplitTunnelMode.all) ...[
-            Divider(height: 1, thickness: 0.5, color: dividerColor),
-            YLSettingsRow(
-              title: s.splitTunnelApps,
-              description: s.splitTunnelEffectHint,
-              trailing: TextButton.icon(
-                icon: const Icon(Icons.apps, size: 14),
-                label: Text(s.splitTunnelManage),
-                onPressed: () async {
-                  if (_apps == null) await _loadApps();
-                  if (!mounted) return;
-                  _showAppPicker(context, selectedPkgs); // ignore: use_build_context_synchronously
-                },
-              ),
-            ),
-            if (selectedPkgs.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                child: Wrap(
-                  spacing: 6,
-                  runSpacing: 4,
-                  children: selectedPkgs
-                      .map((pkg) => Chip(
-                            label: Text(pkg,
-                                style: const TextStyle(fontSize: 11)),
-                            deleteIcon:
-                                const Icon(Icons.close, size: 14),
-                            onDeleted: () => ref
-                                .read(splitTunnelAppsProvider.notifier)
-                                .remove(pkg),
-                          ))
-                      .toList(),
-                ),
-              ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  void _showAppPicker(BuildContext context, List<String> initialSelected) {
-    final s = S.of(context);
-    // Local mutable copy — updated together with the provider so the
-    // StatefulBuilder can reflect changes without re-reading the provider.
-    final localSelected = Set<String>.from(initialSelected);
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setModal) {
-          final apps = _apps ?? [];
-          final filtered = _search.isEmpty
-              ? List<Map<String, String>>.from(apps)
-              : apps
-                  .where((a) =>
-                      (a['appName'] ?? '').toLowerCase().contains(_search) ||
-                      (a['packageName'] ?? '').toLowerCase().contains(_search))
-                  .toList();
-          // Sort selected apps to the top, then alphabetically by name
-          filtered.sort((a, b) {
-            final aSelected = localSelected.contains(a['packageName']);
-            final bSelected = localSelected.contains(b['packageName']);
-            if (aSelected != bSelected) return aSelected ? -1 : 1;
-            return (a['appName'] ?? '').compareTo(b['appName'] ?? '');
-          });
-
-          return DraggableScrollableSheet(
-            initialChildSize: 0.85,
-            expand: false,
-            builder: (_, sc) => Column(
-              children: [
-                const SizedBox(height: 8),
-                Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                        color: Colors.grey.shade300,
-                        borderRadius: BorderRadius.circular(2))),
-                Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: TextField(
-                    autofocus: false,
-                    decoration: InputDecoration(
-                      hintText: s.splitTunnelSearchHint,
-                      prefixIcon: const Icon(Icons.search, size: 18),
-                      isDense: true,
-                      border: const OutlineInputBorder(),
-                    ),
-                    onChanged: (v) => setModal(() => _search = v.toLowerCase()),
-                  ),
-                ),
-                Expanded(
-                  child: _loading
-                      ? const Center(child: CircularProgressIndicator())
-                      : filtered.isEmpty
-                          ? Center(
-                              child: Padding(
-                                padding: const EdgeInsets.all(24),
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(Icons.apps_outlined, size: 40, color: YLColors.zinc400),
-                                    const SizedBox(height: 12),
-                                    Text(
-                                      _loadError ?? (_search.isNotEmpty
-                                          ? (S.of(context).isEn ? 'No matching apps' : '未找到匹配应用')
-                                          : (S.of(context).isEn ? 'No apps found' : '未获取到应用')),
-                                      textAlign: TextAlign.center,
-                                      style: YLText.body.copyWith(color: YLColors.zinc500),
-                                    ),
-                                    if (_loadError != null) ...[
-                                      const SizedBox(height: 12),
-                                      TextButton(
-                                        onPressed: () {
-                                          _loadApps().then((_) => setModal(() {}));
-                                        },
-                                        child: Text(S.of(context).isEn ? 'Retry' : '重试'),
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                              ),
-                            )
-                          : ListView.builder(
-                              controller: sc,
-                              itemCount: filtered.length,
-                              itemBuilder: (_, i) {
-                                final app = filtered[i];
-                                final pkg = app['packageName'] ?? '';
-                                final isSelected = localSelected.contains(pkg);
-                                return CheckboxListTile(
-                                  dense: true,
-                                  title: Text(app['appName'] ?? pkg),
-                                  subtitle: Text(pkg,
-                                      style: const TextStyle(fontSize: 11)),
-                                  value: isSelected,
-                                  onChanged: (_) {
-                                    setModal(() {
-                                      if (localSelected.contains(pkg)) {
-                                        localSelected.remove(pkg);
-                                      } else {
-                                        localSelected.add(pkg);
-                                      }
-                                    });
-                                    ref
-                                        .read(splitTunnelAppsProvider.notifier)
-                                        .toggle(pkg);
-                                  },
-                                );
-                              },
-                            ),
-                ),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }
-}
 
 /// A single settings row with a label on the left and a value or trailing widget on the right.
 class YLInfoRow extends StatelessWidget {

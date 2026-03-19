@@ -178,34 +178,55 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                       const RepaintBoundary(child: AnnouncementBanner()),
 
                       // ── Running: carrier, exit IP, chart, stats ─────
-                      if (isRunning) ...[
-                        const SizedBox(height: 12),
-                        const RepaintBoundary(child: CarrierCard()),
-                        const SizedBox(height: 12),
-                        if (isWide)
-                          SizedBox(
-                            height: 190,
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: const [
-                                Expanded(flex: 1, child: RepaintBoundary(child: ExitIpCard())),
-                                SizedBox(width: 12),
-                                Expanded(
-                                  flex: 2,
-                                  child:
-                                      RepaintBoundary(child: ChartCard()),
-                                ),
-                              ],
-                            ),
-                          )
-                        else ...[
-                          const RepaintBoundary(child: ExitIpCard()),
-                          const SizedBox(height: 12),
-                          const RepaintBoundary(child: ChartCard()),
-                        ],
-                        const SizedBox(height: 12),
-                        const RepaintBoundary(child: StatsCard()),
-                      ],
+                      // Wrap in AnimatedSize + AnimatedOpacity to avoid
+                      // layout jump / flash when core starts/stops.
+                      AnimatedSize(
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeInOut,
+                        alignment: Alignment.topCenter,
+                        child: AnimatedOpacity(
+                          opacity: isRunning ? 1.0 : 0.0,
+                          duration: const Duration(milliseconds: 250),
+                          child: isRunning
+                              ? Column(
+                                  children: [
+                                    const SizedBox(height: 12),
+                                    const RepaintBoundary(child: CarrierCard()),
+                                    const SizedBox(height: 12),
+                                    if (isWide)
+                                      SizedBox(
+                                        height: 190,
+                                        child: Row(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.stretch,
+                                          children: const [
+                                            Expanded(
+                                                flex: 1,
+                                                child: RepaintBoundary(
+                                                    child: ExitIpCard())),
+                                            SizedBox(width: 12),
+                                            Expanded(
+                                              flex: 2,
+                                              child: RepaintBoundary(
+                                                  child: ChartCard()),
+                                            ),
+                                          ],
+                                        ),
+                                      )
+                                    else ...[
+                                      const RepaintBoundary(
+                                          child: ExitIpCard()),
+                                      const SizedBox(height: 12),
+                                      const RepaintBoundary(
+                                          child: ChartCard()),
+                                    ],
+                                    const SizedBox(height: 12),
+                                    const RepaintBoundary(child: StatsCard()),
+                                  ],
+                                )
+                              : const SizedBox.shrink(),
+                        ),
+                      ),
 
                       // ── Subscription info ───────────────────────────
                       const SizedBox(height: 16),

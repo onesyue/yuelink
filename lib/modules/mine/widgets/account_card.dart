@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/storage/auth_token_service.dart';
 import '../../../infrastructure/datasources/xboard_api.dart';
 import '../../../l10n/app_strings.dart';
 import '../../../modules/yue_auth/providers/yue_auth_providers.dart';
+import '../../../shared/app_notifier.dart';
 import '../../../shared/formatters/subscription_parser.dart' show formatBytes;
 import '../../../theme.dart';
 
 /// Full-featured account card shown at the top of the "我的" page.
 /// Shows plan info, traffic progress bar, expiry, and a renewal warning.
+/// Includes change-password and logout icon buttons in the header.
 class AccountCard extends ConsumerWidget {
   const AccountCard({super.key});
 
@@ -37,7 +40,7 @@ class AccountCard extends ConsumerWidget {
           ),
           child: profile == null
               ? _EmptyProfile(s: s, isDark: isDark)
-              : _ProfileContent(profile: profile, s: s, isDark: isDark),
+              : _ProfileContent(profile: profile, s: s, isDark: isDark, ref: ref),
         ),
       ],
     );
@@ -70,11 +73,13 @@ class _ProfileContent extends StatelessWidget {
   final UserProfile profile;
   final S s;
   final bool isDark;
+  final WidgetRef ref;
 
   const _ProfileContent({
     required this.profile,
     required this.s,
     required this.isDark,
+    required this.ref,
   });
 
   @override
@@ -88,7 +93,7 @@ class _ProfileContent extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // ── Header: avatar + email + plan chip ────────────────────
+        // ── Header: avatar + email + plan chip + action icons ─────
         Row(
           children: [
             _Avatar(
@@ -133,6 +138,20 @@ class _ProfileContent extends StatelessWidget {
                   ],
                 ],
               ),
+            ),
+            // ── Action icons: change password + logout ─────────────
+            _ActionIcon(
+              icon: Icons.lock_outline_rounded,
+              tooltip: s.mineChangePassword,
+              color: YLColors.zinc400,
+              onTap: () => _showChangePasswordDialog(context),
+            ),
+            const SizedBox(width: 2),
+            _ActionIcon(
+              icon: Icons.logout_rounded,
+              tooltip: s.authLogout,
+              color: YLColors.error,
+              onTap: () => _confirmLogout(context),
             ),
           ],
         ),
@@ -254,6 +273,133 @@ class _ProfileContent extends StatelessWidget {
     final d = p.daysRemaining;
     if (d != null && d <= 7) return Colors.orange;
     return YLColors.zinc500;
+  }
+
+  void _showChangePasswordDialog(BuildContext context) {
+    final oldPwCtrl = TextEditingController();
+    final newPwCtrl = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(s.mineChangePassword),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: oldPwCtrl,
+              obscureText: true,
+              decoration: InputDecoration(labelText: s.oldPassword),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: newPwCtrl,
+              obscureText: true,
+              decoration: InputDecoration(labelText: s.newPassword),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(s.cancel),
+          ),
+          FilledButton(
+            onPressed: () async {
+              final oldPw = oldPwCtrl.text.trim();
+              final newPw = newPwCtrl.text.trim();
+              if (oldPw.isEmpty || newPw.isEmpty) return;
+              Navigator.pop(ctx);
+              await _doChangePassword(oldPw, newPw);
+            },
+            child: Text(s.confirm),
+          ),
+        ],
+      ),
+    ).whenComplete(() {
+      oldPwCtrl.dispose();
+      newPwCtrl.dispose();
+    });
+  }
+
+  Future<void> _doChangePassword(String oldPassword, String newPassword) async {
+    final token = ref.read(authProvider).token;
+    if (token == null) return;
+    try {
+      final host = await AuthTokenService.instance.getApiHost() ??
+          'https://d7ccm19ki90mg.cloudfront.net';
+      final api = XBoardApi(baseUrl: host);
+      await api.changePassword(
+        token: token,
+        oldPassword: oldPassword,
+        newPassword: newPassword,
+      );
+      AppNotifier.success(s.passwordChangedSuccess);
+    } on XBoardApiException catch (e) {
+      final msg = e.message;
+      AppNotifier.error(
+        msg.isNotEmpty && msg.length < 80 && !msg.startsWith('{')
+            ? msg
+            : s.passwordChangeFailed,
+      );
+    } catch (_) {
+      AppNotifier.error(s.passwordChangeFailed);
+    }
+  }
+
+  void _confirmLogout(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(s.authLogout),
+        content: Text(s.authLogoutConfirm),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(s.cancel),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: YLColors.error),
+            onPressed: () {
+              Navigator.pop(ctx);
+              ref.read(authProvider.notifier).logout();
+            },
+            child: Text(s.authLogout),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Small action icon button ─────────────────────────────────────────────────
+
+class _ActionIcon extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _ActionIcon({
+    required this.icon,
+    required this.tooltip,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Padding(
+          padding: const EdgeInsets.all(8),
+          child: Icon(icon, size: 18, color: color),
+        ),
+      ),
+    );
   }
 }
 

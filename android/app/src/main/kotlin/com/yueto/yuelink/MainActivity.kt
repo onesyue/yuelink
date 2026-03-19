@@ -7,9 +7,12 @@ import android.content.Intent
 import android.content.ServiceConnection
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.net.VpnService
 import android.os.Build
 import android.os.IBinder
+import androidx.core.content.FileProvider
+import java.io.File
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.android.RenderMode
 import io.flutter.embedding.engine.FlutterEngine
@@ -75,6 +78,14 @@ class MainActivity : FlutterActivity() {
                     }
                     "stopVpn"  -> stopVpnService(result)
                     "getTunFd" -> result.success(vpnService?.getTunFd() ?: -1)
+                    "installApk" -> {
+                        val path = call.argument<String>("path")
+                        if (path != null) {
+                            installApk(path, result)
+                        } else {
+                            result.error("INVALID_PATH", "APK path is null", null)
+                        }
+                    }
                     else -> result.notImplemented()
                 }
             }
@@ -143,6 +154,28 @@ class MainActivity : FlutterActivity() {
         } catch (e: Exception) {
             android.util.Log.e("YueLinkApps", "getInstalledApps failed", e)
             return emptyList()
+        }
+    }
+
+    // ── APK installer ─────────────────────────────────────────────────────────
+
+    private fun installApk(path: String, result: MethodChannel.Result) {
+        try {
+            val file = File(path)
+            if (!file.exists()) {
+                result.error("FILE_NOT_FOUND", "APK file not found: $path", null)
+                return
+            }
+            val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(intent)
+            result.success(true)
+        } catch (e: Exception) {
+            result.error("INSTALL_FAILED", e.message, null)
         }
     }
 

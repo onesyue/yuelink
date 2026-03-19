@@ -11,6 +11,10 @@ class TrafficHistory {
   int _index = 0;
   bool _full = false;
 
+  /// Monotonically increasing version. Bumped on every [add] so that
+  /// Riverpod StateProvider can detect changes without a full [copy].
+  int version = 0;
+
   TrafficHistory()
       : _up = List.filled(capacity, 0.0),
         _down = List.filled(capacity, 0.0);
@@ -21,6 +25,7 @@ class TrafficHistory {
     _down[_index] = downBps.toDouble();
     _index = (_index + 1) % capacity;
     if (_index == 0) _full = true;
+    version++;
   }
 
   int get count => _full ? capacity : _index;

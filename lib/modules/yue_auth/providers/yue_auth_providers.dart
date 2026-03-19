@@ -76,8 +76,14 @@ final authProvider = StateNotifierProvider<AuthNotifier, AuthState>(
 );
 
 class AuthNotifier extends StateNotifier<AuthState> {
-  AuthNotifier(this._ref) : super(const AuthState()) {
-    _init();
+  AuthNotifier(this._ref, {AuthState? initial})
+      : super(initial ?? const AuthState()) {
+    if (initial != null && initial.status != AuthStatus.unknown) {
+      // Pre-loaded in main() — skip async _init(), just refresh in background
+      if (initial.token != null) _refreshUserInfo(initial.token!);
+    } else {
+      _init();
+    }
   }
 
   final Ref _ref;

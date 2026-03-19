@@ -1,3 +1,5 @@
+import 'dart:convert' show base64Decode;
+
 /// Parses subscription response headers and content.
 ///
 /// Clash/mihomo subscriptions return useful metadata in HTTP headers:
@@ -10,6 +12,7 @@ class SubscriptionInfo {
   final int? total; // total quota bytes
   final DateTime? expire; // expiry date
   final int? updateInterval; // hours
+  final String? profileTitle; // subscription name from headers
 
   const SubscriptionInfo({
     this.upload,
@@ -17,6 +20,7 @@ class SubscriptionInfo {
     this.total,
     this.expire,
     this.updateInterval,
+    this.profileTitle,
   });
 
   /// Remaining traffic in bytes, or null if unknown.
@@ -48,6 +52,10 @@ class SubscriptionInfo {
   ///
   /// Expects the `subscription-userinfo` header format:
   /// `upload=1234; download=5678; total=10000000000; expire=1700000000`
+  ///
+  /// Also extracts subscription name from:
+  /// - `profile-title` header (base64 or plain text, used by some panels)
+  /// - `content-disposition` header filename
   factory SubscriptionInfo.fromHeaders(Map<String, String> headers) {
     final userInfo = headers['subscription-userinfo'] ?? '';
     final interval = headers['profile-update-interval'];
@@ -74,13 +82,64 @@ class SubscriptionInfo {
       }
     }
 
+    // Extract subscription name from headers
+    final profileTitle = _extractProfileTitle(headers);
+
     return SubscriptionInfo(
       upload: upload,
       download: download,
       total: total,
       expire: expire,
       updateInterval: interval != null ? int.tryParse(interval) : null,
+      profileTitle: profileTitle,
     );
+  }
+
+  /// Extract subscription name from HTTP headers.
+  ///
+  /// Priority: profile-title > content-disposition filename.
+  static String? _extractProfileTitle(Map<String, String> headers) {
+    // 1. profile-title header (some panels send base64-encoded title)
+    final title = headers['profile-title'];
+    if (title != null && title.isNotEmpty) {
+      // Try base64 decode first
+      try {
+        final decoded = String.fromCharCodes(
+            _base64DecodeStr(title));
+        if (decoded.isNotEmpty) return decoded;
+      } catch (_) {}
+      // Plain text fallback
+      return Uri.decodeComponent(title);
+    }
+
+    // 2. content-disposition filename
+    final cd = headers['content-disposition'];
+    if (cd != null && cd.isNotEmpty) {
+      // filename*=UTF-8''EncodedName
+      final utf8Match = RegExp(r"filename\*=UTF-8''(.+?)(?:;|$)", caseSensitive: false).firstMatch(cd);
+      if (utf8Match != null) {
+        final decoded = Uri.decodeComponent(utf8Match.group(1)!.trim());
+        final name = decoded.replaceAll(RegExp(r'\.(yaml|yml|txt)$'), '');
+        if (name.isNotEmpty) return name;
+      }
+      // filename="Name" or filename=Name
+      final fnMatch = RegExp(r'filename="?([^";]+)"?', caseSensitive: false).firstMatch(cd);
+      if (fnMatch != null) {
+        final name = fnMatch.group(1)!.trim().replaceAll(RegExp(r'\.(yaml|yml|txt)$'), '');
+        if (name.isNotEmpty) return name;
+      }
+    }
+
+    return null;
+  }
+
+  static List<int> _base64DecodeStr(String input) {
+    // Pad if needed
+    var s = input.trim();
+    while (s.length % 4 != 0) {
+      s += '=';
+    }
+    return base64Decode(s);
   }
 
   Map<String, dynamic> toJson() => {
@@ -89,6 +148,7 @@ class SubscriptionInfo {
         if (total != null) 'total': total,
         if (expire != null) 'expire': expire!.millisecondsSinceEpoch ~/ 1000,
         if (updateInterval != null) 'updateInterval': updateInterval,
+        if (profileTitle != null) 'profileTitle': profileTitle,
       };
 
   factory SubscriptionInfo.fromJson(Map<String, dynamic> json) {
@@ -101,6 +161,7 @@ class SubscriptionInfo {
               (json['expire'] as int) * 1000)
           : null,
       updateInterval: json['updateInterval'] as int?,
+      profileTitle: json['profileTitle'] as String?,
     );
   }
 }
