@@ -92,6 +92,9 @@ class ConfigTemplate {
     config = _ensureFindProcessMode(config);
     debugPrint('[Config] 10 findProcessMode done');
 
+    config = _ensureEch(config);
+    debugPrint('[Config] 10b ech done');
+
     if (!_hasKey(config, 'mode')) {
       config += '\nmode: rule\n';
     }
@@ -227,6 +230,54 @@ class ConfigTemplate {
         '  auto-detect-interface: false\n'
         '  dns-hijack:\n'
         '    - any:53\n';
+  }
+
+  /// TLS-based proxy types that support ECH.
+  /// REALITY (vless with reality-opts) is excluded — it has its own TLS camouflage.
+  static const _echTlsTypes = {'trojan', 'vless', 'vmess', 'hysteria2', 'tuic', 'anytls'};
+
+  /// Inject ECH (Encrypted Client Hello) into TLS-based proxies that lack it.
+  ///
+  /// ECH encrypts the SNI in TLS ClientHello, preventing middleboxes from
+  /// seeing which domain the client connects to. mihomo fetches ECH configs
+  /// automatically from DNS HTTPS (Type 65) records when enable=true.
+  ///
+  /// This is a fallback for subscriptions that don't inject ech-opts themselves
+  /// (e.g., third-party subscriptions). Our own XBoard already injects it.
+  static String _ensureEch(String config) {
+    try {
+      final yaml = loadYaml(config);
+      if (yaml is! YamlMap) return config;
+      final mutable = _toMutable(yaml) as Map<String, dynamic>;
+
+      final proxies = mutable['proxies'];
+      if (proxies is! List || proxies.isEmpty) return config;
+
+      var modified = false;
+      for (final proxy in proxies) {
+        if (proxy is! Map<String, dynamic>) continue;
+        final type = proxy['type']?.toString() ?? '';
+        if (!_echTlsTypes.contains(type)) continue;
+
+        // Skip if ECH already configured
+        if (proxy.containsKey('ech-opts')) continue;
+
+        // Skip REALITY (vless with reality-opts) — incompatible with ECH
+        if (proxy.containsKey('reality-opts')) continue;
+
+        // For vmess/vless, only add ECH when TLS is enabled
+        if ((type == 'vmess' || type == 'vless') && proxy['tls'] != true) continue;
+
+        proxy['ech-opts'] = <String, dynamic>{'enable': true};
+        modified = true;
+      }
+
+      if (!modified) return config;
+      return YamlWriter().write(mutable);
+    } catch (e) {
+      debugPrint('[Config] ECH injection failed: $e');
+      return config;
+    }
   }
 
   /// Ensure DNS is enabled with comprehensive fake-ip + fallback config.
