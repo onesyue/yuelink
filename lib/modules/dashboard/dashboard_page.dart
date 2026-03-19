@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/storage/settings_service.dart';
 import '../../l10n/app_strings.dart';
 import '../../modules/yue_auth/providers/yue_auth_providers.dart';
 import '../../providers/connection_provider.dart';
@@ -44,14 +45,19 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     Future.microtask(() {
       _statusSub = ref.listenManual(coreStatusProvider, (prev, next) {
         if (next == CoreStatus.running) {
-          _startUptimeTimer();
+          // Only reset _connectedSince on a real stopped→running transition.
+          // If the timer is already running (e.g. widget rebuild), skip.
+          if (_connectedSince == null) {
+            _startUptimeTimer();
+          }
         } else if (next == CoreStatus.stopped) {
           _stopUptimeTimer();
         }
       });
-      // Sync initial state if core is already running
+      // Sync initial state if core is already running (e.g. Android process
+      // restore where Go core survived). Try to restore persisted timestamp.
       if (ref.read(coreStatusProvider) == CoreStatus.running) {
-        _startUptimeTimer();
+        _restoreOrStartUptimeTimer();
       }
     });
   }
@@ -64,8 +70,10 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     super.dispose();
   }
 
-  void _startUptimeTimer() {
-    _connectedSince = DateTime.now();
+  void _startUptimeTimer({DateTime? since}) {
+    _connectedSince = since ?? DateTime.now();
+    // Persist so we can restore after Android process recreation
+    SettingsService.set('connected_since', _connectedSince!.millisecondsSinceEpoch);
     _uptimeNotifier.value = '';
     _uptimeTimer?.cancel();
     _uptimeTimer = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -84,11 +92,29 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     });
   }
 
+  /// Restore persisted _connectedSince on recovery (Android process recreate
+  /// where Go core survived). Falls back to DateTime.now() if not found.
+  Future<void> _restoreOrStartUptimeTimer() async {
+    final savedMs = await SettingsService.get<int>('connected_since');
+    if (savedMs != null && savedMs > 0) {
+      final saved = DateTime.fromMillisecondsSinceEpoch(savedMs);
+      // Sanity check: must be in the past and not more than 7 days old
+      if (saved.isBefore(DateTime.now()) &&
+          DateTime.now().difference(saved).inDays < 7) {
+        _startUptimeTimer(since: saved);
+        return;
+      }
+    }
+    _startUptimeTimer();
+  }
+
   void _stopUptimeTimer() {
     _uptimeTimer?.cancel();
     _uptimeTimer = null;
     _connectedSince = null;
     _uptimeNotifier.value = '';
+    // Clear persisted timestamp
+    SettingsService.set('connected_since', null);
   }
 
   @override

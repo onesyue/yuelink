@@ -308,6 +308,8 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
           // Restore Dart state + ports to match reality
           await manager.markRunning();
           ref.read(coreStatusProvider.notifier).state = CoreStatus.running;
+          // Clear any stale startup error from previous session
+          ref.read(coreStartupErrorProvider.notifier).state = null;
           // Kick off streams and data refresh
           ref.invalidate(trafficStreamProvider);
           ref.invalidate(memoryStreamProvider);
@@ -336,10 +338,10 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
         }
         manager.stop().catchError((_) {});
       } else {
-        // Core alive — force reconnect stale WebSocket streams.
-        // After long background, OS may have closed TCP connections;
-        // the retry loop in MihomoStream is paused while suspended.
-        ref.invalidate(trafficStreamProvider);
+        // Core alive — refresh data but do NOT invalidate trafficStreamProvider.
+        // Invalidating it creates a new TrafficHistory(), wiping the chart.
+        // The WebSocket reconnection logic (exponential backoff in MihomoStream)
+        // handles stale connections automatically when data stops flowing.
         ref.invalidate(memoryStreamProvider);
         ref.invalidate(connectionsStreamProvider);
         // Refresh exit IP in case network changed during background

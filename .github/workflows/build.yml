@@ -211,7 +211,12 @@ jobs:
         run: |
           VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f1)
           BUILD_NUM=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f2)
-          echo "APP_VERSION=${VERSION}" >> $GITHUB_ENV
+          if [ "$GITHUB_REF_NAME" = "pre" ]; then
+            APP_VERSION="${VERSION}-pre"
+          else
+            APP_VERSION="${VERSION}"
+          fi
+          echo "APP_VERSION=${APP_VERSION}" >> $GITHUB_ENV
           echo "BUILD_NUM=${BUILD_NUM}" >> $GITHUB_ENV
 
       - run: flutter pub get
@@ -276,7 +281,12 @@ jobs:
         run: |
           VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f1)
           BUILD_NUM=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f2)
-          echo "APP_VERSION=${VERSION}" >> $GITHUB_ENV
+          if [ "$GITHUB_REF_NAME" = "pre" ]; then
+            APP_VERSION="${VERSION}-pre"
+          else
+            APP_VERSION="${VERSION}"
+          fi
+          echo "APP_VERSION=${APP_VERSION}" >> $GITHUB_ENV
           echo "BUILD_NUM=${BUILD_NUM}" >> $GITHUB_ENV
 
       - run: flutter pub get
@@ -365,7 +375,12 @@ jobs:
         run: |
           VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f1)
           BUILD_NUM=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f2)
-          echo "APP_VERSION=${VERSION}" >> $GITHUB_ENV
+          if [ "$GITHUB_REF_NAME" = "pre" ]; then
+            APP_VERSION="${VERSION}-pre"
+          else
+            APP_VERSION="${VERSION}"
+          fi
+          echo "APP_VERSION=${APP_VERSION}" >> $GITHUB_ENV
           echo "BUILD_NUM=${BUILD_NUM}" >> $GITHUB_ENV
 
       - run: flutter config --enable-macos-desktop
@@ -442,7 +457,12 @@ jobs:
         run: |
           VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f1)
           BUILD_NUM=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f2)
-          echo "APP_VERSION=${VERSION}" >> $GITHUB_ENV
+          if [ "$GITHUB_REF_NAME" = "pre" ]; then
+            APP_VERSION="${VERSION}-pre"
+          else
+            APP_VERSION="${VERSION}"
+          fi
+          echo "APP_VERSION=${APP_VERSION}" >> $GITHUB_ENV
           echo "BUILD_NUM=${BUILD_NUM}" >> $GITHUB_ENV
 
       - run: flutter config --enable-windows-desktop
@@ -483,7 +503,7 @@ jobs:
       - name: Build installer with Inno Setup
         shell: pwsh
         run: |
-          $version = (Select-String -Path pubspec.yaml -Pattern '^version: (.+)\+').Matches[0].Groups[1].Value
+          $version = "${{ env.APP_VERSION }}"
           iscc "/DMyAppVersion=$version" windows\installer.iss
 
       - uses: actions/upload-artifact@v4
@@ -536,7 +556,12 @@ jobs:
         run: |
           VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f1)
           BUILD_NUM=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f2)
-          echo "APP_VERSION=${VERSION}" >> $GITHUB_ENV
+          if [ "$GITHUB_REF_NAME" = "pre" ]; then
+            APP_VERSION="${VERSION}-pre"
+          else
+            APP_VERSION="${VERSION}"
+          fi
+          echo "APP_VERSION=${APP_VERSION}" >> $GITHUB_ENV
           echo "BUILD_NUM=${BUILD_NUM}" >> $GITHUB_ENV
 
       - run: flutter config --enable-linux-desktop
@@ -649,6 +674,7 @@ jobs:
           IS_PRE=${{ github.ref == 'refs/tags/pre' }}
 
           if [ "$IS_PRE" = "true" ]; then
+            VERSION="${VERSION}-pre"
             TITLE="YueLink v${VERSION} Pre-release"
           else
             TITLE="YueLink v${VERSION}"
