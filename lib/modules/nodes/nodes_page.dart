@@ -345,6 +345,7 @@ class _NodesPageState extends ConsumerState<NodesPage> {
                       );
                     },
                     childCount: listCount,
+                    addAutomaticKeepAlives: false,
                   ),
                 ),
               ),

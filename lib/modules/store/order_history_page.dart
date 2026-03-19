@@ -28,6 +28,8 @@ class OrderHistoryPage extends ConsumerWidget {
       appBar: AppBar(
         backgroundColor: isDark ? YLColors.bgDark : YLColors.bgLight,
         elevation: 0,
+        leading: Navigator.canPop(context) ? const BackButton() : null,
+        automaticallyImplyLeading: false,
         title: Text(
           isEn ? 'Order History' : '订单记录',
           style: YLText.titleMedium.copyWith(fontWeight: FontWeight.w700),

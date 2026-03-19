@@ -137,15 +137,31 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
                 + "    - \"+.cdn-apple.com\"\n"
                 + "    - \"+.mzstatic.com\"\n"
                 + "    - \"+.push.apple.com\"\n"
+                // Connectivity check domains — all platforms
+                // Google / Android
                 + "    - \"connectivitycheck.gstatic.com\"\n"
+                + "    - \"www.gstatic.com\"\n"
                 + "    - \"+.connectivitycheck.android.com\"\n"
-                + "    - \"clients3.google.com\"\n"
                 + "    - \"clients1.google.com\"\n"
+                + "    - \"clients3.google.com\"\n"
+                + "    - \"play.googleapis.com\"\n"
+                // Apple captive portal
+                + "    - \"captive.apple.com\"\n"
+                + "    - \"gsp-ssl.ls.apple.com\"\n"
+                + "    - \"gsp-ssl.ls-apple.com.akadns.net\"\n"
+                // Microsoft
+                + "    - \"www.msftconnecttest.com\"\n"
+                + "    - \"www.msftncsi.com\"\n"
+                + "    - \"dns.msftncsi.com\"\n"
+                // Huawei
                 + "    - \"connectivitycheck.platform.hicloud.com\"\n"
                 + "    - \"+.wifi.huawei.com\"\n"
-                + "    - \"connect.rom.miui.com\"\n"
-                + "    - \"wifi.vivo.com.cn\"\n"
+                // Samsung
                 + "    - \"connectivitycheck.samsung.com\"\n"
+                // Xiaomi
+                + "    - \"connect.rom.miui.com\"\n"
+                // Vivo / other
+                + "    - \"wifi.vivo.com.cn\"\n"
                 + "    - \"noisyfox.cn\"\n"
                 + "  default-nameserver:\n"
                 + "    - 223.5.5.5\n"
@@ -290,15 +306,30 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         // Without these, Android/vendor connectivity checks resolve to fake IPs,
         // causing "no internet" / WiFi exclamation mark.
         let connectivityDomains = [
+            // Google / Android
             "connectivitycheck.gstatic.com",
+            "www.gstatic.com",
             "+.connectivitycheck.android.com",
-            "clients3.google.com",
             "clients1.google.com",
+            "clients3.google.com",
+            "play.googleapis.com",
+            // Apple captive portal
+            "captive.apple.com",
+            "gsp-ssl.ls.apple.com",
+            "gsp-ssl.ls-apple.com.akadns.net",
+            // Microsoft
+            "www.msftconnecttest.com",
+            "www.msftncsi.com",
+            "dns.msftncsi.com",
+            // Huawei
             "connectivitycheck.platform.hicloud.com",
             "+.wifi.huawei.com",
-            "connect.rom.miui.com",
-            "wifi.vivo.com.cn",
+            // Samsung
             "connectivitycheck.samsung.com",
+            // Xiaomi
+            "connect.rom.miui.com",
+            // Vivo / other
+            "wifi.vivo.com.cn",
             "noisyfox.cn",
         ]
         // Re-capture dns block for fake-ip-filter check

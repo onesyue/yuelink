@@ -149,7 +149,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
 
                       // ── Latest announcement (always visible) ────────
                       const SizedBox(height: 12),
-                      const AnnouncementBanner(),
+                      const RepaintBoundary(child: AnnouncementBanner()),
 
                       // ── Running: carrier, exit IP, chart, stats ─────
                       if (isRunning) ...[

@@ -310,17 +310,32 @@ class ConfigTemplate {
           '    - "+.cdn-apple.com"\n'
           '    - "+.mzstatic.com"\n'
           '    - "+.push.apple.com"\n'
-          // Android / vendor connectivity check domains — must resolve to real IPs
-          // to avoid "no internet" / WiFi exclamation mark on Samsung, Huawei etc.
+          // Connectivity check domains — must resolve to real IPs to avoid
+          // "no internet" / WiFi exclamation mark on all platforms.
+          // Google / Android
           '    - "connectivitycheck.gstatic.com"\n'
+          '    - "www.gstatic.com"\n'
           '    - "+.connectivitycheck.android.com"\n'
-          '    - "clients3.google.com"\n'
           '    - "clients1.google.com"\n'
+          '    - "clients3.google.com"\n'
+          '    - "play.googleapis.com"\n'
+          // Apple captive portal
+          '    - "captive.apple.com"\n'
+          '    - "gsp-ssl.ls.apple.com"\n'
+          '    - "gsp-ssl.ls-apple.com.akadns.net"\n'
+          // Microsoft
+          '    - "www.msftconnecttest.com"\n'
+          '    - "www.msftncsi.com"\n'
+          '    - "dns.msftncsi.com"\n'
+          // Huawei
           '    - "connectivitycheck.platform.hicloud.com"\n'
           '    - "+.wifi.huawei.com"\n'
-          '    - "connect.rom.miui.com"\n'
-          '    - "wifi.vivo.com.cn"\n'
+          // Samsung
           '    - "connectivitycheck.samsung.com"\n'
+          // Xiaomi
+          '    - "connect.rom.miui.com"\n'
+          // Vivo / other
+          '    - "wifi.vivo.com.cn"\n'
           '    - "noisyfox.cn"\n'
           '  default-nameserver:\n'
           '    - 223.5.5.5\n'
@@ -446,19 +461,34 @@ class ConfigTemplate {
       }
 
       // Fix 3: ensure connectivity-check domains are in fake-ip-filter.
-      // Without these, Android/vendor connectivity checks resolve to fake IPs,
-      // causing "no internet" / WiFi exclamation mark.
+      // Without these, connectivity checks resolve to fake IPs, causing
+      // "no internet" / WiFi exclamation mark on Android, iOS, Windows, etc.
       dnsSection = config.substring(dnsMatch.start, dnsEnd);
       const connectivityDomains = [
+        // Google / Android
         'connectivitycheck.gstatic.com',
+        'www.gstatic.com',
         '+.connectivitycheck.android.com',
-        'clients3.google.com',
         'clients1.google.com',
+        'clients3.google.com',
+        'play.googleapis.com',
+        // Apple captive portal
+        'captive.apple.com',
+        'gsp-ssl.ls.apple.com',
+        'gsp-ssl.ls-apple.com.akadns.net',
+        // Microsoft
+        'www.msftconnecttest.com',
+        'www.msftncsi.com',
+        'dns.msftncsi.com',
+        // Huawei
         'connectivitycheck.platform.hicloud.com',
         '+.wifi.huawei.com',
-        'connect.rom.miui.com',
-        'wifi.vivo.com.cn',
+        // Samsung
         'connectivitycheck.samsung.com',
+        // Xiaomi
+        'connect.rom.miui.com',
+        // Vivo / other
+        'wifi.vivo.com.cn',
         'noisyfox.cn',
       ];
       if (dnsSection.contains('fake-ip-filter:')) {
