@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import '../../l10n/app_strings.dart';
@@ -15,6 +17,8 @@ class OnboardingPage extends StatefulWidget {
 class _OnboardingPageState extends State<OnboardingPage> {
   final _controller = PageController();
   int _currentPage = 0;
+
+  static final bool _isDesktop = Platform.isMacOS || Platform.isWindows;
 
   @override
   void dispose() {
@@ -70,6 +74,177 @@ class _OnboardingPageState extends State<OnboardingPage> {
       ),
     ];
 
+    // Desktop: horizontal layout with preview on left, content on right
+    if (_isDesktop) {
+      return Scaffold(
+        body: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 680, maxHeight: 480),
+            child: Container(
+              margin: const EdgeInsets.all(32),
+              decoration: BoxDecoration(
+                color: isDark ? YLColors.zinc900 : Colors.white,
+                borderRadius: BorderRadius.circular(YLRadius.xl),
+                border: Border.all(
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.08)
+                      : Colors.black.withValues(alpha: 0.06),
+                  width: 0.5,
+                ),
+                boxShadow: YLShadow.card(context),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Row(
+                children: [
+                  // Left: colored accent panel with icon
+                  Expanded(
+                    flex: 2,
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeOutCubic,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            pages[_currentPage].iconColor.withValues(alpha: 0.15),
+                            pages[_currentPage].iconColor.withValues(alpha: 0.05),
+                          ],
+                        ),
+                      ),
+                      child: Center(
+                        child: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 250),
+                          child: Container(
+                            key: ValueKey(_currentPage),
+                            width: 96,
+                            height: 96,
+                            decoration: BoxDecoration(
+                              color: pages[_currentPage]
+                                  .iconColor
+                                  .withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(28),
+                            ),
+                            child: Icon(
+                              pages[_currentPage].icon,
+                              size: 44,
+                              color: pages[_currentPage].iconColor,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  // Right: text content + controls
+                  Expanded(
+                    flex: 3,
+                    child: Padding(
+                      padding: const EdgeInsets.all(28),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Skip
+                          Align(
+                            alignment: Alignment.topRight,
+                            child: TextButton(
+                              onPressed: _finish,
+                              child: Text(s.onboardingSkip,
+                                  style: YLText.caption
+                                      .copyWith(color: YLColors.zinc400)),
+                            ),
+                          ),
+                          const Spacer(),
+                          // Title + description
+                          AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 250),
+                            child: Column(
+                              key: ValueKey(_currentPage),
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  pages[_currentPage].title,
+                                  style: YLText.titleLarge.copyWith(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w700,
+                                    color: isDark
+                                        ? Colors.white
+                                        : YLColors.zinc900,
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                                Text(
+                                  pages[_currentPage].description,
+                                  style: YLText.body.copyWith(
+                                    color: YLColors.zinc500,
+                                    height: 1.6,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Spacer(),
+                          // Indicators + button
+                          Row(
+                            children: [
+                              // Dots
+                              ...List.generate(4, (i) {
+                                final isActive = i == _currentPage;
+                                return AnimatedContainer(
+                                  duration: const Duration(milliseconds: 200),
+                                  margin:
+                                      const EdgeInsets.only(right: 6),
+                                  width: isActive ? 20 : 8,
+                                  height: 8,
+                                  decoration: BoxDecoration(
+                                    color: isActive
+                                        ? (isDark
+                                            ? Colors.white
+                                            : YLColors.primary)
+                                        : (isDark
+                                            ? YLColors.zinc700
+                                            : YLColors.zinc200),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                );
+                              }),
+                              const Spacer(),
+                              FilledButton(
+                                onPressed: _next,
+                                style: FilledButton.styleFrom(
+                                  backgroundColor:
+                                      isDark ? Colors.white : YLColors.primary,
+                                  foregroundColor:
+                                      isDark ? YLColors.primary : Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 24, vertical: 12),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius:
+                                        BorderRadius.circular(YLRadius.lg),
+                                  ),
+                                ),
+                                child: Text(
+                                  _currentPage == 3
+                                      ? s.onboardingDone
+                                      : s.onboardingNext,
+                                  style: YLText.label
+                                      .copyWith(fontWeight: FontWeight.w600),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Mobile: vertical full-screen layout
     return Scaffold(
       body: SafeArea(
         child: Center(

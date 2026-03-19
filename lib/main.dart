@@ -698,17 +698,10 @@ class _AuthGateState extends ConsumerState<_AuthGate> {
       case AuthStatus.loggedIn:
       case AuthStatus.guest:
         if (_hasSeenOnboarding == null) return const SizedBox.shrink();
-        // Desktop: skip onboarding (power users, layout doesn't suit wide screens)
-        if (_hasSeenOnboarding == false &&
-            !(Platform.isMacOS || Platform.isWindows)) {
+        if (_hasSeenOnboarding == false) {
           return OnboardingPage(
             onComplete: () => setState(() => _hasSeenOnboarding = true),
           );
-        }
-        // Mark as seen for desktop too, so it won't show if user later
-        // switches to mobile (shared settings file).
-        if (_hasSeenOnboarding == false) {
-          SettingsService.setHasSeenOnboarding(true);
         }
         return const MainShell();
     }
