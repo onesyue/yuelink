@@ -152,6 +152,9 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
   ProviderSubscription? _hotkeySub;
   ProviderSubscription? _carrierSub;
 
+  /// Guard to prevent onWindowClose from interfering during programmatic quit.
+  bool _isQuitting = false;
+
   @override
   void initState() {
     super.initState();
@@ -408,6 +411,9 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
 
   @override
   void onWindowClose() async {
+    // If programmatic quit is in progress, don't interfere
+    if (_isQuitting) return;
+
     // Linux has no system tray — always quit on close
     if (Platform.isLinux) {
       await _handleQuit();
@@ -526,7 +532,7 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
   }
 
   @override
-  void onTrayMenuItemClick(MenuItem menuItem) {
+  void onTrayMenuItemClick(MenuItem menuItem) async {
     final key = menuItem.key ?? '';
     if (key.startsWith('proxy_')) {
       final resolved = _resolveProxyKey(key);
@@ -539,11 +545,11 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
     }
     switch (key) {
       case 'toggle':
-        _handleTrayToggle();
+        await _handleTrayToggle();
       case 'show':
-        _toggleWindowVisibility();
+        await _toggleWindowVisibility();
       case 'quit':
-        _handleQuit();
+        await _handleQuit();
     }
   }
 
@@ -580,17 +586,25 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
   }
 
   Future<void> _handleQuit() async {
-    final status = ref.read(coreStatusProvider);
-    if (status == CoreStatus.running) {
-      await ref.read(coreActionsProvider).stop();
-    }
-    // Always clear system proxy on exit regardless of settings/state,
-    // so quitting the app never leaves a dead proxy configured.
-    if (Platform.isMacOS || Platform.isWindows) {
-      await CoreActions.clearSystemProxyStatic().catchError((_) {});
-      await windowManager.setPreventClose(false);
-      await windowManager.close();
-    } else {
+    _isQuitting = true;
+    try {
+      final status = ref.read(coreStatusProvider);
+      if (status == CoreStatus.running) {
+        await ref.read(coreActionsProvider).stop();
+      }
+      // Always clear system proxy on exit regardless of settings/state,
+      // so quitting the app never leaves a dead proxy configured.
+      if (Platform.isMacOS || Platform.isWindows) {
+        await CoreActions.clearSystemProxyStatic().catchError((_) {});
+        await windowManager.setPreventClose(false);
+        // Use destroy() instead of close() — close() triggers onWindowClose
+        // callback which can interfere (e.g., hide the window instead of closing).
+        await windowManager.destroy();
+      } else {
+        exit(0);
+      }
+    } catch (_) {
+      // If anything fails during quit, force exit
       exit(0);
     }
   }
