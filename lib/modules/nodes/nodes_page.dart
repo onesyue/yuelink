@@ -326,20 +326,22 @@ class _NodesPageState extends ConsumerState<NodesPage> {
                       }
                       final groupIndex = showBanner ? index - 1 : index;
                       final group = displayGroups[groupIndex];
-                      return Padding(
-                        padding:
-                            const EdgeInsets.only(bottom: YLSpacing.lg),
-                        child: viewMode == NodeViewMode.list
-                            ? GroupListSection(
-                                group: group,
-                                sortMode: sortMode,
-                                searchQuery: searchQuery,
-                              )
-                            : GroupCard(
-                                group: group,
-                                sortMode: sortMode,
-                                searchQuery: searchQuery,
-                              ),
+                      return RepaintBoundary(
+                        child: Padding(
+                          padding:
+                              const EdgeInsets.only(bottom: YLSpacing.lg),
+                          child: viewMode == NodeViewMode.list
+                              ? GroupListSection(
+                                  group: group,
+                                  sortMode: sortMode,
+                                  searchQuery: searchQuery,
+                                )
+                              : GroupCard(
+                                  group: group,
+                                  sortMode: sortMode,
+                                  searchQuery: searchQuery,
+                                ),
+                        ),
                       );
                     },
                     childCount: listCount,

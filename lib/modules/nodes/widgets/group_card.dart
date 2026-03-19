@@ -218,41 +218,47 @@ class _GroupCardState extends ConsumerState<GroupCard>
           SizeTransition(
             sizeFactor: _expandAnim,
             axisAlignment: -1.0,
-            child: Column(
-              children: [
-                const Divider(height: 0.5),
-                Padding(
-                  padding: const EdgeInsets.all(YLSpacing.sm),
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      const minItemWidth = 140.0;
-                      const spacing = 8.0;
-                      final cols =
-                          ((constraints.maxWidth + spacing) /
-                                  (minItemWidth + spacing))
-                              .floor()
-                              .clamp(1, 4);
-                      final itemWidth =
-                          (constraints.maxWidth - spacing * (cols - 1)) /
-                              cols;
-                      return Wrap(
-                        spacing: spacing,
-                        runSpacing: spacing,
-                        children: nodeList
-                            .map((name) => SizedBox(
-                                  width: itemWidth,
-                                  child: NodeCardItem(
-                                    name: name,
-                                    groupName: group.name,
-                                  ),
-                                ))
-                            .toList(),
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
+            // Only build node widgets when expanded — avoids creating
+            // 100+ widgets per collapsed group on Android.
+            child: _expanded
+                ? Column(
+                    children: [
+                      const Divider(height: 0.5),
+                      Padding(
+                        padding: const EdgeInsets.all(YLSpacing.sm),
+                        child: LayoutBuilder(
+                          builder: (context, constraints) {
+                            const minItemWidth = 140.0;
+                            const spacing = 8.0;
+                            final cols =
+                                ((constraints.maxWidth + spacing) /
+                                        (minItemWidth + spacing))
+                                    .floor()
+                                    .clamp(1, 4);
+                            final itemWidth =
+                                (constraints.maxWidth - spacing * (cols - 1)) /
+                                    cols;
+                            return Wrap(
+                              spacing: spacing,
+                              runSpacing: spacing,
+                              children: nodeList
+                                  .map((name) => SizedBox(
+                                        width: itemWidth,
+                                        child: RepaintBoundary(
+                                          child: NodeCardItem(
+                                            name: name,
+                                            groupName: group.name,
+                                          ),
+                                        ),
+                                      ))
+                                  .toList(),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  )
+                : const SizedBox.shrink(),
           ),
         ],
       ),

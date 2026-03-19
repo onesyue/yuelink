@@ -140,18 +140,21 @@ class GroupListSection extends ConsumerWidget {
           ),
           const Divider(height: 0.5),
           // Flat node list — each NodeTile manages its own state.
+          // Wrap each tile in RepaintBoundary to isolate repaints.
           Column(
             children: List.generate(nodeList.length, (i) {
               final nodeName = nodeList[i];
-              return Column(
-                children: [
-                  NodeTile(
-                    name: nodeName,
-                    groupName: group.name,
-                  ),
-                  if (i < nodeList.length - 1)
-                    const Divider(height: 1, indent: 48),
-                ],
+              return RepaintBoundary(
+                child: Column(
+                  children: [
+                    NodeTile(
+                      name: nodeName,
+                      groupName: group.name,
+                    ),
+                    if (i < nodeList.length - 1)
+                      const Divider(height: 1, indent: 48),
+                  ],
+                ),
               );
             }),
           ),
