@@ -2,7 +2,7 @@ name: Build YueLink
 
 on:
   push:
-    tags: ['v*', 'alpha.*']
+    tags: ['v*', 'pre']
   workflow_dispatch:
 
 # Cancel any in-progress run for the same ref (branch or tag) automatically.
@@ -636,20 +636,26 @@ jobs:
           cp artifacts/yuelink-linux/YueLink-Linux-x86_64.AppImage release/
           ls -lh release/
 
+      - name: Delete previous pre-release (if updating)
+        if: github.ref == 'refs/tags/pre'
+        run: gh release delete pre --yes 2>/dev/null || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Generate release notes
         run: |
           VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f1)
           TAG="${GITHUB_REF_NAME}"
-          IS_PRE=${{ startsWith(github.ref, 'refs/tags/alpha') }}
+          IS_PRE=${{ github.ref == 'refs/tags/pre' }}
 
           if [ "$IS_PRE" = "true" ]; then
-            TITLE="YueLink v${VERSION} Pre-release (${TAG})"
+            TITLE="YueLink v${VERSION} Pre-release"
           else
             TITLE="YueLink v${VERSION}"
           fi
 
-          # Collect commits since last tag
-          PREV_TAG=$(git tag --sort=-creatordate | grep -v "^${TAG}$" | head -1)
+          # Collect commits since last stable tag
+          PREV_TAG=$(git tag --sort=-creatordate | grep -E '^v[0-9]' | head -1)
           if [ -n "$PREV_TAG" ]; then
             CHANGES=$(git log --pretty=format:"- %s" "${PREV_TAG}..HEAD" -- | head -50)
           else
@@ -674,5 +680,4 @@ jobs:
           name: ${{ env.RELEASE_TITLE }}
           body_path: release_notes.md
           files: release/*
-          # alpha.* → pre-release; v* stable → release
-          prerelease: ${{ startsWith(github.ref, 'refs/tags/alpha') }}
+          prerelease: ${{ github.ref == 'refs/tags/pre' }}
