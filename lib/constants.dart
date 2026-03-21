@@ -1,10 +1,18 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+
+/// Version string from pubspec.yaml (single source of truth).
+final appVersionProvider = FutureProvider<String>((ref) async {
+  final info = await PackageInfo.fromPlatform();
+  return info.version;
+});
+
 /// App-wide constants.
 class AppConstants {
   AppConstants._();
 
   static const appName = 'YueLink';
   static const appBrand = 'Yue.to';
-  static const appVersion = '1.0.4';
   static const packageName = 'com.yueto.yuelink';
 
   static const configFileName = 'yuelink.yaml';
