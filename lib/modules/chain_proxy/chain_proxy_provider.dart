@@ -162,9 +162,8 @@ class ChainProxyNotifier extends Notifier<ChainProxyState> {
       // 3. Write back
       await configFile.writeAsString(config);
 
-      // 4. Reload mihomo
-      final ok = await manager.api.reloadConfig(configPath, force: true);
-      if (!ok) throw Exception('Config reload failed');
+      // 4. Reload mihomo (throws MihomoApiException with body on failure)
+      await manager.api.reloadConfig(configPath, force: true);
 
       // 5. Wait for mihomo to finish reloading, then select relay with retry.
       // force=true reload can take >300ms on large configs / slow devices.

@@ -166,12 +166,15 @@ class MihomoApi {
   }
 
   /// Reload config from file. Set [force] to true to force reload.
+  /// Throws [MihomoApiException] with the response body on failure so callers
+  /// can surface the actual mihomo parse / validation error.
   Future<bool> reloadConfig(String path, {bool force = false}) async {
     final resp = await _put(
       '/configs?force=$force',
       body: {'path': path},
     );
-    return resp.statusCode == 204 || resp.statusCode == 200;
+    if (resp.statusCode == 204 || resp.statusCode == 200) return true;
+    throw MihomoApiException(resp.statusCode, resp.body);
   }
 
   // ------------------------------------------------------------------
