@@ -99,9 +99,7 @@ class CheckinNotifier extends Notifier<CheckinState> {
   /// (some backends return a business error instead of alreadyChecked:true).
   static bool _isAlreadyCheckedError(String message) {
     final m = message.toLowerCase();
-    return m.contains('already') ||
-        m.contains('cannot determine') ||
-        m.contains('已签到');
+    return m.contains('already') || m.contains('已签到');
   }
 
   // ── Status check ───────────────────────────────────────────────────

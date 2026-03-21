@@ -86,6 +86,16 @@ class CheckinRepository {
         json['detail']?.toString() ?? 'Unauthorized',
       );
     }
+    // Catch any non-2xx status (e.g. 502 from auth failures) that slipped
+    // past the checks above — prevents treating server errors as success.
+    if (statusCode < 200 || statusCode >= 300) {
+      throw XBoardApiException(
+        statusCode,
+        json['detail']?.toString() ??
+            json['message']?.toString() ??
+            'Server error ($statusCode)',
+      );
+    }
     if (json['status'] == 'fail') {
       throw XBoardApiException(
         200,
