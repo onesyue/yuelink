@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../datasources/mihomo_api.dart';
@@ -22,8 +23,11 @@ class ConnectionRepository {
   ///
   /// Throttling prevents UI overload when hundreds of connections change per
   /// second (e.g. BitTorrent downloads).
+  ///
+  /// Performance: raw JSON is stored and only parsed when the throttle timer
+  /// fires — intermediate frames are discarded without parsing.
   Stream<ConnectionsSnapshot> connectionsStream() {
-    ConnectionsSnapshot? pending;
+    Map<String, dynamic>? pendingRaw;
     Timer? throttle;
 
     late StreamController<ConnectionsSnapshot> controller;
@@ -32,17 +36,20 @@ class ConnectionRepository {
     controller = StreamController<ConnectionsSnapshot>.broadcast(
       onListen: () {
         sub = _stream.connectionsStream().listen((data) {
-          try {
-            pending = ConnectionsSnapshot.fromJson(data);
-            throttle ??= Timer(const Duration(milliseconds: 500), () {
-              final snap = pending;
-              if (snap != null) {
-                if (!controller.isClosed) controller.add(snap);
-                pending = null;
+          // Store raw JSON — defer expensive fromJson until throttle fires
+          pendingRaw = data;
+          throttle ??= Timer(const Duration(milliseconds: 500), () {
+            final raw = pendingRaw;
+            if (raw != null && !controller.isClosed) {
+              try {
+                controller.add(ConnectionsSnapshot.fromJson(raw));
+              } catch (e) {
+                debugPrint('[ConnectionRepo] parse snapshot failed: $e');
               }
-              throttle = null;
-            });
-          } catch (_) {}
+              pendingRaw = null;
+            }
+            throttle = null;
+          });
         });
       },
       onCancel: () {
@@ -50,6 +57,7 @@ class ConnectionRepository {
         throttle?.cancel();
         sub = null;
         throttle = null;
+        pendingRaw = null;
         controller.close();
       },
     );

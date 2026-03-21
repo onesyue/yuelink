@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
 /// Persists locally-read announcement IDs as a JSON array in
@@ -28,7 +29,8 @@ class AnnouncementReadService {
       final content = await file.readAsString();
       final list = jsonDecode(content) as List;
       return list.whereType<int>().toSet();
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[Announcements] getReadIds failed: $e');
       return {};
     }
   }
@@ -50,6 +52,8 @@ class AnnouncementReadService {
     try {
       final file = await _file();
       await file.writeAsString(jsonEncode(ids.toList()));
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[Announcements] save failed: $e');
+    }
   }
 }

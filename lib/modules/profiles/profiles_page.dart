@@ -1,6 +1,3 @@
-import 'dart:io';
-
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -193,69 +190,6 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     }
     AppNotifier.success(s.updateAllResult(updated, failed));
     ref.read(profilesProvider.notifier).load();
-  }
-
-  Future<void> _importLocalFile(
-      BuildContext context, WidgetRef ref) async {
-    final s = S.of(context);
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['yaml', 'yml'],
-    );
-    if (result == null || result.files.isEmpty) return;
-    final path = result.files.first.path;
-    if (path == null) return;
-
-    final content = await File(path).readAsString();
-    if (content.trim().isEmpty) {
-      AppNotifier.warning(s.importLocalFileFailed);
-      return;
-    }
-
-    // Use filename (without extension) as default profile name
-    final fileName = result.files.first.name;
-    final defaultName =
-        fileName.replaceAll(RegExp(r'\.(yaml|yml)$'), '');
-
-    if (!context.mounted) return;
-    _showImportNameDialog(context, ref, defaultName, content);
-  }
-
-  void _showImportNameDialog(BuildContext context, WidgetRef ref,
-      String defaultName, String configContent) {
-    final s = S.of(context);
-    final nameCtrl = TextEditingController(text: defaultName);
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(s.importLocalFile),
-        content: TextField(
-          controller: nameCtrl,
-          autofocus: true,
-          decoration: InputDecoration(
-            labelText: s.nameLabel,
-            hintText: s.importLocalNameHint,
-            prefixIcon: const Icon(Icons.label_outline),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text(s.cancel),
-          ),
-          FilledButton(
-            onPressed: () {
-              final name = nameCtrl.text.trim();
-              if (name.isEmpty) return;
-              Navigator.pop(ctx);
-              _doImportLocal(context, ref, name, configContent);
-            },
-            child: Text(s.add),
-          ),
-        ],
-      ),
-    ).whenComplete(nameCtrl.dispose);
   }
 
   /// Auto-read clipboard for URL, fetch subscription name, and show add dialog.
@@ -459,26 +393,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     }
   }
 
-  Future<void> _doImportLocal(BuildContext context, WidgetRef ref,
-      String name, String configContent) async {
-    final s = S.of(context);
-    try {
-      final profile = await LoadingOverlay.run(
-        context,
-        message: s.downloadingSubscription,
-        action: () async {
-          final p = await ProfileService.addLocalProfile(
-              name: name, configContent: configContent);
-          ref.read(profilesProvider.notifier).addLocal(p);
-          return p;
-        },
-      );
-      ref.read(activeProfileIdProvider.notifier).select(profile.id);
-      AppNotifier.success(s.importLocalFileSuccess);
-    } catch (e) {
-      AppNotifier.error(s.addFailed(_friendlyError(e)));
-    }
-  }
+
 
   Future<void> _doUpdateProfile(
       BuildContext context, WidgetRef ref, Profile profile) async {

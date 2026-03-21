@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
@@ -99,14 +100,17 @@ class WebDavService {
     final h = _authHeaders(cfg['username']!, cfg['password']!);
     final appDir = await getApplicationSupportDirectory();
 
-    // Download index files
-    for (final name in ['settings.json', 'profiles.json']) {
-      final resp =
-          await http.get(_uri(url, name), headers: h).timeout(_kTimeout);
+    // Download index files — download profiles.json first so settings.json
+    // invalidation doesn't leave a stale-read window.
+    for (final name in ['profiles.json', 'settings.json']) {
+      final resp = await _request('GET', _uri(url, name), headers: h);
       if (resp.statusCode == 200) {
         await File('${appDir.path}/$name').writeAsBytes(resp.bodyBytes);
       }
     }
+
+    // Invalidate settings cache AFTER writing settings.json
+    SettingsService.invalidateCache();
 
     // Download config YAML files by reading the profiles index
     final profilesFile = File('${appDir.path}/profiles.json');
@@ -121,21 +125,20 @@ class WebDavService {
           final id = (item as Map<String, dynamic>)['id'] as String?;
           if (id == null) continue;
           final fileName = '$id.yaml';
-          final resp = await http
-              .get(_uri(url, '$_configsDir/$fileName'), headers: h)
-              .timeout(_kTimeout);
+          final resp = await _request(
+            'GET',
+            _uri(url, '$_configsDir/$fileName'),
+            headers: h,
+          );
           if (resp.statusCode == 200) {
             await File('${configsDir.path}/$fileName')
                 .writeAsBytes(resp.bodyBytes);
           }
         }
-      } catch (_) {
-        // If profiles.json parse fails, skip config download
+      } catch (e) {
+        debugPrint('[WebdavService] profiles.json parse failed: $e');
       }
     }
-
-    // Invalidate settings cache so the new values load on next access
-    SettingsService.invalidateCache();
   }
 
   /// Test WebDAV connection. Returns true if reachable.
@@ -150,7 +153,8 @@ class WebDavService {
               headers: _authHeaders(cfg['username']!, cfg['password']!))
           .timeout(const Duration(seconds: 5));
       return resp.statusCode < 400;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[WebdavService] testConnection failed: $e');
       return false;
     }
   }

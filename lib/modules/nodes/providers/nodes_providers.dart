@@ -93,19 +93,19 @@ final offlineProxyGroupsProvider = FutureProvider<List<ProxyGroup>>((ref) async 
 // ------------------------------------------------------------------
 
 final proxyGroupsProvider =
-    StateNotifierProvider<ProxyGroupsNotifier, List<ProxyGroup>>(
-  (ref) => ProxyGroupsNotifier(ref),
+    NotifierProvider<ProxyGroupsNotifier, List<ProxyGroup>>(
+  ProxyGroupsNotifier.new,
 );
 
 /// The mihomo GLOBAL proxy group (used in global routing mode).
 /// null until the first refresh completes.
 final globalGroupProvider = StateProvider<ProxyGroup?>((ref) => null);
 
-class ProxyGroupsNotifier extends StateNotifier<List<ProxyGroup>> {
-  ProxyGroupsNotifier(this._ref) : super([]);
-  final Ref _ref;
+class ProxyGroupsNotifier extends Notifier<List<ProxyGroup>> {
+  @override
+  List<ProxyGroup> build() => [];
 
-  ProxyRepository get _repo => _ref.read(proxyRepositoryProvider);
+  ProxyRepository get _repo => ref.read(proxyRepositoryProvider);
 
   /// Refresh proxy data from the running mihomo instance.
   ///
@@ -149,7 +149,7 @@ class ProxyGroupsNotifier extends StateNotifier<List<ProxyGroup>> {
         nodeTypes[entry.key] = type;
       }
     }
-    _ref.read(nodeTypeMapProvider.notifier).state = nodeTypes;
+    ref.read(nodeTypeMapProvider.notifier).state = nodeTypes;
 
     // Extract and store the GLOBAL group (for global routing mode display).
     final globalInfo = proxiesMap['GLOBAL'] as Map<String, dynamic>?;
@@ -165,7 +165,7 @@ class ProxyGroupsNotifier extends StateNotifier<List<ProxyGroup>> {
         all: filteredAll.isNotEmpty ? filteredAll : allNames,
         now: globalInfo['now'] as String? ?? '',
       );
-      _ref.read(globalGroupProvider.notifier).state = globalGroup;
+      ref.read(globalGroupProvider.notifier).state = globalGroup;
     }
 
     // Use GLOBAL group's order to sort; exclude GLOBAL itself
@@ -186,7 +186,7 @@ class ProxyGroupsNotifier extends StateNotifier<List<ProxyGroup>> {
   /// Returns data in the same format as the mihomo REST API /proxies response.
   Future<Map<String, dynamic>> _parseMockProxiesFromProfile() async {
     try {
-      final activeId = _ref.read(activeProfileIdProvider);
+      final activeId = ref.read(activeProfileIdProvider);
       if (activeId == null) return {};
       final config = await ProfileService.loadConfig(activeId);
       if (config == null || config.isEmpty) return {};

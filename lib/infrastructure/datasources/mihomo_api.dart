@@ -1,7 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+
+import 'circuit_breaker.dart';
 
 /// Client for the mihomo RESTful API (external-controller).
 ///
@@ -18,6 +22,7 @@ class MihomoApi {
   final String host;
   final int port;
   final String? secret;
+  final CircuitBreaker _breaker = CircuitBreaker();
 
   String get _baseUrl => 'http://$host:$port';
 
@@ -31,12 +36,15 @@ class MihomoApi {
   // ------------------------------------------------------------------
 
   /// Check if mihomo is reachable.
+  /// Bypasses the circuit breaker — this is the health check itself.
   Future<bool> isAvailable() async {
     try {
       final resp = await http
           .get(Uri.parse('$_baseUrl/version'), headers: _headers)
           .timeout(const Duration(seconds: 2));
-      return resp.statusCode == 200;
+      final ok = resp.statusCode == 200;
+      if (ok) _breaker.reset();
+      return ok;
     } catch (_) {
       return false;
     }
@@ -157,13 +165,27 @@ class MihomoApi {
     }
   }
 
-  /// Reload config from file. Set [force] to true to force reload.
+  /// Reload config from file path. Throws [MihomoApiException] on failure.
   Future<bool> reloadConfig(String path, {bool force = false}) async {
     final resp = await _put(
       '/configs?force=$force',
       body: {'path': path},
     );
-    return resp.statusCode == 204 || resp.statusCode == 200;
+    if (resp.statusCode == 204 || resp.statusCode == 200) return true;
+    throw MihomoApiException(resp.statusCode, resp.body);
+  }
+
+  /// Push a config YAML string directly to mihomo without touching the disk.
+  /// Preferred over [reloadConfig] for runtime patches (e.g. chain proxy)
+  /// because it avoids YAML round-trip corruption from file read/write.
+  Future<void> pushConfig(String yamlContent, {bool force = true}) async {
+    final resp = await _put(
+      '/configs?force=$force',
+      body: {'payload': yamlContent},
+    );
+    if (resp.statusCode != 204 && resp.statusCode != 200) {
+      throw MihomoApiException(resp.statusCode, resp.body);
+    }
   }
 
   // ------------------------------------------------------------------
@@ -253,12 +275,55 @@ class MihomoApi {
   }
 
   // ------------------------------------------------------------------
-  // HTTP helpers
+  // HTTP helpers with retry
   // ------------------------------------------------------------------
 
   static const _kTimeout = Duration(seconds: 10);
+  static const _maxRetries = 3;
+  static const _retryDelays = [
+    Duration(milliseconds: 300),
+    Duration(milliseconds: 600),
+    Duration(seconds: 1),
+  ];
 
-  Future<Map<String, dynamic>> _get(String path) async {
+  /// Whether an error is transient and safe to retry.
+  static bool _isTransient(Object e) {
+    if (e is TimeoutException) return true;
+    if (e is SocketException) return true;
+    if (e is HttpException) return true;
+    if (e is MihomoApiException && e.statusCode >= 500) return true;
+    return false;
+  }
+
+  /// Execute [fn] with automatic retry on transient errors.
+  /// Respects the circuit breaker — throws immediately if the breaker is open.
+  Future<T> _withRetry<T>(Future<T> Function() fn) async {
+    if (_breaker.isOpen) {
+      throw MihomoApiException(
+        503,
+        'Circuit breaker open — mihomo API unavailable, retry after cooldown',
+      );
+    }
+    for (var attempt = 0; attempt < _maxRetries; attempt++) {
+      try {
+        final result = await fn();
+        _breaker.recordSuccess();
+        return result;
+      } catch (e) {
+        final isLast = attempt == _maxRetries - 1;
+        if (!_isTransient(e)) rethrow;
+        if (isLast) {
+          _breaker.recordFailure();
+          rethrow;
+        }
+        debugPrint('[MihomoApi] Retry ${attempt + 1}/$_maxRetries after: $e');
+        await Future.delayed(_retryDelays[attempt]);
+      }
+    }
+    throw StateError('unreachable');
+  }
+
+  Future<Map<String, dynamic>> _get(String path) => _withRetry(() async {
     final resp = await http
         .get(Uri.parse('$_baseUrl$path'), headers: _headers)
         .timeout(_kTimeout);
@@ -266,7 +331,7 @@ class MihomoApi {
       throw MihomoApiException(resp.statusCode, resp.body);
     }
     return json.decode(resp.body) as Map<String, dynamic>;
-  }
+  });
 
   Future<http.Response> _put(String path,
       {Map<String, dynamic>? body}) async {

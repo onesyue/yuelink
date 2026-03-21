@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:app_links/app_links.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
@@ -19,7 +18,6 @@ import 'pages/dashboard_page.dart';
 import 'pages/nodes_page.dart';
 import 'pages/settings_page.dart';
 import 'domain/models/proxy.dart';
-import 'modules/nodes/providers/nodes_providers.dart';
 import 'modules/store/store_page.dart';
 import 'modules/onboarding/onboarding_page.dart';
 import 'modules/carrier/carrier_provider.dart';
@@ -31,9 +29,9 @@ import 'modules/connections/providers/connections_providers.dart';
 import 'modules/dashboard/providers/dashboard_providers.dart';
 import 'providers/core_provider.dart';
 import 'providers/profile_provider.dart';
-import 'providers/proxy_provider.dart';
 import 'shared/app_notifier.dart';
 import 'core/kernel/core_manager.dart';
+import 'core/platform/vpn_service.dart';
 import 'core/storage/auth_token_service.dart';
 import 'services/profile_service.dart';
 import 'core/storage/settings_service.dart';
@@ -41,6 +39,43 @@ import 'theme.dart';
 
 /// Global navigator key for deep-link navigation outside widget tree.
 final navigatorKey = GlobalKey<NavigatorState>();
+
+// ── Single-instance IPC server (macOS / Windows) ──────────────────────────────
+/// Local TCP server used as a single-instance mutex.
+/// Port 47866 is fixed — chosen to avoid common conflicts.
+/// The server accepts a "show\n" message from a second instance and brings
+/// the window to the foreground. The second instance then exits immediately.
+ServerSocket? _singleInstanceServer;
+
+Future<bool> _ensureSingleInstance() async {
+  const port = 47866;
+  try {
+    _singleInstanceServer = await ServerSocket.bind(
+        InternetAddress.loopbackIPv4, port,
+        shared: false);
+    _singleInstanceServer!.listen((socket) {
+      socket.listen((data) {
+        final msg = String.fromCharCodes(data).trim();
+        if (msg == 'show') {
+          windowManager.show();
+          windowManager.focus();
+        }
+        socket.close();
+      });
+    });
+    return true; // We are the first instance
+  } on SocketException {
+    // Another instance is running — ask it to show itself
+    try {
+      final socket = await Socket.connect(InternetAddress.loopbackIPv4, port,
+          timeout: const Duration(seconds: 1));
+      socket.write('show\n');
+      await socket.flush();
+      await socket.close();
+    } catch (_) {}
+    return false;
+  }
+}
 
 /// Jump-to-profile-page notifier (deep link triggers this).
 final deepLinkUrlProvider = StateProvider<String?>((ref) => null);
@@ -89,6 +124,17 @@ void main() async {
   // Apply global strings language before runApp (for tray etc.)
   S.setLanguage(savedLanguage);
 
+  // ── Single instance guard (macOS / Windows) ─────────────────────────────
+  // Must run before windowManager.ensureInitialized() so the second instance
+  // can exit(0) before creating a window. The first instance's server is ready
+  // to receive "show" commands as soon as windowManager is initialized below.
+  if (Platform.isMacOS || Platform.isWindows) {
+    final isFirst = await _ensureSingleInstance();
+    if (!isFirst) {
+      exit(0);
+    }
+  }
+
   // Configure launch at startup (macOS / Windows only)
   if (Platform.isMacOS || Platform.isWindows) {
     try {
@@ -96,7 +142,9 @@ void main() async {
         appName: AppConstants.appName,
         appPath: Platform.resolvedExecutable,
       );
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[App] launchAtStartup setup: $e');
+    }
   }
 
   // Initialize window manager (macOS, Windows, Linux)
@@ -131,8 +179,7 @@ void main() async {
     overrides: [
       themeProvider.overrideWith((ref) => savedTheme),
       languageProvider.overrideWith((ref) => savedLanguage),
-      activeProfileIdProvider
-          .overrideWith((ref) => ActiveProfileNotifier(savedProfileId)),
+      preloadedProfileIdProvider.overrideWithValue(savedProfileId),
       routingModeProvider.overrideWith((ref) => savedRoutingMode),
       connectionModeProvider.overrideWith((ref) => savedConnectionMode),
       logLevelProvider.overrideWith((ref) => savedLogLevel),
@@ -147,16 +194,15 @@ void main() async {
       hasSeenOnboardingProvider.overrideWith((ref) => savedOnboarding),
       initialBuiltTabsProvider.overrideWithValue(savedBuiltTabs),
       // Pre-loaded auth state: eliminates blank screen from async AuthNotifier._init()
-      authProvider.overrideWith((ref) => AuthNotifier(
-        ref,
-        initial: (savedToken != null && savedToken.isNotEmpty)
+      preloadedAuthStateProvider.overrideWithValue(
+        (savedToken != null && savedToken.isNotEmpty)
             ? AuthState(
                 status: AuthStatus.loggedIn,
                 token: savedToken,
                 userProfile: savedProfile,
               )
             : const AuthState(status: AuthStatus.loggedOut),
-      )),
+      ),
     ],
     child: const YueLinkApp(),
   ));
@@ -186,10 +232,18 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
   /// Guard to prevent onWindowClose from interfering during programmatic quit.
   bool _isQuitting = false;
 
+  /// True while the initial post-frame recovery has run.
+  /// Prevents didChangeAppLifecycleState(resumed) from re-running
+  /// _onAppResumed() on the same engine-create cycle.
+  bool _initialRecoveryDone = false;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    if (Platform.isAndroid) {
+      _setupVpnRevocationListener();
+    }
     if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
       windowManager.addListener(this);
       windowManager.setPreventClose(true);
@@ -207,8 +261,17 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
         // instead of waiting up to 10s for the heartbeat.
         if (Platform.isAndroid) {
           await _onAppResumed();
+          // Mark initial recovery as done so didChangeAppLifecycleState
+          // doesn't re-run _onAppResumed() on this same engine create cycle.
+          _initialRecoveryDone = true;
         }
         await _maybeAutoConnect();
+        // Clear the recovery guard AFTER auto-connect completes.
+        // This ensures heartbeat and VPN revocation callbacks don't interfere
+        // during the entire recovery + auto-connect sequence.
+        if (Platform.isAndroid) {
+          ref.read(recoveryInProgressProvider.notifier).state = false;
+        }
         _checkSubscriptionExpiry();
         _initDeepLinks();
         if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
@@ -216,6 +279,10 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
         }
       } catch (e) {
         debugPrint('[Init] post-frame init error (non-fatal): $e');
+        // Always clear recovery guard even on error
+        if (Platform.isAndroid) {
+          ref.read(recoveryInProgressProvider.notifier).state = false;
+        }
       }
     });
   }
@@ -240,7 +307,13 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
         groups: ref.read(proxyGroupsProvider),
       );
       if (prev == CoreStatus.running && next == CoreStatus.stopped) {
-        AppNotifier.warning(S.current.disconnectedUnexpected);
+        // Only show "unexpected disconnect" if the user did NOT initiate stop
+        // AND we're not in the middle of recovery (which temporarily resets state).
+        // userStoppedProvider is set true in CoreActions.stop() before status changes.
+        if (!ref.read(userStoppedProvider) &&
+            !ref.read(recoveryInProgressProvider)) {
+          AppNotifier.warning(S.current.disconnectedUnexpected);
+        }
         if (_trayInitialized) {
           trayManager
               .setToolTip('YueLink · ${S.current.statusDisconnected}')
@@ -281,6 +354,30 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
     });
   }
 
+  /// Register VPN revocation listener (Android only).
+  ///
+  /// Uses the recoveryInProgressProvider as the guard instead of a local
+  /// bool, so it stays in sync with the provider-level guard that heartbeat
+  /// also respects. This prevents VPN revocation from racing with recovery.
+  void _setupVpnRevocationListener() {
+    VpnService.listenForRevocation(() {
+      // Skip if recovery is in progress — the recovery logic will handle
+      // state correctly. Without this guard, onVpnRevoked races with
+      // _onAppResumed() on engine recreate and resets state prematurely.
+      if (ref.read(recoveryInProgressProvider)) {
+        debugPrint('[App] VPN revoked during recovery — ignoring');
+        return;
+      }
+      debugPrint('[App] VPN revoked — resetting state');
+      ref.read(coreStatusProvider.notifier).state = CoreStatus.stopped;
+      ref.read(trafficProvider.notifier).state = const Traffic();
+      ref.read(trafficHistoryProvider.notifier).state = TrafficHistory();
+      ref.read(trafficHistoryVersionProvider.notifier).state = 0;
+      CoreManager.instance.stop().catchError((_) {});
+      AppNotifier.warning(S.current.disconnectedUnexpected);
+    });
+  }
+
   /// Detect carrier via YueOps after VPN connects.
   /// Fetches the user's real (direct) IP to determine ISP (CT/CU/CM).
   void _startCarrierDetection() {
@@ -314,7 +411,22 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      _onAppResumed();
+      // On Android, the first resume after engine recreate is already handled
+      // by addPostFrameCallback. Without this guard, _onAppResumed() runs
+      // TWICE on the same cycle: once from post-frame, once from here.
+      // The double call causes race conditions (concurrent API checks,
+      // duplicate stream invalidations, state flip-flop).
+      if (Platform.isAndroid && !_initialRecoveryDone) {
+        debugPrint('[AppLifecycle] skipping resumed — initial recovery pending');
+        return;
+      }
+      _onAppResumed().then((_) {
+        // Clear recovery guard for subsequent resume calls (background→foreground).
+        // The initial engine-create path clears this in the post-frame callback.
+        if (Platform.isAndroid) {
+          ref.read(recoveryInProgressProvider.notifier).state = false;
+        }
+      });
     }
   }
 
@@ -337,7 +449,14 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
     //    This happens on Android when the OS kills the Flutter engine in the
     //    background but the VPN service + Go core survive. On resume, the
     //    engine is recreated with default state (stopped), but the core is alive.
+    //
+    //    The recovery guard is set on the PROVIDER (not a local bool) so that
+    //    both the heartbeat timer and the VPN revocation callback respect it.
+    //    The guard stays up until auto-connect also completes — this prevents
+    //    the status listener from firing "unexpected disconnect" during the
+    //    brief stopped→running transition.
     if (status != CoreStatus.running) {
+      ref.read(recoveryInProgressProvider.notifier).state = true;
       try {
         final coreAlive = manager.isCoreActuallyRunning;
         final apiOk = coreAlive ? await manager.api.isAvailable() : false;
@@ -345,18 +464,27 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
           debugPrint('[AppLifecycle] core alive but Dart state was $status — recovering');
           // Restore Dart state + ports to match reality
           await manager.markRunning();
-          ref.read(coreStatusProvider.notifier).state = CoreStatus.running;
-          // Clear any stale startup error from previous session
-          ref.read(coreStartupErrorProvider.notifier).state = null;
-          // Kick off streams and data refresh
+          // Invalidate streams BEFORE setting status to running.
+          // This ensures streams reconnect before heartbeat or listeners
+          // check for data, preventing a brief "no data" state.
           ref.invalidate(trafficStreamProvider);
           ref.invalidate(memoryStreamProvider);
           ref.invalidate(connectionsStreamProvider);
           ref.invalidate(exitIpInfoProvider);
+          // Now set state — this triggers the status listener and heartbeat
+          ref.read(coreStatusProvider.notifier).state = CoreStatus.running;
+          // Clear any stale startup error from previous session
+          ref.read(coreStartupErrorProvider.notifier).state = null;
+          // Also reset the user-stopped flag so the UI shows connected state
+          ref.read(userStoppedProvider.notifier).state = false;
           ref.read(proxyGroupsProvider.notifier).refresh();
         }
+        // Note: recovery guard stays up — cleared after _maybeAutoConnect
+        // in the post-frame callback, or at the end of this method for
+        // subsequent resume calls (not engine-create).
       } catch (e) {
         debugPrint('[AppLifecycle] recovery check failed: $e');
+        ref.read(recoveryInProgressProvider.notifier).state = false;
       }
       return;
     }
@@ -432,8 +560,9 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
       await hotKeyManager.register(toggleKey, keyDownHandler: (_) {
         _handleTrayToggle();
       });
-    } catch (_) {
+    } catch (e) {
       // Hotkey registration can fail if another app holds the shortcut
+      debugPrint('[App] hotkey registration: $e');
     }
   }
 
@@ -445,7 +574,9 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
       await hotKeyManager.register(toggleKey, keyDownHandler: (_) {
         _handleTrayToggle();
       });
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[App] hotkey re-registration: $e');
+    }
   }
 
   // ── Window manager callbacks ─────────────────────────────────────
@@ -539,7 +670,9 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
         MenuItem.separator(),
         MenuItem(key: 'quit', label: s.trayQuit),
       ]));
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[App] tray menu update: $e');
+    }
   }
 
   // Resolves a proxy_gi_ni key to (groupName, nodeName) using current groups.
@@ -603,7 +736,9 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
         await windowManager.show();
         await windowManager.focus();
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[App] window visibility toggle: $e');
+    }
   }
 
   Future<void> _handleTrayToggle() async {
@@ -636,6 +771,7 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
       // Always clear system proxy on exit regardless of settings/state,
       // so quitting the app never leaves a dead proxy configured.
       if (Platform.isMacOS || Platform.isWindows) {
+        try { await _singleInstanceServer?.close(); } catch (_) {}
         await CoreActions.clearSystemProxyStatic().catchError((_) {});
         await windowManager.setPreventClose(false);
         // Use destroy() instead of close() — close() triggers onWindowClose
@@ -746,8 +882,10 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
 
 // ── Auth gate ──────────────────────────────────────────────────────────────────
 
-/// Shows login page when not authenticated, main shell when logged in.
-/// On first login, shows onboarding before main shell.
+/// Gate flow: Onboarding (first launch) → Login → MainShell.
+///
+/// Onboarding is shown BEFORE the login page so first-time users see the
+/// product intro regardless of auth state. This works on all platforms.
 ///
 /// Auth state and onboarding flag are pre-loaded in main() to eliminate
 /// blank screen flashes on Android engine recreate (background→foreground).
@@ -756,9 +894,19 @@ class _AuthGate extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final authState = ref.watch(authProvider);
     final hasSeenOnboarding = ref.watch(hasSeenOnboardingProvider);
 
+    // 1. Onboarding first — before login, on ALL platforms
+    if (!hasSeenOnboarding) {
+      return OnboardingPage(
+        onComplete: () {
+          ref.read(hasSeenOnboardingProvider.notifier).state = true;
+        },
+      );
+    }
+
+    // 2. Auth check
+    final authState = ref.watch(authProvider);
     switch (authState.status) {
       case AuthStatus.unknown:
         // With pre-loaded auth, this should never show. Keep as safety fallback.
@@ -767,13 +915,6 @@ class _AuthGate extends ConsumerWidget {
         return const YueAuthPage();
       case AuthStatus.loggedIn:
       case AuthStatus.guest:
-        if (!hasSeenOnboarding) {
-          return OnboardingPage(
-            onComplete: () {
-              ref.read(hasSeenOnboardingProvider.notifier).state = true;
-            },
-          );
-        }
         return const MainShell();
     }
   }

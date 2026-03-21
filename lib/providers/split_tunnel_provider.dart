@@ -25,13 +25,15 @@ class AppInfo {
 // ── Providers ─────────────────────────────────────────────────────────────────
 
 final splitTunnelModeProvider =
-    StateNotifierProvider<SplitTunnelModeNotifier, SplitTunnelMode>(
-  (ref) => SplitTunnelModeNotifier(),
+    NotifierProvider<SplitTunnelModeNotifier, SplitTunnelMode>(
+  SplitTunnelModeNotifier.new,
 );
 
-class SplitTunnelModeNotifier extends StateNotifier<SplitTunnelMode> {
-  SplitTunnelModeNotifier() : super(SplitTunnelMode.all) {
+class SplitTunnelModeNotifier extends Notifier<SplitTunnelMode> {
+  @override
+  SplitTunnelMode build() {
     _load();
+    return SplitTunnelMode.all;
   }
 
   Future<void> _load() async {
@@ -51,13 +53,15 @@ class SplitTunnelModeNotifier extends StateNotifier<SplitTunnelMode> {
 
 /// The list of package names in the split tunnel list (whitelist or blacklist).
 final splitTunnelAppsProvider =
-    StateNotifierProvider<SplitTunnelAppsNotifier, List<String>>(
-  (ref) => SplitTunnelAppsNotifier(),
+    NotifierProvider<SplitTunnelAppsNotifier, List<String>>(
+  SplitTunnelAppsNotifier.new,
 );
 
-class SplitTunnelAppsNotifier extends StateNotifier<List<String>> {
-  SplitTunnelAppsNotifier() : super([]) {
+class SplitTunnelAppsNotifier extends Notifier<List<String>> {
+  @override
+  List<String> build() {
     _load();
+    return [];
   }
 
   Future<void> _load() async {

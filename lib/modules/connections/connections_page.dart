@@ -28,7 +28,18 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
   // from Settings on all platforms.
   static const bool _isSubPage = true;
 
+  // Sort cache — avoids O(n log n) re-sort on every build when data hasn't changed
+  List<ActiveConnection>? _sortedCache;
+  List<ActiveConnection>? _sortedInput;
+  _SortColumn? _sortedCol;
+  bool? _sortedAsc;
+
   List<ActiveConnection> _sorted(List<ActiveConnection> list) {
+    // Return cached result if inputs haven't changed (identity check is sufficient
+    // because filteredConnectionsProvider returns a new list on every change)
+    if (identical(list, _sortedInput) && _sortCol == _sortedCol && _sortAsc == _sortedAsc) {
+      return _sortedCache!;
+    }
     final copy = List<ActiveConnection>.from(list);
     copy.sort((a, b) {
       int cmp;
@@ -42,6 +53,10 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
       }
       return _sortAsc ? cmp : -cmp;
     });
+    _sortedCache = copy;
+    _sortedInput = list;
+    _sortedCol = _sortCol;
+    _sortedAsc = _sortAsc;
     return copy;
   }
 
@@ -223,6 +238,7 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
                         padding: const EdgeInsets.only(left: 16, right: 16, bottom: 32),
                         physics: const BouncingScrollPhysics(),
                         itemCount: filtered.length,
+                        addAutomaticKeepAlives: false,
                         itemBuilder: (context, i) => _ConnectionTile(
                           connection: filtered[i],
                           onClose: () => actions.close(filtered[i].id),

@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
+
 import 'secure_storage_service.dart';
 import '../../infrastructure/datasources/xboard_api.dart';
 
@@ -47,21 +49,38 @@ class AuthTokenService {
 
   // ── User profile (cached) ──────────────────────────────────────────────────
 
+  static const _kProfileCachedAt = 'yue_profile_cached_at';
+
   Future<UserProfile?> getCachedProfile() async {
     final raw = await _secure.read(_kUserProfile);
     if (raw == null || raw.isEmpty) return null;
     try {
       final json = jsonDecode(raw) as Map<String, dynamic>;
       return UserProfile.fromJson(json);
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[AuthTokenService] Failed to parse cached profile: $e');
       return null;
     }
   }
 
-  Future<void> cacheProfile(UserProfile profile) =>
-      _secure.write(_kUserProfile, jsonEncode(profile.toJson()));
+  /// Whether the cached profile is older than [maxAge] (default 1 hour).
+  Future<bool> isProfileStale({Duration maxAge = const Duration(hours: 1)}) async {
+    final raw = await _secure.read(_kProfileCachedAt);
+    if (raw == null || raw.isEmpty) return true;
+    final cachedAt = DateTime.tryParse(raw);
+    if (cachedAt == null) return true;
+    return DateTime.now().difference(cachedAt) > maxAge;
+  }
 
-  Future<void> clearCachedProfile() => _secure.delete(_kUserProfile);
+  Future<void> cacheProfile(UserProfile profile) async {
+    await _secure.write(_kUserProfile, jsonEncode(profile.toJson()));
+    await _secure.write(_kProfileCachedAt, DateTime.now().toIso8601String());
+  }
+
+  Future<void> clearCachedProfile() async {
+    await _secure.delete(_kUserProfile);
+    await _secure.delete(_kProfileCachedAt);
+  }
 
   // ── API host ────────────────────────────────────────────────────────────────
 

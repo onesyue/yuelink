@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/ffi/core_mock.dart';
@@ -39,7 +40,9 @@ final connectionsStreamProvider = Provider<void>((ref) {
         final data = CoreMock.instance.getConnections();
         final snapshot = ConnectionsSnapshot.fromJson(data);
         ref.read(connectionsSnapshotProvider.notifier).state = snapshot;
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('[Connections] mock poll failed: $e');
+      }
     }
 
     poll();

@@ -26,29 +26,35 @@ final announcementsProvider = FutureProvider<List<Announcement>>((ref) async {
   }
 });
 
-/// Locally-read announcement IDs (Set<int>), notifier for invalidation.
+/// Locally-read announcement IDs (`Set<int>`), notifier for invalidation.
 final readAnnouncementIdsProvider =
-    StateNotifierProvider<_ReadIdsNotifier, Set<int>>(
-  (_) => _ReadIdsNotifier(),
+    NotifierProvider<ReadIdsNotifier, Set<int>>(
+  ReadIdsNotifier.new,
 );
 
-class _ReadIdsNotifier extends StateNotifier<Set<int>> {
-  _ReadIdsNotifier() : super({}) {
+class ReadIdsNotifier extends Notifier<Set<int>> {
+  bool _disposed = false;
+
+  @override
+  Set<int> build() {
+    _disposed = false;
+    ref.onDispose(() => _disposed = true);
     _load();
+    return {};
   }
 
   Future<void> _load() async {
     final ids = await AnnouncementReadService.instance.getReadIds();
-    if (mounted) state = ids;
+    if (!_disposed) state = ids;
   }
 
   Future<void> markRead(int id) async {
     await AnnouncementReadService.instance.markRead(id);
-    if (mounted) state = {...state, id};
+    if (!_disposed) state = {...state, id};
   }
 
   Future<void> markAllRead(Iterable<int> ids) async {
     await AnnouncementReadService.instance.markAllRead(ids);
-    if (mounted) state = {...state, ...ids};
+    if (!_disposed) state = {...state, ...ids};
   }
 }

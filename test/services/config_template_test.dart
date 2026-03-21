@@ -138,4 +138,230 @@ rules:
     });
   });
 
+  group('ConfigTemplate.injectProxyChain', () {
+    const baseConfig = '''
+proxies:
+  - name: HK
+    type: ss
+    server: 1.2.3.4
+    port: 443
+  - name: JP
+    type: vmess
+    server: 5.6.7.8
+    port: 443
+proxy-groups:
+  - name: 自动选择
+    type: select
+    proxies:
+      - HK
+      - JP
+''';
+
+    test('sets dialer-proxy directly on exit proxy node', () {
+      final result =
+          ConfigTemplate.injectProxyChain(baseConfig, ['HK', 'JP'], '自动选择');
+      // JP (exit) must have dialer-proxy: HK
+      expect(result,
+          anyOf(contains('dialer-proxy: HK'), contains('dialer-proxy: "HK"')));
+      // HK (entry) must NOT have dialer-proxy pointing to JP
+      expect(result, isNot(contains('dialer-proxy: JP')));
+      expect(result, isNot(contains('dialer-proxy: "JP"')));
+      // No chain wrapper groups should be created
+      expect(result, isNot(contains('_YueLink_Chain_')));
+      // No relay type
+      expect(result,
+          isNot(anyOf(contains('type: relay'), contains('type: "relay"'))));
+    });
+
+    test('3-node chain sets correct dialer-proxy links on nodes', () {
+      const config = '''
+proxies:
+  - name: A
+    type: ss
+    server: 1.1.1.1
+    port: 443
+  - name: B
+    type: vmess
+    server: 2.2.2.2
+    port: 443
+  - name: C
+    type: trojan
+    server: 3.3.3.3
+    port: 443
+proxy-groups:
+  - name: 选择
+    type: select
+    proxies: [A, B, C]
+''';
+      final result =
+          ConfigTemplate.injectProxyChain(config, ['A', 'B', 'C'], '选择');
+      // B dials through A
+      expect(result,
+          anyOf(contains('dialer-proxy: A'), contains('dialer-proxy: "A"')));
+      // C dials through B
+      expect(result,
+          anyOf(contains('dialer-proxy: B'), contains('dialer-proxy: "B"')));
+      // A (entry) has no dialer-proxy
+      expect(result, isNot(contains('dialer-proxy: C')));
+      expect(result, isNot(contains('dialer-proxy: "C"')));
+    });
+
+    test('is idempotent — re-inject clears old dialer-proxy before re-setting', () {
+      var result =
+          ConfigTemplate.injectProxyChain(baseConfig, ['HK', 'JP'], '自动选择');
+      result =
+          ConfigTemplate.injectProxyChain(result, ['HK', 'JP'], '自动选择');
+      // Exactly one dialer-proxy in the entire config (JP → HK)
+      expect(RegExp(r'dialer-proxy:').allMatches(result).length, 1);
+    });
+
+    test('returns original config for less than 2 nodes', () {
+      expect(ConfigTemplate.injectProxyChain(baseConfig, ['HK'], '自动选择'),
+          equals(baseConfig));
+      expect(ConfigTemplate.injectProxyChain(baseConfig, [], '自动选择'),
+          equals(baseConfig));
+    });
+
+    test('returns original config when activeGroup not found', () {
+      expect(
+          ConfigTemplate.injectProxyChain(
+              baseConfig, ['HK', 'JP'], 'NonExistent'),
+          equals(baseConfig));
+    });
+
+    test('strips legacy dialer-proxy on raw proxy nodes on inject', () {
+      const legacyConfig = '''
+proxies:
+  - name: HK
+    type: ss
+    server: 1.2.3.4
+    port: 443
+    dialer-proxy: SomeNode
+  - name: JP
+    type: vmess
+    server: 5.6.7.8
+    port: 443
+proxy-groups:
+  - name: 自动选择
+    type: select
+    proxies:
+      - HK
+      - JP
+''';
+      final result = ConfigTemplate.injectProxyChain(
+          legacyConfig, ['HK', 'JP'], '自动选择');
+      expect(result, isNot(contains('dialer-proxy: SomeNode')));
+      expect(result, isNot(contains('dialer-proxy: "SomeNode"')));
+      // JP should now have dialer-proxy: HK
+      expect(result,
+          anyOf(contains('dialer-proxy: HK'), contains('dialer-proxy: "HK"')));
+    });
+
+    test('removes old _YueLink_Chain_* groups on re-inject (backward compat)', () {
+      const oldChainConfig = '''
+proxies:
+  - name: HK
+    type: ss
+    server: 1.2.3.4
+    port: 443
+  - name: JP
+    type: vmess
+    server: 5.6.7.8
+    port: 443
+proxy-groups:
+  - name: 自动选择
+    type: select
+    proxies:
+      - _YueLink_Chain_1
+      - HK
+      - JP
+  - name: _YueLink_Chain_0
+    type: select
+    proxies:
+      - HK
+  - name: _YueLink_Chain_1
+    type: select
+    proxies:
+      - JP
+''';
+      final result = ConfigTemplate.injectProxyChain(
+          oldChainConfig, ['HK', 'JP'], '自动选择');
+      expect(result, isNot(contains('_YueLink_Chain_')));
+      expect(result,
+          anyOf(contains('dialer-proxy: HK'), contains('dialer-proxy: "HK"')));
+    });
+  });
+
+  group('ConfigTemplate.removeProxyChain', () {
+    test('removes all chain wrapper groups and their entries', () {
+      const config = '''
+proxies:
+  - name: HK
+    type: ss
+    server: 1.2.3.4
+    port: 443
+proxy-groups:
+  - name: 自动选择
+    type: select
+    proxies:
+      - _YueLink_Chain_1
+      - HK
+  - name: _YueLink_Chain_0
+    type: select
+    proxies:
+      - HK
+  - name: _YueLink_Chain_1
+    type: select
+    proxies:
+      - JP
+    dialer-proxy: _YueLink_Chain_0
+''';
+      final result = ConfigTemplate.removeProxyChain(config);
+      expect(result, isNot(contains('_YueLink_Chain_')));
+    });
+
+    test('keeps _upstream dialer-proxy intact', () {
+      const config = '''
+proxies:
+  - name: _upstream
+    type: socks5
+    server: 10.0.0.1
+    port: 1080
+  - name: HK
+    type: ss
+    server: 1.2.3.4
+    port: 443
+    dialer-proxy: _upstream
+proxy-groups:
+  - name: 自动选择
+    type: select
+    proxies:
+      - HK
+''';
+      final result = ConfigTemplate.removeProxyChain(config);
+      expect(result,
+          anyOf(contains('dialer-proxy: _upstream'),
+              contains('dialer-proxy: "_upstream"')));
+    });
+
+    test('strips legacy dialer-proxy on raw proxy nodes on remove', () {
+      const config = '''
+proxies:
+  - name: HK
+    type: ss
+    server: 1.2.3.4
+    port: 443
+    dialer-proxy: SomeNode
+proxy-groups:
+  - name: 自动选择
+    type: select
+    proxies:
+      - HK
+''';
+      final result = ConfigTemplate.removeProxyChain(config);
+      expect(result, isNot(contains('dialer-proxy: SomeNode')));
+      expect(result, isNot(contains('dialer-proxy: "SomeNode"')));
+    });
+  });
+
 }

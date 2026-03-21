@@ -8,6 +8,7 @@ import '../../../l10n/app_strings.dart';
 import '../../../shared/app_notifier.dart';
 import '../../../theme.dart';
 import '../group_type_label.dart';
+import '../../chain_proxy/chain_proxy_provider.dart';
 import '../protocol_color.dart';
 import '../providers/node_providers.dart';
 import '../providers/nodes_providers.dart';
@@ -124,10 +125,15 @@ class _GroupCardState extends ConsumerState<GroupCard>
   Widget build(BuildContext context) {
     final group = widget.group;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final testing = ref.watch(delayTestingProvider);
-    final isGroupTesting = testing.any((n) => group.all.contains(n));
-    final delays = ref.watch(delayResultsProvider);
-    final sorted = _sortedNodes(group.all, widget.sortMode, delays);
+    // Only rebuild when testing state for THIS group's nodes changes
+    final isGroupTesting = ref.watch(delayTestingProvider.select(
+        (set) => set.any((n) => group.all.contains(n))));
+    // Only rebuild when sort-relevant delays change (not every single node update)
+    final sortMode = widget.sortMode;
+    final delays = sortMode == NodeSortMode.defaultOrder
+        ? const <String, int>{}
+        : ref.watch(delayResultsProvider);
+    final sorted = _sortedNodes(group.all, sortMode, delays);
     final query = widget.searchQuery.trim().toLowerCase();
     final nodeList = query.isEmpty
         ? sorted
@@ -151,9 +157,13 @@ class _GroupCardState extends ConsumerState<GroupCard>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Header (tap to toggle) ──────────────────────────────────
+          // ── Header (tap to toggle, long-press to add group to chain) ──
           InkWell(
             onTap: _toggle,
+            onLongPress: () {
+              ref.read(chainProxyProvider.notifier).addNode(group.name);
+              AppNotifier.info(S.of(context).chainAddHint);
+            },
             borderRadius: BorderRadius.vertical(
               top: const Radius.circular(YLRadius.xl),
               bottom: _expanded
@@ -358,6 +368,10 @@ class _NodeCardItemState extends ConsumerState<NodeCardItem> {
 
     return GestureDetector(
       onTap: _handleSelect,
+      onLongPress: () {
+        ref.read(chainProxyProvider.notifier).addNode(widget.name);
+        AppNotifier.info(S.of(context).chainAddHint);
+      },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         decoration: BoxDecoration(

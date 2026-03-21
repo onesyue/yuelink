@@ -7,7 +7,6 @@ import '../../../l10n/app_strings.dart';
 import '../../../providers/core_provider.dart';
 import '../../../shared/traffic_formatter.dart';
 import '../../../theme.dart';
-import '../providers/traffic_providers.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Layer 3 — Chart Card
@@ -24,6 +23,21 @@ class _ChartCardState extends ConsumerState<ChartCard> {
   TrafficHistory? _frozenHistory;
 
   @override
+  void initState() {
+    super.initState();
+    // Listen for lock toggle — capture/release snapshot outside build()
+    Future.microtask(() {
+      ref.listenManual(trafficChartLockedProvider, (prev, next) {
+        if (next && _frozenHistory == null) {
+          _frozenHistory = ref.read(trafficHistoryProvider).copy();
+        } else if (!next && _frozenHistory != null) {
+          _frozenHistory = null;
+        }
+      });
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final s = S.of(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -34,13 +48,6 @@ class _ChartCardState extends ConsumerState<ChartCard> {
     final range = ref.watch(trafficChartRangeProvider);
     final locked = ref.watch(trafficChartLockedProvider);
     final traffic = ref.watch(trafficProvider);
-
-    // When lock toggles on, capture snapshot; when off, clear it
-    if (locked && _frozenHistory == null) {
-      _frozenHistory = liveHistory.copy();
-    } else if (!locked && _frozenHistory != null) {
-      _frozenHistory = null;
-    }
 
     final history = locked && _frozenHistory != null ? _frozenHistory! : liveHistory;
     final downHistory = history.downSampled(seconds: range);
@@ -71,11 +78,11 @@ class _ChartCardState extends ConsumerState<ChartCard> {
                     style: YLText.caption.copyWith(color: YLColors.zinc500)),
               ),
               // Time range buttons
-              _RangeButton(label: '1m', value: 60, range: range, ref: ref),
+              _RangeButton(label: '1m', value: 60, range: range, onTap: () => ref.read(trafficChartRangeProvider.notifier).state = 60),
               const SizedBox(width: 4),
-              _RangeButton(label: '5m', value: 300, range: range, ref: ref),
+              _RangeButton(label: '5m', value: 300, range: range, onTap: () => ref.read(trafficChartRangeProvider.notifier).state = 300),
               const SizedBox(width: 4),
-              _RangeButton(label: '30m', value: 1800, range: range, ref: ref),
+              _RangeButton(label: '30m', value: 1800, range: range, onTap: () => ref.read(trafficChartRangeProvider.notifier).state = 1800),
               const SizedBox(width: 4),
               // Lock button
               GestureDetector(
@@ -240,18 +247,18 @@ class _RangeButton extends StatelessWidget {
   final String label;
   final int value;
   final int range;
-  final WidgetRef ref;
+  final VoidCallback onTap;
   const _RangeButton(
       {required this.label,
       required this.value,
       required this.range,
-      required this.ref});
+      required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     final selected = value == range;
     return GestureDetector(
-      onTap: () => ref.read(trafficChartRangeProvider.notifier).state = value,
+      onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
         decoration: BoxDecoration(

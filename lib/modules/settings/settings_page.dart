@@ -17,8 +17,6 @@ import 'sub/general_settings_page.dart';
 import '../../modules/store/store_page.dart';
 import '../../modules/store/order_history_page.dart';
 import '../../modules/yue_auth/providers/yue_auth_providers.dart';
-import '../../core/storage/auth_token_service.dart';
-import '../../infrastructure/datasources/xboard_api.dart';
 import '../../shared/formatters/subscription_parser.dart' show formatBytes;
 import '../../providers/core_provider.dart';
 import '../../shared/app_notifier.dart';
@@ -508,99 +506,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     );
   }
 
-  void _showChangePasswordDialog(BuildContext context, S s) {
-    final oldPwCtrl = TextEditingController();
-    final newPwCtrl = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(s.mineChangePassword),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: oldPwCtrl,
-              obscureText: true,
-              decoration: InputDecoration(labelText: s.oldPassword),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: newPwCtrl,
-              obscureText: true,
-              decoration: InputDecoration(labelText: s.newPassword),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text(s.cancel),
-          ),
-          FilledButton(
-            onPressed: () async {
-              final oldPw = oldPwCtrl.text.trim();
-              final newPw = newPwCtrl.text.trim();
-              if (oldPw.isEmpty || newPw.isEmpty) return;
-              Navigator.pop(ctx);
-              await _doChangePassword(oldPw, newPw);
-            },
-            child: Text(s.confirm),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _doChangePassword(String oldPassword, String newPassword) async {
-    final s = S.current;
-    final token = ref.read(authProvider).token;
-    if (token == null) return;
-    try {
-      final host = await AuthTokenService.instance.getApiHost() ??
-          'https://d7ccm19ki90mg.cloudfront.net';
-      final api = XBoardApi(baseUrl: host);
-      await api.changePassword(
-        token: token,
-        oldPassword: oldPassword,
-        newPassword: newPassword,
-      );
-      AppNotifier.success(s.passwordChangedSuccess);
-    } on XBoardApiException catch (e) {
-      final msg = e.message;
-      AppNotifier.error(
-        msg.isNotEmpty && msg.length < 80 && !msg.startsWith('{')
-            ? msg
-            : s.passwordChangeFailed,
-      );
-    } catch (_) {
-      AppNotifier.error(s.passwordChangeFailed);
-    }
-  }
-
-  void _confirmLogout(BuildContext context, S s, WidgetRef ref) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(s.authLogout),
-        content: Text(s.authLogoutConfirm),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text(s.cancel),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: YLColors.error),
-            onPressed: () {
-              Navigator.pop(ctx);
-              ref.read(authProvider.notifier).logout();
-            },
-            child: Text(s.authLogout),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 // ── Account section (superseded by AccountCard; retained for reference) ────────
@@ -865,39 +770,6 @@ class YLInfoRow extends StatelessWidget {
   }
 }
 
-// ── Close behavior row (desktop) ─────────────────────────────────────────────
-
-class _CloseBehaviorRow extends ConsumerWidget {
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final s = S.of(context);
-    final behavior = ref.watch(closeBehaviorProvider);
-    return YLInfoRow(
-      label: s.closeWindowBehavior,
-      trailing: SizedBox(
-        width: 260,
-        child: SegmentedButton<String>(
-          showSelectedIcon: false,
-          style: SegmentedButton.styleFrom(
-            visualDensity: VisualDensity.compact,
-            textStyle: const TextStyle(fontSize: 12),
-          ),
-          segments: [
-            ButtonSegment(value: 'tray', label: Text(s.closeBehaviorTray)),
-            ButtonSegment(value: 'exit', label: Text(s.closeBehaviorExit)),
-          ],
-          selected: {behavior},
-          onSelectionChanged: (v) async {
-            final val = v.first;
-            ref.read(closeBehaviorProvider.notifier).state = val;
-            await SettingsService.setCloseBehavior(val);
-          },
-        ),
-      ),
-    );
-  }
-}
-
 // ── Hotkey row (desktop) ──────────────────────────────────────────────────────
 
 class _HotkeyRow extends ConsumerStatefulWidget {
@@ -1025,43 +897,6 @@ class _HotkeyRowState extends ConsumerState<_HotkeyRow> {
 }
 
 // ── GeoData row ───────────────────────────────────────────────────────────────
-
-// ── Linux proxy notice row ────────────────────────────────────────────────────
-
-class _LinuxProxyNoticeRow extends StatelessWidget {
-  const _LinuxProxyNoticeRow();
-
-  @override
-  Widget build(BuildContext context) {
-    final s = S.of(context);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Icon(Icons.info_outline_rounded,
-              size: 16, color: YLColors.zinc400),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(s.linuxProxyNotice,
-                    style: YLText.body.copyWith(
-                        color: isDark ? YLColors.zinc200 : YLColors.zinc700)),
-                const SizedBox(height: 2),
-                Text(s.linuxProxyManual,
-                    style: YLText.caption.copyWith(
-                        fontFamily: 'monospace', color: YLColors.zinc400)),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 // ── GeoData row ───────────────────────────────────────────────────────────────
 

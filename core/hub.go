@@ -34,11 +34,13 @@ import (
 // Caller must free the returned string via FreeCString.
 //
 //export InitCore
-func InitCore(homeDir *C.char) *C.char {
+func InitCore(homeDir *C.char) (result *C.char) {
 	// Recover from Go panics — a panic in CGO kills the entire Flutter process.
+	// Uses named return so the deferred recover can set the error string.
 	defer func() {
 		if r := recover(); r != nil {
 			log.Errorln("[InitCore] PANIC recovered: %v", r)
+			result = C.CString(fmt.Sprintf("PANIC: %v", r))
 		}
 	}()
 
@@ -69,11 +71,18 @@ func InitCore(homeDir *C.char) *C.char {
 		return C.CString(fmt.Sprintf("config.Init failed: %v", err))
 	}
 
+	// Close previous log file handle if re-initializing (prevents fd leak)
+	if state.logFile != nil {
+		state.logFile.Close()
+		state.logFile = nil
+	}
+
 	// Redirect logrus output to core.log so Dart can read Go-side logs.
 	// Also tee to stdout for adb logcat / Xcode console.
 	logPath := filepath.Join(dir, "core.log")
 	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 	if err == nil {
+		state.logFile = logFile
 		logrus.SetOutput(io.MultiWriter(os.Stdout, logFile))
 	}
 
@@ -91,15 +100,17 @@ func InitCore(homeDir *C.char) *C.char {
 // Caller must free the returned string via FreeCString.
 //
 //export StartCore
-func StartCore(configStr *C.char) *C.char {
+func StartCore(configStr *C.char) (result *C.char) {
 	state.lock()
 	defer state.unlock()
 
 	// Recover from Go panics — a panic in CGO kills the entire Flutter process.
-	// Catch it and return an error string instead.
+	// Uses named return so the deferred recover can set the error string.
 	defer func() {
 		if r := recover(); r != nil {
 			log.Errorln("[StartCore] PANIC recovered: %v", r)
+			state.isRunning = false
+			result = C.CString(fmt.Sprintf("PANIC: %v", r))
 		}
 	}()
 
@@ -205,6 +216,9 @@ func IsRunning() C.int {
 //
 //export ValidateConfig
 func ValidateConfig(configStr *C.char) C.int {
+	state.lock()
+	defer state.unlock()
+
 	yaml := C.GoString(configStr)
 
 	_, err := executor.ParseWithBytes([]byte(yaml))

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../constants.dart';
@@ -62,7 +63,9 @@ class ProcessManager {
       if (result.exitCode == 0) {
         return (result.stdout as String).trim();
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[ProcessManager] PATH lookup failed: $e');
+    }
 
     return null;
   }
@@ -139,8 +142,8 @@ class ProcessManager {
       await p.exitCode.timeout(const Duration(seconds: 5));
     } on TimeoutException {
       p.kill(ProcessSignal.sigkill);
-    } catch (_) {
-      // 忽略其他可能的进程退出异常
+    } catch (e) {
+      debugPrint('[ProcessManager] process exit error: $e');
     }
   }
 

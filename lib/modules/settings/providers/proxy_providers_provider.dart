@@ -5,15 +5,15 @@ import '../../../core/kernel/core_manager.dart';
 import '../../../infrastructure/repositories/proxy_repository.dart';
 
 final proxyProvidersProvider =
-    StateNotifierProvider<ProxyProvidersNotifier, List<ProxyProviderInfo>>(
-  (ref) => ProxyProvidersNotifier(ref.read(proxyRepositoryProvider)),
+    NotifierProvider<ProxyProvidersNotifier, List<ProxyProviderInfo>>(
+  ProxyProvidersNotifier.new,
 );
 
-class ProxyProvidersNotifier
-    extends StateNotifier<List<ProxyProviderInfo>> {
-  final ProxyRepository _repo;
+class ProxyProvidersNotifier extends Notifier<List<ProxyProviderInfo>> {
+  @override
+  List<ProxyProviderInfo> build() => [];
 
-  ProxyProvidersNotifier(this._repo) : super([]);
+  ProxyRepository get _repo => ref.read(proxyRepositoryProvider);
 
   Future<void> refresh() async {
     if (CoreManager.instance.isMockMode) return;

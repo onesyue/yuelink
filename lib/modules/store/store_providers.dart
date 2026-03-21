@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -55,11 +56,7 @@ final paymentMethodsProvider =
     FutureProvider<List<PaymentMethod>>((ref) async {
   final repo = ref.watch(storeRepositoryProvider);
   if (repo == null) return [];
-  try {
-    return await repo.fetchPaymentMethods();
-  } catch (_) {
-    return [];
-  }
+  return repo.fetchPaymentMethods();
 });
 
 // ------------------------------------------------------------------
@@ -129,12 +126,34 @@ class PurchaseNotifier extends Notifier<PurchaseState> {
     String? couponCode,
     int? methodId,
   }) async {
-    if (state is PurchaseLoading) return; // prevent double submit
+    // Prevent double submit during loading, polling, or awaiting payment
+    if (state is PurchaseLoading || state is PurchasePolling ||
+        state is PurchaseAwaitingPayment) {
+      return;
+    }
 
     final repo = ref.read(storeRepositoryProvider);
     if (repo == null) {
       state = const PurchaseFailed('未登录');
       return;
+    }
+
+    // Idempotency: check for existing pending order for same plan
+    try {
+      final List<StoreOrder> orders = ref.read(orderHistoryProvider).valueOrNull ??
+          (await repo.fetchOrders(page: 1)).orders;
+      final pending = orders
+          .where((o) => o.planId == planId && o.status == OrderStatus.pending)
+          .firstOrNull;
+      if (pending != null) {
+        // Reuse existing pending order instead of creating a duplicate
+        debugPrint('[Store] Found pending order ${pending.tradeNo} for plan $planId — reusing');
+        await payExistingOrder(tradeNo: pending.tradeNo, methodId: methodId);
+        return;
+      }
+    } catch (e) {
+      // Non-blocking: if history check fails, proceed with normal flow
+      debugPrint('[Store] Pending order check failed: $e');
     }
 
     String? tradeNo; // captured early so error handler can reference it
@@ -226,7 +245,9 @@ class PurchaseNotifier extends Notifier<PurchaseState> {
             state = PurchaseFailed('订单已取消', tradeNo: tradeNo);
             return;
           }
-        } catch (_) {}
+        } catch (e) {
+          debugPrint('[Store] pollOrderResult failed: $e');
+        }
 
         if (i < maxAttempts) await Future.delayed(interval);
       }
@@ -248,7 +269,10 @@ class PurchaseNotifier extends Notifier<PurchaseState> {
     required String tradeNo,
     int? methodId,
   }) async {
-    if (state is PurchaseLoading) return;
+    if (state is PurchaseLoading || state is PurchasePolling ||
+        state is PurchaseAwaitingPayment) {
+      return;
+    }
     final repo = ref.read(storeRepositoryProvider);
     if (repo == null) {
       state = const PurchaseFailed('未登录');
@@ -325,6 +349,8 @@ class PurchaseNotifier extends Notifier<PurchaseState> {
   void _refreshUserSubscription() {
     // Trigger subscription sync so traffic/expiry reflects the new plan.
     ref.read(authProvider.notifier).syncSubscription().ignore();
+    // Refresh order history so the paid order shows updated status.
+    ref.invalidate(orderHistoryProvider);
   }
 
   String _extractMessage(Object e) {
@@ -362,7 +388,14 @@ class OrderHistoryNotifier extends AsyncNotifier<List<StoreOrder>> {
     final repo = ref.watch(storeRepositoryProvider);
     if (repo == null) return [];
     final result = await repo.fetchOrders(page: 1);
-    _hasMore = result.hasMore || result.orders.length >= _perPage;
+    // Trust server's hasMore when available (paginated response).
+    // Only use length heuristic as fallback — if the first page returns
+    // fewer items than _perPage, there are definitely no more pages.
+    _hasMore = result.hasMore;
+    if (!_hasMore && result.orders.length >= _perPage) {
+      // Server says no more, but we got a full page — could be exact fit.
+      // Keep _hasMore = false; server is authoritative.
+    }
     return result.orders;
   }
 
@@ -374,7 +407,7 @@ class OrderHistoryNotifier extends AsyncNotifier<List<StoreOrder>> {
     try {
       final result = await repo.fetchOrders(page: _page + 1);
       _page++;
-      _hasMore = result.hasMore || result.orders.length >= _perPage;
+      _hasMore = result.hasMore;
       final current = state.valueOrNull ?? [];
       state = AsyncData([...current, ...result.orders]);
     } catch (e) {
@@ -396,7 +429,7 @@ class OrderHistoryNotifier extends AsyncNotifier<List<StoreOrder>> {
       final repo = ref.read(storeRepositoryProvider);
       if (repo == null) return [];
       final result = await repo.fetchOrders(page: 1);
-      _hasMore = result.hasMore || result.orders.length >= _perPage;
+      _hasMore = result.hasMore;
       return result.orders;
     });
   }

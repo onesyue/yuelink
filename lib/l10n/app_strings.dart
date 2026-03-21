@@ -649,6 +649,7 @@ class S {
   String get mineSpeedUp => _e ? 'Upload' : '上传';
   String get mineSpeedDown => _e ? 'Download' : '下载';
   String get mineRemaining => _e ? 'Remaining' : '剩余';
+  String get mineDevices => _e ? 'Devices' : '设备在线';
   String get mineActions => _e ? 'Quick Actions' : '快捷操作';
   String get mineChangePassword => _e ? 'Change Password' : '修改密码';
   String get mineTelegramGroup => _e ? 'Join Telegram Group' : '加入 Telegram 群';
@@ -731,6 +732,7 @@ class S {
       _e ? 'Subscription Management' : '订阅管理';
   String get dashAccountLabel => _e ? 'Account' : '账户';
   String get dashLatestAnnouncement => _e ? 'Latest Announcements' : '最新公告';
+  String get noNetworkConnection => _e ? 'No network connection' : '网络连接不可用';
   String get dashGreeting => _e ? 'Hello' : '你好';
   String get dashGreetingReturning => _e ? 'Welcome back' : '欢迎回来';
   String get dashNoAnnouncements => _e ? 'No announcements' : '暂无公告';
@@ -781,4 +783,49 @@ class S {
   String get onboardingSkip => _e ? 'Skip' : '跳过';
   String get onboardingNext => _e ? 'Next' : '下一步';
   String get onboardingDone => _e ? 'Get Started' : '开始使用';
+
+  // ── Chain proxy ──────────────────────────────────────────────
+  String get chainProxy => _e ? 'Proxy Chain' : '链式代理';
+  String get chainEntry => _e ? 'Entry' : '入口';
+  String get chainExit => _e ? 'Exit' : '出口';
+  String get chainConnect => _e ? 'Connect Chain' : '连接链路';
+  String get chainDisconnect => _e ? 'Disconnect' : '断开链路';
+  String get chainConnected => _e ? 'Proxy chain connected' : '链式代理已连接';
+  String get chainDisconnected => _e ? 'Proxy chain disconnected' : '链式代理已断开';
+  String get chainConnectFailed => _e ? 'Chain connect failed' : '链路连接失败';
+  String get chainNeedConnect => _e ? 'Connect VPN first' : '请先连接 VPN';
+  String get chainNoGroup => _e ? 'No proxy group available' : '未找到可用策略组';
+  String get chainNeedTwoNodes => _e ? 'Need 2+ nodes' : '至少需要 2 个节点';
+  String get chainNodeDuplicate => _e ? 'Node already in chain' : '节点已在链路中';
+  String get chainClear => _e ? 'Clear' : '清空';
+  String get chainEmptyHint => _e ? 'No nodes in chain' : '暂无链路节点';
+  String get chainEmptyDesc => _e
+      ? 'Long-press any node or group on the Lines page to add it'
+      : '在线路页面长按节点或策略组即可加入链路';
+  String get chainAddHint => _e ? 'Added to proxy chain' : '已添加到链式代理';
+  String get chainPickerTitle => _e ? 'Add to Chain' : '添加到链路';
+  String get chainPickerSearch => _e ? 'Search nodes / groups...' : '搜索节点 / 策略组…';
+  String get chainSectionGroups => _e ? 'Proxy Groups' : '策略组';
+  String get chainSectionNodes => _e ? 'Nodes' : '节点';
+  String get msgSystemProxyConflict => _e
+      ? 'Another proxy client took over — stopping YueLink proxy'
+      : '检测到其他代理客户端已接管系统代理，已停止 YueLink 代理';
+
+  // ── Checkin ──────────────────────────────────────────────────
+  String get checkinTitle => _e ? 'Daily Check-in' : '每日签到';
+  String get checkinDesc => _e
+      ? 'Check in to get traffic or balance rewards'
+      : '签到领取流量或余额奖励';
+  String get checkinAction => _e ? 'Check in' : '签到';
+  String get checkinDone => _e ? 'Checked in' : '已签到';
+  String get checkinAlready => _e ? 'Already checked in today' : '今日已签到';
+  String get checkinOtherDevice =>
+      _e ? 'Checked in on another device' : '已在其他设备签到';
+  String get checkinNeedLogin => _e ? 'Please login first' : '请先登录';
+  String get checkinFailed => _e ? 'Check-in failed' : '签到失败';
+  String get checkinReward => _e ? 'Reward' : '奖励';
+  String checkinTrafficReward(String amount) =>
+      _e ? 'Got $amount traffic!' : '获得 $amount 流量！';
+  String checkinBalanceReward(String amount) =>
+      _e ? 'Got ¥$amount balance!' : '获得 ¥$amount 余额！';
 }

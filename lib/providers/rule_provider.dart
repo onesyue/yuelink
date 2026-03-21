@@ -5,12 +5,13 @@ import '../domain/models/rule.dart';
 import '../core/kernel/core_manager.dart';
 
 final rulesProvider =
-    StateNotifierProvider<RulesNotifier, List<RuleInfo>>(
-  (ref) => RulesNotifier(),
+    NotifierProvider<RulesNotifier, List<RuleInfo>>(
+  RulesNotifier.new,
 );
 
-class RulesNotifier extends StateNotifier<List<RuleInfo>> {
-  RulesNotifier() : super([]);
+class RulesNotifier extends Notifier<List<RuleInfo>> {
+  @override
+  List<RuleInfo> build() => [];
 
   Future<void> refresh() async {
     final manager = CoreManager.instance;

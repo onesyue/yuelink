@@ -17,6 +17,8 @@ import 'providers/nodes_providers.dart';
 import 'group_type_label.dart';
 import 'widgets/group_card.dart';
 import 'widgets/group_list_section.dart';
+import '../chain_proxy/chain_proxy_provider.dart';
+import '../chain_proxy/chain_proxy_sheet.dart';
 
 export 'providers/nodes_providers.dart';
 export 'providers/node_providers.dart';
@@ -223,6 +225,9 @@ class _NodesPageState extends ConsumerState<NodesPage> {
                 surfaceTintColor: Colors.transparent,
                 pinned: true,
                 actions: [
+                  // Chain proxy button
+                  _ChainProxyButton(),
+                  const SizedBox(width: 2),
                   // Sort chip — shows current mode, taps to cycle
                   GestureDetector(
                     onTap: () {
@@ -612,6 +617,72 @@ class _OfflinePreviewBanner extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ── Chain Proxy Button ──────────────────────────────────────────────────────
+
+class _ChainProxyButton extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final chain = ref.watch(chainProxyProvider);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return GestureDetector(
+      onTap: () => ChainProxySheet.show(context),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+        decoration: BoxDecoration(
+          color: chain.connected
+              ? YLColors.connected.withValues(alpha: 0.12)
+              : (isDark ? YLColors.zinc700 : YLColors.zinc100),
+          borderRadius: BorderRadius.circular(YLRadius.sm),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.link_rounded,
+              size: 13,
+              color: chain.connected ? YLColors.connected : YLColors.zinc500,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              S.of(context).chainProxy,
+              style: YLText.caption.copyWith(
+                fontSize: 11,
+                color:
+                    chain.connected ? YLColors.connected : YLColors.zinc500,
+                fontWeight: chain.connected ? FontWeight.w600 : FontWeight.w400,
+              ),
+            ),
+            if (chain.nodes.isNotEmpty) ...[
+              const SizedBox(width: 4),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                decoration: BoxDecoration(
+                  color: chain.connected
+                      ? YLColors.connected.withValues(alpha: 0.2)
+                      : YLColors.zinc500.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(YLRadius.sm),
+                ),
+                child: Text(
+                  '${chain.nodes.length}',
+                  style: YLText.caption.copyWith(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w600,
+                    color: chain.connected
+                        ? YLColors.connected
+                        : YLColors.zinc500,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }

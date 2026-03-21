@@ -84,11 +84,16 @@ class _PurchaseConfirmSheetState extends ConsumerState<PurchaseConfirmSheet> {
     // button re-enables and the duplicate-submit guard is bypassed.
     final isLoading = loadingState != null || purchaseState is PurchasePolling;
 
-    // Navigate to result view when payment URL is ready
+    // Navigate to result view when payment URL is ready.
+    // Capture navigator before pop — after pop, this widget's context is invalid.
     ref.listen(purchaseProvider, (_, next) {
       if (next is PurchaseAwaitingPayment || next is PurchaseSuccess) {
-        Navigator.pop(context);
-        _showResultView(context, next);
+        final nav = Navigator.of(context);
+        nav.pop();
+        // Use the navigator's overlay context (still valid after pop)
+        if (nav.context.mounted) {
+          _showResultView(nav.context, next);
+        }
       }
       if (next is PurchaseFailed) {
         AppNotifier.error(next.message);
@@ -341,11 +346,27 @@ class _PurchaseConfirmSheetState extends ConsumerState<PurchaseConfirmSheet> {
     } on Exception catch (e) {
       if (mounted) {
         setState(() {
-          _couponError = e is XBoardApiException ? e.message : e.toString();
+          _couponError = _friendlyError(e);
           _couponLoading = false;
         });
       }
     }
+  }
+
+  String _friendlyError(Exception e) {
+    if (e is XBoardApiException) return e.message;
+    final s = e.toString();
+    if (s.contains('SocketException') ||
+        s.contains('HandshakeException') ||
+        s.contains('HttpException')) {
+      final isEn = S.of(context).isEn;
+      return isEn ? 'Network error, please try again' : '网络异常，请重试';
+    }
+    if (s.contains('TimeoutException')) {
+      final isEn = S.of(context).isEn;
+      return isEn ? 'Request timed out, please try again' : '请求超时，请重试';
+    }
+    return s.startsWith('Exception: ') ? s.substring(11) : s;
   }
 
   void _showResultView(BuildContext context, PurchaseState state) {

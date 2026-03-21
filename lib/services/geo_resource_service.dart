@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
@@ -60,7 +61,8 @@ class GeoResourceService {
       await tmpFile.writeAsBytes(resp.bodyBytes);
       await tmpFile.rename('${dir.path}/$fileName');
       return true;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[GeoResourceService] download $fileName failed: $e');
       if (await tmpFile.exists()) await tmpFile.delete();
       return false;
     }

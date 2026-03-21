@@ -14,17 +14,28 @@ import '../../../providers/core_provider.dart';
 // ------------------------------------------------------------------
 
 final dailyTrafficProvider =
-    StateNotifierProvider<DailyTrafficNotifier, (int, int)>(
-  (ref) => DailyTrafficNotifier(),
+    NotifierProvider<DailyTrafficNotifier, (int, int)>(
+  DailyTrafficNotifier.new,
 );
 
-class DailyTrafficNotifier extends StateNotifier<(int, int)> {
+class DailyTrafficNotifier extends Notifier<(int, int)> {
   Timer? _flushTimer;
   bool _loaded = false;
+  bool _disposed = false;
   String _loadedDateKey = '';
 
-  DailyTrafficNotifier() : super((0, 0)) {
+  @override
+  (int, int) build() {
+    _loaded = false;
+    _disposed = false;
+    ref.onDispose(() {
+      _disposed = true;
+      _flushTimer?.cancel();
+      // Fire-and-forget final flush so we don't lose partial data on exit
+      SettingsService.saveTodayTraffic(state.$1, state.$2);
+    });
     _load();
+    return (0, 0);
   }
 
   static String _todayKey() {
@@ -37,14 +48,14 @@ class DailyTrafficNotifier extends StateNotifier<(int, int)> {
   Future<void> _load() async {
     _loadedDateKey = _todayKey();
     final data = await SettingsService.getTodayTraffic();
-    if (mounted) {
+    if (!_disposed) {
       state = (data['up']!, data['down']!);
       _loaded = true;
     }
   }
 
   void add(int upDelta, int downDelta) {
-    if (!_loaded || !mounted) return;
+    if (!_loaded || _disposed) return;
 
     // Reset counters on day rollover (midnight boundary)
     final today = _todayKey();
@@ -62,14 +73,6 @@ class DailyTrafficNotifier extends StateNotifier<(int, int)> {
 
   Future<void> _flush() async {
     await SettingsService.saveTodayTraffic(state.$1, state.$2);
-  }
-
-  @override
-  void dispose() {
-    _flushTimer?.cancel();
-    // Fire-and-forget final flush so we don't lose partial data on exit
-    SettingsService.saveTodayTraffic(state.$1, state.$2);
-    super.dispose();
   }
 }
 

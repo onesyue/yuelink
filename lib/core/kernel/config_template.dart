@@ -18,6 +18,9 @@ import '../../constants.dart';
 /// The bundled `default_config.yaml` is a **complete fallback** used
 /// when a subscription provides raw proxy nodes without groups/rules.
 class ConfigTemplate {
+  /// Prefix for temporary per-node wrapper groups injected for chain proxy.
+  /// Groups are named _YueLink_Chain_0, _YueLink_Chain_1, …
+  static const chainGroupPrefix = '_YueLink_Chain_';
   ConfigTemplate._();
 
   /// Template variables and their replacement values.
@@ -28,7 +31,9 @@ class ConfigTemplate {
   // Cached RegExp patterns
   static final _reTunKey        = RegExp(r'^tun:', multiLine: true);
   static final _reDnsKey        = RegExp(r'^dns:', multiLine: true);
-  static final _reTopLevel      = RegExp(r'^\S', multiLine: true);
+  /// Matches a top-level YAML key (non-whitespace, non-comment at line start).
+  /// Excludes `#` comment lines which are not section boundaries.
+  static final _reTopLevel      = RegExp(r'^[^\s#]', multiLine: true);
   static final _reEnableTrue    = RegExp(r'\benable:\s*true');
   static final _reEnableFalse   = RegExp(r'\benable:\s*false');
   static final _reExtController = RegExp(r'^(external-controller:\s*).*$', multiLine: true);
@@ -42,6 +47,17 @@ class ConfigTemplate {
   /// Ensures all critical config keys are present for reliable operation
   /// across all platforms. Uses "ensure" pattern: only injects when missing,
   /// never overwrites subscription-provided settings.
+  /// Validate that a string is parseable YAML. Returns null on success,
+  /// or an error message on failure.
+  static String? validateYaml(String yaml) {
+    try {
+      loadYaml(yaml);
+      return null;
+    } catch (e) {
+      return e.toString();
+    }
+  }
+
   static String process(
     String rawConfig, {
     int apiPort = AppConstants.defaultApiPort,
@@ -52,6 +68,15 @@ class ConfigTemplate {
     var config = rawConfig;
 
     debugPrint('[Config] process start, len=${config.length}');
+
+    // Pre-validate input YAML to catch broken subscription configs early
+    final yamlError = validateYaml(config);
+    if (yamlError != null) {
+      debugPrint('[Config] WARNING: input YAML is malformed: $yamlError');
+      // Don't throw — some subscription configs have minor YAML issues that
+      // mihomo's parser tolerates. Log and proceed; if it's truly broken,
+      // StartCore will surface the real error.
+    }
 
     // Replace template variables
     for (final entry in _variables.entries) {
@@ -144,6 +169,128 @@ class ConfigTemplate {
       return config;
     }
   }
+
+  /// Inject a proxy chain by setting `dialer-proxy` directly on proxy nodes.
+  ///
+  /// mihomo only allows `dialer-proxy` on proxy nodes in `proxies:`, NOT on
+  /// proxy-groups. For chain [A, B, C]:
+  ///   - A (entry): unchanged
+  ///   - B: dialer-proxy: A   (B connects through A)
+  ///   - C (exit): dialer-proxy: B  (C → B → A)
+  ///
+  /// After calling this, the caller should select the exit node (chainNames.last)
+  /// in the active proxy group via the REST API.
+  static String injectProxyChain(
+      String config, List<String> chainNames, String activeGroup) {
+    if (chainNames.length < 2) return config;
+    try {
+      final yaml = loadYaml(config);
+      if (yaml is! YamlMap) return config;
+      final mutable = _toMutable(yaml) as Map<String, dynamic>;
+
+      final proxies =
+          (mutable['proxies'] as List<dynamic>?)?.cast<dynamic>() ??
+              <dynamic>[];
+      final proxyGroups =
+          (mutable['proxy-groups'] as List<dynamic>?)?.cast<dynamic>() ??
+              <dynamic>[];
+
+      // Strip any existing chain dialer-proxy on nodes (idempotent re-inject).
+      // Preserve _upstream dialer-proxy (soft-router pass-through feature).
+      for (final p in proxies) {
+        if (p is Map<String, dynamic> && p['dialer-proxy'] != '_upstream') {
+          p.remove('dialer-proxy');
+        }
+      }
+
+      // Remove stale _YueLink_Chain_* wrapper groups (backward compat with
+      // the old proxy-group-based implementation).
+      proxyGroups.removeWhere(
+          (g) => g is Map && _isChainGroup(g['name'] as String? ?? ''));
+      for (final g in proxyGroups) {
+        if (g is Map<String, dynamic>) {
+          final gp = (g['proxies'] as List<dynamic>?)?.toList();
+          if (gp != null) {
+            final before = gp.length;
+            gp.removeWhere((p) => _isChainGroup(p as String? ?? ''));
+            if (gp.length != before) g['proxies'] = gp;
+          }
+        }
+      }
+
+      // Verify that the active group exists in this config.
+      final hasGroup = proxyGroups.any(
+          (g) => g is Map<String, dynamic> && g['name'] == activeGroup);
+      if (!hasGroup) return config;
+
+      // Set dialer-proxy on nodes[1..N-1]: each node dials through the previous.
+      for (var i = 1; i < chainNames.length; i++) {
+        for (final p in proxies) {
+          if (p is Map<String, dynamic> && p['name'] == chainNames[i]) {
+            p['dialer-proxy'] = chainNames[i - 1];
+            break;
+          }
+        }
+      }
+
+      mutable['proxies'] = proxies;
+      mutable['proxy-groups'] = proxyGroups;
+      return YamlWriter().write(mutable);
+    } catch (e) {
+      debugPrint('[ConfigTemplate] injectProxyChain error: $e');
+      return config;
+    }
+  }
+
+  /// Remove all chain wrapper groups and their entries from every proxy-group.
+  /// Also strips any legacy dialer-proxy on raw proxy nodes (backward compat).
+  static String removeProxyChain(String config) {
+    try {
+      final yaml = loadYaml(config);
+      if (yaml is! YamlMap) return config;
+      final mutable = _toMutable(yaml) as Map<String, dynamic>;
+
+      final proxies =
+          (mutable['proxies'] as List<dynamic>?)?.cast<dynamic>() ??
+              <dynamic>[];
+      final proxyGroups =
+          (mutable['proxy-groups'] as List<dynamic>?)?.cast<dynamic>() ??
+              <dynamic>[];
+
+      // Strip legacy dialer-proxy on raw proxy nodes (backward compat)
+      for (final p in proxies) {
+        if (p is Map<String, dynamic> && p['dialer-proxy'] != '_upstream') {
+          p.remove('dialer-proxy');
+        }
+      }
+
+      // Remove chain entries from every group's proxies list
+      for (final g in proxyGroups) {
+        if (g is Map<String, dynamic>) {
+          final gp = (g['proxies'] as List<dynamic>?)?.toList();
+          if (gp != null) {
+            final before = gp.length;
+            gp.removeWhere((p) => _isChainGroup(p as String? ?? ''));
+            if (gp.length != before) g['proxies'] = gp;
+          }
+        }
+      }
+
+      // Remove all chain wrapper groups
+      proxyGroups.removeWhere(
+          (g) => g is Map && _isChainGroup(g['name'] as String? ?? ''));
+
+      mutable['proxies'] = proxies;
+      if (proxyGroups.isNotEmpty) mutable['proxy-groups'] = proxyGroups;
+      return YamlWriter().write(mutable);
+    } catch (e) {
+      debugPrint('[ConfigTemplate] removeProxyChain error: $e');
+      return config;
+    }
+  }
+
+  static bool _isChainGroup(String name) =>
+      name.startsWith(chainGroupPrefix);
 
   static dynamic _toMutable(dynamic value) {
     if (value is YamlMap) {
@@ -293,6 +440,9 @@ class ConfigTemplate {
           '    - https://doh.pub/dns-query\n'
           '    - https://dns.alidns.com/dns-query\n'
           '  proxy-server-nameserver:\n'
+          '    - 223.5.5.5\n'
+          '    - 119.29.29.29\n'
+          '    - 8.8.8.8\n'
           '    - https://doh.pub/dns-query\n'
           '    - https://dns.alidns.com/dns-query\n'
           '  nameserver-policy:\n'
@@ -403,9 +553,29 @@ class ConfigTemplate {
         config =
             config.substring(0, dnsEnd) + directNs + config.substring(dnsEnd);
         dnsEnd += directNs.length;
+        dnsSection = config.substring(dnsMatch.start, dnsEnd);
       }
 
-      // Fix 3: ensure connectivity-check domains are in fake-ip-filter.
+      // Fix 4: ensure proxy-server-nameserver has plain UDP DNS fallbacks.
+      // Problem: if proxy-server-nameserver only has DoH (HTTPS) servers,
+      // mihomo can't resolve proxy server hostnames before connecting — the
+      // DoH query itself requires the proxy to be up (chicken-and-egg).
+      // Plain UDP DNS (223.5.5.5 / 8.8.8.8) bypass the proxy and bootstrap
+      // resolution so the proxy can start in the first place.
+      if (!dnsSection.contains('proxy-server-nameserver:')) {
+        final proxyNs = '${indent}proxy-server-nameserver:\n'
+            '${entryIndent}- 223.5.5.5\n'
+            '${entryIndent}- 119.29.29.29\n'
+            '${entryIndent}- 8.8.8.8\n'
+            '${entryIndent}- https://doh.pub/dns-query\n'
+            '${entryIndent}- https://dns.alidns.com/dns-query\n';
+        config =
+            config.substring(0, dnsEnd) + proxyNs + config.substring(dnsEnd);
+        dnsEnd += proxyNs.length;
+        dnsSection = config.substring(dnsMatch.start, dnsEnd);
+      }
+
+      // Fix 5: ensure connectivity-check domains are in fake-ip-filter.
       // Without these, connectivity checks resolve to fake IPs, causing
       // "no internet" / WiFi exclamation mark on Android, iOS, Windows, etc.
       dnsSection = config.substring(dnsMatch.start, dnsEnd);
@@ -570,13 +740,22 @@ class ConfigTemplate {
   }
 
   /// Remove a top-level YAML section (key + all indented content below it).
-  /// Handles blank lines within the section (e.g., tun blocks with spacing).
+  /// Works whether the section ends with a newline, EOF, or next top-level key.
   static String _removeSection(String config, String key) {
-    final pattern = RegExp(
-      '^$key:.*\n(?:(?:[ \t]+.*|[ \t]*)\n)*',
-      multiLine: true,
-    );
-    return config.replaceFirst(pattern, '');
+    final keyPattern = RegExp('^$key:', multiLine: true);
+    final match = keyPattern.firstMatch(config);
+    if (match == null) return config;
+
+    final afterKeyLine = config.indexOf('\n', match.start);
+    if (afterKeyLine < 0) {
+      // Section is the last line with no newline — remove to EOF
+      return config.substring(0, match.start);
+    }
+    final afterKey = afterKeyLine + 1;
+    final nextTopLevel = _reTopLevel.firstMatch(config.substring(afterKey));
+    final sectionEnd =
+        nextTopLevel != null ? afterKey + nextTopLevel.start : config.length;
+    return config.substring(0, match.start) + config.substring(sectionEnd);
   }
 
   /// Replace the value of a top-level scalar key.

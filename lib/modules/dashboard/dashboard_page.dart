@@ -1,27 +1,26 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/storage/settings_service.dart';
 import '../../l10n/app_strings.dart';
 import '../../modules/yue_auth/providers/yue_auth_providers.dart';
-import '../../providers/connection_provider.dart';
 import '../../providers/core_provider.dart';
 import '../../providers/profile_provider.dart';
 import '../../shared/app_notifier.dart';
 import '../../core/kernel/core_manager.dart';
 import '../../services/profile_service.dart';
+import '../../providers/connection_provider.dart';
+import '../../providers/connectivity_provider.dart';
 import '../../theme.dart';
 import '../announcements/providers/announcements_providers.dart';
 import 'widgets/announcement_banner.dart';
-import 'widgets/chart_card.dart';
-import 'widgets/exit_ip_card.dart';
+import 'widgets/live_status_card.dart';
+import 'widgets/metrics_row.dart';
 import 'widgets/hero_card.dart';
 import 'widgets/carrier_card.dart';
-import 'widgets/stats_card.dart';
 import 'widgets/subscription_card.dart';
+import '../checkin/checkin_card.dart';
+import '../checkin/checkin_provider.dart';
 
 class DashboardPage extends ConsumerStatefulWidget {
   const DashboardPage({super.key});
@@ -31,91 +30,7 @@ class DashboardPage extends ConsumerStatefulWidget {
 }
 
 class _DashboardPageState extends ConsumerState<DashboardPage> {
-  DateTime? _connectedSince;
-  Timer? _uptimeTimer;
-  final _uptimeNotifier = ValueNotifier<String>('');
   bool _busy = false;
-  ProviderSubscription? _statusSub;
-
-  @override
-  void initState() {
-    super.initState();
-    // Listen for core status changes to manage the uptime timer.
-    // Using listenManual avoids re-registering in every build() call.
-    Future.microtask(() {
-      _statusSub = ref.listenManual(coreStatusProvider, (prev, next) {
-        if (next == CoreStatus.running) {
-          // Only reset _connectedSince on a real stopped→running transition.
-          // If the timer is already running (e.g. widget rebuild), skip.
-          if (_connectedSince == null) {
-            _startUptimeTimer();
-          }
-        } else if (next == CoreStatus.stopped) {
-          _stopUptimeTimer();
-        }
-      });
-      // Sync initial state if core is already running (e.g. Android process
-      // restore where Go core survived). Try to restore persisted timestamp.
-      if (ref.read(coreStatusProvider) == CoreStatus.running) {
-        _restoreOrStartUptimeTimer();
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _statusSub?.close();
-    _uptimeTimer?.cancel();
-    _uptimeNotifier.dispose();
-    super.dispose();
-  }
-
-  void _startUptimeTimer({DateTime? since}) {
-    _connectedSince = since ?? DateTime.now();
-    // Persist so we can restore after Android process recreation
-    SettingsService.set('connected_since', _connectedSince!.millisecondsSinceEpoch);
-    _uptimeNotifier.value = '';
-    _uptimeTimer?.cancel();
-    _uptimeTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (_connectedSince == null) return;
-      final diff = DateTime.now().difference(_connectedSince!);
-      final h = diff.inHours;
-      final m = diff.inMinutes % 60;
-      final sec = diff.inSeconds % 60;
-      if (h > 0) {
-        _uptimeNotifier.value = '${h}h ${m}m';
-      } else if (m > 0) {
-        _uptimeNotifier.value = '${m}m';
-      } else {
-        _uptimeNotifier.value = '${sec}s';
-      }
-    });
-  }
-
-  /// Restore persisted _connectedSince on recovery (Android process recreate
-  /// where Go core survived). Falls back to DateTime.now() if not found.
-  Future<void> _restoreOrStartUptimeTimer() async {
-    final savedMs = await SettingsService.get<int>('connected_since');
-    if (savedMs != null && savedMs > 0) {
-      final saved = DateTime.fromMillisecondsSinceEpoch(savedMs);
-      // Sanity check: must be in the past and not more than 7 days old
-      if (saved.isBefore(DateTime.now()) &&
-          DateTime.now().difference(saved).inDays < 7) {
-        _startUptimeTimer(since: saved);
-        return;
-      }
-    }
-    _startUptimeTimer();
-  }
-
-  void _stopUptimeTimer() {
-    _uptimeTimer?.cancel();
-    _uptimeTimer = null;
-    _connectedSince = null;
-    _uptimeNotifier.value = '';
-    // Clear persisted timestamp
-    SettingsService.set('connected_since', null);
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -135,8 +50,6 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
         bottom: false,
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final isWide = constraints.maxWidth > 560;
-
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -150,6 +63,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                           .read(authProvider.notifier)
                           .refreshUserInfo();
                       ref.invalidate(announcementsProvider);
+                      ref.read(checkinProvider.notifier).refresh();
                     },
                     child: ListView(
                     padding: EdgeInsets.symmetric(
@@ -162,24 +76,20 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                       // ── User greeting header ─────────────────────────
                       _DashboardHeader(),
 
+                      // ── Offline banner ─────────────────────────────
+                      const _OfflineBanner(),
+
                       const SizedBox(height: 16),
 
                       // ── Hero card: connect/status ────────────────────
                       RepaintBoundary(
                         child: HeroCard(
                           status: status,
-                          uptimeNotifier: _uptimeNotifier,
                           onToggle: () => _toggle(context, ref),
                         ),
                       ),
 
-                      // ── Latest announcement (always visible) ────────
-                      const SizedBox(height: 12),
-                      const RepaintBoundary(child: AnnouncementBanner()),
-
-                      // ── Running: carrier, exit IP, chart, stats ─────
-                      // Wrap in AnimatedSize + AnimatedOpacity to avoid
-                      // layout jump / flash when core starts/stops.
+                      // ── Running: carrier, live status, metrics ───────
                       AnimatedSize(
                         duration: const Duration(milliseconds: 300),
                         curve: Curves.easeInOut,
@@ -188,49 +98,31 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                           opacity: isRunning ? 1.0 : 0.0,
                           duration: const Duration(milliseconds: 250),
                           child: isRunning
-                              ? Column(
+                              ? const Column(
                                   children: [
-                                    const SizedBox(height: 12),
-                                    const RepaintBoundary(child: CarrierCard()),
-                                    const SizedBox(height: 12),
-                                    if (isWide)
-                                      SizedBox(
-                                        height: 190,
-                                        child: Row(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.stretch,
-                                          children: const [
-                                            Expanded(
-                                                flex: 1,
-                                                child: RepaintBoundary(
-                                                    child: ExitIpCard())),
-                                            SizedBox(width: 12),
-                                            Expanded(
-                                              flex: 2,
-                                              child: RepaintBoundary(
-                                                  child: ChartCard()),
-                                            ),
-                                          ],
-                                        ),
-                                      )
-                                    else ...[
-                                      const RepaintBoundary(
-                                          child: ExitIpCard()),
-                                      const SizedBox(height: 12),
-                                      const RepaintBoundary(
-                                          child: ChartCard()),
-                                    ],
-                                    const SizedBox(height: 12),
-                                    const RepaintBoundary(child: StatsCard()),
+                                    SizedBox(height: 12),
+                                    RepaintBoundary(child: CarrierCard()),
+                                    SizedBox(height: 12),
+                                    RepaintBoundary(child: LiveStatusCard()),
+                                    SizedBox(height: 12),
+                                    RepaintBoundary(child: MetricsRow()),
                                   ],
                                 )
                               : const SizedBox.shrink(),
                         ),
                       ),
 
+                      // ── Announcement (after live data, before account) ──
+                      const SizedBox(height: 12),
+                      const RepaintBoundary(child: AnnouncementBanner()),
+
                       // ── Subscription info ───────────────────────────
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 12),
                       const RepaintBoundary(child: SubscriptionCard()),
+
+                      // ── Daily check-in ────────────────────────────
+                      const SizedBox(height: 12),
+                      const RepaintBoundary(child: CheckinCard()),
 
                       const SizedBox(height: 8),
                     ],
@@ -379,6 +271,58 @@ class _DashboardHeader extends ConsumerWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+// ── Offline banner ──────────────────────────────────────────────────────────
+
+class _OfflineBanner extends ConsumerWidget {
+  const _OfflineBanner();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final connectivity = ref.watch(connectivityProvider);
+    if (connectivity != ConnectivityStatus.offline) {
+      return const SizedBox.shrink();
+    }
+
+    final s = S.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: isDark
+              ? Colors.orange.withValues(alpha: 0.15)
+              : Colors.orange.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(YLRadius.md),
+          border: Border.all(
+            color: Colors.orange.withValues(alpha: 0.3),
+            width: 0.5,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              Icons.wifi_off_rounded,
+              size: 16,
+              color: isDark ? Colors.orange[300] : Colors.orange[800],
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                s.noNetworkConnection,
+                style: YLText.caption.copyWith(
+                  color: isDark ? Colors.orange[300] : Colors.orange[800],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

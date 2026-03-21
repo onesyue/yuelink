@@ -4,16 +4,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../datasources/mihomo_stream.dart';
 import '../../domain/models/traffic.dart';
-import '../../domain/models/traffic_history.dart';
 import '../../core/kernel/core_manager.dart';
 
 /// Repository that wraps real-time traffic/memory streams from [MihomoStream].
 ///
-/// Provides three streams:
+/// Provides two streams:
 /// - [trafficStream] — raw 1 s traffic ticks.
 /// - [memoryStream] — memory usage throttled to 5 s windows.
-/// - [historyStream] — accumulates ticks into a [TrafficHistory] ring buffer
-///   and emits an updated copy every tick.
+///
+/// Traffic history accumulation is handled by [trafficStreamProvider] using
+/// in-place mutation + version counter (no per-tick copy).
 class TrafficRepository {
   TrafficRepository(this._stream);
 
@@ -55,33 +55,6 @@ class TrafficRepository {
         throttle?.cancel();
         sub = null;
         throttle = null;
-        controller.close();
-      },
-    );
-
-    return controller.stream;
-  }
-
-  // ------------------------------------------------------------------
-  // History stream — accumulates ticks into a ring buffer
-  // ------------------------------------------------------------------
-
-  Stream<TrafficHistory> historyStream() {
-    final history = TrafficHistory();
-
-    late StreamController<TrafficHistory> controller;
-    StreamSubscription<({int up, int down})>? sub;
-
-    controller = StreamController<TrafficHistory>.broadcast(
-      onListen: () {
-        sub = _stream.trafficStream().listen((t) {
-          history.add(t.up, t.down);
-          if (!controller.isClosed) controller.add(history.copy());
-        });
-      },
-      onCancel: () {
-        sub?.cancel();
-        sub = null;
         controller.close();
       },
     );

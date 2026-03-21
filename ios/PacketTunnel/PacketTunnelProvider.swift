@@ -22,6 +22,8 @@ func FreeCString(_ s: UnsafeMutablePointer<CChar>!)
 class PacketTunnelProvider: NEPacketTunnelProvider {
 
     private let appGroup = "group.com.yueto.yuelink"
+    /// Cached TUN file descriptor — avoids re-scanning 4094 fds on every config update.
+    private var cachedTunFd: Int32 = -1
 
     override func startTunnel(
         options: [String: NSObject]?,
@@ -56,7 +58,9 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
 
     /// Find the TUN file descriptor created by NEPacketTunnelProvider.
     /// Scans open fds for a utun device (public API, no private KVC).
+    /// Results are cached — invalidate with `cachedTunFd = -1` on error.
     private func findTunFd() -> Int32 {
+        if cachedTunFd > 0 { return cachedTunFd }
         var buf = [CChar](repeating: 0, count: Int(IFNAMSIZ))
         for fd: Int32 in 3...4096 {
             var len = socklen_t(buf.count)
@@ -64,6 +68,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
             if getsockopt(fd, 2, 2, &buf, &len) == 0 {
                 let name = String(cString: buf)
                 if name.hasPrefix("utun") {
+                    cachedTunFd = fd
                     return fd
                 }
             }
@@ -202,12 +207,16 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
     /// nameserver-policy + direct-nameserver for Apple/iCloud if not present.
     /// Uses indent detection to match the subscription's YAML style (2-space
     /// or 4-space) — hardcoded indentation breaks go-yaml parsing.
+    ///
+    /// Optimized: builds all injection text in a single pass, then applies
+    /// insertions in one operation to avoid repeated O(n) regex scans.
     private func ensureDnsPatched(_ config: String) -> String {
         var result = config
+        let dnsBlockRegex = #"(?m)^dns:.*\n(?:[ \t]+.*\n)*"#
 
-        // Ensure enable: true
+        // ── Pass 1: ensure enable: true ────────────────────────────────
         guard let dnsRange = result.range(
-            of: #"(?m)^dns:.*\n(?:[ \t]+.*\n)*"#, options: .regularExpression
+            of: dnsBlockRegex, options: .regularExpression
         ) else { return result }
 
         let dnsBlock = String(result[dnsRange])
@@ -218,8 +227,6 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
             )
         } else if !dnsBlock.contains("enable: true") {
             if let dnsLineEnd = result.range(of: #"(?m)^dns:.*$"#, options: .regularExpression) {
-                // Insert "enable: true" on the line after "dns:".
-                // Guard against end-of-string to avoid index(after: endIndex) crash.
                 if dnsLineEnd.upperBound < result.endIndex {
                     let insertPos = result.index(after: dnsLineEnd.upperBound)
                     result.insert(contentsOf: "  enable: true\n", at: insertPos)
@@ -229,136 +236,98 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
             }
         }
 
-        // Re-capture dns block after enable:true changes
+        // ── Pass 2 (single): capture block, detect indent, build all injections
         guard let updatedRange = result.range(
-            of: #"(?m)^dns:.*\n(?:[ \t]+.*\n)*"#, options: .regularExpression
+            of: dnsBlockRegex, options: .regularExpression
         ) else { return result }
         let updatedBlock = String(result[updatedRange])
 
-        // Detect indentation used by dns sub-keys (2-space or 4-space).
-        // Without matching, go-yaml reports "did not find expected key".
         guard let indentMatch = updatedBlock.range(
             of: #"(?m)\n( +)\S"#, options: .regularExpression
         ) else { return result }
 
-        // Extract the whitespace between \n and the first non-whitespace char
         let afterNewline = updatedBlock.index(after: indentMatch.lowerBound)
         let firstNonSpace = updatedBlock[indentMatch].drop(while: { $0 == "\n" || $0 == " " || $0 == "\t" }).startIndex
         let indent = String(updatedBlock[afterNewline..<firstNonSpace])
 
-        // Detect entry indentation from existing list items (e.g. "    - ")
-        var entryIndent = indent + "  " // default: indent + 2
+        var entryIndent = indent + "  "
         if let listMatch = updatedBlock.range(of: #"(?m)\n( +)- "#, options: .regularExpression) {
             let afterNl = updatedBlock.index(after: listMatch.lowerBound)
             let firstDash = updatedBlock[listMatch].drop(while: { $0 == "\n" || $0 == " " }).startIndex
             entryIndent = String(updatedBlock[afterNl..<firstDash])
         }
 
-        // Inject prefer-h3 for DNS-over-HTTP/3 (QUIC) — faster DNS resolution,
-        // avoids TCP DNS blocking on some networks.
+        // Build all appendable text in one pass, then insert once at dns block end
+        var appendAfterDns = ""
+
+        // prefer-h3
         if !updatedBlock.contains("prefer-h3") {
-            // Re-find dns block for insertion
-            if let dnsLineRange = result.range(of: #"(?m)^dns:.*$"#, options: .regularExpression) {
-                if dnsLineRange.upperBound < result.endIndex {
-                    let insertPos = result.index(after: dnsLineRange.upperBound)
-                    result.insert(contentsOf: "\(indent)prefer-h3: true\n", at: insertPos)
-                }
+            // Insert right after "dns:" line
+            if let dnsLineRange = result.range(of: #"(?m)^dns:.*$"#, options: .regularExpression),
+               dnsLineRange.upperBound < result.endIndex {
+                let insertPos = result.index(after: dnsLineRange.upperBound)
+                result.insert(contentsOf: "\(indent)prefer-h3: true\n", at: insertPos)
             }
         }
 
-        // Inject nameserver-policy for Apple/iCloud (used by main resolver).
-        // On some networks, domestic UDP DNS returns 0.0.0.0 for Apple update
-        // domains when subscription routes them DIRECT.
-        // Re-capture dns block after possible prefer-h3 changes
-        guard let updatedRange2 = result.range(
-            of: #"(?m)^dns:.*\n(?:[ \t]+.*\n)*"#, options: .regularExpression
-        ) else { return result }
-        let updatedBlock2 = String(result[updatedRange2])
-        if !updatedBlock2.contains("nameserver-policy:") {
-            let policy = "\(indent)nameserver-policy:\n"
+        // nameserver-policy
+        if !updatedBlock.contains("nameserver-policy:") {
+            appendAfterDns += "\(indent)nameserver-policy:\n"
                 + "\(entryIndent)\"+.apple.com\": [\"https://doh.pub/dns-query\", \"https://dns.alidns.com/dns-query\"]\n"
                 + "\(entryIndent)\"+.icloud.com\": [\"https://doh.pub/dns-query\", \"https://dns.alidns.com/dns-query\"]\n"
-            result.insert(contentsOf: policy, at: updatedRange2.upperBound)
         }
 
-        // Inject direct-nameserver with DoH (used by direct resolver for
-        // DIRECT outbound connections). This is critical — mihomo uses
-        // direct-nameserver (not nameserver-policy) to resolve domains
-        // when the rule says DIRECT. Without DoH, plain UDP DNS may be
-        // poisoned and return 0.0.0.0 for Apple/other domains.
-        if !updatedBlock2.contains("direct-nameserver:") {
-            // Re-find dns block end after possible nameserver-policy injection
-            if let finalRange = result.range(
-                of: #"(?m)^dns:.*\n(?:[ \t]+.*\n)*"#, options: .regularExpression
-            ) {
-                let directNs = "\(indent)direct-nameserver:\n"
-                    + "\(entryIndent)- https://doh.pub/dns-query\n"
-                    + "\(entryIndent)- https://dns.alidns.com/dns-query\n"
-                result.insert(contentsOf: directNs, at: finalRange.upperBound)
+        // direct-nameserver
+        if !updatedBlock.contains("direct-nameserver:") {
+            appendAfterDns += "\(indent)direct-nameserver:\n"
+                + "\(entryIndent)- https://doh.pub/dns-query\n"
+                + "\(entryIndent)- https://dns.alidns.com/dns-query\n"
+        }
+
+        // Single insertion of accumulated text at dns block end
+        if !appendAfterDns.isEmpty {
+            // Re-find dns block end after possible prefer-h3 insertion
+            if let finalRange = result.range(of: dnsBlockRegex, options: .regularExpression) {
+                result.insert(contentsOf: appendAfterDns, at: finalRange.upperBound)
             }
         }
 
-        // Fix 3: ensure connectivity-check domains are in fake-ip-filter.
-        // Without these, Android/vendor connectivity checks resolve to fake IPs,
-        // causing "no internet" / WiFi exclamation mark.
+        // ── Connectivity domains for fake-ip-filter ────────────────────
         let connectivityDomains = [
-            // Google / Android
-            "connectivitycheck.gstatic.com",
-            "www.gstatic.com",
-            "+.connectivitycheck.android.com",
-            "clients1.google.com",
-            "clients3.google.com",
-            "play.googleapis.com",
-            // Apple captive portal
-            "captive.apple.com",
-            "gsp-ssl.ls.apple.com",
+            "connectivitycheck.gstatic.com", "www.gstatic.com",
+            "+.connectivitycheck.android.com", "clients1.google.com",
+            "clients3.google.com", "play.googleapis.com",
+            "captive.apple.com", "gsp-ssl.ls.apple.com",
             "gsp-ssl.ls-apple.com.akadns.net",
-            // Microsoft
-            "www.msftconnecttest.com",
-            "www.msftncsi.com",
-            "dns.msftncsi.com",
-            // Huawei
-            "connectivitycheck.platform.hicloud.com",
-            "+.wifi.huawei.com",
-            // Samsung
-            "connectivitycheck.samsung.com",
-            // Xiaomi
-            "connect.rom.miui.com",
-            // Vivo / other
-            "wifi.vivo.com.cn",
-            "noisyfox.cn",
+            "www.msftconnecttest.com", "www.msftncsi.com", "dns.msftncsi.com",
+            "connectivitycheck.platform.hicloud.com", "+.wifi.huawei.com",
+            "connectivitycheck.samsung.com", "connect.rom.miui.com",
+            "wifi.vivo.com.cn", "noisyfox.cn",
         ]
-        // Re-capture dns block for fake-ip-filter check
-        if let fipRange = result.range(
-            of: #"(?m)^dns:.*\n(?:[ \t]+.*\n)*"#, options: .regularExpression
-        ) {
+
+        // Single dns block capture for fake-ip-filter check
+        if let fipRange = result.range(of: dnsBlockRegex, options: .regularExpression) {
             let fipBlock = String(result[fipRange])
             if fipBlock.contains("fake-ip-filter:") {
-                // Append missing domains to existing fake-ip-filter
                 if let filterStart = fipBlock.range(of: #"fake-ip-filter:\s*\n"#, options: .regularExpression) {
-                    // Find end of list items
                     let afterFilter = String(fipBlock[filterStart.upperBound...])
                     var insertOffset = fipRange.lowerBound
-                    // Move to absolute position of filterStart.upperBound
                     let relativeOffset = fipBlock.distance(from: fipBlock.startIndex, to: filterStart.upperBound)
                     insertOffset = result.index(fipRange.lowerBound, offsetBy: relativeOffset)
-                    // Find where list items end
                     if let listEnd = afterFilter.range(of: #"(?m)^(?![ \t]+- )"#, options: .regularExpression) {
                         let listEndOffset = afterFilter.distance(from: afterFilter.startIndex, to: listEnd.lowerBound)
                         insertOffset = result.index(insertOffset, offsetBy: listEndOffset)
                     }
-                    var injection = ""
-                    for domain in connectivityDomains {
-                        if !fipBlock.contains(domain) {
-                            injection += "\(entryIndent)- \"\(domain)\"\n"
-                        }
-                    }
+                    // Build all missing domains at once
+                    let injection = connectivityDomains
+                        .filter { !fipBlock.contains($0) }
+                        .map { "\(entryIndent)- \"\($0)\"" }
+                        .joined(separator: "\n")
                     if !injection.isEmpty {
-                        result.insert(contentsOf: injection, at: insertOffset)
+                        result.insert(contentsOf: injection + "\n", at: insertOffset)
                     }
                 }
             } else {
-                // No fake-ip-filter at all — inject one with connectivity domains
                 let items = connectivityDomains.map { "\(entryIndent)- \"\($0)\"" }.joined(separator: "\n")
                 let filterBlock = "\(indent)fake-ip-filter:\n\(items)\n"
                 result.insert(contentsOf: filterBlock, at: fipRange.upperBound)

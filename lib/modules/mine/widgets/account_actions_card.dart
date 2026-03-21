@@ -248,7 +248,10 @@ class _AccountActionsCardState extends ConsumerState<AccountActionsCard> {
           ),
         ],
       ),
-    );
+    ).whenComplete(() {
+      oldPwCtrl.dispose();
+      newPwCtrl.dispose();
+    });
   }
 
   Future<void> _doChangePassword(

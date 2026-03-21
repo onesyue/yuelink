@@ -13,17 +13,25 @@ export '../../../providers/core_provider.dart' show logLevelProvider;
 
 /// Live log entries from mihomo.
 final logEntriesProvider =
-    StateNotifierProvider<LogEntriesNotifier, List<LogEntry>>(
-  (ref) => LogEntriesNotifier(ref),
+    NotifierProvider<LogEntriesNotifier, List<LogEntry>>(
+  LogEntriesNotifier.new,
 );
 
-class LogEntriesNotifier extends StateNotifier<List<LogEntry>> {
-  final Ref ref;
+class LogEntriesNotifier extends Notifier<List<LogEntry>> {
   StreamSubscription? _sub;
   Timer? _mockTimer;
+  bool _disposed = false;
   static const _maxEntries = 500;
 
-  LogEntriesNotifier(this.ref) : super([]) {
+  @override
+  List<LogEntry> build() {
+    _disposed = false;
+
+    ref.onDispose(() {
+      _disposed = true;
+      _stopListening();
+    });
+
     ref.listen(coreStatusProvider, (prev, next) {
       if (next == CoreStatus.running) {
         _startListening();
@@ -38,6 +46,8 @@ class LogEntriesNotifier extends StateNotifier<List<LogEntry>> {
         _startListening(); // _startListening calls _stopListening first
       }
     });
+
+    return [];
   }
 
   void _startListening() {
@@ -52,7 +62,7 @@ class LogEntriesNotifier extends StateNotifier<List<LogEntry>> {
       final mockLogs = CoreMock.instance.getLogs();
       var index = 0;
       _mockTimer = Timer.periodic(const Duration(seconds: 2), (_) {
-        if (!mounted) return;
+        if (_disposed) return;
         final entry = mockLogs[index % mockLogs.length];
         _addEntry(LogEntry(
           type: entry['type'] ?? 'info',
@@ -64,18 +74,33 @@ class LogEntriesNotifier extends StateNotifier<List<LogEntry>> {
       // Connect via LogRepository (goes through infrastructure layer)
       final repo = ref.read(logRepositoryProvider);
       _sub = repo.logStream(level: level).listen((entry) {
-        if (mounted) _addEntry(entry);
+        if (!_disposed) _addEntry(entry);
       });
     }
   }
 
+  /// Batch buffer — accumulates entries and flushes every 200ms to avoid
+  /// creating a new List on every single log line (can be 100+/sec on debug).
+  List<LogEntry>? _pendingBatch;
+  Timer? _batchTimer;
+
   void _addEntry(LogEntry entry) {
-    if (state.length >= _maxEntries) {
-      // Avoid copying the full list + trimming; just take the tail we need
-      state = [entry, ...state.take(_maxEntries - 1)];
-    } else {
-      state = [entry, ...state];
-    }
+    _pendingBatch ??= [];
+    _pendingBatch!.add(entry);
+    _batchTimer ??= Timer(const Duration(milliseconds: 200), _flushBatch);
+  }
+
+  void _flushBatch() {
+    _batchTimer = null;
+    final batch = _pendingBatch;
+    if (batch == null || batch.isEmpty || _disposed) return;
+    _pendingBatch = null;
+
+    // Prepend batch (newest first) and trim to max
+    final newState = [...batch.reversed, ...state];
+    state = newState.length > _maxEntries
+        ? newState.sublist(0, _maxEntries)
+        : newState;
   }
 
   void _stopListening() {
@@ -83,13 +108,10 @@ class LogEntriesNotifier extends StateNotifier<List<LogEntry>> {
     _sub = null;
     _mockTimer?.cancel();
     _mockTimer = null;
+    _batchTimer?.cancel();
+    _batchTimer = null;
+    _pendingBatch = null;
   }
 
   void clear() => state = [];
-
-  @override
-  void dispose() {
-    _stopListening();
-    super.dispose();
-  }
 }

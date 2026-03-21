@@ -8,6 +8,7 @@ import '../../../theme.dart';
 import '../protocol_color.dart';
 import '../providers/node_providers.dart';
 import '../providers/nodes_providers.dart';
+import '../../chain_proxy/chain_proxy_provider.dart';
 
 /// A single proxy node row.
 ///
@@ -106,6 +107,10 @@ class _NodeTileState extends ConsumerState<NodeTile> {
       color: Colors.transparent,
       child: InkWell(
         onTap: _handleSelect,
+        onLongPress: () {
+          ref.read(chainProxyProvider.notifier).addNode(widget.name);
+          AppNotifier.info(S.of(context).chainAddHint);
+        },
         child: Container(
           padding: const EdgeInsets.symmetric(
               horizontal: YLSpacing.md, vertical: YLSpacing.sm),

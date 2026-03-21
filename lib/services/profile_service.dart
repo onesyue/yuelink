@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
@@ -16,6 +17,22 @@ import '../shared/formatters/subscription_parser.dart';
 class ProfileService {
   static const _profilesFileName = 'profiles.json';
   static const _configDirName = 'configs';
+
+  /// Mutex to prevent concurrent index file mutations (load→modify→save race).
+  static Completer<void>? _indexLock;
+
+  static Future<T> _withIndexLock<T>(Future<T> Function() action) async {
+    while (_indexLock != null) {
+      await _indexLock!.future;
+    }
+    _indexLock = Completer<void>();
+    try {
+      return await action();
+    } finally {
+      _indexLock!.complete();
+      _indexLock = null;
+    }
+  }
 
   static Future<Directory> _getProfilesDir() async {
     final appDir = await getApplicationSupportDirectory();
@@ -102,9 +119,11 @@ class ProfileService {
     final dir = await _getProfilesDir();
     await File('${dir.path}/$id.yaml').writeAsString(finalContent);
 
-    final profiles = await loadProfiles();
-    profiles.add(profile);
-    await saveProfiles(profiles);
+    await _withIndexLock(() async {
+      final profiles = await loadProfiles();
+      profiles.add(profile);
+      await saveProfiles(profiles);
+    });
 
     return profile;
   }
@@ -132,10 +151,12 @@ class ProfileService {
     await File('${dir.path}/${profile.id}.yaml')
         .writeAsString(finalContent);
 
-    final profiles = await loadProfiles();
-    final idx = profiles.indexWhere((p) => p.id == profile.id);
-    if (idx >= 0) profiles[idx] = profile;
-    await saveProfiles(profiles);
+    await _withIndexLock(() async {
+      final profiles = await loadProfiles();
+      final idx = profiles.indexWhere((p) => p.id == profile.id);
+      if (idx >= 0) profiles[idx] = profile;
+      await saveProfiles(profiles);
+    });
 
     return profile;
   }
@@ -166,9 +187,11 @@ class ProfileService {
     final dir = await _getProfilesDir();
     await File('${dir.path}/$id.yaml').writeAsString(finalContent);
 
-    final profiles = await loadProfiles();
-    profiles.add(profile);
-    await saveProfiles(profiles);
+    await _withIndexLock(() async {
+      final profiles = await loadProfiles();
+      profiles.add(profile);
+      await saveProfiles(profiles);
+    });
 
     return profile;
   }
@@ -180,9 +203,11 @@ class ProfileService {
     if (await configFile.exists()) {
       await configFile.delete();
     }
-    final profiles = await loadProfiles();
-    profiles.removeWhere((p) => p.id == id);
-    await saveProfiles(profiles);
+    await _withIndexLock(() async {
+      final profiles = await loadProfiles();
+      profiles.removeWhere((p) => p.id == id);
+      await saveProfiles(profiles);
+    });
   }
 
   /// Load config content for a profile.
@@ -199,51 +224,27 @@ class ProfileService {
   /// Returns both the content and parsed subscription info from headers.
   ///
   /// When [proxyPort] is provided (core is running), the download goes
-  /// through the local proxy. This is critical on Android: the app itself
-  /// is excluded from VPN (addDisallowedApplication), so direct HTTP
-  /// requests bypass the proxy. If the subscription URL is behind a
-  /// firewall, direct download fails while proxied download succeeds.
+  /// through the local proxy first. If that fails, falls back to direct
+  /// download. This is critical on Android: the app itself is excluded
+  /// from VPN (addDisallowedApplication), so direct HTTP requests bypass
+  /// the proxy. If the subscription URL is behind a firewall, direct
+  /// download fails while proxied download succeeds.
   static Future<_DownloadResult> _downloadConfig(
     String url, {
     int? proxyPort,
   }) async {
     http.Response response;
-    try {
-      if (proxyPort != null && proxyPort > 0) {
-        // Use local proxy for download (app is excluded from VPN on Android)
-        final client = HttpClient();
-        client.findProxy = (_) => 'PROXY 127.0.0.1:$proxyPort';
-        client.connectionTimeout = const Duration(seconds: 30);
-        try {
-          final request = await client.getUrl(Uri.parse(url));
-          request.headers.set('User-Agent', AppConstants.userAgent);
-          final ioResponse =
-              await request.close().timeout(const Duration(seconds: 30));
-          final body =
-              await ioResponse.transform(utf8.decoder).join();
-          final headers = <String, String>{};
-          ioResponse.headers.forEach((name, values) {
-            headers[name] = values.join(', ');
-          });
-          response = http.Response(body, ioResponse.statusCode,
-              headers: headers);
-        } finally {
-          client.close();
-        }
-      } else {
-        // Direct download (no proxy running)
-        response = await http
-            .get(
-              Uri.parse(url),
-              headers: {'User-Agent': AppConstants.userAgent},
-            )
-            .timeout(const Duration(seconds: 30));
+
+    // Try proxied download first, fall back to direct on failure
+    if (proxyPort != null && proxyPort > 0) {
+      try {
+        response = await _downloadViaProxy(url, proxyPort);
+      } catch (e) {
+        debugPrint('[ProfileService] Proxied download failed ($e), falling back to direct');
+        response = await _downloadDirect(url);
       }
-    } on TimeoutException {
-      throw Exception(S.current.errDownloadTimeout);
-    } on SocketException catch (e) {
-      final detail = e.message.isNotEmpty ? e.message : (e.address?.host ?? 'unknown');
-      throw Exception(S.current.errNetworkError(detail));
+    } else {
+      response = await _downloadDirect(url);
     }
 
     if (response.statusCode != 200) {
@@ -254,6 +255,44 @@ class ProfileService {
     return _DownloadResult(content: response.body, subInfo: subInfo);
   }
 
+  /// Download via local proxy.
+  static Future<http.Response> _downloadViaProxy(String url, int port) async {
+    final client = HttpClient();
+    client.findProxy = (_) => 'PROXY 127.0.0.1:$port';
+    client.connectionTimeout = const Duration(seconds: 30);
+    try {
+      final request = await client.getUrl(Uri.parse(url));
+      request.headers.set('User-Agent', AppConstants.userAgent);
+      final ioResponse =
+          await request.close().timeout(const Duration(seconds: 30));
+      final body = await ioResponse.transform(utf8.decoder).join();
+      final headers = <String, String>{};
+      ioResponse.headers.forEach((name, values) {
+        headers[name] = values.join(', ');
+      });
+      return http.Response(body, ioResponse.statusCode, headers: headers);
+    } finally {
+      client.close();
+    }
+  }
+
+  /// Download directly (no proxy).
+  static Future<http.Response> _downloadDirect(String url) async {
+    try {
+      return await http
+          .get(
+            Uri.parse(url),
+            headers: {'User-Agent': AppConstants.userAgent},
+          )
+          .timeout(const Duration(seconds: 30));
+    } on TimeoutException {
+      throw Exception(S.current.errDownloadTimeout);
+    } on SocketException catch (e) {
+      final detail = e.message.isNotEmpty ? e.message : (e.address?.host ?? 'unknown');
+      throw Exception(S.current.errNetworkError(detail));
+    }
+  }
+
   /// Fallback name from URL hostname when headers don't provide a name.
   static String _nameFromUrl(String url) {
     try {
@@ -262,7 +301,9 @@ class ProfileService {
       var host = uri.host;
       if (host.startsWith('www.')) host = host.substring(4);
       if (host.isNotEmpty) return host;
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[ProfileService] _nameFromUrl parse failed: $e');
+    }
     return 'Subscription';
   }
 
@@ -286,7 +327,8 @@ class ProfileService {
       } finally {
         client.close(force: true);
       }
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[ProfileService] fetchSubscriptionName failed: $e');
       return null;
     }
   }
