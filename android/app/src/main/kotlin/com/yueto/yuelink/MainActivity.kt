@@ -90,6 +90,16 @@ class MainActivity : FlutterActivity() {
                 }
             }
 
+        // Notify Dart when VPN is revoked by system/another app
+        YueLinkVpnService.onVpnRevoked = {
+            try {
+                MethodChannel(flutterEngine.dartExecutor.binaryMessenger, VPN_CHANNEL)
+                    .invokeMethod("vpnRevoked", null)
+            } catch (e: Exception) {
+                android.util.Log.w("YueLinkVpn", "Failed to notify Dart of VPN revoke: ${e.message}")
+            }
+        }
+
         // ── Installed apps channel ────────────────────────────────────────────
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, APPS_CHANNEL)
             .setMethodCallHandler { call, result ->

@@ -6,11 +6,18 @@ import '../../../l10n/app_strings.dart';
 import '../../../theme.dart';
 import '../providers/announcements_providers.dart';
 
-class AnnouncementsPage extends ConsumerWidget {
+class AnnouncementsPage extends ConsumerStatefulWidget {
   const AnnouncementsPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AnnouncementsPage> createState() => _AnnouncementsPageState();
+}
+
+class _AnnouncementsPageState extends ConsumerState<AnnouncementsPage> {
+  bool _markedRead = false;
+
+  @override
+  Widget build(BuildContext context) {
     final s = S.of(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final async = ref.watch(announcementsProvider);
@@ -23,7 +30,10 @@ class AnnouncementsPage extends ConsumerWidget {
           // Manual refresh button
           IconButton(
             icon: const Icon(Icons.refresh_rounded, size: 20),
-            onPressed: () => ref.invalidate(announcementsProvider),
+            onPressed: () {
+              _markedRead = false;
+              ref.invalidate(announcementsProvider);
+            },
             tooltip: s.retry,
           ),
         ],
@@ -46,7 +56,10 @@ class AnnouncementsPage extends ConsumerWidget {
                 ),
                 const SizedBox(height: 12),
                 FilledButton.icon(
-                  onPressed: () => ref.invalidate(announcementsProvider),
+                  onPressed: () {
+                    _markedRead = false;
+                    ref.invalidate(announcementsProvider);
+                  },
                   icon: const Icon(Icons.refresh, size: 16),
                   label: Text(s.retry),
                 ),
@@ -70,19 +83,24 @@ class AnnouncementsPage extends ConsumerWidget {
             );
           }
 
-          // Mark all as read when list is shown
-          WidgetsBinding.instance.addPostFrameCallback((_) {
+          // Mark all as read once when data arrives — guarded to prevent rebuild cascade
+          if (!_markedRead) {
+            _markedRead = true;
             final ids = list
                 .where((a) => a.id != null)
                 .map((a) => a.id!)
                 .toList();
             if (ids.isNotEmpty) {
+              // Fire-and-forget, no setState needed
               ref.read(readAnnouncementIdsProvider.notifier).markAllRead(ids);
             }
-          });
+          }
 
           return RefreshIndicator(
-            onRefresh: () async => ref.invalidate(announcementsProvider),
+            onRefresh: () async {
+              _markedRead = false;
+              ref.invalidate(announcementsProvider);
+            },
             child: ListView.separated(
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),

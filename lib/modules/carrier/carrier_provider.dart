@@ -39,22 +39,28 @@ class CarrierState {
   });
 
   CarrierState copyWith({
-    String? carrier,
+    Object? carrier = _sentinel,
     String? carrierName,
-    String? recommendedNodeId,
+    Object? recommendedNodeId = _sentinel,
     String? sniDomain,
     String? sniStatus,
-    DateTime? lastChecked,
+    Object? lastChecked = _sentinel,
   }) {
     return CarrierState(
-      carrier: carrier ?? this.carrier,
+      carrier: carrier == _sentinel ? this.carrier : carrier as String?,
       carrierName: carrierName ?? this.carrierName,
-      recommendedNodeId: recommendedNodeId ?? this.recommendedNodeId,
+      recommendedNodeId: recommendedNodeId == _sentinel
+          ? this.recommendedNodeId
+          : recommendedNodeId as String?,
       sniDomain: sniDomain ?? this.sniDomain,
       sniStatus: sniStatus ?? this.sniStatus,
-      lastChecked: lastChecked ?? this.lastChecked,
+      lastChecked: lastChecked == _sentinel
+          ? this.lastChecked
+          : lastChecked as DateTime?,
     );
   }
+
+  static const _sentinel = Object();
 
   bool get isDetected => carrier != null && carrier!.isNotEmpty;
   bool get isSniHealthy => sniStatus == 'healthy';
@@ -63,19 +69,26 @@ class CarrierState {
 // ── Carrier notifier ────────────────────────────────────────────────────────
 
 final carrierProvider =
-    StateNotifierProvider<CarrierNotifier, CarrierState>((ref) {
-  return CarrierNotifier(ref);
-});
+    NotifierProvider<CarrierNotifier, CarrierState>(
+  CarrierNotifier.new,
+);
 
-class CarrierNotifier extends StateNotifier<CarrierState> {
-  CarrierNotifier(this._ref) : super(const CarrierState()) {
-    _loadCached();
-  }
-
-  final Ref _ref;
+class CarrierNotifier extends Notifier<CarrierState> {
   Timer? _pollingTimer;
   bool _detecting = false;
+  bool _disposed = false;
   final Completer<void> _cacheLoaded = Completer<void>();
+
+  @override
+  CarrierState build() {
+    _disposed = false;
+    ref.onDispose(() {
+      _disposed = true;
+      _pollingTimer?.cancel();
+    });
+    _loadCached();
+    return const CarrierState();
+  }
 
   /// Polling interval for SNI status checks.
   static const _pollInterval = Duration(minutes: 30);
@@ -89,7 +102,7 @@ class CarrierNotifier extends StateNotifier<CarrierState> {
       final sniDomain =
           await SettingsService.get<String>('cachedSniDomain') ?? '';
       if (carrier != null) {
-        if (!mounted) return;
+        if (_disposed) return;
         state = CarrierState(
           carrier: carrier,
           carrierName: carrierName,
@@ -110,7 +123,8 @@ class CarrierNotifier extends StateNotifier<CarrierState> {
     if (_detecting) return;
     _detecting = true;
     try {
-      final api = _ref.read(yueOpsApiProvider);
+      final oldCarrier = state.carrier;
+      final api = ref.read(yueOpsApiProvider);
       // Step 1: Get user's real IP (direct, bypassing proxy)
       final realIp = await _fetchRealIp();
       if (realIp == null) {
@@ -126,7 +140,7 @@ class CarrierNotifier extends StateNotifier<CarrierState> {
       final carrierInfo = results[0] as CarrierInfo;
       final config = results[1] as ClientConfig;
 
-      if (!mounted) return;
+      if (_disposed) return;
       state = CarrierState(
         carrier: carrierInfo.carrier,
         carrierName: carrierInfo.carrierName,
@@ -145,8 +159,11 @@ class CarrierNotifier extends StateNotifier<CarrierState> {
       EventLog.write(
           '[Carrier] ip=$realIp detected=${carrierInfo.carrier} sni=${config.sniDomain} status=${config.sniStatus}');
 
-      // Auto-select carrier-optimized proxy node
-      if (carrierInfo.isDetected) {
+      // Auto-select carrier-optimized proxy node only on first detection
+      // (not when carrier is already known). This prevents overriding the
+      // user's manual proxy choice on every connect.
+      final isFirstDetection = oldCarrier == null || oldCarrier.isEmpty;
+      if (carrierInfo.isDetected && isFirstDetection) {
         _autoSelectCarrierNode(carrierInfo.carrier!);
       }
     } catch (e) {
@@ -174,8 +191,8 @@ class CarrierNotifier extends StateNotifier<CarrierState> {
     final keywords = _carrierKeywords[carrier];
     if (keywords == null) return;
 
-    final groups = _ref.read(proxyGroupsProvider);
-    final notifier = _ref.read(proxyGroupsProvider.notifier);
+    final groups = ref.read(proxyGroupsProvider);
+    final notifier = ref.read(proxyGroupsProvider.notifier);
 
     for (final group in groups) {
       // Only auto-select in Selector groups (user-switchable)
@@ -243,7 +260,7 @@ class CarrierNotifier extends StateNotifier<CarrierState> {
     if (changed) {
       // SNI domain rotated — trigger subscription re-download silently
       try {
-        await _ref.read(authProvider.notifier).syncSubscription();
+        await ref.read(authProvider.notifier).syncSubscription();
       } catch (e) {
         debugPrint('[Carrier] Subscription refresh after SNI change failed: $e');
       }
@@ -258,13 +275,13 @@ class CarrierNotifier extends StateNotifier<CarrierState> {
 
   /// Single SNI poll. Returns true if SNI domain changed.
   Future<bool> _pollSni() async {
-    final api = _ref.read(yueOpsApiProvider);
+    final api = ref.read(yueOpsApiProvider);
     try {
       final config = await api.getConfig();
       final oldDomain = state.sniDomain;
       final newDomain = config.sniDomain;
 
-      if (!mounted) return false;
+      if (_disposed) return false;
       state = state.copyWith(
         sniDomain: newDomain,
         sniStatus: config.sniStatus,
@@ -289,9 +306,4 @@ class CarrierNotifier extends StateNotifier<CarrierState> {
   /// Force check SNI and return whether it changed.
   Future<bool> checkSni() => _pollSni();
 
-  @override
-  void dispose() {
-    _pollingTimer?.cancel();
-    super.dispose();
-  }
 }

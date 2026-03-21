@@ -36,6 +36,9 @@ class CoreManager {
   bool _running = false;
   bool _initialized = false;
 
+  /// Guards against concurrent start/stop calls.
+  Completer<void>? _pendingOperation;
+
   /// The most recent startup report (kept in memory for UI).
   StartupReport? lastReport;
 
@@ -65,7 +68,8 @@ class CoreManager {
     if (isMockMode) return _running;
     try {
       return _core.isRunning;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[CoreManager] isCoreActuallyRunning check failed: $e');
       return false;
     }
   }
@@ -118,6 +122,13 @@ class CoreManager {
     debugPrint('[CoreManager] ══════ START ══════');
     if (_running) return true;
 
+    // Wait for any pending start/stop to complete before proceeding
+    if (_pendingOperation != null) {
+      await _pendingOperation!.future;
+    }
+    if (_running) return true; // re-check after waiting
+    _pendingOperation = Completer<void>();
+
     final steps = <StartupStep>[];
     String? homeDir;
 
@@ -127,14 +138,16 @@ class CoreManager {
         return _startIos(configYaml, steps);
       }
 
-      // ── Step 1: ensureGeo ──────────────────────────────────────────
-      await _step(steps, 'ensureGeo', StartupError.geoFilesFailed, () async {
-        final installed = await GeoDataService.ensureFiles();
-        return 'installed=$installed';
-      });
-
-      // ── Step 2: initCore ───────────────────────────────────────────
-      await _step(steps, 'initCore', StartupError.initCoreFailed, () async {
+      // ── Steps 1+2: ensureGeo + initCore (parallelized) ─────────────
+      // These steps are independent — geo files don't need the core, and
+      // core init doesn't need geo files. Running in parallel saves
+      // 100-500ms on first launch or when CDN fallback is needed.
+      await Future.wait([
+        _step(steps, 'ensureGeo', StartupError.geoFilesFailed, () async {
+          final installed = await GeoDataService.ensureFiles();
+          return 'installed=$installed';
+        }),
+        _step(steps, 'initCore', StartupError.initCoreFailed, () async {
         if (_initialized) {
           return 'skip (already initialized)';
         }
@@ -161,7 +174,8 @@ class CoreManager {
         }
         _initialized = true;
         return 'homeDir=$homeDir';
-      });
+      }),
+      ]); // end Future.wait(ensureGeo, initCore)
 
       // ── Step 3: vpnPermission (Android only) ───────────────────────
       if (Platform.isAndroid && !isMockMode) {
@@ -217,12 +231,17 @@ class CoreManager {
         // mihomo can start even when Clash / Surge / V2rayU etc. are running.
         if ((Platform.isMacOS || Platform.isWindows) && !isMockMode) {
           final preferredMixed = ConfigTemplate.getMixedPort(withOverwrite);
-          final freeMixed = await _findAvailablePort(preferredMixed);
+          // Scan both ports in parallel to save 10-50ms
+          final ports = await Future.wait([
+            _findAvailablePort(preferredMixed),
+            _findAvailablePort(_apiPort),
+          ]);
+          final freeMixed = ports[0];
+          final freeApi = ports[1];
           if (freeMixed != preferredMixed) {
             debugPrint('[CoreManager] mixed-port $preferredMixed busy → remapped to $freeMixed');
             withOverwrite = ConfigTemplate.setMixedPort(withOverwrite, freeMixed);
           }
-          final freeApi = await _findAvailablePort(_apiPort);
           if (freeApi != _apiPort) {
             debugPrint('[CoreManager] apiPort $_apiPort busy → remapped to $freeApi');
             _apiPort = freeApi;
@@ -333,6 +352,8 @@ class CoreManager {
       // ── Success ────────────────────────────────────────────────────
       await _persistPorts();
       await _finishReport(steps, true, null);
+      _pendingOperation?.complete();
+      _pendingOperation = null;
       return true;
     } catch (e) {
       final failedName =
@@ -344,14 +365,20 @@ class CoreManager {
         _running = false;
         try {
           if (!Platform.isIOS) _core.stop();
-        } catch (_) {}
+        } catch (e) {
+          debugPrint('[CoreManager] cleanup core.stop() after failed start: $e');
+        }
       }
       if (Platform.isAndroid || Platform.isIOS) {
         try {
           await vpn.VpnService.stopVpn();
-        } catch (_) {}
+        } catch (e) {
+          debugPrint('[CoreManager] cleanup stopVpn after failed start: $e');
+        }
       }
 
+      _pendingOperation?.complete();
+      _pendingOperation = null;
       rethrow;
     }
   }
@@ -363,59 +390,81 @@ class CoreManager {
   Future<bool> _startIos(String configYaml, List<StartupStep> steps) async {
     String processed = configYaml;
 
-    await _step(steps, 'buildConfig_ios', StartupError.configBuildFailed,
-        () async {
-      final overwrite = await OverwriteService.load();
-      var withOverwrite = OverwriteService.apply(configYaml, overwrite);
+    try {
+      await _step(steps, 'buildConfig_ios', StartupError.configBuildFailed,
+          () async {
+        final overwrite = await OverwriteService.load();
+        var withOverwrite = OverwriteService.apply(configYaml, overwrite);
 
-      // Inject upstream proxy if configured
-      final upstream = await SettingsService.getUpstreamProxy();
-      if (upstream != null && (upstream['server'] as String).isNotEmpty) {
-        withOverwrite = ConfigTemplate.injectUpstreamProxy(
-          withOverwrite,
-          upstream['type'] as String,
-          upstream['server'] as String,
-          upstream['port'] as int,
-        );
-      }
-
-      processed = ConfigTemplate.process(
+        // Inject upstream proxy if configured
+        final upstream = await SettingsService.getUpstreamProxy();
+        if (upstream != null && (upstream['server'] as String).isNotEmpty) {
+          withOverwrite = ConfigTemplate.injectUpstreamProxy(
             withOverwrite,
-            apiPort: _apiPort,
-            secret: _apiSecret,
+            upstream['type'] as String,
+            upstream['server'] as String,
+            upstream['port'] as int,
           );
-      _apiPort = ConfigTemplate.getApiPort(processed);
-      _mixedPort = ConfigTemplate.getMixedPort(processed);
-      _apiSecret ??= ConfigTemplate.getSecret(processed);
-      _api = null;
-      _stream = null;
-      return 'len=${processed.length}, apiPort=$_apiPort';
-    });
-
-    await _step(steps, 'startIosVpn', StartupError.coreStartFailed, () async {
-      final ok = await vpn.VpnService.startIosVpn(configYaml: processed);
-      if (!ok) throw Exception('startIosVpn returned false');
-      _running = true;
-      return 'ok';
-    });
-
-    // ── Step 3: waitApi (iOS) ──────────────────────────────────────
-    // The Go core runs inside the PacketTunnel extension process.
-    // Its REST API on 127.0.0.1:apiPort may take a moment to bind
-    // after the VPN reports .connected. Poll until reachable.
-    await _step(steps, 'waitApi', StartupError.apiTimeout, () async {
-      for (var i = 1; i <= 50; i++) {
-        if (await api.isAvailable()) {
-          return 'ready after $i attempts';
         }
-        await Future.delayed(const Duration(milliseconds: 100));
-      }
-      _running = false;
-      throw Exception('API not available after 50 attempts (5s)');
-    });
 
-    await _finishReport(steps, true, null);
-    return true;
+        processed = ConfigTemplate.process(
+              withOverwrite,
+              apiPort: _apiPort,
+              secret: _apiSecret,
+            );
+        _apiPort = ConfigTemplate.getApiPort(processed);
+        _mixedPort = ConfigTemplate.getMixedPort(processed);
+        _apiSecret ??= ConfigTemplate.getSecret(processed);
+        _api = null;
+        _stream = null;
+        return 'len=${processed.length}, apiPort=$_apiPort';
+      });
+
+      await _step(steps, 'startIosVpn', StartupError.coreStartFailed, () async {
+        final ok = await vpn.VpnService.startIosVpn(configYaml: processed);
+        if (!ok) throw Exception('startIosVpn returned false');
+        _running = true;
+        return 'ok';
+      });
+
+      // ── Step 3: waitApi (iOS) ──────────────────────────────────────
+      // The Go core runs inside the PacketTunnel extension process.
+      // Its REST API on 127.0.0.1:apiPort may take a moment to bind
+      // after the VPN reports .connected. Poll until reachable.
+      await _step(steps, 'waitApi', StartupError.apiTimeout, () async {
+        for (var i = 1; i <= 50; i++) {
+          if (await api.isAvailable()) {
+            return 'ready after $i attempts';
+          }
+          await Future.delayed(const Duration(milliseconds: 100));
+        }
+        _running = false;
+        throw Exception('API not available after 50 attempts (5s)');
+      });
+
+      await _persistPorts();
+      await _finishReport(steps, true, null);
+      _pendingOperation?.complete();
+      _pendingOperation = null;
+      return true;
+    } catch (e) {
+      final failedName =
+          steps.where((s) => !s.success).firstOrNull?.name ?? 'unknown';
+      await _finishReport(steps, false, failedName);
+
+      if (_running) {
+        _running = false;
+      }
+      try {
+        await vpn.VpnService.stopVpn();
+      } catch (e) {
+        debugPrint('[CoreManager] cleanup stopVpn after failed iOS start: $e');
+      }
+
+      _pendingOperation?.complete();
+      _pendingOperation = null;
+      rethrow;
+    }
   }
 
   // ==================================================================
@@ -424,6 +473,13 @@ class CoreManager {
 
   Future<void> stop() async {
     if (!_running) return;
+
+    // Wait for any pending start to complete before stopping
+    if (_pendingOperation != null) {
+      await _pendingOperation!.future;
+    }
+    if (!_running) return; // re-check after waiting
+    _pendingOperation = Completer<void>();
 
     // Mark as stopped FIRST to prevent re-entry and ensure consistent state
     // even if the shutdown steps below crash or throw.
@@ -482,6 +538,9 @@ class CoreManager {
         debugPrint('[CoreManager] stopVpn error: $e');
       }
     }
+
+    _pendingOperation?.complete();
+    _pendingOperation = null;
   }
 
   // ==================================================================
@@ -564,7 +623,9 @@ class CoreManager {
         // Keep last 100 lines to avoid huge reports
         coreLogs = lines.length > 100 ? lines.sublist(lines.length - 100) : lines;
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[CoreManager] failed to read core.log: $e');
+    }
 
     final report = StartupReport(
       timestamp: DateTime.now(),

@@ -282,6 +282,8 @@ class _LogsTabState extends ConsumerState<_LogsTab> {
                     padding: const EdgeInsets.symmetric(
                         horizontal: 8, vertical: 4),
                     itemCount: filtered.length,
+                    addAutomaticKeepAlives: false,
+                    addRepaintBoundaries: false,
                     itemBuilder: (context, index) {
                       return _LogTile(
                           entry: filtered[index],

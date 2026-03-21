@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 
 import '../storage/settings_service.dart';
 
+/// Callback type for VPN revocation events.
+
 /// Platform-specific VPN service abstraction.
 ///
 /// Handles starting/stopping the OS-level VPN tunnel:
@@ -146,5 +148,19 @@ class VpnService {
     } on PlatformException catch (_) {
       return false;
     }
+  }
+
+  /// Register a callback for VPN revocation events (Android only).
+  ///
+  /// Called when the system or another app revokes our VPN permission.
+  /// Call this once during app initialization.
+  static void listenForRevocation(VoidCallback onRevoked) {
+    if (!Platform.isAndroid) return;
+    _channel.setMethodCallHandler((call) async {
+      if (call.method == 'vpnRevoked') {
+        debugPrint('[VpnService] VPN revoked by system');
+        onRevoked();
+      }
+    });
   }
 }

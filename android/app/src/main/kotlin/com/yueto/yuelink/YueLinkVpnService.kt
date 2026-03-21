@@ -30,6 +30,9 @@ class YueLinkVpnService : VpnService() {
         private const val NOTIFICATION_ID = 1
         private const val CHANNEL_ID = "yuelink_vpn"
 
+        /** Called when VPN is revoked by the system or another app. */
+        var onVpnRevoked: (() -> Unit)? = null
+
         // JNI bridge to Go core's protect_android.c
         @JvmStatic external fun nativeStartProtect(vpnService: VpnService)
         @JvmStatic external fun nativeStopProtect()
@@ -118,7 +121,6 @@ class YueLinkVpnService : VpnService() {
             .addDnsServer("172.19.0.2")
             .setMtu(9000)
             .setBlocking(false)
-            .addDisallowedApplication(packageName)
 
         // Tell Android this VPN is not metered — prevents traffic throttling
         // and allows background data for all apps through the VPN.
@@ -126,15 +128,25 @@ class YueLinkVpnService : VpnService() {
             builder.setMetered(false)
         }
 
+        // Android VPN API requires EITHER addAllowedApplication OR addDisallowedApplication,
+        // never both — calling both throws IllegalArgumentException.
+        // Whitelist mode: only specified apps go through VPN (addAllowedApplication).
+        // Blacklist / all mode: all apps except specified ones (addDisallowedApplication).
         when (mode) {
             "whitelist" -> {
                 for (pkg in apps) {
                     try { builder.addAllowedApplication(pkg) } catch (_: Exception) {}
                 }
+                // In whitelist mode, our own app must also be allowed to protect sockets
+                try { builder.addAllowedApplication(packageName) } catch (_: Exception) {}
             }
-            "blacklist" -> {
-                for (pkg in apps) {
-                    try { builder.addDisallowedApplication(pkg) } catch (_: Exception) {}
+            else -> {
+                // Always exclude ourselves to prevent routing loops
+                builder.addDisallowedApplication(packageName)
+                if (mode == "blacklist") {
+                    for (pkg in apps) {
+                        try { builder.addDisallowedApplication(pkg) } catch (_: Exception) {}
+                    }
                 }
             }
         }
@@ -191,6 +203,7 @@ class YueLinkVpnService : VpnService() {
     }
 
     override fun onRevoke() {
+        onVpnRevoked?.invoke()
         stopTunnel()
     }
 

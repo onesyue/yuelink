@@ -34,7 +34,11 @@ class PaymentMethodSelector extends ConsumerWidget {
 
     return methodsAsync.when(
       loading: () => const SizedBox(height: 48, child: _MethodShimmer()),
-      error: (_, __) => const SizedBox.shrink(),
+      error: (_, __) => _MethodErrorRow(
+        isEn: isEn,
+        isDark: isDark,
+        onRetry: () => ref.invalidate(paymentMethodsProvider),
+      ),
       data: (methods) {
         if (methods.isEmpty) return const SizedBox.shrink();
         return Column(
@@ -133,6 +137,41 @@ class _MethodChip extends StatelessWidget {
                   fontSize: 10,
                 ),
               ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MethodErrorRow extends StatelessWidget {
+  const _MethodErrorRow({
+    required this.isEn,
+    required this.isDark,
+    required this.onRetry,
+  });
+
+  final bool isEn;
+  final bool isDark;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: YLSpacing.md),
+      child: GestureDetector(
+        onTap: onRetry,
+        child: Row(
+          children: [
+            Icon(Icons.error_outline_rounded,
+                size: 14, color: YLColors.zinc400),
+            const SizedBox(width: 6),
+            Text(
+              isEn
+                  ? 'Failed to load payment methods, tap to retry'
+                  : '支付方式加载失败，点击重试',
+              style: YLText.caption.copyWith(color: YLColors.zinc400),
+            ),
           ],
         ),
       ),

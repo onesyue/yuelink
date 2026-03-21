@@ -28,7 +28,9 @@ class ConfigTemplate {
   // Cached RegExp patterns
   static final _reTunKey        = RegExp(r'^tun:', multiLine: true);
   static final _reDnsKey        = RegExp(r'^dns:', multiLine: true);
-  static final _reTopLevel      = RegExp(r'^\S', multiLine: true);
+  /// Matches a top-level YAML key (non-whitespace, non-comment at line start).
+  /// Excludes `#` comment lines which are not section boundaries.
+  static final _reTopLevel      = RegExp(r'^[^\s#]', multiLine: true);
   static final _reEnableTrue    = RegExp(r'\benable:\s*true');
   static final _reEnableFalse   = RegExp(r'\benable:\s*false');
   static final _reExtController = RegExp(r'^(external-controller:\s*).*$', multiLine: true);
@@ -42,6 +44,17 @@ class ConfigTemplate {
   /// Ensures all critical config keys are present for reliable operation
   /// across all platforms. Uses "ensure" pattern: only injects when missing,
   /// never overwrites subscription-provided settings.
+  /// Validate that a string is parseable YAML. Returns null on success,
+  /// or an error message on failure.
+  static String? validateYaml(String yaml) {
+    try {
+      loadYaml(yaml);
+      return null;
+    } catch (e) {
+      return e.toString();
+    }
+  }
+
   static String process(
     String rawConfig, {
     int apiPort = AppConstants.defaultApiPort,
@@ -52,6 +65,15 @@ class ConfigTemplate {
     var config = rawConfig;
 
     debugPrint('[Config] process start, len=${config.length}');
+
+    // Pre-validate input YAML to catch broken subscription configs early
+    final yamlError = validateYaml(config);
+    if (yamlError != null) {
+      debugPrint('[Config] WARNING: input YAML is malformed: $yamlError');
+      // Don't throw — some subscription configs have minor YAML issues that
+      // mihomo's parser tolerates. Log and proceed; if it's truly broken,
+      // StartCore will surface the real error.
+    }
 
     // Replace template variables
     for (final entry in _variables.entries) {
@@ -570,13 +592,22 @@ class ConfigTemplate {
   }
 
   /// Remove a top-level YAML section (key + all indented content below it).
-  /// Handles blank lines within the section (e.g., tun blocks with spacing).
+  /// Works whether the section ends with a newline, EOF, or next top-level key.
   static String _removeSection(String config, String key) {
-    final pattern = RegExp(
-      '^$key:.*\n(?:(?:[ \t]+.*|[ \t]*)\n)*',
-      multiLine: true,
-    );
-    return config.replaceFirst(pattern, '');
+    final keyPattern = RegExp('^$key:', multiLine: true);
+    final match = keyPattern.firstMatch(config);
+    if (match == null) return config;
+
+    final afterKeyLine = config.indexOf('\n', match.start);
+    if (afterKeyLine < 0) {
+      // Section is the last line with no newline — remove to EOF
+      return config.substring(0, match.start);
+    }
+    final afterKey = afterKeyLine + 1;
+    final nextTopLevel = _reTopLevel.firstMatch(config.substring(afterKey));
+    final sectionEnd =
+        nextTopLevel != null ? afterKey + nextTopLevel.start : config.length;
+    return config.substring(0, match.start) + config.substring(sectionEnd);
   }
 
   /// Replace the value of a top-level scalar key.

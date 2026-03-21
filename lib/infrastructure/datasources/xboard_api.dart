@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 
@@ -339,13 +341,51 @@ class XBoardApi {
   // HTTP helpers
   // ------------------------------------------------------------------
 
+  /// Maximum retry attempts for transient network errors.
+  static const _maxRetries = 3;
+
+  /// Backoff delays between retries: 500ms, 1s, 2s.
+  static const _retryDelays = [
+    Duration(milliseconds: 500),
+    Duration(seconds: 1),
+    Duration(seconds: 2),
+  ];
+
+  /// Whether an error is transient and safe to retry.
+  static bool _isTransient(Object e) {
+    if (e is TimeoutException) return true;
+    if (e is SocketException) return true;
+    if (e is HandshakeException) return true;
+    if (e is HttpException) return true;
+    // Server errors (5xx) — retry
+    if (e is XBoardApiException && e.statusCode >= 500) return true;
+    return false;
+  }
+
+  /// Execute [fn] with automatic retry on transient errors.
+  /// Non-retryable errors (auth, business logic) propagate immediately.
+  Future<T> _withRetry<T>(Future<T> Function() fn) async {
+    for (var attempt = 0; attempt < _maxRetries; attempt++) {
+      try {
+        return await fn();
+      } catch (e) {
+        final isLast = attempt == _maxRetries - 1;
+        if (isLast || !_isTransient(e)) rethrow;
+        debugPrint('[XBoardApi] Retry ${attempt + 1}/$_maxRetries after: $e');
+        await Future.delayed(_retryDelays[attempt]);
+      }
+    }
+    throw StateError('unreachable'); // loop always returns or rethrows
+  }
+
   Map<String, String> _headers({String? token}) => {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
         if (token != null) 'Authorization': token,
       };
 
-  Future<Map<String, dynamic>> _get(String path, {String? token}) async {
+  Future<Map<String, dynamic>> _get(String path, {String? token}) =>
+      _withRetry(() async {
     final client = _buildClient();
     try {
       final resp = await client
@@ -365,12 +405,12 @@ class XBoardApi {
     } finally {
       client.close();
     }
-  }
+  });
 
   Future<Map<String, dynamic>> _post(String path, {
     Map<String, dynamic>? body,
     String? token,
-  }) async {
+  }) => _withRetry(() async {
     final client = _buildClient();
     try {
       final resp = await client
@@ -393,7 +433,7 @@ class XBoardApi {
     } finally {
       client.close();
     }
-  }
+  });
 
   /// Like [_get] but returns the raw `data` value without forcing Map type.
   /// Used for endpoints whose `data` is a List or scalar (String, bool, etc.).
@@ -401,7 +441,7 @@ class XBoardApi {
     String path, {
     String? token,
     Map<String, String>? queryParams,
-  }) async {
+  }) => _withRetry(() async {
     final client = _buildClient();
     try {
       var uri = Uri.parse('$baseUrl$path');
@@ -422,14 +462,14 @@ class XBoardApi {
     } finally {
       client.close();
     }
-  }
+  });
 
   /// Like [_post] but returns the raw `data` value without forcing Map type.
   Future<dynamic> _postRawData(
     String path, {
     Map<String, dynamic>? body,
     String? token,
-  }) async {
+  }) => _withRetry(() async {
     final client = _buildClient();
     try {
       final resp = await client
@@ -450,7 +490,7 @@ class XBoardApi {
     } finally {
       client.close();
     }
-  }
+  });
 
   /// Checks XBoard's `status` field (present when HTTP 200 but business-level
   /// failure). Throws [XBoardApiException] with the server's `message`.
@@ -628,11 +668,20 @@ class Announcement {
 
   factory Announcement.fromJson(Map<String, dynamic> json) {
     return Announcement(
-      id: json['id'] as int?,
+      id: _toInt(json['id']),
       title: json['title'] as String? ?? '',
       content: json['content'] as String? ?? '',
-      createdAt: json['created_at'] as int?,
+      createdAt: _toInt(json['created_at']),
     );
+  }
+
+  /// XBoard may return numeric fields as int, double, or bool (tinyint).
+  static int? _toInt(dynamic v) {
+    if (v == null) return null;
+    if (v is int) return v;
+    if (v is double) return v.toInt();
+    if (v is bool) return v ? 1 : 0;
+    return null;
   }
 }
 
@@ -679,17 +728,24 @@ class OrderListResult {
 
 class XBoardApiException implements Exception {
   final int statusCode;
-  final String body;
+  final String _body;
 
-  XBoardApiException(this.statusCode, this.body);
+  XBoardApiException(this.statusCode, this._body);
 
-  /// Try to extract a user-friendly error message from XBoard JSON response.
-  String get message {
+  /// User-friendly error message.
+  /// If the body is a JSON string with a `message` field, extract it.
+  /// Otherwise return the raw body. Caches the result to avoid repeated parsing.
+  late final String message = _extractMessage();
+
+  String _extractMessage() {
+    // If _assertSuccess already extracted the message, body is plain text — return as-is.
+    // Only attempt JSON decode when body looks like a JSON object.
+    if (!_body.startsWith('{')) return _body;
     try {
-      final json = jsonDecode(body) as Map<String, dynamic>;
-      return json['message'] as String? ?? body;
+      final json = jsonDecode(_body) as Map<String, dynamic>;
+      return json['message'] as String? ?? _body;
     } catch (_) {
-      return body;
+      return _body;
     }
   }
 

@@ -93,11 +93,15 @@ class MihomoStream {
           final uri = Uri.parse('$_wsBase$authPath');
           final channel = WebSocketChannel.connect(uri);
           activeChannel = channel;
-
-          // Reset backoff on successful connection
-          retryDelay = const Duration(seconds: 2);
+          var gotFirstMessage = false;
 
           await for (final event in channel.stream) {
+            // Reset backoff only after receiving first message — prevents
+            // tight 2s retry loop when server accepts then immediately closes.
+            if (!gotFirstMessage) {
+              gotFirstMessage = true;
+              retryDelay = const Duration(seconds: 2);
+            }
             if (cancelled) {
               activeChannel = null;
               return;

@@ -13,6 +13,7 @@ import '../../providers/profile_provider.dart';
 import '../../shared/app_notifier.dart';
 import '../../core/kernel/core_manager.dart';
 import '../../services/profile_service.dart';
+import '../../providers/connectivity_provider.dart';
 import '../../theme.dart';
 import '../announcements/providers/announcements_providers.dart';
 import 'widgets/announcement_banner.dart';
@@ -82,12 +83,17 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
       final h = diff.inHours;
       final m = diff.inMinutes % 60;
       final sec = diff.inSeconds % 60;
+      final String newValue;
       if (h > 0) {
-        _uptimeNotifier.value = '${h}h ${m}m';
+        newValue = '${h}h ${m}m';
       } else if (m > 0) {
-        _uptimeNotifier.value = '${m}m';
+        newValue = '${m}m ${sec}s';
       } else {
-        _uptimeNotifier.value = '${sec}s';
+        newValue = '${sec}s';
+      }
+      // Only notify listeners when the display string actually changes
+      if (_uptimeNotifier.value != newValue) {
+        _uptimeNotifier.value = newValue;
       }
     });
   }
@@ -161,6 +167,9 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                     children: [
                       // ── User greeting header ─────────────────────────
                       _DashboardHeader(),
+
+                      // ── Offline banner ─────────────────────────────
+                      const _OfflineBanner(),
 
                       const SizedBox(height: 16),
 
@@ -379,6 +388,58 @@ class _DashboardHeader extends ConsumerWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+// ── Offline banner ──────────────────────────────────────────────────────────
+
+class _OfflineBanner extends ConsumerWidget {
+  const _OfflineBanner();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final connectivity = ref.watch(connectivityProvider);
+    if (connectivity != ConnectivityStatus.offline) {
+      return const SizedBox.shrink();
+    }
+
+    final s = S.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: isDark
+              ? Colors.orange.withValues(alpha: 0.15)
+              : Colors.orange.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(YLRadius.md),
+          border: Border.all(
+            color: Colors.orange.withValues(alpha: 0.3),
+            width: 0.5,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              Icons.wifi_off_rounded,
+              size: 16,
+              color: isDark ? Colors.orange[300] : Colors.orange[800],
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                s.noNetworkConnection,
+                style: YLText.caption.copyWith(
+                  color: isDark ? Colors.orange[300] : Colors.orange[800],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

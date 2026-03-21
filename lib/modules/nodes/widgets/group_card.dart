@@ -124,10 +124,15 @@ class _GroupCardState extends ConsumerState<GroupCard>
   Widget build(BuildContext context) {
     final group = widget.group;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final testing = ref.watch(delayTestingProvider);
-    final isGroupTesting = testing.any((n) => group.all.contains(n));
-    final delays = ref.watch(delayResultsProvider);
-    final sorted = _sortedNodes(group.all, widget.sortMode, delays);
+    // Only rebuild when testing state for THIS group's nodes changes
+    final isGroupTesting = ref.watch(delayTestingProvider.select(
+        (set) => set.any((n) => group.all.contains(n))));
+    // Only rebuild when sort-relevant delays change (not every single node update)
+    final sortMode = widget.sortMode;
+    final delays = sortMode == NodeSortMode.defaultOrder
+        ? const <String, int>{}
+        : ref.watch(delayResultsProvider);
+    final sorted = _sortedNodes(group.all, sortMode, delays);
     final query = widget.searchQuery.trim().toLowerCase();
     final nodeList = query.isEmpty
         ? sorted

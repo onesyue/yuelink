@@ -33,17 +33,21 @@ class AuthState {
     this.isLoading = false,
   });
 
+  /// Copy with nullable field support. Pass [_clearToken] or [_clearProfile]
+  /// as `true` to explicitly null out the field (since `null` means "keep").
   AuthState copyWith({
     AuthStatus? status,
     String? token,
+    bool clearToken = false,
     UserProfile? userProfile,
+    bool clearProfile = false,
     String? error,
     bool? isLoading,
   }) {
     return AuthState(
       status: status ?? this.status,
-      token: token ?? this.token,
-      userProfile: userProfile ?? this.userProfile,
+      token: clearToken ? null : (token ?? this.token),
+      userProfile: clearProfile ? null : (userProfile ?? this.userProfile),
       error: error,
       isLoading: isLoading ?? this.isLoading,
     );
@@ -61,38 +65,55 @@ class AuthState {
 /// Must match the CloudFront custom domain so TLS SNI handshake succeeds.
 const _kDefaultApiHost = 'https://d7ccm19ki90mg.cloudfront.net';
 
+/// Tracks the current API host — updated on login and restored from storage.
+final _apiHostProvider = StateProvider<String>((ref) => _kDefaultApiHost);
+
 final xboardApiProvider = Provider<XBoardApi>((ref) {
-  // The actual host will be resolved asynchronously in AuthNotifier.
-  // This provides a default instance; login flow overrides baseUrl.
-  return XBoardApi(baseUrl: _kDefaultApiHost);
+  final host = ref.watch(_apiHostProvider);
+  return XBoardApi(baseUrl: host);
 });
 
 // ------------------------------------------------------------------
 // Auth notifier
 // ------------------------------------------------------------------
 
-final authProvider = StateNotifierProvider<AuthNotifier, AuthState>(
-  (ref) => AuthNotifier(ref),
+/// Pre-loaded auth state, overridden in main.dart ProviderScope to
+/// eliminate the blank screen from async AuthNotifier._init().
+final preloadedAuthStateProvider = Provider<AuthState?>((ref) => null);
+
+final authProvider = NotifierProvider<AuthNotifier, AuthState>(
+  AuthNotifier.new,
 );
 
-class AuthNotifier extends StateNotifier<AuthState> {
-  AuthNotifier(this._ref, {AuthState? initial})
-      : super(initial ?? const AuthState()) {
+class AuthNotifier extends Notifier<AuthState> {
+  late final AuthTokenService _authService;
+  bool _disposed = false;
+
+  @override
+  AuthState build() {
+    _disposed = false;
+    _authService = AuthTokenService.instance;
+    ref.onDispose(() => _disposed = true);
+
+    final initial = ref.read(preloadedAuthStateProvider);
     if (initial != null && initial.status != AuthStatus.unknown) {
       // Pre-loaded in main() — skip async _init(), just refresh in background
       if (initial.token != null) _refreshUserInfo(initial.token!);
-    } else {
-      _init();
+      return initial;
     }
+    _init();
+    return const AuthState();
   }
-
-  final Ref _ref;
-  final _authService = AuthTokenService.instance;
 
   /// Check if user has a saved token on app startup.
   Future<void> _init() async {
     final token = await _authService.getToken();
     if (token != null && token.isNotEmpty) {
+      // Restore saved API host so all providers use the correct endpoint
+      final savedHost = await _authService.getApiHost();
+      if (savedHost != null && savedHost.isNotEmpty) {
+        ref.read(_apiHostProvider.notifier).state = savedHost;
+      }
       final cachedProfile = await _authService.getCachedProfile();
       state = AuthState(
         status: AuthStatus.loggedIn,
@@ -119,9 +140,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final loginResp = await api.login(email, password);
       final token = loginResp.token;
 
-      // 2. Save token and host
+      // 2. Save token and host, update provider so all consumers get correct host
       await _authService.saveToken(token);
       await _authService.saveApiHost(host);
+      ref.read(_apiHostProvider.notifier).state = host;
       EventLog.write('[Auth] login_ok');
 
       // 3. Get subscribe data (profile + URL) in one request.
@@ -202,7 +224,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       final manager = CoreManager.instance;
       if (manager.isRunning) await manager.stop();
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[Auth] stop core on logout failed: $e');
+    }
 
     // Clear all subscription profiles
     try {
@@ -210,7 +234,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
       for (final p in profiles) {
         await ProfileService.deleteProfile(p.id);
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[Auth] clear profiles on logout failed: $e');
+    }
 
     await _authService.clearAll();
     state = const AuthState(status: AuthStatus.loggedOut);
@@ -240,7 +266,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       await _authService.cacheProfile(sub.profile);
       // Also update subscribe URL in case it changed
       await _authService.saveSubscribeUrl(sub.subscribeUrl);
-      if (mounted) {
+      if (!_disposed) {
         state = state.copyWith(userProfile: sub.profile);
       }
     } catch (e) {
@@ -262,7 +288,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final sub = await api.getSubscribeData(token);
       await _authService.cacheProfile(sub.profile);
       await _authService.saveSubscribeUrl(sub.subscribeUrl);
-      if (mounted) state = state.copyWith(userProfile: sub.profile);
+      if (!_disposed) state = state.copyWith(userProfile: sub.profile);
       await _syncSubscription(sub.subscribeUrl);
     } catch (e) {
       debugPrint('[Auth] Failed to sync subscription: $e');
@@ -304,11 +330,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
       debugPrint('[Auth] Created new 悦通 profile: ${profile.id}');
 
       // Auto-select the new profile
-      _ref.read(activeProfileIdProvider.notifier).select(profile.id);
+      ref.read(activeProfileIdProvider.notifier).select(profile.id);
     }
 
     // Refresh profiles list in UI
-    _ref.read(profilesProvider.notifier).load();
+    ref.read(profilesProvider.notifier).load();
 
     // First-time sync: welcome the user
     if (isFirstTime) {

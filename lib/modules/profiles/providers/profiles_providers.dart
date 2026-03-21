@@ -9,13 +9,17 @@ import '../../../core/storage/settings_service.dart';
 // Current active profile (persisted)
 // ------------------------------------------------------------------
 
+/// Pre-loaded initial profile ID, overridden in main.dart ProviderScope.
+final preloadedProfileIdProvider = Provider<String?>((ref) => null);
+
 final activeProfileIdProvider =
-    StateNotifierProvider<ActiveProfileNotifier, String?>(
-  (ref) => ActiveProfileNotifier(),
+    NotifierProvider<ActiveProfileNotifier, String?>(
+  ActiveProfileNotifier.new,
 );
 
-class ActiveProfileNotifier extends StateNotifier<String?> {
-  ActiveProfileNotifier([super.initial]);
+class ActiveProfileNotifier extends Notifier<String?> {
+  @override
+  String? build() => ref.read(preloadedProfileIdProvider);
 
   void select(String? id) {
     state = id;
@@ -28,18 +32,18 @@ class ActiveProfileNotifier extends StateNotifier<String?> {
 // ------------------------------------------------------------------
 
 final profilesProvider =
-    StateNotifierProvider<ProfilesNotifier, AsyncValue<List<Profile>>>(
-  (ref) => ProfilesNotifier(ref),
+    NotifierProvider<ProfilesNotifier, AsyncValue<List<Profile>>>(
+  ProfilesNotifier.new,
 );
 
-class ProfilesNotifier extends StateNotifier<AsyncValue<List<Profile>>> {
-  ProfilesNotifier(this._ref) : super(const AsyncValue.loading()) {
+class ProfilesNotifier extends Notifier<AsyncValue<List<Profile>>> {
+  @override
+  AsyncValue<List<Profile>> build() {
     load();
+    return const AsyncValue.loading();
   }
 
-  final Ref _ref;
-
-  ProfileRepository get _repo => _ref.read(profileRepositoryProvider);
+  ProfileRepository get _repo => ref.read(profileRepositoryProvider);
 
   Future<void> load() async {
     state = const AsyncValue.loading();
@@ -57,17 +61,15 @@ class ProfilesNotifier extends StateNotifier<AsyncValue<List<Profile>>> {
         : null;
     final profile =
         await _repo.addProfile(name: name, url: url, proxyPort: proxyPort);
-    state.whenData((list) {
-      state = AsyncValue.data([...list, profile]);
-    });
+    final current = state.valueOrNull;
+    state = AsyncValue.data([...?current, profile]);
     return profile;
   }
 
   /// Insert an already-created local profile into the state list.
   void addLocal(Profile profile) {
-    state.whenData((list) {
-      state = AsyncValue.data([...list, profile]);
-    });
+    final current = state.valueOrNull;
+    state = AsyncValue.data([...?current, profile]);
   }
 
   /// Update a profile in-place to avoid loading flash.
@@ -76,23 +78,26 @@ class ProfilesNotifier extends StateNotifier<AsyncValue<List<Profile>>> {
         ? CoreManager.instance.mixedPort
         : null;
     await _repo.updateProfile(profile, proxyPort: proxyPort);
-    state.whenData((list) {
+    final list = state.valueOrNull;
+    if (list != null) {
       final idx = list.indexWhere((p) => p.id == profile.id);
-      if (idx == -1) return;
-      final updated = [...list];
-      updated[idx] = profile;
-      state = AsyncValue.data(updated);
-    });
+      if (idx != -1) {
+        final updated = [...list];
+        updated[idx] = profile;
+        state = AsyncValue.data(updated);
+      }
+    }
   }
 
   Future<void> delete(String id) async {
     await _repo.deleteProfile(id);
     // Clear active profile selection if we deleted the active one
-    if (_ref.read(activeProfileIdProvider) == id) {
-      _ref.read(activeProfileIdProvider.notifier).select(null);
+    if (ref.read(activeProfileIdProvider) == id) {
+      ref.read(activeProfileIdProvider.notifier).select(null);
     }
-    state.whenData((list) {
+    final list = state.valueOrNull;
+    if (list != null) {
       state = AsyncValue.data(list.where((p) => p.id != id).toList());
-    });
+    }
   }
 }

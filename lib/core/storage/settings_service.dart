@@ -23,7 +23,13 @@ class SettingsService {
       _cache = {};
       return _cache!;
     }
-    _cache = json.decode(await file.readAsString()) as Map<String, dynamic>;
+    try {
+      _cache = json.decode(await file.readAsString()) as Map<String, dynamic>;
+    } catch (_) {
+      // Corrupt JSON (crash during write, bad WebDAV sync) — fall back to empty.
+      debugPrint('[SettingsService] corrupt settings.json, resetting to empty');
+      _cache = {};
+    }
     return _cache!;
   }
 
@@ -281,7 +287,10 @@ class SettingsService {
   static Future<Map<String, int>> getDelayResults() async {
     final settings = await load();
     final raw = settings['delayResults'];
-    if (raw is Map) return raw.cast<String, int>();
+    if (raw is Map) {
+      // JSON decode may produce double for numeric values; safely convert to int
+      return raw.map((k, v) => MapEntry(k as String, (v as num).toInt()));
+    }
     return {};
   }
 

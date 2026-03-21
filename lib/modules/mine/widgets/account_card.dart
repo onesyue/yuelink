@@ -40,7 +40,7 @@ class AccountCard extends ConsumerWidget {
           ),
           child: profile == null
               ? _EmptyProfile(s: s, isDark: isDark)
-              : _ProfileContent(profile: profile, s: s, isDark: isDark, ref: ref),
+              : _ProfileContent(profile: profile, s: s, isDark: isDark),
         ),
       ],
     );
@@ -69,21 +69,19 @@ class _EmptyProfile extends StatelessWidget {
 
 // ── Full profile content ──────────────────────────────────────────────────────
 
-class _ProfileContent extends StatelessWidget {
+class _ProfileContent extends ConsumerWidget {
   final UserProfile profile;
   final S s;
   final bool isDark;
-  final WidgetRef ref;
 
   const _ProfileContent({
     required this.profile,
     required this.s,
     required this.isDark,
-    required this.ref,
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final used = (profile.uploadUsed ?? 0) + (profile.downloadUsed ?? 0);
     final total = profile.transferEnable;
     final percent = profile.usagePercent ?? 0.0;
@@ -144,14 +142,14 @@ class _ProfileContent extends StatelessWidget {
               icon: Icons.lock_outline_rounded,
               tooltip: s.mineChangePassword,
               color: YLColors.zinc400,
-              onTap: () => _showChangePasswordDialog(context),
+              onTap: () => _showChangePasswordDialog(context, ref),
             ),
             const SizedBox(width: 2),
             _ActionIcon(
               icon: Icons.logout_rounded,
               tooltip: s.authLogout,
               color: YLColors.error,
-              onTap: () => _confirmLogout(context),
+              onTap: () => _confirmLogout(context, ref),
             ),
           ],
         ),
@@ -275,7 +273,7 @@ class _ProfileContent extends StatelessWidget {
     return YLColors.zinc500;
   }
 
-  void _showChangePasswordDialog(BuildContext context) {
+  void _showChangePasswordDialog(BuildContext context, WidgetRef ref) {
     final oldPwCtrl = TextEditingController();
     final newPwCtrl = TextEditingController();
 
@@ -310,7 +308,7 @@ class _ProfileContent extends StatelessWidget {
               final newPw = newPwCtrl.text.trim();
               if (oldPw.isEmpty || newPw.isEmpty) return;
               Navigator.pop(ctx);
-              await _doChangePassword(oldPw, newPw);
+              await _doChangePassword(oldPw, newPw, ref);
             },
             child: Text(s.confirm),
           ),
@@ -322,7 +320,7 @@ class _ProfileContent extends StatelessWidget {
     });
   }
 
-  Future<void> _doChangePassword(String oldPassword, String newPassword) async {
+  Future<void> _doChangePassword(String oldPassword, String newPassword, WidgetRef ref) async {
     final token = ref.read(authProvider).token;
     if (token == null) return;
     try {
@@ -347,7 +345,7 @@ class _ProfileContent extends StatelessWidget {
     }
   }
 
-  void _confirmLogout(BuildContext context) {
+  void _confirmLogout(BuildContext context, WidgetRef ref) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(

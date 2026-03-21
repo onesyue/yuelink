@@ -40,7 +40,7 @@ class EventLog {
       if (f.existsSync()) {
         final lines = await f.readAsLines();
         if (lines.length >= _kMaxLines) {
-          await f.writeAsString(lines.skip(lines.length ~/ 2).join('\n') + '\n');
+          await f.writeAsString('${lines.skip(lines.length ~/ 2).join('\n')}\n');
         }
       }
 

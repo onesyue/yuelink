@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
@@ -49,7 +50,8 @@ class UpdateChecker {
         downloadUrl: downloadUrl,
         publishedAt: publishedAt != null ? DateTime.tryParse(publishedAt) : null,
       );
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[UpdateChecker] check failed: $e');
       return null;
     }
   }
@@ -85,6 +87,8 @@ class UpdateChecker {
   }) async {
     final client = HttpClient();
     client.connectionTimeout = const Duration(seconds: 30);
+    IOSink? sink;
+    File? file;
     try {
       final request = await client.getUrl(Uri.parse(url));
       final response = await request.close();
@@ -96,9 +100,9 @@ class UpdateChecker {
       final total = response.contentLength;
       final fileName = Uri.parse(url).pathSegments.last;
       final dir = await getTemporaryDirectory();
-      final file = File('${dir.path}/$fileName');
+      file = File('${dir.path}/$fileName');
 
-      final sink = file.openWrite();
+      sink = file.openWrite();
       var received = 0;
 
       await for (final chunk in response) {
@@ -109,7 +113,13 @@ class UpdateChecker {
 
       await sink.flush();
       await sink.close();
+      sink = null; // mark as successfully closed
       return file.path;
+    } catch (e) {
+      // Close sink and delete partial file on failure
+      try { await sink?.close(); } catch (e) { debugPrint('[UpdateChecker] sink close error: $e'); }
+      try { if (file != null && file.existsSync()) file.deleteSync(); } catch (e) { debugPrint('[UpdateChecker] partial file cleanup error: $e'); }
+      rethrow;
     } finally {
       client.close();
     }

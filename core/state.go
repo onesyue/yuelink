@@ -1,6 +1,9 @@
 package main
 
-import "sync"
+import (
+	"os"
+	"sync"
+)
 
 // CoreState holds the global runtime state of the mihomo core.
 type CoreState struct {
@@ -8,6 +11,7 @@ type CoreState struct {
 	isInit    bool
 	isRunning bool
 	homeDir   string
+	logFile   *os.File // retained so we can close it on re-init (prevents fd leak)
 }
 
 var state = &CoreState{}

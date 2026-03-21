@@ -40,9 +40,9 @@ class CouponResult {
 
   factory CouponResult.fromJson(Map<String, dynamic> json) {
     return CouponResult(
-      id: json['id'] as int? ?? 0,
+      id: _toInt(json['id']) ?? 0,
       code: json['code'] as String? ?? '',
-      type: json['type'] as int? ?? 1,
+      type: _toInt(json['type']) ?? 1,
       value: _toInt(json['value']) ?? 0,
     );
   }

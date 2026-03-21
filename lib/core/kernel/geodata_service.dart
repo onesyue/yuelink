@@ -95,7 +95,8 @@ class GeoDataService {
         flush: true,
       );
       return true;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[GeoData] copyFromAsset failed: $e');
       return false;
     }
   }
@@ -129,7 +130,8 @@ class GeoDataService {
         const Duration(seconds: 60),
         onTimeout: () => false,
       );
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[GeoData] downloadFromMirrors failed: $e');
       return false;
     }
   }
@@ -141,17 +143,27 @@ class GeoDataService {
   /// Returns true only when all 4 files were successfully downloaded.
   static Future<bool> forceUpdate() async {
     final appDir = await getApplicationSupportDirectory();
-    // Delete existing files so _tryDownload doesn't skip them
-    for (final name in _bundledFiles.keys) {
-      final f = File('${appDir.path}/$name');
-      try {
-        if (f.existsSync()) await f.delete();
-      } catch (_) {}
-    }
+    // Download to temp files first, then replace — avoids losing existing geo
+    // files if CDN is unreachable (which would break core startup).
     int downloaded = 0;
     for (final entry in _remoteNames.entries) {
-      final destFile = File('${appDir.path}/${entry.key}');
-      if (await _downloadFromMirrors(entry.value, destFile)) downloaded++;
+      final tmpFile = File('${appDir.path}/${entry.key}.tmp');
+      if (await _downloadFromMirrors(entry.value, tmpFile)) {
+        // Replace existing file only after successful download
+        final destFile = File('${appDir.path}/${entry.key}');
+        try {
+          await tmpFile.rename(destFile.path);
+        } catch (e) {
+          debugPrint('[GeoData] rename failed, falling back to copy+delete: $e');
+          // rename may fail cross-device; fallback to copy+delete
+          await tmpFile.copy(destFile.path);
+          await tmpFile.delete();
+        }
+        downloaded++;
+      } else {
+        // Clean up failed temp file
+        try { if (tmpFile.existsSync()) await tmpFile.delete(); } catch (e) { debugPrint('[GeoData] tmp cleanup failed: $e'); }
+      }
     }
     return downloaded == _remoteNames.length;
   }
@@ -163,7 +175,8 @@ class GeoDataService {
       final file = File('${appDir.path}/GeoIP.dat');
       if (!file.existsSync()) return null;
       return file.lastModifiedSync();
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[GeoData] lastUpdated failed: $e');
       return null;
     }
   }
@@ -188,7 +201,9 @@ class GeoDataService {
         await dest.writeAsBytes(response.bodyBytes, flush: true);
         return true;
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[GeoData] download failed ($url): $e');
+    }
     return false;
   }
 }

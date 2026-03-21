@@ -731,6 +731,7 @@ class S {
       _e ? 'Subscription Management' : '订阅管理';
   String get dashAccountLabel => _e ? 'Account' : '账户';
   String get dashLatestAnnouncement => _e ? 'Latest Announcements' : '最新公告';
+  String get noNetworkConnection => _e ? 'No network connection' : '网络连接不可用';
   String get dashGreeting => _e ? 'Hello' : '你好';
   String get dashGreetingReturning => _e ? 'Welcome back' : '欢迎回来';
   String get dashNoAnnouncements => _e ? 'No announcements' : '暂无公告';

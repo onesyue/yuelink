@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:app_links/app_links.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
@@ -19,7 +18,6 @@ import 'pages/dashboard_page.dart';
 import 'pages/nodes_page.dart';
 import 'pages/settings_page.dart';
 import 'domain/models/proxy.dart';
-import 'modules/nodes/providers/nodes_providers.dart';
 import 'modules/store/store_page.dart';
 import 'modules/onboarding/onboarding_page.dart';
 import 'modules/carrier/carrier_provider.dart';
@@ -31,9 +29,9 @@ import 'modules/connections/providers/connections_providers.dart';
 import 'modules/dashboard/providers/dashboard_providers.dart';
 import 'providers/core_provider.dart';
 import 'providers/profile_provider.dart';
-import 'providers/proxy_provider.dart';
 import 'shared/app_notifier.dart';
 import 'core/kernel/core_manager.dart';
+import 'core/platform/vpn_service.dart';
 import 'core/storage/auth_token_service.dart';
 import 'services/profile_service.dart';
 import 'core/storage/settings_service.dart';
@@ -96,7 +94,9 @@ void main() async {
         appName: AppConstants.appName,
         appPath: Platform.resolvedExecutable,
       );
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[App] launchAtStartup setup: $e');
+    }
   }
 
   // Initialize window manager (macOS, Windows, Linux)
@@ -131,8 +131,7 @@ void main() async {
     overrides: [
       themeProvider.overrideWith((ref) => savedTheme),
       languageProvider.overrideWith((ref) => savedLanguage),
-      activeProfileIdProvider
-          .overrideWith((ref) => ActiveProfileNotifier(savedProfileId)),
+      preloadedProfileIdProvider.overrideWithValue(savedProfileId),
       routingModeProvider.overrideWith((ref) => savedRoutingMode),
       connectionModeProvider.overrideWith((ref) => savedConnectionMode),
       logLevelProvider.overrideWith((ref) => savedLogLevel),
@@ -147,16 +146,15 @@ void main() async {
       hasSeenOnboardingProvider.overrideWith((ref) => savedOnboarding),
       initialBuiltTabsProvider.overrideWithValue(savedBuiltTabs),
       // Pre-loaded auth state: eliminates blank screen from async AuthNotifier._init()
-      authProvider.overrideWith((ref) => AuthNotifier(
-        ref,
-        initial: (savedToken != null && savedToken.isNotEmpty)
+      preloadedAuthStateProvider.overrideWithValue(
+        (savedToken != null && savedToken.isNotEmpty)
             ? AuthState(
                 status: AuthStatus.loggedIn,
                 token: savedToken,
                 userProfile: savedProfile,
               )
             : const AuthState(status: AuthStatus.loggedOut),
-      )),
+      ),
     ],
     child: const YueLinkApp(),
   ));
@@ -190,6 +188,17 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    if (Platform.isAndroid) {
+      VpnService.listenForRevocation(() {
+        debugPrint('[App] VPN revoked — resetting state');
+        ref.read(coreStatusProvider.notifier).state = CoreStatus.stopped;
+        ref.read(trafficProvider.notifier).state = const Traffic();
+        ref.read(trafficHistoryProvider.notifier).state = TrafficHistory();
+        ref.read(trafficHistoryVersionProvider.notifier).state = 0;
+        CoreManager.instance.stop().catchError((_) {});
+        AppNotifier.warning(S.current.disconnectedUnexpected);
+      });
+    }
     if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
       windowManager.addListener(this);
       windowManager.setPreventClose(true);
@@ -240,7 +249,11 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
         groups: ref.read(proxyGroupsProvider),
       );
       if (prev == CoreStatus.running && next == CoreStatus.stopped) {
-        AppNotifier.warning(S.current.disconnectedUnexpected);
+        // Only show "unexpected disconnect" if the user did NOT initiate stop.
+        // userStoppedProvider is set true in CoreActions.stop() before status changes.
+        if (!ref.read(userStoppedProvider)) {
+          AppNotifier.warning(S.current.disconnectedUnexpected);
+        }
         if (_trayInitialized) {
           trayManager
               .setToolTip('YueLink · ${S.current.statusDisconnected}')
@@ -432,8 +445,9 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
       await hotKeyManager.register(toggleKey, keyDownHandler: (_) {
         _handleTrayToggle();
       });
-    } catch (_) {
+    } catch (e) {
       // Hotkey registration can fail if another app holds the shortcut
+      debugPrint('[App] hotkey registration: $e');
     }
   }
 
@@ -445,7 +459,9 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
       await hotKeyManager.register(toggleKey, keyDownHandler: (_) {
         _handleTrayToggle();
       });
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[App] hotkey re-registration: $e');
+    }
   }
 
   // ── Window manager callbacks ─────────────────────────────────────
@@ -539,7 +555,9 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
         MenuItem.separator(),
         MenuItem(key: 'quit', label: s.trayQuit),
       ]));
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[App] tray menu update: $e');
+    }
   }
 
   // Resolves a proxy_gi_ni key to (groupName, nodeName) using current groups.
@@ -603,7 +621,9 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
         await windowManager.show();
         await windowManager.focus();
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[App] window visibility toggle: $e');
+    }
   }
 
   Future<void> _handleTrayToggle() async {

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -49,7 +50,8 @@ class SecureStorageService {
       }
       final raw = jsonDecode(await f.readAsString()) as Map<String, dynamic>;
       _macosCache = raw.map((k, v) => MapEntry(k, v.toString()));
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[SecureStorage] loadMacos failed: $e');
       _macosCache = {};
     }
     return _macosCache!;
@@ -58,9 +60,19 @@ class SecureStorageService {
   static Future<void> _saveMacos(Map<String, String> data) async {
     try {
       final f = await _getFile();
-      await f.writeAsString(jsonEncode(data));
+      // Ensure parent directory exists (first run or after system cleanup)
+      final dir = f.parent;
+      if (!dir.existsSync()) {
+        await dir.create(recursive: true);
+      }
+      // Atomic write: write to temp file then rename to prevent corruption
+      final tmp = File('${f.path}.tmp');
+      await tmp.writeAsString(jsonEncode(data));
+      await tmp.rename(f.path);
       _macosCache = data;
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[SecureStorage] saveMacos failed: $e');
+    }
   }
 
   // ── Public API ────────────────────────────────────────────────────────────

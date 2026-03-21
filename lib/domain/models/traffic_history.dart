@@ -15,6 +15,15 @@ class TrafficHistory {
   /// Riverpod StateProvider can detect changes without a full [copy].
   int version = 0;
 
+  // ── Downsample cache ─────────────────────────────────────────────
+  // Avoids recalculating O(n) downsampling on every frame.
+  int _cachedUpVersion = -1;
+  int _cachedUpRange = -1;
+  List<double> _cachedUp = const [];
+  int _cachedDownVersion = -1;
+  int _cachedDownRange = -1;
+  List<double> _cachedDown = const [];
+
   TrafficHistory()
       : _up = List.filled(capacity, 0.0),
         _down = List.filled(capacity, 0.0);
@@ -41,11 +50,28 @@ class TrafficHistory {
   ///
   /// Groups raw samples into [targetPoints] buckets and averages each bucket.
   /// This keeps chart rendering cost constant regardless of [seconds].
-  List<double> upSampled({int seconds = 60, int targetPoints = 60}) =>
-      _downsample(_slice(_up, seconds), targetPoints);
+  ///
+  /// Results are cached by (version, seconds) — calling with the same
+  /// parameters returns the same list without recomputing.
+  List<double> upSampled({int seconds = 60, int targetPoints = 60}) {
+    if (_cachedUpVersion == version && _cachedUpRange == seconds) {
+      return _cachedUp;
+    }
+    _cachedUp = _downsample(_slice(_up, seconds), targetPoints);
+    _cachedUpVersion = version;
+    _cachedUpRange = seconds;
+    return _cachedUp;
+  }
 
-  List<double> downSampled({int seconds = 60, int targetPoints = 60}) =>
-      _downsample(_slice(_down, seconds), targetPoints);
+  List<double> downSampled({int seconds = 60, int targetPoints = 60}) {
+    if (_cachedDownVersion == version && _cachedDownRange == seconds) {
+      return _cachedDown;
+    }
+    _cachedDown = _downsample(_slice(_down, seconds), targetPoints);
+    _cachedDownVersion = version;
+    _cachedDownRange = seconds;
+    return _cachedDown;
+  }
 
   /// 90th-percentile of sampled up+down values for a given range.
   double p90({int seconds = 60}) {
@@ -61,8 +87,7 @@ class TrafficHistory {
   }
 
   /// Returns a new [TrafficHistory] with the same ring-buffer state.
-  /// Required because Riverpod's StateProvider uses identical() to detect
-  /// changes — mutating in place and setting the same reference never notifies.
+  /// Used only for chart lock (frozen snapshot).
   TrafficHistory copy() {
     final c = TrafficHistory();
     for (var i = 0; i < capacity; i++) {
@@ -71,35 +96,41 @@ class TrafficHistory {
     }
     c._index = _index;
     c._full = _full;
+    c.version = version;
     return c;
   }
 
   /// Returns the last [seconds] raw samples in chronological order (oldest first).
+  ///
+  /// Writes directly in forward order to avoid reversing the list.
   List<double> _slice(List<double> buf, int seconds) {
-    if (count == 0) return [];
-    final n = seconds.clamp(1, count);
-    final result = <double>[];
-    // Walk backwards from current write head to collect `n` samples,
-    // then reverse to get oldest-first order.
-    for (var i = 1; i <= n; i++) {
-      final idx = (_index - i + capacity) % capacity;
-      result.add(buf[idx]);
+    final c = count;
+    if (c == 0) return const [];
+    final n = seconds.clamp(1, c);
+    final result = List<double>.filled(n, 0.0);
+    // Start index: the oldest sample we want
+    final startOffset = _index - n;
+    for (var i = 0; i < n; i++) {
+      result[i] = buf[(startOffset + i + capacity) % capacity];
     }
-    return result.reversed.toList();
+    return result;
   }
 
   /// Downsamples [data] to [targetPoints] by averaging consecutive buckets.
-  List<double> _downsample(List<double> data, int targetPoints) {
-    if (data.isEmpty) return [];
+  static List<double> _downsample(List<double> data, int targetPoints) {
+    if (data.isEmpty) return const [];
     if (data.length <= targetPoints) return data;
     final bucketSize = data.length / targetPoints;
-    final result = <double>[];
+    final result = List<double>.filled(targetPoints, 0.0);
     for (var i = 0; i < targetPoints; i++) {
       final start = (i * bucketSize).round();
       final end = ((i + 1) * bucketSize).round().clamp(0, data.length);
       if (start >= end) continue;
-      final sum = data.sublist(start, end).fold(0.0, (a, b) => a + b);
-      result.add(sum / (end - start));
+      var sum = 0.0;
+      for (var j = start; j < end; j++) {
+        sum += data[j];
+      }
+      result[i] = sum / (end - start);
     }
     return result;
   }
