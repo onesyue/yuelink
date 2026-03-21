@@ -20,6 +20,7 @@ import 'widgets/hero_card.dart';
 import 'widgets/carrier_card.dart';
 import 'widgets/subscription_card.dart';
 import '../checkin/checkin_card.dart';
+import '../checkin/checkin_provider.dart';
 
 class DashboardPage extends ConsumerStatefulWidget {
   const DashboardPage({super.key});
@@ -62,6 +63,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                           .read(authProvider.notifier)
                           .refreshUserInfo();
                       ref.invalidate(announcementsProvider);
+                      ref.read(checkinProvider.notifier).refresh();
                     },
                     child: ListView(
                     padding: EdgeInsets.symmetric(

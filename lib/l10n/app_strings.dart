@@ -818,6 +818,8 @@ class S {
   String get checkinAction => _e ? 'Check in' : '签到';
   String get checkinDone => _e ? 'Checked in' : '已签到';
   String get checkinAlready => _e ? 'Already checked in today' : '今日已签到';
+  String get checkinOtherDevice =>
+      _e ? 'Checked in on another device' : '已在其他设备签到';
   String get checkinNeedLogin => _e ? 'Please login first' : '请先登录';
   String get checkinFailed => _e ? 'Check-in failed' : '签到失败';
   String get checkinReward => _e ? 'Reward' : '奖励';

@@ -139,8 +139,7 @@ rules:
   });
 
   group('ConfigTemplate.injectProxyChain', () {
-    test('injects dialer-proxy chain for 2 nodes', () {
-      const config = '''
+    const baseConfig = '''
 proxies:
   - name: HK
     type: ss
@@ -150,46 +149,111 @@ proxies:
     type: vmess
     server: 5.6.7.8
     port: 443
+proxy-groups:
+  - name: 自动选择
+    type: select
+    proxies:
+      - HK
+      - JP
 ''';
-      final result = ConfigTemplate.injectProxyChain(config, ['HK', 'JP']);
-      // YAML writer may quote values
-      expect(result, anyOf(contains('dialer-proxy: HK'), contains('dialer-proxy: "HK"')));
-      // Entry node (HK) should NOT have dialer-proxy — only exit node (JP) should
-      expect(result.indexOf('dialer-proxy'), greaterThan(result.indexOf('name: "JP"') > -1 ? result.indexOf('name: "JP"') - 30 : result.indexOf('name: JP') - 30));
+
+    test('creates relay group with correct chain order', () {
+      final result =
+          ConfigTemplate.injectProxyChain(baseConfig, ['HK', 'JP'], '自动选择');
+      expect(result, contains('_YueLink_Chain_Relay'));
+      expect(result,
+          anyOf(contains('type: relay'), contains('type: "relay"')));
+      // Node definitions must NOT have dialer-proxy
+      expect(result, isNot(contains('dialer-proxy: HK')));
+      expect(result, isNot(contains('dialer-proxy: "HK"')));
     });
 
-    test('injects chain for 3 nodes', () {
-      const config = '''
-proxies:
-  - name: A
-    type: ss
-    server: 1.1.1.1
-    port: 443
-  - name: B
-    type: vmess
-    server: 2.2.2.2
-    port: 443
-  - name: C
-    type: trojan
-    server: 3.3.3.3
-    port: 443
-''';
-      final result = ConfigTemplate.injectProxyChain(config, ['A', 'B', 'C']);
-      // B should use A as dialer (YAML writer may quote values)
-      expect(result, anyOf(contains('dialer-proxy: A'), contains('dialer-proxy: "A"')));
-      // C should use B as dialer
-      expect(result, anyOf(contains('dialer-proxy: B'), contains('dialer-proxy: "B"')));
+    test('inserts relay at front of activeGroup.proxies', () {
+      final result =
+          ConfigTemplate.injectProxyChain(baseConfig, ['HK', 'JP'], '自动选择');
+      // relay group name should appear before HK in the group's proxies list
+      final relayIdx =
+          result.indexOf('_YueLink_Chain_Relay');
+      final hkInGroupIdx =
+          result.lastIndexOf('HK'); // last occurrence = inside relay group
+      expect(relayIdx, greaterThan(-1));
+      expect(relayIdx, lessThan(hkInGroupIdx));
+    });
+
+    test('is idempotent — re-inject updates relay without duplicates', () {
+      var result =
+          ConfigTemplate.injectProxyChain(baseConfig, ['HK', 'JP'], '自动选择');
+      result =
+          ConfigTemplate.injectProxyChain(result, ['HK', 'JP'], '自动选择');
+      // Relay name appears exactly twice: once in activeGroup.proxies, once as relay group name
+      expect('_YueLink_Chain_Relay'.allMatches(result).length, 2);
     });
 
     test('returns original config for less than 2 nodes', () {
-      const config = 'proxies:\n  - name: A\n    type: ss\n';
-      expect(ConfigTemplate.injectProxyChain(config, ['A']), equals(config));
-      expect(ConfigTemplate.injectProxyChain(config, []), equals(config));
+      expect(ConfigTemplate.injectProxyChain(baseConfig, ['HK'], '自动选择'),
+          equals(baseConfig));
+      expect(ConfigTemplate.injectProxyChain(baseConfig, [], '自动选择'),
+          equals(baseConfig));
+    });
+
+    test('returns original config when activeGroup not found', () {
+      expect(
+          ConfigTemplate.injectProxyChain(
+              baseConfig, ['HK', 'JP'], 'NonExistent'),
+          equals(baseConfig));
+    });
+
+    test('strips legacy dialer-proxy fields on inject', () {
+      const legacyConfig = '''
+proxies:
+  - name: HK
+    type: ss
+    server: 1.2.3.4
+    port: 443
+    dialer-proxy: SomeNode
+  - name: JP
+    type: vmess
+    server: 5.6.7.8
+    port: 443
+proxy-groups:
+  - name: 自动选择
+    type: select
+    proxies:
+      - HK
+      - JP
+''';
+      final result = ConfigTemplate.injectProxyChain(
+          legacyConfig, ['HK', 'JP'], '自动选择');
+      expect(result, isNot(contains('dialer-proxy: SomeNode')));
+      expect(result, isNot(contains('dialer-proxy: "SomeNode"')));
     });
   });
 
   group('ConfigTemplate.removeProxyChain', () {
-    test('removes dialer-proxy but keeps _upstream', () {
+    test('removes relay group and its entry from proxy-groups', () {
+      const config = '''
+proxies:
+  - name: HK
+    type: ss
+    server: 1.2.3.4
+    port: 443
+proxy-groups:
+  - name: 自动选择
+    type: select
+    proxies:
+      - _YueLink_Chain_Relay
+      - HK
+  - name: _YueLink_Chain_Relay
+    type: relay
+    proxies:
+      - HK
+      - JP
+''';
+      final result = ConfigTemplate.removeProxyChain(config);
+      expect(result, isNot(contains('_YueLink_Chain_Relay')));
+    });
+
+    test('keeps _upstream dialer-proxy intact', () {
       const config = '''
 proxies:
   - name: _upstream
@@ -201,18 +265,35 @@ proxies:
     server: 1.2.3.4
     port: 443
     dialer-proxy: _upstream
-  - name: JP
-    type: vmess
-    server: 5.6.7.8
-    port: 443
-    dialer-proxy: HK
+proxy-groups:
+  - name: 自动选择
+    type: select
+    proxies:
+      - HK
 ''';
       final result = ConfigTemplate.removeProxyChain(config);
-      // _upstream reference should be kept (YAML writer may quote values)
-      expect(result, anyOf(contains('dialer-proxy: _upstream'), contains('dialer-proxy: "_upstream"')));
-      // Chain reference (HK) should be removed
-      expect(result, isNot(contains('dialer-proxy: HK')));
-      expect(result, isNot(contains('dialer-proxy: "HK"')));
+      expect(result,
+          anyOf(contains('dialer-proxy: _upstream'),
+              contains('dialer-proxy: "_upstream"')));
+    });
+
+    test('strips legacy dialer-proxy on remove', () {
+      const config = '''
+proxies:
+  - name: HK
+    type: ss
+    server: 1.2.3.4
+    port: 443
+    dialer-proxy: SomeNode
+proxy-groups:
+  - name: 自动选择
+    type: select
+    proxies:
+      - HK
+''';
+      final result = ConfigTemplate.removeProxyChain(config);
+      expect(result, isNot(contains('dialer-proxy: SomeNode')));
+      expect(result, isNot(contains('dialer-proxy: "SomeNode"')));
     });
   });
 

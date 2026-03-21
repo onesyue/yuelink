@@ -43,21 +43,25 @@ class CheckinCard extends ConsumerWidget {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: state.checkedIn
-                  ? const Color(0xFF22C55E).withValues(alpha: 0.12)
-                  : (isDark
-                      ? YLColors.zinc700
-                      : YLColors.zinc100),
+              color: state.checkedInOnOtherDevice
+                  ? Colors.orange.withValues(alpha: 0.12)
+                  : state.checkedIn
+                      ? const Color(0xFF22C55E).withValues(alpha: 0.12)
+                      : (isDark ? YLColors.zinc700 : YLColors.zinc100),
               borderRadius: BorderRadius.circular(YLRadius.lg),
             ),
             child: Icon(
-              state.checkedIn
-                  ? Icons.check_circle_rounded
-                  : Icons.calendar_today_rounded,
+              state.checkedInOnOtherDevice
+                  ? Icons.devices_rounded
+                  : state.checkedIn
+                      ? Icons.check_circle_rounded
+                      : Icons.calendar_today_rounded,
               size: 20,
-              color: state.checkedIn
-                  ? const Color(0xFF22C55E)
-                  : YLColors.zinc400,
+              color: state.checkedInOnOtherDevice
+                  ? Colors.orange
+                  : state.checkedIn
+                      ? const Color(0xFF22C55E)
+                      : YLColors.zinc400,
             ),
           ),
           const SizedBox(width: 12),
@@ -73,12 +77,18 @@ class CheckinCard extends ConsumerWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  state.checkedIn
-                      ? (state.lastResult != null
-                          ? '${s.checkinReward}: ${state.lastResult!.amountText}'
-                          : s.checkinDone)
-                      : s.checkinDesc,
-                  style: YLText.caption.copyWith(color: YLColors.zinc500),
+                  state.checkedInOnOtherDevice
+                      ? s.checkinOtherDevice
+                      : state.checkedIn
+                          ? (state.lastResult != null
+                              ? '${s.checkinReward}: ${state.lastResult!.amountText}'
+                              : s.checkinDone)
+                          : s.checkinDesc,
+                  style: YLText.caption.copyWith(
+                    color: state.checkedInOnOtherDevice
+                        ? Colors.orange
+                        : YLColors.zinc500,
+                  ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -86,8 +96,24 @@ class CheckinCard extends ConsumerWidget {
             ),
           ),
 
-          // ── Button ───────────────────────────────────────────────
-          if (state.checkedIn)
+          // ── Button / Badge ────────────────────────────────────────
+          if (state.checkedInOnOtherDevice)
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.orange.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(YLRadius.pill),
+              ),
+              child: Text(
+                s.checkinDone,
+                style: YLText.caption.copyWith(
+                  color: Colors.orange,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            )
+          else if (state.checkedIn)
             Container(
               padding:
                   const EdgeInsets.symmetric(horizontal: 12, vertical: 6),

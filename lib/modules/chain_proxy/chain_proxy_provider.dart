@@ -147,8 +147,12 @@ class ChainProxyNotifier extends Notifier<ChainProxyState> {
       }
       var config = await configFile.readAsString();
 
-      // 2. Inject chain
-      config = ConfigTemplate.injectProxyChain(config, state.nodes);
+      // 2. Inject chain (relay group scoped to activeGroup)
+      final injectGroup = groupName ?? '';
+      if (injectGroup.isEmpty) {
+        throw Exception('No active group selected');
+      }
+      config = ConfigTemplate.injectProxyChain(config, state.nodes, injectGroup);
 
       // 3. Write back
       await configFile.writeAsString(config);
@@ -160,10 +164,9 @@ class ChainProxyNotifier extends Notifier<ChainProxyState> {
       // 5. Wait briefly for mihomo to apply
       await Future.delayed(const Duration(milliseconds: 300));
 
-      // 6. Select exit node in the proxy group
-      final exitNode = state.exitNode;
-      if (groupName != null && exitNode != null) {
-        await manager.api.changeProxy(groupName, exitNode);
+      // 6. Select the relay group in activeGroup so traffic routes through the chain
+      if (groupName != null) {
+        await manager.api.changeProxy(groupName, '_YueLink_Chain_Relay');
       }
 
       // 7. Refresh proxy groups

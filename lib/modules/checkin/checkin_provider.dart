@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/storage/settings_service.dart';
 import '../../infrastructure/datasources/xboard_api.dart';
 import '../../modules/yue_auth/providers/yue_auth_providers.dart';
 import '../../shared/app_notifier.dart';
@@ -20,11 +21,16 @@ class CheckinState {
   final CheckinResult? lastResult;
   final String? error;
 
+  /// True when the server reports already-checked but this device has no
+  /// local record for today — meaning another device performed the check-in.
+  final bool checkedInOnOtherDevice;
+
   const CheckinState({
     this.checkedIn = false,
     this.loading = false,
     this.lastResult,
     this.error,
+    this.checkedInOnOtherDevice = false,
   });
 
   CheckinState copyWith({
@@ -32,12 +38,15 @@ class CheckinState {
     bool? loading,
     CheckinResult? lastResult,
     String? error,
+    bool? checkedInOnOtherDevice,
   }) =>
       CheckinState(
         checkedIn: checkedIn ?? this.checkedIn,
         loading: loading ?? this.loading,
         lastResult: lastResult ?? this.lastResult,
         error: error,
+        checkedInOnOtherDevice:
+            checkedInOnOtherDevice ?? this.checkedInOnOtherDevice,
       );
 }
 
@@ -49,25 +58,62 @@ final checkinProvider =
     NotifierProvider<CheckinNotifier, CheckinState>(CheckinNotifier.new);
 
 class CheckinNotifier extends Notifier<CheckinState> {
+  static const _dateKey = 'checkin_date';
+
   @override
   CheckinState build() {
-    // Check status on build
+    // Reset + refresh whenever auth changes (login / logout).
+    ref.listen(authProvider, (prev, next) {
+      if (prev?.isLoggedIn == true && !next.isLoggedIn) {
+        state = const CheckinState();
+      } else if (prev?.isLoggedIn == false && next.isLoggedIn) {
+        refresh();
+      }
+    });
+
     _checkStatus();
     return const CheckinState();
   }
 
-  /// Check if user has already checked in today.
+  // ── Helpers ────────────────────────────────────────────────────────
+
+  /// Today's date in UTC+8, e.g. "2026-03-21".
+  /// Forced to UTC+8 so the result is consistent across all timezones —
+  /// a user in UTC-5 won't get a different date than one in UTC+8.
+  static String _todayStr() {
+    final now = DateTime.now().toUtc().add(const Duration(hours: 8));
+    return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+  }
+
+  /// Whether this device recorded a check-in for today.
+  Future<bool> _selfCheckedToday() async {
+    final stored = await SettingsService.get<String>(_dateKey);
+    return stored == _todayStr();
+  }
+
+  /// Persist today's date as the local check-in record.
+  Future<void> _recordSelfCheckin() =>
+      SettingsService.set(_dateKey, _todayStr());
+
+  // ── Status check ───────────────────────────────────────────────────
+
+  /// Poll the server for today's check-in status and reconcile with local
+  /// record. Sets [CheckinState.checkedInOnOtherDevice] when the server
+  /// reports already-checked but this device has no local record.
   Future<void> _checkStatus() async {
     final auth = ref.read(authProvider);
     if (auth.token == null) return;
 
     try {
-      final repo = CheckinRepository();
-      final result = await repo.getCheckinStatus(auth.token!);
-      if (result != null) {
+      final result = await CheckinRepository().getCheckinStatus(auth.token!);
+      if (result == null) return;
+
+      if (result.alreadyChecked) {
+        final self = await _selfCheckedToday();
         state = state.copyWith(
-          checkedIn: result.alreadyChecked,
+          checkedIn: true,
           lastResult: result,
+          checkedInOnOtherDevice: !self,
         );
       }
     } catch (e) {
@@ -75,7 +121,10 @@ class CheckinNotifier extends Notifier<CheckinState> {
     }
   }
 
-  /// Perform check-in.
+  // ── Checkin action ─────────────────────────────────────────────────
+
+  /// Perform check-in. Distinguishes "other device already checked" from
+  /// "this device already checked" for a clear user message.
   Future<void> checkin() async {
     if (state.loading || state.checkedIn) return;
 
@@ -88,33 +137,37 @@ class CheckinNotifier extends Notifier<CheckinState> {
     state = state.copyWith(loading: true, error: null);
 
     try {
-      final repo = CheckinRepository();
-      final result = await repo.checkin(auth.token!);
+      final result = await CheckinRepository().checkin(auth.token!);
 
-      if (result.alreadyChecked && state.lastResult == null) {
-        // Server says already checked but we didn't know — update state
+      if (result.alreadyChecked) {
+        // Server says today is already done — check if it was us or another device.
+        final self = await _selfCheckedToday();
         state = state.copyWith(
           checkedIn: true,
           loading: false,
           lastResult: result,
+          checkedInOnOtherDevice: !self,
         );
-        AppNotifier.warning(S.current.checkinAlready);
+        AppNotifier.warning(
+            self ? S.current.checkinAlready : S.current.checkinOtherDevice);
         return;
       }
 
+      // Successful new check-in — persist local date.
+      await _recordSelfCheckin();
       state = state.copyWith(
         checkedIn: true,
         loading: false,
         lastResult: result,
+        checkedInOnOtherDevice: false,
       );
 
-      // Show reward toast
       final rewardText = result.type == 'traffic'
           ? S.current.checkinTrafficReward(result.amountText)
           : S.current.checkinBalanceReward(result.amountText);
       AppNotifier.success(rewardText);
 
-      // Refresh user profile to reflect new traffic/balance
+      // Refresh user profile to reflect new traffic/balance.
       ref.read(authProvider.notifier).refreshUserInfo();
     } on XBoardApiException catch (e) {
       state = state.copyWith(loading: false, error: e.message);
@@ -126,7 +179,8 @@ class CheckinNotifier extends Notifier<CheckinState> {
     }
   }
 
-  /// Refresh check-in status (e.g. after midnight).
+  /// Reset state and re-check from server (e.g. called on app resume or
+  /// when pulling to refresh on the Dashboard).
   Future<void> refresh() async {
     state = const CheckinState();
     await _checkStatus();

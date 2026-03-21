@@ -18,6 +18,8 @@ import '../../constants.dart';
 /// The bundled `default_config.yaml` is a **complete fallback** used
 /// when a subscription provides raw proxy nodes without groups/rules.
 class ConfigTemplate {
+  /// Name of the temporary relay group injected for chain proxy.
+  static const _relayGroupName = '_YueLink_Chain_Relay';
   ConfigTemplate._();
 
   /// Template variables and their replacement values.
@@ -167,14 +169,15 @@ class ConfigTemplate {
     }
   }
 
-  /// Inject a proxy chain: set `dialer-proxy` on each node to form a chain.
+  /// Inject a proxy chain scoped to [activeGroup] via a `type: relay` group.
   ///
-  /// [chainNames] is ordered [entry, hop1, ..., exit].
-  /// Entry node has no dialer-proxy (direct out).
-  /// Each subsequent node gets `dialer-proxy: previous_node`.
+  /// Creates `_YueLink_Chain_Relay` (relay type, ordered [entry…exit]) and
+  /// inserts it at the front of [activeGroup].proxies. Node definitions are
+  /// never modified — no `dialer-proxy` pollution to unrelated groups.
   ///
-  /// Clears any existing dialer-proxy fields first to avoid conflicts.
-  static String injectProxyChain(String config, List<String> chainNames) {
+  /// Also strips any legacy `dialer-proxy` fields left from the old approach.
+  static String injectProxyChain(
+      String config, List<String> chainNames, String activeGroup) {
     if (chainNames.length < 2) return config;
     try {
       final yaml = loadYaml(config);
@@ -188,45 +191,50 @@ class ConfigTemplate {
           (mutable['proxy-groups'] as List<dynamic>?)?.cast<dynamic>() ??
               <dynamic>[];
 
-      // Build name→index for both proxies and proxy-groups
-      final proxyIndex = <String, int>{};
-      for (var i = 0; i < proxies.length; i++) {
-        if (proxies[i] is Map) {
-          proxyIndex[proxies[i]['name'] as String? ?? ''] = i;
+      // Strip legacy dialer-proxy fields (backward compat with old approach)
+      for (final p in proxies) {
+        if (p is Map<String, dynamic> && p['dialer-proxy'] != '_upstream') {
+          p.remove('dialer-proxy');
         }
       }
-      final groupIndex = <String, int>{};
-      for (var i = 0; i < proxyGroups.length; i++) {
-        if (proxyGroups[i] is Map) {
-          groupIndex[proxyGroups[i]['name'] as String? ?? ''] = i;
+      for (final g in proxyGroups) {
+        if (g is Map<String, dynamic> && g['dialer-proxy'] != '_upstream') {
+          g.remove('dialer-proxy');
         }
       }
 
-      // 1. Clear ALL existing dialer-proxy (clean slate)
-      for (final proxy in proxies) {
-        if (proxy is Map<String, dynamic>) proxy.remove('dialer-proxy');
-      }
-      for (final group in proxyGroups) {
-        if (group is Map<String, dynamic>) group.remove('dialer-proxy');
-      }
+      // Remove any stale relay group (idempotent re-inject / chain change)
+      proxyGroups.removeWhere(
+          (g) => g is Map && g['name'] == _relayGroupName);
 
-      // 2. Set chain: each non-first item dials through the previous item.
-      //    Both individual proxies and proxy-groups are supported as chain items.
-      for (var i = 1; i < chainNames.length; i++) {
-        final name = chainNames[i];
-        final prev = chainNames[i - 1];
-        final pIdx = proxyIndex[name];
-        if (pIdx != null && proxies[pIdx] is Map<String, dynamic>) {
-          (proxies[pIdx] as Map<String, dynamic>)['dialer-proxy'] = prev;
-        }
-        final gIdx = groupIndex[name];
-        if (gIdx != null && proxyGroups[gIdx] is Map<String, dynamic>) {
-          (proxyGroups[gIdx] as Map<String, dynamic>)['dialer-proxy'] = prev;
+      // Locate the target proxy-group
+      Map<String, dynamic>? targetGroup;
+      for (final g in proxyGroups) {
+        if (g is Map<String, dynamic> && g['name'] == activeGroup) {
+          targetGroup = g;
+          break;
         }
       }
+      if (targetGroup == null) return config;
+
+      // Sanitise targetGroup.proxies: remove any stale relay entry
+      final groupProxies =
+          ((targetGroup['proxies'] as List<dynamic>?) ?? []).toList();
+      groupProxies.removeWhere((p) => p == _relayGroupName);
+
+      // Create relay group and append to proxy-groups
+      proxyGroups.add(<String, dynamic>{
+        'name': _relayGroupName,
+        'type': 'relay',
+        'proxies': List<String>.from(chainNames),
+      });
+
+      // Insert relay at front of targetGroup.proxies
+      groupProxies.insert(0, _relayGroupName);
+      targetGroup['proxies'] = groupProxies;
 
       mutable['proxies'] = proxies;
-      if (proxyGroups.isNotEmpty) mutable['proxy-groups'] = proxyGroups;
+      mutable['proxy-groups'] = proxyGroups;
       return YamlWriter().write(mutable);
     } catch (e) {
       debugPrint('[ConfigTemplate] injectProxyChain error: $e');
@@ -234,7 +242,8 @@ class ConfigTemplate {
     }
   }
 
-  /// Remove all `dialer-proxy` fields from proxies and proxy-groups (disconnect chain).
+  /// Remove the relay chain group and clean up all proxy-group proxies lists.
+  /// Also strips any legacy `dialer-proxy` fields for backward compat.
   static String removeProxyChain(String config) {
     try {
       final yaml = loadYaml(config);
@@ -248,23 +257,31 @@ class ConfigTemplate {
           (mutable['proxy-groups'] as List<dynamic>?)?.cast<dynamic>() ??
               <dynamic>[];
 
-      var changed = false;
-      for (final proxy in proxies) {
-        if (proxy is Map<String, dynamic> && proxy.containsKey('dialer-proxy')) {
-          if (proxy['dialer-proxy'] == '_upstream') continue;
-          proxy.remove('dialer-proxy');
-          changed = true;
+      // Strip legacy dialer-proxy fields (backward compat)
+      for (final p in proxies) {
+        if (p is Map<String, dynamic> && p['dialer-proxy'] != '_upstream') {
+          p.remove('dialer-proxy');
         }
       }
-      for (final group in proxyGroups) {
-        if (group is Map<String, dynamic> && group.containsKey('dialer-proxy')) {
-          if (group['dialer-proxy'] == '_upstream') continue;
-          group.remove('dialer-proxy');
-          changed = true;
+      for (final g in proxyGroups) {
+        if (g is Map<String, dynamic> && g['dialer-proxy'] != '_upstream') {
+          g.remove('dialer-proxy');
         }
       }
 
-      if (!changed) return config;
+      // Remove relay name from every group's proxies list (defensive sweep)
+      for (final g in proxyGroups) {
+        if (g is Map<String, dynamic>) {
+          final gp = (g['proxies'] as List<dynamic>?)?.toList();
+          if (gp != null && gp.remove(_relayGroupName)) {
+            g['proxies'] = gp;
+          }
+        }
+      }
+
+      // Remove the relay group itself
+      proxyGroups.removeWhere((g) => g is Map && g['name'] == _relayGroupName);
+
       mutable['proxies'] = proxies;
       if (proxyGroups.isNotEmpty) mutable['proxy-groups'] = proxyGroups;
       return YamlWriter().write(mutable);
