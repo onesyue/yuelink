@@ -12,13 +12,11 @@ import 'overview_card.dart';
 
 class HeroCard extends ConsumerWidget {
   final CoreStatus status;
-  final ValueNotifier<String> uptimeNotifier;
   final VoidCallback onToggle;
 
   const HeroCard({
     super.key,
     required this.status,
-    required this.uptimeNotifier,
     required this.onToggle,
   });
 
@@ -76,9 +74,7 @@ class HeroCard extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Row 1: Status + uptime ───────── Power button
-          // Flexible wraps the left text group so the PowerButton stays pinned
-          // right regardless of status-text or uptime-text length.
+          // Row 1: Status dot + label ───────── Power button
           Row(
             children: [
               YLStatusDot(
@@ -88,50 +84,19 @@ class HeroCard extends ConsumerWidget {
                 glow: isRunning,
               ),
               const SizedBox(width: 8),
-              Flexible(
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Flexible(
-                      child: Text(
-                        isRunning
-                            ? s.statusConnected
-                            : (isTransitioning
-                                ? s.statusProcessing
-                                : s.statusDisconnected),
-                        style: YLText.label.copyWith(
-                          color: isRunning ? YLColors.connected : YLColors.zinc500,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    if (isRunning)
-                      ValueListenableBuilder<String>(
-                        valueListenable: uptimeNotifier,
-                        builder: (_, text, __) {
-                          if (text.isEmpty) return const SizedBox.shrink();
-                          return Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const SizedBox(width: 8),
-                              Text(
-                                text,
-                                style: YLText.caption.copyWith(
-                                  color: YLColors.zinc400,
-                                  fontFeatures: const [
-                                    FontFeature.tabularFigures()
-                                  ],
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
-                          );
-                        },
-                      ),
-                  ],
+              Expanded(
+                child: Text(
+                  isRunning
+                      ? s.statusConnected
+                      : (isTransitioning
+                          ? s.statusProcessing
+                          : s.statusDisconnected),
+                  style: YLText.label.copyWith(
+                    color: isRunning ? YLColors.connected : YLColors.zinc500,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
               const SizedBox(width: 8),

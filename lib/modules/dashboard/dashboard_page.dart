@@ -1,13 +1,9 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/storage/settings_service.dart';
 import '../../l10n/app_strings.dart';
 import '../../modules/yue_auth/providers/yue_auth_providers.dart';
-import '../../providers/connection_provider.dart';
 import '../../providers/core_provider.dart';
 import '../../providers/profile_provider.dart';
 import '../../shared/app_notifier.dart';
@@ -33,96 +29,7 @@ class DashboardPage extends ConsumerStatefulWidget {
 }
 
 class _DashboardPageState extends ConsumerState<DashboardPage> {
-  DateTime? _connectedSince;
-  Timer? _uptimeTimer;
-  final _uptimeNotifier = ValueNotifier<String>('');
   bool _busy = false;
-  ProviderSubscription? _statusSub;
-
-  @override
-  void initState() {
-    super.initState();
-    // Listen for core status changes to manage the uptime timer.
-    // Using listenManual avoids re-registering in every build() call.
-    Future.microtask(() {
-      _statusSub = ref.listenManual(coreStatusProvider, (prev, next) {
-        if (next == CoreStatus.running) {
-          // Only reset _connectedSince on a real stopped→running transition.
-          // If the timer is already running (e.g. widget rebuild), skip.
-          if (_connectedSince == null) {
-            _startUptimeTimer();
-          }
-        } else if (next == CoreStatus.stopped) {
-          _stopUptimeTimer();
-        }
-      });
-      // Sync initial state if core is already running (e.g. Android process
-      // restore where Go core survived). Try to restore persisted timestamp.
-      if (ref.read(coreStatusProvider) == CoreStatus.running) {
-        _restoreOrStartUptimeTimer();
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _statusSub?.close();
-    _uptimeTimer?.cancel();
-    _uptimeNotifier.dispose();
-    super.dispose();
-  }
-
-  void _startUptimeTimer({DateTime? since}) {
-    _connectedSince = since ?? DateTime.now();
-    // Persist so we can restore after Android process recreation
-    SettingsService.set('connected_since', _connectedSince!.millisecondsSinceEpoch);
-    _uptimeNotifier.value = '';
-    _uptimeTimer?.cancel();
-    _uptimeTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (_connectedSince == null) return;
-      final diff = DateTime.now().difference(_connectedSince!);
-      final h = diff.inHours;
-      final m = diff.inMinutes % 60;
-      final sec = diff.inSeconds % 60;
-      final String newValue;
-      if (h > 0) {
-        newValue = '${h}h ${m}m';
-      } else if (m > 0) {
-        newValue = '${m}m ${sec}s';
-      } else {
-        newValue = '${sec}s';
-      }
-      // Only notify listeners when the display string actually changes
-      if (_uptimeNotifier.value != newValue) {
-        _uptimeNotifier.value = newValue;
-      }
-    });
-  }
-
-  /// Restore persisted _connectedSince on recovery (Android process recreate
-  /// where Go core survived). Falls back to DateTime.now() if not found.
-  Future<void> _restoreOrStartUptimeTimer() async {
-    final savedMs = await SettingsService.get<int>('connected_since');
-    if (savedMs != null && savedMs > 0) {
-      final saved = DateTime.fromMillisecondsSinceEpoch(savedMs);
-      // Sanity check: must be in the past and not more than 7 days old
-      if (saved.isBefore(DateTime.now()) &&
-          DateTime.now().difference(saved).inDays < 7) {
-        _startUptimeTimer(since: saved);
-        return;
-      }
-    }
-    _startUptimeTimer();
-  }
-
-  void _stopUptimeTimer() {
-    _uptimeTimer?.cancel();
-    _uptimeTimer = null;
-    _connectedSince = null;
-    _uptimeNotifier.value = '';
-    // Clear persisted timestamp
-    SettingsService.set('connected_since', null);
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -178,18 +85,13 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                       RepaintBoundary(
                         child: HeroCard(
                           status: status,
-                          uptimeNotifier: _uptimeNotifier,
                           onToggle: () => _toggle(context, ref),
                         ),
                       ),
 
-                      // ── Latest announcement (always visible) ────────
-                      const SizedBox(height: 12),
-                      const RepaintBoundary(child: AnnouncementBanner()),
-
                       // ── Running: carrier, exit IP, chart, stats ─────
-                      // Wrap in AnimatedSize + AnimatedOpacity to avoid
-                      // layout jump / flash when core starts/stops.
+                      // Placed immediately after HeroCard so live data
+                      // flows continuously from the connect status.
                       AnimatedSize(
                         duration: const Duration(milliseconds: 300),
                         curve: Curves.easeInOut,
@@ -238,8 +140,12 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                         ),
                       ),
 
+                      // ── Announcement (after live data, before account) ──
+                      const SizedBox(height: 12),
+                      const RepaintBoundary(child: AnnouncementBanner()),
+
                       // ── Subscription info ───────────────────────────
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 12),
                       const RepaintBoundary(child: SubscriptionCard()),
 
                       // ── Daily check-in ────────────────────────────
