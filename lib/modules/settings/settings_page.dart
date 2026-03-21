@@ -407,7 +407,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   children: [
                     YLInfoRow(
                       label: s.checkUpdate,
-                      value: AppConstants.appVersion,
+                      value: ref.watch(appVersionProvider).valueOrNull ?? '',
                       trailing: _checkingUpdate
                           ? const SizedBox(
                               width: 14, height: 14,
@@ -489,7 +489,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                       onTap: () => showLicensePage(
                         context: context,
                         applicationName: AppConstants.appName,
-                        applicationVersion: AppConstants.appVersion,
+                        applicationVersion: ref.watch(appVersionProvider).valueOrNull ?? '',
                       ),
                     ),
                   ],
