@@ -95,6 +95,15 @@ class CheckinNotifier extends Notifier<CheckinState> {
   Future<void> _recordSelfCheckin() =>
       SettingsService.set(_dateKey, _todayStr());
 
+  /// Whether a server error message indicates the user has already checked in
+  /// (some backends return a business error instead of alreadyChecked:true).
+  static bool _isAlreadyCheckedError(String message) {
+    final m = message.toLowerCase();
+    return m.contains('already') ||
+        m.contains('cannot determine') ||
+        m.contains('已签到');
+  }
+
   // ── Status check ───────────────────────────────────────────────────
 
   /// Poll the server for today's check-in status and reconcile with local
@@ -170,8 +179,22 @@ class CheckinNotifier extends Notifier<CheckinState> {
       // Refresh user profile to reflect new traffic/balance.
       ref.read(authProvider.notifier).refreshUserInfo();
     } on XBoardApiException catch (e) {
+      // Some checkin servers return a business error (e.g. "cannot determine
+      // user ID") instead of alreadyChecked:true when the user has already
+      // checked in. Intercept known patterns and show the correct message.
+      if (_isAlreadyCheckedError(e.message)) {
+        final self = await _selfCheckedToday();
+        state = state.copyWith(
+          checkedIn: true,
+          loading: false,
+          checkedInOnOtherDevice: !self,
+        );
+        AppNotifier.warning(
+            self ? S.current.checkinAlready : S.current.checkinOtherDevice);
+        return;
+      }
       state = state.copyWith(loading: false, error: e.message);
-      AppNotifier.error(e.message);
+      AppNotifier.error(S.current.checkinFailed);
     } catch (e) {
       debugPrint('[Checkin] error: $e');
       state = state.copyWith(loading: false, error: e.toString());
