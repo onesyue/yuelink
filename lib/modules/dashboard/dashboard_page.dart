@@ -9,6 +9,7 @@ import '../../providers/profile_provider.dart';
 import '../../shared/app_notifier.dart';
 import '../../core/kernel/core_manager.dart';
 import '../../services/profile_service.dart';
+import '../../providers/connection_provider.dart';
 import '../../providers/connectivity_provider.dart';
 import '../../theme.dart';
 import '../announcements/providers/announcements_providers.dart';
