@@ -157,9 +157,13 @@ class _GroupCardState extends ConsumerState<GroupCard>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Header (tap to toggle) ──────────────────────────────────
+          // ── Header (tap to toggle, long-press to add group to chain) ──
           InkWell(
             onTap: _toggle,
+            onLongPress: () {
+              ref.read(chainProxyProvider.notifier).addNode(group.name);
+              AppNotifier.info(S.of(context).chainAddHint);
+            },
             borderRadius: BorderRadius.vertical(
               top: const Radius.circular(YLRadius.xl),
               bottom: _expanded

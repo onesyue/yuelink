@@ -116,31 +116,36 @@ class ChainProxySheet extends ConsumerWidget {
                     ],
                   ),
                 )
-              : ReorderableListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  itemCount: chain.nodes.length,
-                  onReorder: (oldI, newI) => ref
-                      .read(chainProxyProvider.notifier)
-                      .reorder(oldI, newI),
-                  itemBuilder: (context, index) {
-                    final name = chain.nodes[index];
-                    final isEntry = index == 0;
-                    final isExit =
-                        index == chain.nodes.length - 1 &&
-                            chain.nodes.length >= 2;
-                    return _ChainNodeTile(
-                      key: ValueKey(name),
-                      name: name,
-                      index: index,
-                      isEntry: isEntry,
-                      isExit: isExit,
-                      isDark: isDark,
-                      onRemove: () => ref
-                          .read(chainProxyProvider.notifier)
-                          .removeNode(index),
-                    );
-                  },
-                ),
+              : Builder(builder: (context) {
+                  final groupNames =
+                      groups.map((g) => g.name).toSet();
+                  return ReorderableListView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    itemCount: chain.nodes.length,
+                    onReorder: (oldI, newI) => ref
+                        .read(chainProxyProvider.notifier)
+                        .reorder(oldI, newI),
+                    itemBuilder: (context, index) {
+                      final name = chain.nodes[index];
+                      final isEntry = index == 0;
+                      final isExit =
+                          index == chain.nodes.length - 1 &&
+                              chain.nodes.length >= 2;
+                      return _ChainNodeTile(
+                        key: ValueKey(name),
+                        name: name,
+                        index: index,
+                        isEntry: isEntry,
+                        isExit: isExit,
+                        isGroup: groupNames.contains(name),
+                        isDark: isDark,
+                        onRemove: () => ref
+                            .read(chainProxyProvider.notifier)
+                            .removeNode(index),
+                      );
+                    },
+                  );
+                }),
         ),
 
         // ── Connect / Disconnect button ────────────────────────────────
@@ -262,6 +267,7 @@ class _ChainNodeTile extends StatelessWidget {
   final int index;
   final bool isEntry;
   final bool isExit;
+  final bool isGroup;
   final bool isDark;
   final VoidCallback onRemove;
 
@@ -271,6 +277,7 @@ class _ChainNodeTile extends StatelessWidget {
     required this.index,
     required this.isEntry,
     required this.isExit,
+    required this.isGroup,
     required this.isDark,
     required this.onRemove,
   });
@@ -298,6 +305,16 @@ class _ChainNodeTile extends StatelessWidget {
             const Icon(Icons.drag_handle_rounded,
                 size: 18, color: YLColors.zinc400),
             const SizedBox(width: 8),
+
+            // Type icon (group vs node)
+            Icon(
+              isGroup
+                  ? Icons.account_tree_rounded
+                  : Icons.wifi_tethering_rounded,
+              size: 14,
+              color: isGroup ? Colors.purple.shade300 : YLColors.zinc400,
+            ),
+            const SizedBox(width: 6),
 
             // Role badge
             if (isEntry || isExit)

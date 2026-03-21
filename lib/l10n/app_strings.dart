@@ -799,9 +799,12 @@ class S {
   String get chainClear => _e ? 'Clear' : '清空';
   String get chainEmptyHint => _e ? 'No nodes in chain' : '暂无链路节点';
   String get chainEmptyDesc => _e
-      ? 'Long-press any node on the Lines page to add it'
-      : '在线路页面长按节点即可加入链路';
+      ? 'Long-press any node or group on the Lines page to add it'
+      : '在线路页面长按节点或策略组即可加入链路';
   String get chainAddHint => _e ? 'Added to proxy chain' : '已添加到链式代理';
+  String get msgSystemProxyConflict => _e
+      ? 'Another proxy client took over — stopping YueLink proxy'
+      : '检测到其他代理客户端已接管系统代理，已停止 YueLink 代理';
 
   // ── Checkin ──────────────────────────────────────────────────
   String get checkinTitle => _e ? 'Daily Check-in' : '每日签到';

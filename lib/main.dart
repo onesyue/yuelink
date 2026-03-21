@@ -40,6 +40,43 @@ import 'theme.dart';
 /// Global navigator key for deep-link navigation outside widget tree.
 final navigatorKey = GlobalKey<NavigatorState>();
 
+// ── Single-instance IPC server (macOS / Windows) ──────────────────────────────
+/// Local TCP server used as a single-instance mutex.
+/// Port 47866 is fixed — chosen to avoid common conflicts.
+/// The server accepts a "show\n" message from a second instance and brings
+/// the window to the foreground. The second instance then exits immediately.
+ServerSocket? _singleInstanceServer;
+
+Future<bool> _ensureSingleInstance() async {
+  const port = 47866;
+  try {
+    _singleInstanceServer = await ServerSocket.bind(
+        InternetAddress.loopbackIPv4, port,
+        shared: false);
+    _singleInstanceServer!.listen((socket) {
+      socket.listen((data) {
+        final msg = String.fromCharCodes(data).trim();
+        if (msg == 'show') {
+          windowManager.show();
+          windowManager.focus();
+        }
+        socket.close();
+      });
+    });
+    return true; // We are the first instance
+  } on SocketException {
+    // Another instance is running — ask it to show itself
+    try {
+      final socket = await Socket.connect(InternetAddress.loopbackIPv4, port,
+          timeout: const Duration(seconds: 1));
+      socket.write('show\n');
+      await socket.flush();
+      await socket.close();
+    } catch (_) {}
+    return false;
+  }
+}
+
 /// Jump-to-profile-page notifier (deep link triggers this).
 final deepLinkUrlProvider = StateProvider<String?>((ref) => null);
 
@@ -86,6 +123,17 @@ void main() async {
 
   // Apply global strings language before runApp (for tray etc.)
   S.setLanguage(savedLanguage);
+
+  // ── Single instance guard (macOS / Windows) ─────────────────────────────
+  // Must run before windowManager.ensureInitialized() so the second instance
+  // can exit(0) before creating a window. The first instance's server is ready
+  // to receive "show" commands as soon as windowManager is initialized below.
+  if (Platform.isMacOS || Platform.isWindows) {
+    final isFirst = await _ensureSingleInstance();
+    if (!isFirst) {
+      exit(0);
+    }
+  }
 
   // Configure launch at startup (macOS / Windows only)
   if (Platform.isMacOS || Platform.isWindows) {
@@ -723,6 +771,7 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
       // Always clear system proxy on exit regardless of settings/state,
       // so quitting the app never leaves a dead proxy configured.
       if (Platform.isMacOS || Platform.isWindows) {
+        try { await _singleInstanceServer?.close(); } catch (_) {}
         await CoreActions.clearSystemProxyStatic().catchError((_) {});
         await windowManager.setPreventClose(false);
         // Use destroy() instead of close() — close() triggers onWindowClose

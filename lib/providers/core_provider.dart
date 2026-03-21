@@ -237,7 +237,7 @@ class CoreActions {
       }
       // Verify the proxy was actually set
       if (anySuccess) {
-        final verified = await _verifySystemProxy(mixedPort);
+        final verified = await verifySystemProxy(mixedPort);
         if (!verified) {
           debugPrint('[SystemProxy] WARNING: proxy set commands succeeded '
               'but verification failed');
@@ -279,42 +279,64 @@ class CoreActions {
     return false;
   }
 
-  /// Verify that macOS system proxy is actually pointing to our port.
-  /// Checks ALL network services (not just the first match) so the log
-  /// shows which interfaces have the proxy enabled.
-  static Future<bool> _verifySystemProxy(int mixedPort) async {
-    if (!Platform.isMacOS) return true;
-    try {
-      final services = await _listNetworkServices();
-      final verified = <String>[];
-      final missing = <String>[];
-      for (final svc in services) {
-        final result = await Process.run(
-            'networksetup', ['-getwebproxy', svc]);
-        final output = result.stdout as String;
-        if (output.contains('Enabled: Yes') &&
-            output.contains('Port: $mixedPort')) {
-          verified.add(svc);
-        } else {
-          missing.add(svc);
+  /// Verify that system proxy is actually pointing to our port.
+  /// Returns true if at least one interface has our proxy set (macOS),
+  /// or the registry points to our port (Windows).
+  static Future<bool> verifySystemProxy(int mixedPort) async {
+    if (Platform.isMacOS) {
+      try {
+        final services = await _listNetworkServices();
+        final verified = <String>[];
+        final missing = <String>[];
+        for (final svc in services) {
+          final result = await Process.run(
+              'networksetup', ['-getwebproxy', svc]);
+          final output = result.stdout as String;
+          if (output.contains('Enabled: Yes') &&
+              output.contains('Port: $mixedPort')) {
+            verified.add(svc);
+          } else {
+            missing.add(svc);
+          }
         }
+        if (verified.isNotEmpty) {
+          debugPrint('[SystemProxy] Proxy active on: ${verified.join(', ')} '
+              '(port $mixedPort)');
+          if (missing.isNotEmpty) {
+            debugPrint('[SystemProxy] Not set on: ${missing.join(', ')} '
+                '(inactive interfaces)');
+          }
+          return true;
+        }
+        debugPrint('[SystemProxy] Verification failed: no service has '
+            'proxy set to port $mixedPort');
+        return false;
+      } catch (e) {
+        debugPrint('[SystemProxy] Verification error: $e');
+        return false;
       }
-      if (verified.isNotEmpty) {
-        debugPrint('[SystemProxy] Proxy active on: ${verified.join(', ')} '
-            '(port $mixedPort)');
-        if (missing.isNotEmpty) {
-          debugPrint('[SystemProxy] Not set on: ${missing.join(', ')} '
-              '(inactive interfaces)');
+    } else if (Platform.isWindows) {
+      try {
+        const regKey =
+            r'HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings';
+        final r1 = await Process.run('reg', ['query', regKey, '/v', 'ProxyEnable']);
+        final o1 = r1.stdout as String;
+        // Enabled value shows as "0x1" in reg query output
+        if (!o1.contains('0x1')) return false;
+        final r2 = await Process.run('reg', ['query', regKey, '/v', 'ProxyServer']);
+        final o2 = r2.stdout as String;
+        if (!o2.contains('127.0.0.1:$mixedPort')) {
+          debugPrint('[SystemProxy] Windows proxy server changed, '
+              'no longer pointing to port $mixedPort');
+          return false;
         }
         return true;
+      } catch (e) {
+        debugPrint('[SystemProxy] Windows verification error: $e');
+        return false;
       }
-      debugPrint('[SystemProxy] Verification failed: no service has '
-          'proxy set to port $mixedPort');
-      return false;
-    } catch (e) {
-      debugPrint('[SystemProxy] Verification error: $e');
-      return false;
     }
+    return true;
   }
 
   static Future<void> clearSystemProxyStatic() async {
@@ -412,6 +434,7 @@ final coreHeartbeatProvider = Provider<void>((ref) {
   if (manager.isMockMode) return; // mock never crashes
 
   var failures = 0;
+  var proxyCheckTick = 0;
   final timer = Timer.periodic(const Duration(seconds: 10), (_) async {
     // Skip heartbeat while recovery is in progress — the recovery logic
     // handles state transitions. Without this guard, heartbeat can
@@ -429,6 +452,30 @@ final coreHeartbeatProvider = Provider<void>((ref) {
 
     if (apiOk && ffiRunning) {
       failures = 0;
+
+      // Every 30s on desktop, check if another proxy client stole our system proxy.
+      // If detected, stop the core gracefully — let the newer client take over.
+      if (Platform.isMacOS || Platform.isWindows) {
+        proxyCheckTick++;
+        if (proxyCheckTick >= 3) {
+          proxyCheckTick = 0;
+          if (ref.read(systemProxyOnConnectProvider)) {
+            final port = manager.mixedPort;
+            final proxyOk = await CoreActions.verifySystemProxy(port);
+            if (!proxyOk) {
+              debugPrint('[Heartbeat] system proxy conflict — another client took over port $port');
+              AppNotifier.warning(S.current.msgSystemProxyConflict);
+              ref.read(coreStatusProvider.notifier).state = CoreStatus.stopped;
+              ref.read(trafficProvider.notifier).state = const Traffic();
+              ref.read(trafficHistoryProvider.notifier).state = TrafficHistory();
+              ref.read(trafficHistoryVersionProvider.notifier).state = 0;
+              manager.stop().catchError((_) {});
+              failures = 0;
+              return;
+            }
+          }
+        }
+      }
     } else {
       failures++;
       debugPrint('[Heartbeat] failure #$failures — '

@@ -184,32 +184,49 @@ class ConfigTemplate {
       final proxies =
           (mutable['proxies'] as List<dynamic>?)?.cast<dynamic>() ??
               <dynamic>[];
+      final proxyGroups =
+          (mutable['proxy-groups'] as List<dynamic>?)?.cast<dynamic>() ??
+              <dynamic>[];
 
-      // Build name→proxy index for quick lookup
-      final nameIndex = <String, int>{};
+      // Build name→index for both proxies and proxy-groups
+      final proxyIndex = <String, int>{};
       for (var i = 0; i < proxies.length; i++) {
         if (proxies[i] is Map) {
-          nameIndex[proxies[i]['name'] as String? ?? ''] = i;
+          proxyIndex[proxies[i]['name'] as String? ?? ''] = i;
+        }
+      }
+      final groupIndex = <String, int>{};
+      for (var i = 0; i < proxyGroups.length; i++) {
+        if (proxyGroups[i] is Map) {
+          groupIndex[proxyGroups[i]['name'] as String? ?? ''] = i;
         }
       }
 
       // 1. Clear ALL existing dialer-proxy (clean slate)
       for (final proxy in proxies) {
-        if (proxy is Map<String, dynamic>) {
-          proxy.remove('dialer-proxy');
-        }
+        if (proxy is Map<String, dynamic>) proxy.remove('dialer-proxy');
+      }
+      for (final group in proxyGroups) {
+        if (group is Map<String, dynamic>) group.remove('dialer-proxy');
       }
 
-      // 2. Set chain: from index 1 onwards, dialer-proxy = chainNames[i-1]
+      // 2. Set chain: each non-first item dials through the previous item.
+      //    Both individual proxies and proxy-groups are supported as chain items.
       for (var i = 1; i < chainNames.length; i++) {
-        final idx = nameIndex[chainNames[i]];
-        if (idx != null && proxies[idx] is Map<String, dynamic>) {
-          (proxies[idx] as Map<String, dynamic>)['dialer-proxy'] =
-              chainNames[i - 1];
+        final name = chainNames[i];
+        final prev = chainNames[i - 1];
+        final pIdx = proxyIndex[name];
+        if (pIdx != null && proxies[pIdx] is Map<String, dynamic>) {
+          (proxies[pIdx] as Map<String, dynamic>)['dialer-proxy'] = prev;
+        }
+        final gIdx = groupIndex[name];
+        if (gIdx != null && proxyGroups[gIdx] is Map<String, dynamic>) {
+          (proxyGroups[gIdx] as Map<String, dynamic>)['dialer-proxy'] = prev;
         }
       }
 
       mutable['proxies'] = proxies;
+      if (proxyGroups.isNotEmpty) mutable['proxy-groups'] = proxyGroups;
       return YamlWriter().write(mutable);
     } catch (e) {
       debugPrint('[ConfigTemplate] injectProxyChain error: $e');
@@ -217,7 +234,7 @@ class ConfigTemplate {
     }
   }
 
-  /// Remove all `dialer-proxy` fields from proxies (disconnect chain).
+  /// Remove all `dialer-proxy` fields from proxies and proxy-groups (disconnect chain).
   static String removeProxyChain(String config) {
     try {
       final yaml = loadYaml(config);
@@ -227,19 +244,29 @@ class ConfigTemplate {
       final proxies =
           (mutable['proxies'] as List<dynamic>?)?.cast<dynamic>() ??
               <dynamic>[];
+      final proxyGroups =
+          (mutable['proxy-groups'] as List<dynamic>?)?.cast<dynamic>() ??
+              <dynamic>[];
 
       var changed = false;
       for (final proxy in proxies) {
         if (proxy is Map<String, dynamic> && proxy.containsKey('dialer-proxy')) {
-          // Keep _upstream (that's the upstream proxy feature, not chain)
           if (proxy['dialer-proxy'] == '_upstream') continue;
           proxy.remove('dialer-proxy');
+          changed = true;
+        }
+      }
+      for (final group in proxyGroups) {
+        if (group is Map<String, dynamic> && group.containsKey('dialer-proxy')) {
+          if (group['dialer-proxy'] == '_upstream') continue;
+          group.remove('dialer-proxy');
           changed = true;
         }
       }
 
       if (!changed) return config;
       mutable['proxies'] = proxies;
+      if (proxyGroups.isNotEmpty) mutable['proxy-groups'] = proxyGroups;
       return YamlWriter().write(mutable);
     } catch (e) {
       debugPrint('[ConfigTemplate] removeProxyChain error: $e');
