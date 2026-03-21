@@ -18,8 +18,9 @@ import '../../constants.dart';
 /// The bundled `default_config.yaml` is a **complete fallback** used
 /// when a subscription provides raw proxy nodes without groups/rules.
 class ConfigTemplate {
-  /// Name of the temporary relay group injected for chain proxy.
-  static const _relayGroupName = '_YueLink_Chain_Relay';
+  /// Prefix for temporary per-node wrapper groups injected for chain proxy.
+  /// Groups are named _YueLink_Chain_0, _YueLink_Chain_1, …
+  static const chainGroupPrefix = '_YueLink_Chain_';
   ConfigTemplate._();
 
   /// Template variables and their replacement values.
@@ -169,13 +170,19 @@ class ConfigTemplate {
     }
   }
 
-  /// Inject a proxy chain scoped to [activeGroup] via a `type: relay` group.
+  /// Inject a proxy chain scoped to [activeGroup] using per-node select wrapper
+  /// groups connected via `dialer-proxy`.
   ///
-  /// Creates `_YueLink_Chain_Relay` (relay type, ordered [entry…exit]) and
-  /// inserts it at the front of [activeGroup].proxies. Node definitions are
-  /// never modified — no `dialer-proxy` pollution to unrelated groups.
+  /// mihomo removed `type: relay` — this is the recommended replacement.
+  /// Creates N wrapper groups (_YueLink_Chain_0 … _YueLink_Chain_N-1), each
+  /// wrapping one chain node, linked via dialer-proxy. Only the exit wrapper
+  /// group is inserted into [activeGroup].proxies — original node definitions
+  /// are never modified, so other groups are not polluted.
   ///
-  /// Also strips any legacy `dialer-proxy` fields left from the old approach.
+  /// Example for chain [NodeA, NodeB]:
+  ///   _YueLink_Chain_0: select [NodeA]          (entry, no dialer-proxy)
+  ///   _YueLink_Chain_1: select [NodeB], dialer-proxy: _YueLink_Chain_0
+  ///   activeGroup.proxies: [_YueLink_Chain_1, NodeA, NodeB, ...]
   static String injectProxyChain(
       String config, List<String> chainNames, String activeGroup) {
     if (chainNames.length < 2) return config;
@@ -191,21 +198,16 @@ class ConfigTemplate {
           (mutable['proxy-groups'] as List<dynamic>?)?.cast<dynamic>() ??
               <dynamic>[];
 
-      // Strip legacy dialer-proxy fields (backward compat with old approach)
+      // Strip legacy dialer-proxy on raw proxy nodes (backward compat)
       for (final p in proxies) {
         if (p is Map<String, dynamic> && p['dialer-proxy'] != '_upstream') {
           p.remove('dialer-proxy');
         }
       }
-      for (final g in proxyGroups) {
-        if (g is Map<String, dynamic> && g['dialer-proxy'] != '_upstream') {
-          g.remove('dialer-proxy');
-        }
-      }
 
-      // Remove any stale relay group (idempotent re-inject / chain change)
+      // Remove any stale chain wrapper groups (idempotent re-inject)
       proxyGroups.removeWhere(
-          (g) => g is Map && g['name'] == _relayGroupName);
+          (g) => g is Map && _isChainGroup(g['name'] as String? ?? ''));
 
       // Locate the target proxy-group
       Map<String, dynamic>? targetGroup;
@@ -217,20 +219,29 @@ class ConfigTemplate {
       }
       if (targetGroup == null) return config;
 
-      // Sanitise targetGroup.proxies: remove any stale relay entry
+      // Sanitise targetGroup.proxies: remove any stale chain entries
       final groupProxies =
           ((targetGroup['proxies'] as List<dynamic>?) ?? []).toList();
-      groupProxies.removeWhere((p) => p == _relayGroupName);
+      groupProxies.removeWhere(
+          (p) => _isChainGroup(p as String? ?? ''));
 
-      // Create relay group and append to proxy-groups
-      proxyGroups.add(<String, dynamic>{
-        'name': _relayGroupName,
-        'type': 'relay',
-        'proxies': List<String>.from(chainNames),
-      });
+      // Build per-node wrapper groups, chained via dialer-proxy
+      String? prevName;
+      for (var i = 0; i < chainNames.length; i++) {
+        final name = '$chainGroupPrefix$i';
+        final group = <String, dynamic>{
+          'name': name,
+          'type': 'select',
+          'proxies': <String>[chainNames[i]],
+        };
+        if (prevName != null) group['dialer-proxy'] = prevName;
+        proxyGroups.add(group);
+        prevName = name;
+      }
 
-      // Insert relay at front of targetGroup.proxies
-      groupProxies.insert(0, _relayGroupName);
+      // Insert exit wrapper at front of targetGroup.proxies and select it
+      final exitName = '$chainGroupPrefix${chainNames.length - 1}';
+      groupProxies.insert(0, exitName);
       targetGroup['proxies'] = groupProxies;
 
       mutable['proxies'] = proxies;
@@ -242,8 +253,8 @@ class ConfigTemplate {
     }
   }
 
-  /// Remove the relay chain group and clean up all proxy-group proxies lists.
-  /// Also strips any legacy `dialer-proxy` fields for backward compat.
+  /// Remove all chain wrapper groups and their entries from every proxy-group.
+  /// Also strips any legacy dialer-proxy on raw proxy nodes (backward compat).
   static String removeProxyChain(String config) {
     try {
       final yaml = loadYaml(config);
@@ -257,30 +268,28 @@ class ConfigTemplate {
           (mutable['proxy-groups'] as List<dynamic>?)?.cast<dynamic>() ??
               <dynamic>[];
 
-      // Strip legacy dialer-proxy fields (backward compat)
+      // Strip legacy dialer-proxy on raw proxy nodes (backward compat)
       for (final p in proxies) {
         if (p is Map<String, dynamic> && p['dialer-proxy'] != '_upstream') {
           p.remove('dialer-proxy');
         }
       }
-      for (final g in proxyGroups) {
-        if (g is Map<String, dynamic> && g['dialer-proxy'] != '_upstream') {
-          g.remove('dialer-proxy');
-        }
-      }
 
-      // Remove relay name from every group's proxies list (defensive sweep)
+      // Remove chain entries from every group's proxies list
       for (final g in proxyGroups) {
         if (g is Map<String, dynamic>) {
           final gp = (g['proxies'] as List<dynamic>?)?.toList();
-          if (gp != null && gp.remove(_relayGroupName)) {
-            g['proxies'] = gp;
+          if (gp != null) {
+            final before = gp.length;
+            gp.removeWhere((p) => _isChainGroup(p as String? ?? ''));
+            if (gp.length != before) g['proxies'] = gp;
           }
         }
       }
 
-      // Remove the relay group itself
-      proxyGroups.removeWhere((g) => g is Map && g['name'] == _relayGroupName);
+      // Remove all chain wrapper groups
+      proxyGroups.removeWhere(
+          (g) => g is Map && _isChainGroup(g['name'] as String? ?? ''));
 
       mutable['proxies'] = proxies;
       if (proxyGroups.isNotEmpty) mutable['proxy-groups'] = proxyGroups;
@@ -290,6 +299,9 @@ class ConfigTemplate {
       return config;
     }
   }
+
+  static bool _isChainGroup(String name) =>
+      name.startsWith(chainGroupPrefix);
 
   static dynamic _toMutable(dynamic value) {
     if (value is YamlMap) {

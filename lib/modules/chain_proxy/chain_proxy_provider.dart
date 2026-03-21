@@ -169,12 +169,14 @@ class ChainProxyNotifier extends Notifier<ChainProxyState> {
       // force=true reload can take >300ms on large configs / slow devices.
       await Future.delayed(const Duration(milliseconds: 400));
 
-      // 6. Select the relay group — retry once if mihomo isn't ready yet.
+      // 6. Select the exit wrapper group — retry up to 3× if mihomo isn't ready.
+      final exitGroupName =
+          '${ConfigTemplate.chainGroupPrefix}${state.nodes.length - 1}';
       bool selected = false;
       for (var attempt = 0; attempt < 3 && !selected; attempt++) {
         if (attempt > 0) await Future.delayed(const Duration(milliseconds: 300));
         try {
-          await manager.api.changeProxy(resolvedGroup, '_YueLink_Chain_Relay');
+          await manager.api.changeProxy(resolvedGroup, exitGroupName);
           selected = true;
         } catch (e) {
           debugPrint('[ChainProxy] changeProxy attempt ${attempt + 1} failed: $e');
