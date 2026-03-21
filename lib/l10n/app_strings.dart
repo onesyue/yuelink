@@ -799,8 +799,8 @@ class S {
   String get chainClear => _e ? 'Clear' : '清空';
   String get chainEmptyHint => _e ? 'No nodes in chain' : '暂无链路节点';
   String get chainEmptyDesc => _e
-      ? 'Tap nodes on the Lines page to add them'
-      : '在线路页面点击节点添加到链路';
+      ? 'Long-press any node on the Lines page to add it'
+      : '在线路页面长按节点即可加入链路';
   String get chainAddHint => _e ? 'Added to proxy chain' : '已添加到链式代理';
 
   // ── Checkin ──────────────────────────────────────────────────
