@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../l10n/app_strings.dart';
 import '../../../theme.dart';
-import '../models/store_plan.dart';
+import '../../../domain/store/store_plan.dart';
 import '../store_providers.dart';
 import 'period_selector.dart';
 import 'purchase_confirm_sheet.dart';

@@ -1,8 +1,9 @@
-import '../../infrastructure/datasources/xboard_api.dart';
-import '../../modules/store/models/coupon_result.dart';
-import '../../modules/store/models/payment_method.dart';
-import '../../modules/store/models/store_order.dart';
-import '../../modules/store/models/store_plan.dart';
+import '../../domain/store/coupon_result.dart';
+import '../../domain/store/order_list_result.dart';
+import '../../domain/store/payment_method.dart';
+import '../../domain/store/store_order.dart';
+import '../../domain/store/store_plan.dart';
+import '../datasources/xboard_api.dart';
 
 /// Thin wrapper around [XBoardApi] for all store-related operations.
 ///

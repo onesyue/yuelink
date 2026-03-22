@@ -8,7 +8,7 @@ import '../../domain/models/profile.dart';
 import '../../providers/core_provider.dart';
 import 'providers/profiles_providers.dart';
 import '../../shared/app_notifier.dart';
-import '../../services/profile_service.dart';
+import '../../infrastructure/repositories/profile_repository.dart';
 import '../../shared/formatters/subscription_parser.dart';
 import '../../theme.dart';
 import '../../widgets/loading_overlay.dart';
@@ -177,12 +177,13 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   Future<void> _updateAllProfiles(BuildContext context, WidgetRef ref) async {
     final s = S.of(context);
     AppNotifier.info(s.updatingAll);
-    final profiles = await ProfileService.loadProfiles();
+    final repo = ref.read(profileRepositoryProvider);
+    final profiles = await repo.loadProfiles();
     int updated = 0, failed = 0;
     for (final p in profiles) {
       if (p.url.isEmpty) continue;
       try {
-        await ProfileService.updateProfile(p);
+        await repo.updateProfile(p);
         updated++;
       } catch (_) {
         failed++;
@@ -298,7 +299,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
           // Auto-fetch name when URL is pre-filled
           if (autoFetchName && prefilledUrl != null && !fetchingName && fetchedName == null) {
             fetchingName = true;
-            ProfileService.fetchSubscriptionName(prefilledUrl).then((name) {
+            ref.read(profileRepositoryProvider).fetchSubscriptionName(prefilledUrl).then((name) {
               if (ctx.mounted) {
                 setDialogState(() {
                   fetchedName = name;
@@ -362,7 +363,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                   final url = urlCtrl.text.trim();
                   if (url.isEmpty) return;
                   Navigator.pop(ctx); // close dialog first
-                  // Name can be empty — ProfileService will use header name or URL hostname
+                  // Name can be empty — ProfileRepository will use header name or URL hostname
                   _doAddProfile(context, ref, name, url);
                 },
                 child: Text(s.add),
@@ -509,7 +510,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
 
   void _showConfigViewer(BuildContext context, Profile profile) async {
     final s = S.of(context);
-    final config = await ProfileService.loadConfig(profile.id);
+    final config = await ref.read(profileRepositoryProvider).loadConfig(profile.id);
     if (!context.mounted) return;
 
     Navigator.of(context).push(MaterialPageRoute(

@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/ffi/core_mock.dart';
 import '../../../core/kernel/core_manager.dart';
-import '../../../infrastructure/datasources/mihomo_stream.dart';
+import '../../../domain/logs/log_entry.dart';
 import '../../../infrastructure/repositories/log_repository.dart';
 import '../../../providers/core_provider.dart';
 

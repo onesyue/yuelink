@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../l10n/app_strings.dart';
 import '../../../theme.dart';
-import '../models/store_plan.dart';
+import '../../../domain/store/store_plan.dart';
 import '../store_providers.dart';
 import 'plan_detail_sheet.dart';
 

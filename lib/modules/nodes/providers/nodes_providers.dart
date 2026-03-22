@@ -11,7 +11,6 @@ import '../../../providers/profile_provider.dart';
 import '../../../core/kernel/core_manager.dart';
 import '../../../infrastructure/repositories/profile_repository.dart';
 import '../../../infrastructure/repositories/proxy_repository.dart';
-import '../../../services/profile_service.dart';
 
 // ------------------------------------------------------------------
 // Node sort / view mode
@@ -188,7 +187,7 @@ class ProxyGroupsNotifier extends Notifier<List<ProxyGroup>> {
     try {
       final activeId = ref.read(activeProfileIdProvider);
       if (activeId == null) return {};
-      final config = await ProfileService.loadConfig(activeId);
+      final config = await ref.read(profileRepositoryProvider).loadConfig(activeId);
       if (config == null || config.isEmpty) return {};
 
       final yaml = loadYaml(config);

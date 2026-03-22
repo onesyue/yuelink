@@ -8,7 +8,7 @@ import '../../../infrastructure/datasources/xboard_api.dart';
 import '../../../l10n/app_strings.dart';
 import '../../../modules/profiles/providers/profiles_providers.dart';
 import '../../../core/kernel/core_manager.dart';
-import '../../../services/profile_service.dart';
+import '../../../infrastructure/repositories/profile_repository.dart';
 import '../../../shared/app_notifier.dart';
 import '../../../shared/event_log.dart';
 
@@ -230,9 +230,10 @@ class AuthNotifier extends Notifier<AuthState> {
 
     // Clear all subscription profiles
     try {
-      final profiles = await ProfileService.loadProfiles();
+      final repo = ref.read(profileRepositoryProvider);
+      final profiles = await repo.loadProfiles();
       for (final p in profiles) {
-        await ProfileService.deleteProfile(p.id);
+        await repo.deleteProfile(p.id);
       }
     } catch (e) {
       debugPrint('[Auth] clear profiles on logout failed: $e');
@@ -304,9 +305,10 @@ class AuthNotifier extends Notifier<AuthState> {
   Future<void> _syncSubscription(String subscribeUrl) async {
     debugPrint('[Auth] Syncing subscription from: ${subscribeUrl.substring(0, subscribeUrl.length.clamp(0, 50))}...');
 
-    // Use ProfileService.addProfile for consistent config processing.
+    // Use ProfileRepository for consistent config processing.
     // Check if we already have a "悦通" profile — update it instead of adding.
-    final profiles = await ProfileService.loadProfiles();
+    final repo = ref.read(profileRepositoryProvider);
+    final profiles = await repo.loadProfiles();
     final existing = profiles.where((p) => p.name == '悦通').toList();
     final isFirstTime = existing.isEmpty;
 
@@ -318,11 +320,11 @@ class AuthNotifier extends Notifier<AuthState> {
       // Update existing profile
       final profile = existing.first;
       profile.url = subscribeUrl;
-      await ProfileService.updateProfile(profile, proxyPort: proxyPort);
+      await repo.updateProfile(profile, proxyPort: proxyPort);
       debugPrint('[Auth] Updated existing 悦通 profile: ${profile.id}');
     } else {
       // Create new profile
-      final profile = await ProfileService.addProfile(
+      final profile = await repo.addProfile(
         name: '悦通',
         url: subscribeUrl,
         proxyPort: proxyPort,

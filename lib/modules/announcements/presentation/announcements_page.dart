@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../infrastructure/datasources/xboard_api.dart';
+import '../../../domain/announcements/announcement_entity.dart';
 import '../../../l10n/app_strings.dart';
 import '../../../theme.dart';
 import '../providers/announcements_providers.dart';

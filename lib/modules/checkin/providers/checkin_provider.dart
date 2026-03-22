@@ -1,65 +1,31 @@
-import 'dart:async';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/storage/settings_service.dart';
-import '../../infrastructure/datasources/xboard_api.dart';
-import '../../modules/yue_auth/providers/yue_auth_providers.dart';
-import '../../shared/app_notifier.dart';
-import '../../l10n/app_strings.dart';
-import 'models/checkin_result.dart';
-import 'checkin_repository.dart';
+import '../../../domain/checkin/checkin_result_entity.dart';
+import '../../../infrastructure/checkin/checkin_local_datasource.dart';
+import '../../../infrastructure/checkin/checkin_repository.dart';
+import '../../../infrastructure/datasources/xboard_api.dart';
+import '../../../l10n/app_strings.dart';
+import '../../../modules/yue_auth/providers/yue_auth_providers.dart';
+import '../../../shared/app_notifier.dart';
+import '../state/checkin_state.dart';
 
-// ------------------------------------------------------------------
-// Checkin state
-// ------------------------------------------------------------------
+// ── DI: Infrastructure instances ────────────────────────────────────────────
 
-class CheckinState {
-  final bool checkedIn;
-  final bool loading;
-  final CheckinResult? lastResult;
-  final String? error;
+final checkinRepositoryProvider = Provider<CheckinRepository>((ref) {
+  return CheckinRepository();
+});
 
-  /// True when the server reports already-checked but this device has no
-  /// local record for today — meaning another device performed the check-in.
-  final bool checkedInOnOtherDevice;
+final checkinLocalDatasourceProvider = Provider<CheckinLocalDatasource>((ref) {
+  return CheckinLocalDatasource();
+});
 
-  const CheckinState({
-    this.checkedIn = false,
-    this.loading = false,
-    this.lastResult,
-    this.error,
-    this.checkedInOnOtherDevice = false,
-  });
-
-  CheckinState copyWith({
-    bool? checkedIn,
-    bool? loading,
-    CheckinResult? lastResult,
-    String? error,
-    bool? checkedInOnOtherDevice,
-  }) =>
-      CheckinState(
-        checkedIn: checkedIn ?? this.checkedIn,
-        loading: loading ?? this.loading,
-        lastResult: lastResult ?? this.lastResult,
-        error: error,
-        checkedInOnOtherDevice:
-            checkedInOnOtherDevice ?? this.checkedInOnOtherDevice,
-      );
-}
-
-// ------------------------------------------------------------------
-// Provider
-// ------------------------------------------------------------------
+// ── Notifier ────────────────────────────────────────────────────────────────
 
 final checkinProvider =
     NotifierProvider<CheckinNotifier, CheckinState>(CheckinNotifier.new);
 
 class CheckinNotifier extends Notifier<CheckinState> {
-  static const _dateKey = 'checkin_date';
-
   @override
   CheckinState build() {
     // Reset + refresh whenever auth changes (login / logout).
@@ -75,25 +41,12 @@ class CheckinNotifier extends Notifier<CheckinState> {
     return const CheckinState();
   }
 
-  // ── Helpers ────────────────────────────────────────────────────────
+  // ── Injected dependencies ─────────────────────────────────────────────
 
-  /// Today's date in UTC+8, e.g. "2026-03-21".
-  /// Forced to UTC+8 so the result is consistent across all timezones —
-  /// a user in UTC-5 won't get a different date than one in UTC+8.
-  static String _todayStr() {
-    final now = DateTime.now().toUtc().add(const Duration(hours: 8));
-    return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-  }
+  CheckinRepository get _repo => ref.read(checkinRepositoryProvider);
+  CheckinLocalDatasource get _local => ref.read(checkinLocalDatasourceProvider);
 
-  /// Whether this device recorded a check-in for today.
-  Future<bool> _selfCheckedToday() async {
-    final stored = await SettingsService.get<String>(_dateKey);
-    return stored == _todayStr();
-  }
-
-  /// Persist today's date as the local check-in record.
-  Future<void> _recordSelfCheckin() =>
-      SettingsService.set(_dateKey, _todayStr());
+  // ── Helpers ───────────────────────────────────────────────────────────
 
   /// Whether a server error message indicates the user has already checked in
   /// (some backends return a business error instead of alreadyChecked:true).
@@ -102,7 +55,7 @@ class CheckinNotifier extends Notifier<CheckinState> {
     return m.contains('already') || m.contains('已签到');
   }
 
-  // ── Status check ───────────────────────────────────────────────────
+  // ── Status check ──────────────────────────────────────────────────────
 
   /// Poll the server for today's check-in status and reconcile with local
   /// record. Sets [CheckinState.checkedInOnOtherDevice] when the server
@@ -112,14 +65,27 @@ class CheckinNotifier extends Notifier<CheckinState> {
     if (auth.token == null) return;
 
     try {
-      final result = await CheckinRepository().getCheckinStatus(auth.token!);
+      final result = await _repo.getCheckinStatus(auth.token!);
       if (result == null) return;
 
       if (result.alreadyChecked) {
-        final self = await _selfCheckedToday();
+        final self = await _local.selfCheckedToday();
+        // Status API returns amount=0 — restore saved reward from local storage
+        var displayResult = result;
+        if (result.amount == 0 && self) {
+          final saved = await _local.getSavedReward();
+          if (saved != null) {
+            displayResult = CheckinResult(
+              type: saved.type,
+              amount: 0,
+              amountText: saved.text,
+              alreadyChecked: true,
+            );
+          }
+        }
         state = state.copyWith(
           checkedIn: true,
-          lastResult: result,
+          lastResult: displayResult,
           checkedInOnOtherDevice: !self,
         );
       }
@@ -128,7 +94,7 @@ class CheckinNotifier extends Notifier<CheckinState> {
     }
   }
 
-  // ── Checkin action ─────────────────────────────────────────────────
+  // ── Checkin action ────────────────────────────────────────────────────
 
   /// Perform check-in. Distinguishes "other device already checked" from
   /// "this device already checked" for a clear user message.
@@ -144,11 +110,11 @@ class CheckinNotifier extends Notifier<CheckinState> {
     state = state.copyWith(loading: true, error: null);
 
     try {
-      final result = await CheckinRepository().checkin(auth.token!);
+      final result = await _repo.checkin(auth.token!);
 
       if (result.alreadyChecked) {
         // Server says today is already done — check if it was us or another device.
-        final self = await _selfCheckedToday();
+        final self = await _local.selfCheckedToday();
         state = state.copyWith(
           checkedIn: true,
           loading: false,
@@ -160,8 +126,11 @@ class CheckinNotifier extends Notifier<CheckinState> {
         return;
       }
 
-      // Successful new check-in — persist local date.
-      await _recordSelfCheckin();
+      // Successful new check-in — persist local date + reward.
+      await _local.recordSelfCheckin(
+        rewardType: result.type,
+        rewardText: result.amountText,
+      );
       state = state.copyWith(
         checkedIn: true,
         loading: false,
@@ -181,7 +150,7 @@ class CheckinNotifier extends Notifier<CheckinState> {
       // user ID") instead of alreadyChecked:true when the user has already
       // checked in. Intercept known patterns and show the correct message.
       if (_isAlreadyCheckedError(e.message)) {
-        final self = await _selfCheckedToday();
+        final self = await _local.selfCheckedToday();
         state = state.copyWith(
           checkedIn: true,
           loading: false,

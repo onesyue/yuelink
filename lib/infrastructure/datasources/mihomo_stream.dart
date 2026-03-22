@@ -3,6 +3,9 @@ import 'dart:convert';
 
 import 'package:web_socket_channel/web_socket_channel.dart';
 
+import '../../domain/logs/log_entry.dart';
+export '../../domain/logs/log_entry.dart';
+
 /// Real-time WebSocket streaming from mihomo external-controller.
 ///
 /// All streams automatically reconnect with a 2-second delay if the
@@ -146,14 +149,4 @@ class MihomoStream {
 }
 
 /// A single log entry from mihomo.
-class LogEntry {
-  final String type; // info, warning, error, debug
-  final String payload;
-  final DateTime timestamp;
-
-  LogEntry({
-    required this.type,
-    required this.payload,
-    DateTime? timestamp,
-  }) : timestamp = timestamp ?? DateTime.now();
-}
+// LogEntry moved to lib/domain/logs/log_entry.dart

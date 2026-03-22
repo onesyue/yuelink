@@ -9,7 +9,7 @@ import '../../domain/models/rule.dart';
 import '../../providers/core_provider.dart';
 import 'providers/logs_providers.dart';
 import '../../providers/rule_provider.dart';
-import '../../infrastructure/datasources/mihomo_stream.dart';
+import '../../domain/logs/log_entry.dart';
 
 class LogPage extends ConsumerStatefulWidget {
   const LogPage({super.key});

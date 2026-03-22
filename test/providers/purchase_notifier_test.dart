@@ -1,13 +1,13 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:yuelink/infrastructure/datasources/xboard_api.dart';
-import 'package:yuelink/modules/store/models/coupon_result.dart';
-import 'package:yuelink/modules/store/models/payment_method.dart';
-import 'package:yuelink/modules/store/models/store_order.dart';
-import 'package:yuelink/modules/store/models/store_plan.dart';
+import 'package:yuelink/domain/store/coupon_result.dart';
+import 'package:yuelink/domain/store/payment_method.dart';
+import 'package:yuelink/domain/store/store_order.dart';
+import 'package:yuelink/domain/store/store_plan.dart';
+import 'package:yuelink/domain/store/order_list_result.dart';
 import 'package:yuelink/modules/store/store_providers.dart';
-import 'package:yuelink/modules/store/store_repository.dart';
+import 'package:yuelink/infrastructure/store/store_repository.dart';
 // ignore: unused_import (AuthState used in overrides)
 import 'package:yuelink/modules/yue_auth/providers/yue_auth_providers.dart';
 

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../l10n/app_strings.dart';
-import '../../modules/yue_auth/providers/yue_auth_providers.dart';
-import '../../theme.dart';
-import 'checkin_provider.dart';
+import '../../../l10n/app_strings.dart';
+import '../../../modules/yue_auth/providers/yue_auth_providers.dart';
+import '../../../theme.dart';
+import '../providers/checkin_provider.dart';
 
 /// Compact check-in card for the Dashboard page.
 ///
@@ -80,7 +80,9 @@ class CheckinCard extends ConsumerWidget {
                   state.checkedInOnOtherDevice
                       ? s.checkinOtherDevice
                       : state.checkedIn
-                          ? (state.lastResult != null
+                          ? (state.lastResult != null &&
+                                  state.lastResult!.amountText.isNotEmpty &&
+                                  state.lastResult!.amountText != '0 MB'
                               ? '${s.checkinReward}: ${state.lastResult!.amountText}'
                               : s.checkinDone)
                           : s.checkinDesc,

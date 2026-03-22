@@ -7,7 +7,7 @@ import 'package:flutter/material.dart';
 /// final result = await LoadingOverlay.show(
 ///   context,
 ///   message: '正在下载订阅...',
-///   future: ProfileService.addProfile(name: name, url: url),
+///   future: ref.read(profileRepositoryProvider).addProfile(name: name, url: url),
 /// );
 /// ```
 class LoadingOverlay {

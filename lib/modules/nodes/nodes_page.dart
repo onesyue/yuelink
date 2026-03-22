@@ -10,7 +10,7 @@ import '../../core/kernel/core_manager.dart';
 import '../../core/storage/settings_service.dart';
 import '../../shared/app_notifier.dart';
 import '../../theme.dart';
-import '../../services/profile_service.dart';
+import '../../infrastructure/repositories/profile_repository.dart';
 import '../../modules/yue_auth/providers/yue_auth_providers.dart';
 import '../../modules/profiles/providers/profiles_providers.dart';
 import 'providers/nodes_providers.dart';
@@ -61,13 +61,13 @@ class _NodesPageState extends ConsumerState<NodesPage> {
         // Guest / third-party airport: update active profile directly
         final activeId = ref.read(activeProfileIdProvider);
         if (activeId != null) {
-          final profiles = await ProfileService.loadProfiles();
+          final profiles = await ref.read(profileRepositoryProvider).loadProfiles();
           final profile = profiles.where((p) => p.id == activeId).firstOrNull;
           if (profile != null && profile.url.isNotEmpty) {
             final proxyPort = CoreManager.instance.isRunning
                 ? CoreManager.instance.mixedPort
                 : null;
-            await ProfileService.updateProfile(profile, proxyPort: proxyPort);
+            await ref.read(profileRepositoryProvider).updateProfile(profile, proxyPort: proxyPort);
             ref.read(profilesProvider.notifier).load();
           }
         }
@@ -78,7 +78,7 @@ class _NodesPageState extends ConsumerState<NodesPage> {
       if (status == CoreStatus.running) {
         final activeId = ref.read(activeProfileIdProvider);
         if (activeId != null) {
-          final configYaml = await ProfileService.loadConfig(activeId);
+          final configYaml = await ref.read(profileRepositoryProvider).loadConfig(activeId);
           if (configYaml != null) {
             await ref.read(coreActionsProvider).stop();
             await ref.read(coreActionsProvider).start(configYaml);

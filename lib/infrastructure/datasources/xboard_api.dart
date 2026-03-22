@@ -7,10 +7,13 @@ import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 
 import '../../constants.dart';
-import '../../modules/store/models/coupon_result.dart';
-import '../../modules/store/models/payment_method.dart';
-import '../../modules/store/models/store_order.dart';
-import '../../modules/store/models/store_plan.dart';
+import '../../domain/announcements/announcement_entity.dart';
+import '../../domain/emby/emby_info_entity.dart';
+import '../../domain/store/coupon_result.dart';
+import '../../domain/store/order_list_result.dart';
+import '../../domain/store/payment_method.dart';
+import '../../domain/store/store_order.dart';
+import '../../domain/store/store_plan.dart';
 
 /// REST client for XBoard panel API.
 ///
@@ -663,79 +666,11 @@ class SubscribeData {
   SubscribeData({required this.profile, required this.subscribeUrl});
 }
 
-class Announcement {
-  final int? id;
-  final String title;
-  final String content;
-  final int? createdAt;
+// Announcement model moved to lib/domain/announcements/announcement_entity.dart
 
-  Announcement({
-    this.id,
-    required this.title,
-    required this.content,
-    this.createdAt,
-  });
+// EmbyInfo model moved to lib/domain/emby/emby_info_entity.dart
 
-  DateTime? get createdDate {
-    if (createdAt == null) return null;
-    return DateTime.fromMillisecondsSinceEpoch(createdAt! * 1000);
-  }
-
-  factory Announcement.fromJson(Map<String, dynamic> json) {
-    return Announcement(
-      id: _toInt(json['id']),
-      title: json['title'] as String? ?? '',
-      content: json['content'] as String? ?? '',
-      createdAt: _toInt(json['created_at']),
-    );
-  }
-
-  /// XBoard may return numeric fields as int, double, or bool (tinyint).
-  static int? _toInt(dynamic v) {
-    if (v == null) return null;
-    if (v is int) return v;
-    if (v is double) return v.toInt();
-    if (v is bool) return v ? 1 : 0;
-    return null;
-  }
-}
-
-// ------------------------------------------------------------------
-// Emby model
-// ------------------------------------------------------------------
-
-class EmbyInfo {
-  final String? embyUrl;
-  final String? autoLoginUrl;
-
-  EmbyInfo({this.embyUrl, this.autoLoginUrl});
-
-  /// The best URL to open: auto_login_url if present, else emby_url.
-  String? get launchUrl => autoLoginUrl?.isNotEmpty == true
-      ? autoLoginUrl
-      : embyUrl?.isNotEmpty == true
-          ? embyUrl
-          : null;
-
-  bool get hasAccess => launchUrl != null;
-
-  factory EmbyInfo.fromJson(Map<String, dynamic> json) {
-    return EmbyInfo(
-      embyUrl: json['emby_url'] as String?,
-      autoLoginUrl: json['auto_login_url'] as String?,
-    );
-  }
-}
-
-// ------------------------------------------------------------------
-// Order list result
-// ------------------------------------------------------------------
-
-class OrderListResult {
-  final List<StoreOrder> orders;
-  final bool hasMore;
-  const OrderListResult({required this.orders, required this.hasMore});
-}
+// OrderListResult moved to lib/domain/store/order_list_result.dart
 
 // ------------------------------------------------------------------
 // Exception

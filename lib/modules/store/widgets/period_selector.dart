@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../l10n/app_strings.dart';
 import '../../../theme.dart';
-import '../models/store_plan.dart';
+import '../../../domain/store/store_plan.dart';
 
 /// Horizontal pill-style period selector (月/季/年…).
 class PeriodSelector extends StatelessWidget {

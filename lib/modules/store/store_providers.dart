@@ -4,12 +4,15 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../domain/store/payment_method.dart';
+import '../../domain/store/store_order.dart';
+import '../../domain/store/store_plan.dart';
 import '../../infrastructure/datasources/xboard_api.dart';
-import '../../modules/store/models/payment_method.dart';
-import '../../modules/store/models/store_order.dart';
-import '../../modules/store/models/store_plan.dart';
-import '../../modules/store/store_repository.dart';
+import '../../infrastructure/store/store_repository.dart';
 import '../../modules/yue_auth/providers/yue_auth_providers.dart';
+import 'state/purchase_state.dart';
+export 'state/purchase_state.dart';
+export '../../domain/store/order_list_result.dart';
 
 // ------------------------------------------------------------------
 // Repository provider
@@ -67,47 +70,8 @@ final selectedPeriodProvider =
     StateProvider.family<PlanPeriod?, int>((ref, planId) => null);
 
 // ------------------------------------------------------------------
-// Purchase state machine
+// Purchase state machine (defined in state/purchase_state.dart)
 // ------------------------------------------------------------------
-
-sealed class PurchaseState {
-  const PurchaseState();
-}
-
-class PurchaseIdle extends PurchaseState {
-  const PurchaseIdle();
-}
-
-class PurchaseLoading extends PurchaseState {
-  final String message;
-  const PurchaseLoading(this.message);
-}
-
-class PurchaseAwaitingPayment extends PurchaseState {
-  final String tradeNo;
-  final String paymentUrl;
-  const PurchaseAwaitingPayment({
-    required this.tradeNo,
-    required this.paymentUrl,
-  });
-}
-
-class PurchasePolling extends PurchaseState {
-  final String tradeNo;
-  final int attempt;
-  const PurchasePolling(this.tradeNo, this.attempt);
-}
-
-class PurchaseSuccess extends PurchaseState {
-  final StoreOrder order;
-  const PurchaseSuccess(this.order);
-}
-
-class PurchaseFailed extends PurchaseState {
-  final String message;
-  final String? tradeNo; // set when order was created but checkout failed
-  const PurchaseFailed(this.message, {this.tradeNo});
-}
 
 final purchaseProvider =
     NotifierProvider<PurchaseNotifier, PurchaseState>(PurchaseNotifier.new);

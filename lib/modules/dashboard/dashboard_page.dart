@@ -8,7 +8,7 @@ import '../../providers/core_provider.dart';
 import '../../providers/profile_provider.dart';
 import '../../shared/app_notifier.dart';
 import '../../core/kernel/core_manager.dart';
-import '../../services/profile_service.dart';
+import '../../infrastructure/repositories/profile_repository.dart';
 import '../../providers/connection_provider.dart';
 import '../../providers/connectivity_provider.dart';
 import '../../theme.dart';
@@ -19,8 +19,8 @@ import 'widgets/metrics_row.dart';
 import 'widgets/hero_card.dart';
 import 'widgets/carrier_card.dart';
 import 'widgets/subscription_card.dart';
-import '../checkin/checkin_card.dart';
-import '../checkin/checkin_provider.dart';
+import '../checkin/presentation/checkin_card.dart';
+import '../checkin/providers/checkin_provider.dart';
 
 class DashboardPage extends ConsumerStatefulWidget {
   const DashboardPage({super.key});
@@ -37,12 +37,15 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     final status = ref.watch(coreStatusProvider);
     final isRunning = status == CoreStatus.running;
 
-    // coreHeartbeatProvider is watched globally in _YueLinkAppState so it
-    // stays active on all tabs. Traffic/connection streams only needed here.
+    // Activate stream providers without triggering Dashboard rebuilds.
+    // These are Provider<void> — they only need to be "kept alive" while
+    // the core is running. Using ref.listen (not ref.watch) ensures the
+    // streams run but don't cause this widget to rebuild every second.
+    // coreHeartbeatProvider is watched globally in _YueLinkAppState.
     if (isRunning) {
-      ref.watch(trafficStreamProvider);
-      ref.watch(memoryStreamProvider);
-      ref.watch(connectionsStreamProvider);
+      ref.listen(trafficStreamProvider, (_, __) {});
+      ref.listen(memoryStreamProvider, (_, __) {});
+      ref.listen(connectionsStreamProvider, (_, __) {});
     }
 
     return Scaffold(
@@ -194,7 +197,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
         return;
       }
 
-      final config = await ProfileService.loadConfig(activeId);
+      final config = await ref.read(profileRepositoryProvider).loadConfig(activeId);
       if (config == null) {
         AppNotifier.warning(s.snackConfigMissing);
         return;

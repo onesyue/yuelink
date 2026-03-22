@@ -7,14 +7,8 @@ import 'package:path_provider/path_provider.dart';
 /// Persists locally-read announcement IDs as a JSON array in
 /// `read_announcement_ids.json` (app documents directory).
 ///
-/// Using path_provider instead of SharedPreferences ensures the file
-/// survives app reinstalls on the same device — SharedPreferences is
-/// cleared on uninstall (Android/iOS), causing all announcements to
-/// reappear as unread after reinstall.
-class AnnouncementReadService {
-  AnnouncementReadService._();
-  static final instance = AnnouncementReadService._();
-
+/// No singleton — instantiated via Riverpod for testability.
+class AnnouncementsLocalDatasource {
   static const _kFileName = 'read_announcement_ids.json';
 
   Future<File> _file() async {

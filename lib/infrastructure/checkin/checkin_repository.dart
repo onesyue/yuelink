@@ -1,17 +1,18 @@
 import 'dart:convert';
 import 'dart:io';
 
-import '../../infrastructure/datasources/xboard_api.dart';
-import 'models/checkin_result.dart';
+import '../../domain/checkin/checkin_result_entity.dart';
+import '../datasources/xboard_api.dart';
 
 /// Repository for check-in operations via YueLink Checkin API.
 ///
 /// The check-in API runs as a standalone service on yue.yuebao.website,
 /// separate from the XBoard panel. Uses the same XBoard Sanctum token
 /// for authentication.
+///
+/// This repository maintains its own HTTP client because the checkin
+/// server is independent from XBoard — reusing XBoardApi would be incorrect.
 class CheckinRepository {
-  CheckinRepository();
-
   static const _baseUrl = 'https://yue.yuebao.website';
 
   /// Perform a check-in.
@@ -38,7 +39,8 @@ class CheckinRepository {
 
   // ── HTTP helpers ──────────────────────────────────────────────────────
 
-  Future<Map<String, dynamic>> _get(String path, {required String token}) async {
+  Future<Map<String, dynamic>> _get(String path,
+      {required String token}) async {
     final client = HttpClient();
     client.connectionTimeout = const Duration(seconds: 10);
     try {
@@ -56,7 +58,8 @@ class CheckinRepository {
     }
   }
 
-  Future<Map<String, dynamic>> _post(String path, {required String token, Map<String, dynamic>? body}) async {
+  Future<Map<String, dynamic>> _post(String path,
+      {required String token, Map<String, dynamic>? body}) async {
     final client = HttpClient();
     client.connectionTimeout = const Duration(seconds: 10);
     try {

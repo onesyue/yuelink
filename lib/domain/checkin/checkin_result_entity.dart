@@ -1,4 +1,6 @@
 /// Result of a check-in operation.
+///
+/// Pure Dart — no Flutter or network dependencies.
 class CheckinResult {
   /// "traffic" or "balance"
   final String type;
