@@ -1,7 +1,7 @@
 name: yuelink
 description: "YueLink - Cross-platform proxy client by Yue.to"
 publish_to: 'none'
-version: 1.0.5+105
+version: 1.0.6+106
 
 environment:
   sdk: ^3.6.0
