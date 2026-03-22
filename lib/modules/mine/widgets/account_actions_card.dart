@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../../core/storage/auth_token_service.dart';
 import '../../../infrastructure/datasources/xboard_api.dart';
 import '../../../l10n/app_strings.dart';
 import '../../../modules/emby/emby_providers.dart';
@@ -260,9 +259,7 @@ class _AccountActionsCardState extends ConsumerState<AccountActionsCard> {
     final token = ref.read(authProvider).token;
     if (token == null) return;
     try {
-      final host = await AuthTokenService.instance.getApiHost() ??
-          'https://d7ccm19ki90mg.cloudfront.net';
-      final api = XBoardApi(baseUrl: host);
+      final api = ref.read(xboardApiProvider);
       await api.changePassword(
         token: token,
         oldPassword: oldPassword,

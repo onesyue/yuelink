@@ -256,9 +256,9 @@ class XxxNotifier extends Notifier<XxxState> {
 | 3 | logs | 低 | WebSocket stream + 简单 UI |
 | 4 | connections | 低 | WebSocket stream + 简单 UI |
 | ✅ 已完成 | profiles | 中 | 依赖反转 + shim 降级 + 外部调用收口（main.dart 保留 shim） |
-| 6 | nodes / proxy | 高 | 核心模块，ProxyGroupsNotifier 逻辑复杂 |
-| 7 | store | 高 | 多页面、状态机、支付流程 |
-| 8 | mine / settings | 中 | 依赖多个其他模块的 Provider |
+| ✅ 已完成 | nodes / proxy | 高 | 审计确认：Repository + DI 已就位 |
+| ✅ 已完成 | store | 高 | 模板 B+：Model 下沉 + Repository 下沉 + PurchaseState 拆分 |
+| ✅ 已完成 | mine / settings | 中 | 审计确认：读取型展示模块，无需 Repository 层 |
 
 ---
 
