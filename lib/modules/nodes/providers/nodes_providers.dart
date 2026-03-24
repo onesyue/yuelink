@@ -333,6 +333,9 @@ class DelayTestActions {
     final testUrl = ref.read(testUrlProvider);
     int delay;
 
+    // Accumulate results in a single map — write state once at the end.
+    final results = Map<String, int>.from(ref.read(delayResultsProvider));
+
     if (manager.isMockMode) {
       delay = await Future(() {
         return CoreController.instance.testDelay(proxyName);
@@ -342,20 +345,16 @@ class DelayTestActions {
         proxyName,
         url: testUrl,
         onResult: (name, d) {
-          final current =
-              Map<String, int>.from(ref.read(delayResultsProvider));
-          current[name] = d;
-          ref.read(delayResultsProvider.notifier).state = current;
+          results[name] = d;
+          ref.read(delayResultsProvider.notifier).state =
+              Map<String, int>.from(results);
         },
       );
     }
 
-    // Update results directly (batcher may also fire, but this ensures
-    // immediate update for the single-node case)
-    final current = Map<String, int>.from(ref.read(delayResultsProvider));
-    current[proxyName] = delay;
-    ref.read(delayResultsProvider.notifier).state = current;
-    SettingsService.setDelayResults(current);
+    results[proxyName] = delay;
+    ref.read(delayResultsProvider.notifier).state = results;
+    SettingsService.setDelayResults(results);
 
     // Unmark testing
     final doneSet = Set<String>.from(ref.read(delayTestingProvider));

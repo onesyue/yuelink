@@ -21,6 +21,7 @@ import 'widgets/carrier_card.dart';
 import 'widgets/subscription_card.dart';
 import '../checkin/presentation/checkin_card.dart';
 import '../checkin/providers/checkin_provider.dart';
+import 'widgets/emby_banner_card.dart';
 
 class DashboardPage extends ConsumerStatefulWidget {
   const DashboardPage({super.key});
@@ -115,9 +116,13 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                         ),
                       ),
 
-                      // ── Announcement (after live data, before account) ──
+                      // ── Announcement ─────────────────────────────────
                       const SizedBox(height: 12),
                       const RepaintBoundary(child: AnnouncementBanner()),
+
+                      // ── 悦视频（有权限时显示）─────────────────────────
+                      const SizedBox(height: 12),
+                      const RepaintBoundary(child: EmbyBannerCard()),
 
                       // ── Subscription info ───────────────────────────
                       const SizedBox(height: 12),
@@ -224,8 +229,7 @@ class _DashboardHeader extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final s = S.of(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final profile = ref.watch(userProfileProvider);
-    final email = profile?.email;
+    final email = ref.watch(userProfileProvider.select((p) => p?.email));
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,

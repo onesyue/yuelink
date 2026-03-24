@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../../l10n/app_strings.dart';
 import '../../../modules/announcements/presentation/announcements_page.dart';
 import '../../../modules/emby/emby_providers.dart';
+import '../../../modules/emby/emby_web_page.dart';
 import '../../../modules/yue_auth/providers/yue_auth_providers.dart';
 import '../../../shared/app_notifier.dart';
 import '../../../theme.dart';
@@ -35,32 +35,24 @@ class _QuickActionsCardState extends ConsumerState<QuickActionsCard> {
 
   Future<void> _openEmby() async {
     final s = S.of(context);
-    final emby = ref.read(embyProvider).valueOrNull;
-
+    // Always fetch a fresh token — Emby AccessTokens should not be reused
+    // across sessions to avoid stale/revoked token issues.
+    ref.invalidate(embyProvider);
+    AppNotifier.info(s.mineEmbyOpening);
+    final emby = await ref.read(embyProvider.future);
+    if (!mounted) return;
     if (emby == null || !emby.hasAccess) {
-      // Trigger fetch if not yet loaded
-      ref.invalidate(embyProvider);
-      // Show toast while fetching, then retry
-      AppNotifier.info(s.mineEmbyOpening);
-      final freshEmby = await ref.read(embyProvider.future);
-      if (!mounted) return;
-      if (freshEmby == null || !freshEmby.hasAccess) {
-        AppNotifier.warning(s.mineEmbyNoAccess);
-        return;
-      }
-      _launchUrl(freshEmby.launchUrl!);
+      AppNotifier.warning(s.mineEmbyNoAccess);
       return;
     }
     _launchUrl(emby.launchUrl!);
   }
 
-  Future<void> _launchUrl(String url) async {
-    final uri = Uri.parse(url);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } else {
-      AppNotifier.error(S.current.mineEmbyOpenFailed);
-    }
+  void _launchUrl(String url) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => EmbyWebPage(url: url)),
+    );
   }
 
   @override

@@ -4,7 +4,6 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../infrastructure/datasources/xboard_api.dart';
 import '../../../l10n/app_strings.dart';
-import '../../../modules/emby/emby_providers.dart';
 import '../../../modules/store/order_history_page.dart';
 import '../../../modules/profiles/profiles_page.dart';
 import '../../../modules/store/store_page.dart';
@@ -28,10 +27,6 @@ class _AccountActionsCardState extends ConsumerState<AccountActionsCard> {
   Widget build(BuildContext context) {
     final s = S.of(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    // Emby row only when user has confirmed access
-    final hasEmby =
-        ref.watch(embyProvider).valueOrNull?.hasAccess == true;
 
     final divider = Divider(
       height: 1,
@@ -78,15 +73,6 @@ class _AccountActionsCardState extends ConsumerState<AccountActionsCard> {
           MaterialPageRoute(builder: (_) => const ProfilePage()),
         ),
       ),
-
-      // ── Emby (only when user has confirmed access) ─────────
-      if (hasEmby)
-        _ActionRow(
-          icon: Icons.play_circle_outline_rounded,
-          label: s.mineEmby,
-          isDark: isDark,
-          onTap: () => _openEmby(s),
-        ),
 
       // ── Order history ──────────────────────────────────────
       _ActionRow(
@@ -150,23 +136,6 @@ class _AccountActionsCardState extends ConsumerState<AccountActionsCard> {
     );
   }
 
-  Future<void> _openEmby(S s) async {
-    final emby = ref.read(embyProvider).valueOrNull;
-    if (emby == null || !emby.hasAccess) {
-      ref.invalidate(embyProvider);
-      AppNotifier.info(s.mineEmbyOpening);
-      final fresh = await ref.read(embyProvider.future);
-      if (!mounted) return;
-      if (fresh == null || !fresh.hasAccess) {
-        AppNotifier.warning(s.mineEmbyNoAccess);
-        return;
-      }
-      await _launch(fresh.launchUrl!);
-      return;
-    }
-    await _launch(emby.launchUrl!);
-  }
-
   Future<void> _syncSubscription(S s) async {
     setState(() => _syncing = true);
     try {
@@ -176,14 +145,6 @@ class _AccountActionsCardState extends ConsumerState<AccountActionsCard> {
       if (mounted) AppNotifier.error(s.mineSyncFailed);
     } finally {
       if (mounted) setState(() => _syncing = false);
-    }
-  }
-
-  Future<void> _launch(String url) async {
-    try {
-      await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-    } catch (_) {
-      AppNotifier.error(S.current.mineEmbyOpenFailed);
     }
   }
 

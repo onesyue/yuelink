@@ -145,7 +145,7 @@ class XBoardApi {
   /// Returns null if the user has no Emby access.
   Future<EmbyInfo?> getEmby(String token) async {
     try {
-      final resp = await _get('/api/client/emby', token: token);
+      final resp = await _get('/api/v1/user/emby', token: token);
       return EmbyInfo.fromJson(resp);
     } on XBoardApiException catch (e) {
       // 404 / empty data means no Emby for this user

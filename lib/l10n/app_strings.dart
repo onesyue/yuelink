@@ -662,12 +662,14 @@ class S {
   String get mineSyncDone => _e ? 'Synced' : '同步成功';
   String get mineSyncFailed => _e ? 'Sync failed' : '同步失败';
   String get mineNotConnected => _e ? 'Not connected' : '未连接';
-  String get mineEmby => _e ? 'Emby' : 'Emby';
+  String get mineEmby => _e ? '悦视频' : '悦视频';
   String get mineEmbyNoAccess =>
-      _e ? 'No Emby access for this account' : '当前账户暂无 Emby 服务';
-  String get mineEmbyOpening => _e ? 'Opening Emby…' : '正在打开 Emby…';
+      _e ? 'No 悦视频 access for this account' : '当前账户暂无悦视频服务';
+  String get mineEmbyOpening => _e ? 'Opening 悦视频…' : '正在打开悦视频…';
   String get mineEmbyOpenFailed =>
-      _e ? 'Unable to open Emby link' : '无法打开 Emby 链接，请稍后重试';
+      _e ? 'Unable to open 悦视频' : '无法打开悦视频，请稍后重试';
+  String get mineEmbyNeedsVpn =>
+      _e ? 'Please connect first to access 悦视频' : '请先连接悦通，再访问悦视频';
   String get minePrivacyPolicy => _e ? 'Terms of Service' : '服务条款';
   String get goToHomeToProtect => _e ? 'Go to Dashboard' : '去首页开启保护';
   // First-time use

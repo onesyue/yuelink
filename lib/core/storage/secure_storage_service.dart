@@ -32,6 +32,8 @@ class SecureStorageService {
   static const _kFileName = '.yuetong_cred.json';
   static File? _macosFile;
   static Map<String, String>? _macosCache;
+  // Serialize concurrent saves — same pattern as SettingsService._saveGuard.
+  static Future<void> _saveGuard = Future.value();
 
   static Future<File> _getFile() async {
     _macosFile ??= File(
@@ -57,22 +59,19 @@ class SecureStorageService {
     return _macosCache!;
   }
 
-  static Future<void> _saveMacos(Map<String, String> data) async {
-    try {
+  static Future<void> _saveMacos(Map<String, String> data) {
+    _macosCache = data;
+    _saveGuard = _saveGuard.then((_) async {
       final f = await _getFile();
-      // Ensure parent directory exists (first run or after system cleanup)
       final dir = f.parent;
       if (!dir.existsSync()) {
         await dir.create(recursive: true);
       }
-      // Atomic write: write to temp file then rename to prevent corruption
       final tmp = File('${f.path}.tmp');
       await tmp.writeAsString(jsonEncode(data));
       await tmp.rename(f.path);
-      _macosCache = data;
-    } catch (e) {
-      debugPrint('[SecureStorage] saveMacos failed: $e');
-    }
+    }, onError: (_) {});
+    return _saveGuard;
   }
 
   // ── Public API ────────────────────────────────────────────────────────────

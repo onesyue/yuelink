@@ -40,15 +40,14 @@ class HeroCard extends ConsumerWidget {
       }
     }
 
-    // Pills data
-    final profiles = ref.watch(profilesProvider);
+    // Pills data — select() narrows rebuilds to only when active name changes.
     final activeId = ref.watch(activeProfileIdProvider);
     final routingMode = ref.watch(routingModeProvider);
-
-    // Show active profile name (mock mode uses same logic as real mode)
-    final profileName = profiles.whenOrNull(
-      data: (list) => list.where((p) => p.id == activeId).firstOrNull?.name,
-    );
+    final profileName = ref.watch(profilesProvider.select((async) =>
+        async.whenOrNull(
+          data: (list) =>
+              list.where((p) => p.id == activeId).firstOrNull?.name,
+        )));
 
     final routeLabel = routingMode == 'rule'
         ? s.routeModeRule

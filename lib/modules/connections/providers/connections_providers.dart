@@ -27,11 +27,14 @@ final connectionsStreamProvider = Provider<void>((ref) {
   final inBackground = ref.watch(appInBackgroundProvider);
 
   if (status != CoreStatus.running || inBackground) {
-    // Clear connections and search query on disconnect
-    ref.read(connectionsSnapshotProvider.notifier).state =
-        const ConnectionsSnapshot(
-            connections: [], downloadTotal: 0, uploadTotal: 0);
-    ref.read(connectionSearchProvider.notifier).state = '';
+    // Defer state writes to after this provider's build phase — Riverpod
+    // forbids modifying other providers synchronously during initialization.
+    Future.microtask(() {
+      ref.read(connectionsSnapshotProvider.notifier).state =
+          const ConnectionsSnapshot(
+              connections: [], downloadTotal: 0, uploadTotal: 0);
+      ref.read(connectionSearchProvider.notifier).state = '';
+    });
     return;
   }
 

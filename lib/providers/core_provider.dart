@@ -17,6 +17,7 @@ import '../infrastructure/datasources/mihomo_api.dart';
 // (defined in modules/dashboard to avoid circular imports)
 export '../modules/dashboard/providers/traffic_providers.dart';
 
+
 // ------------------------------------------------------------------
 // App background state (battery optimization)
 // ------------------------------------------------------------------
@@ -178,6 +179,10 @@ class CoreActions {
       ref.read(trafficProvider.notifier).state = const Traffic();
       ref.read(trafficHistoryProvider.notifier).state = TrafficHistory();
       ref.read(trafficHistoryVersionProvider.notifier).state = 0;
+      // Clear delay state so stale "testing" badges don't appear after
+      // subscription sync (which calls stop() + start() + refresh()).
+      ref.read(delayResultsProvider.notifier).state = {};
+      ref.read(delayTestingProvider.notifier).state = {};
     }
   }
 

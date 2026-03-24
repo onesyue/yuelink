@@ -11,6 +11,11 @@ class SettingsService {
   static const _fileName = 'settings.json';
   static Map<String, dynamic>? _cache;
 
+  // Serialize concurrent saves: each save waits for the previous to finish.
+  // This prevents the race where two writes share the same .tmp path and the
+  // second rename throws PathNotFoundException after the first already moved it.
+  static Future<void> _saveGuard = Future.value();
+
   static Future<File> _getFile() async {
     final dir = await getApplicationSupportDirectory();
     return File('${dir.path}/$_fileName');
@@ -36,18 +41,25 @@ class SettingsService {
   /// Invalidate in-memory cache (e.g., after WebDAV download).
   static void invalidateCache() => _cache = null;
 
-  static Future<void> save(Map<String, dynamic> settings) async {
+  static Future<void> save(Map<String, dynamic> settings) {
     _cache = settings;
-    final file = await _getFile();
-    // Ensure parent directory exists (first run or after cleanup)
-    final dir = file.parent;
-    if (!await dir.exists()) {
-      await dir.create(recursive: true);
-    }
-    // Atomic write: write to temp file then rename to prevent corruption
-    final tmp = File('${file.path}.tmp');
-    await tmp.writeAsString(json.encode(settings));
-    await tmp.rename(file.path);
+    // Chain onto the previous save so concurrent calls never race on .tmp.
+    _saveGuard = _saveGuard.then((_) async {
+      final file = await _getFile();
+      // Ensure parent directory exists (first run or after cleanup)
+      final dir = file.parent;
+      if (!await dir.exists()) {
+        await dir.create(recursive: true);
+      }
+      // Atomic write: write to temp file then rename to prevent corruption
+      final tmp = File('${file.path}.tmp');
+      await tmp.writeAsString(json.encode(settings));
+      await tmp.rename(file.path);
+    }, onError: (_) {
+      // Swallow errors in chained saves so _saveGuard never stays in a
+      // rejected state (which would block all subsequent saves).
+    });
+    return _saveGuard;
   }
 
   static Future<void> set(String key, dynamic value) async {
@@ -71,7 +83,7 @@ class SettingsService {
       case 'dark':
         return ThemeMode.dark;
       default:
-        return ThemeMode.system;
+        return ThemeMode.dark;
     }
   }
 
