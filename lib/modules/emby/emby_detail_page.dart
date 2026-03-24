@@ -301,8 +301,11 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> {
       data: ThemeData.dark(),
       child: Builder(builder: (ctx) => Scaffold(
         backgroundColor: EmbyTheme.scaffoldBg(ctx),
-        body: CustomScrollView(
-          slivers: [
+        body: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 900),
+            child: CustomScrollView(
+              slivers: [
             SliverToBoxAdapter(child: _buildBackdrop(ctx)),
             SliverToBoxAdapter(child: _buildInfo(ctx)),
             if (widget.overview != null && widget.overview!.isNotEmpty)
@@ -317,6 +320,8 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> {
               SliverToBoxAdapter(child: _buildSimilarSection()),
             const SliverToBoxAdapter(child: SizedBox(height: 40)),
           ],
+        ),
+          ),
         ),
       )),
     );

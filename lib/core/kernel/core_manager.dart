@@ -189,35 +189,20 @@ class CoreManager {
         });
       }
 
-      // ── Step 4: startVpn (Android only) ────────────────────────────
+      // ── Step 4+5: startVpn + buildConfig (parallelized on Android) ──
+      // On Android, VPN fd retrieval and config preprocessing (overwrite +
+      // upstream proxy + port scan) are independent. Run them in parallel
+      // to shave 100-200ms off startup.
       int? tunFd;
-      if (Platform.isAndroid && !isMockMode) {
-        await _step(steps, 'startVpn', StartupError.vpnFdInvalid, () async {
-          // Need mixedPort from raw config before full processing
-          final rawMp = ConfigTemplate.getMixedPort(configYaml);
-          tunFd = await vpn.VpnService.startAndroidVpn(mixedPort: rawMp);
-          if (tunFd == null || tunFd! <= 0) {
-            throw Exception('fd=$tunFd (expected > 0)');
-          }
-          return 'fd=$tunFd, mixedPort=$rawMp';
-        });
-      }
-
-      // ── Step 5: buildConfig ────────────────────────────────────────
-      // Single step: overwrite → template processing → TUN injection
       String processed = '';
-      await _step(steps, 'buildConfig', StartupError.configBuildFailed,
-          () async {
-        // 5a. Apply user overwrite layer
-        debugPrint('[CoreManager] buildConfig 5a: loading overwrite...');
+
+      // Pre-compute config overwrite layer while VPN fd is being obtained.
+      Future<String> prepareConfig() async {
         final overwrite = await OverwriteService.load();
-        debugPrint('[CoreManager] buildConfig 5b: applying overwrite...');
         var withOverwrite = OverwriteService.apply(configYaml, overwrite);
 
-        // 5a+. Inject upstream proxy (soft router / gateway) if configured
         final upstream = await SettingsService.getUpstreamProxy();
         if (upstream != null && (upstream['server'] as String).isNotEmpty) {
-          debugPrint('[CoreManager] buildConfig 5a+: injecting upstream proxy...');
           withOverwrite = ConfigTemplate.injectUpstreamProxy(
             withOverwrite,
             upstream['type'] as String,
@@ -226,12 +211,8 @@ class CoreManager {
           );
         }
 
-        // 5a++. On desktop, check for port conflicts with other proxy software.
-        // If the configured port is already in use, find the next free port so
-        // mihomo can start even when Clash / Surge / V2rayU etc. are running.
         if ((Platform.isMacOS || Platform.isWindows) && !isMockMode) {
           final preferredMixed = ConfigTemplate.getMixedPort(withOverwrite);
-          // Scan both ports in parallel to save 10-50ms
           final ports = await Future.wait([
             _findAvailablePort(preferredMixed),
             _findAvailablePort(_apiPort),
@@ -249,29 +230,57 @@ class CoreManager {
             _stream = null;
           }
         }
+        return withOverwrite;
+      }
 
-        // 5b. Template processing (ports, DNS, sniffer, geo, TUN fd)
-        debugPrint('[CoreManager] buildConfig 5c: ConfigTemplate.process...');
-        processed = ConfigTemplate.process(
-              withOverwrite,
-              apiPort: _apiPort,
-              secret: _apiSecret,
-              tunFd: tunFd,
-            );
-        debugPrint('[CoreManager] buildConfig 5c: done, len=${processed.length}');
+      if (Platform.isAndroid && !isMockMode) {
+        // Run VPN fd + config prep in parallel
+        late final Future<String> configFuture;
+        await _step(steps, 'startVpn', StartupError.vpnFdInvalid, () async {
+          configFuture = prepareConfig();
+          final rawMp = ConfigTemplate.getMixedPort(configYaml);
+          tunFd = await vpn.VpnService.startAndroidVpn(mixedPort: rawMp);
+          if (tunFd == null || tunFd! <= 0) {
+            throw Exception('fd=$tunFd (expected > 0)');
+          }
+          return 'fd=$tunFd, mixedPort=$rawMp';
+        });
 
-        // 5c. Extract ports/secret from final config
-        _apiPort = ConfigTemplate.getApiPort(processed);
-        _mixedPort = ConfigTemplate.getMixedPort(processed);
-        _apiSecret ??= ConfigTemplate.getSecret(processed);
-        _api = null;
-        _stream = null;
-
-        return 'input=${configYaml.length}b, '
-            'output=${processed.length}b, '
-            'apiPort=$_apiPort, mixedPort=$_mixedPort, '
-            'tunFd=$tunFd';
-      });
+        await _step(steps, 'buildConfig', StartupError.configBuildFailed,
+            () async {
+          final withOverwrite = await configFuture;
+          processed = ConfigTemplate.process(
+            withOverwrite,
+            apiPort: _apiPort,
+            secret: _apiSecret,
+            tunFd: tunFd,
+          );
+          _apiPort = ConfigTemplate.getApiPort(processed);
+          _mixedPort = ConfigTemplate.getMixedPort(processed);
+          _apiSecret ??= ConfigTemplate.getSecret(processed);
+          _api = null;
+          _stream = null;
+          return 'output=${processed.length}b, apiPort=$_apiPort, mixedPort=$_mixedPort, tunFd=$tunFd';
+        });
+      } else {
+        // Non-Android: sequential (no VPN step)
+        await _step(steps, 'buildConfig', StartupError.configBuildFailed,
+            () async {
+          final withOverwrite = await prepareConfig();
+          processed = ConfigTemplate.process(
+            withOverwrite,
+            apiPort: _apiPort,
+            secret: _apiSecret,
+            tunFd: tunFd,
+          );
+          _apiPort = ConfigTemplate.getApiPort(processed);
+          _mixedPort = ConfigTemplate.getMixedPort(processed);
+          _apiSecret ??= ConfigTemplate.getSecret(processed);
+          _api = null;
+          _stream = null;
+          return 'output=${processed.length}b, apiPort=$_apiPort, mixedPort=$_mixedPort';
+        });
+      }
 
       // ── Step 6: startCore (Go hub.Parse) ───────────────────────────
       await _step(steps, 'startCore', StartupError.coreStartFailed, () async {

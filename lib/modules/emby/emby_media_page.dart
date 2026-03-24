@@ -335,10 +335,13 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
         child: Text('暂无内容', style: TextStyle(color: Colors.white38)),
       );
     }
+    final screenWidth = MediaQuery.of(context).size.width;
+    final cols = screenWidth > 1200 ? 7 : screenWidth > 900 ? 5 : screenWidth > 600 ? 4 : 3;
+    final hPad = screenWidth > 900 ? (screenWidth - 900) / 2 + 16 : 12.0;
     return GridView.builder(
-      padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
+      padding: EdgeInsets.fromLTRB(hPad, 4, hPad, 24),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: cols,
         childAspectRatio: 2 / 3,
         crossAxisSpacing: 8,
         mainAxisSpacing: 8,
