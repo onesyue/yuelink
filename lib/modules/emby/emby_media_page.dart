@@ -289,9 +289,29 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
     );
   }
 
+  // ── Responsive breakpoints ──────────────────────────────────────────
+
+  double get _posterHeight {
+    final w = MediaQuery.of(context).size.width;
+    if (w > 1200) return 280;
+    if (w > 900) return 240;
+    return 180;
+  }
+
   // ── Netflix-style rows ──────────────────────────────────────────────
 
   Widget _buildNetflixRows() {
+    // Collect first item with backdrop for Hero Banner
+    _Item? heroItem;
+    for (final lib in _libraries!) {
+      final items = _previewCache[lib.id];
+      if (items != null) {
+        final candidate = items.where((i) => i.hasBackdrop).firstOrNull
+            ?? items.where((i) => i.hasPoster).firstOrNull;
+        if (candidate != null && heroItem == null) heroItem = candidate;
+      }
+    }
+
     return RefreshIndicator(
       color: EmbyTheme.textSecondary(context),
       backgroundColor: EmbyTheme.appBarBg(context),
@@ -300,10 +320,139 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
         _loadingPreviews.clear();
         await _loadLibraries();
       },
-      child: ListView.builder(
-        padding: const EdgeInsets.only(bottom: 32),
-        itemCount: _libraries!.length,
-        itemBuilder: (_, i) => _buildLibraryRow(_libraries![i]),
+      child: CustomScrollView(
+        slivers: [
+          // ── Hero Banner ──
+          if (heroItem != null)
+            SliverToBoxAdapter(child: _buildHeroBanner(heroItem)),
+          // ── Library rows ──
+          SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (_, i) => _buildLibraryRow(_libraries![i]),
+              childCount: _libraries!.length,
+            ),
+          ),
+          const SliverToBoxAdapter(child: SizedBox(height: 32)),
+        ],
+      ),
+    );
+  }
+
+  // ── Hero Banner (Netflix featured content) ──────────────────────────
+
+  Widget _buildHeroBanner(_Item item) {
+    return GestureDetector(
+      onTap: () => _openItem(item),
+      child: AspectRatio(
+        aspectRatio: 16 / 9,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // Backdrop image
+            if (item.hasBackdrop)
+              EmbyImage(
+                api: _api,
+                itemId: item.id,
+                url: _api.backdropUrl(item.id, width: 1200),
+                fit: BoxFit.cover,
+                width: 1200,
+              )
+            else if (item.hasPoster)
+              EmbyImage(
+                api: _api,
+                itemId: item.id,
+                fit: BoxFit.cover,
+                width: 600,
+              ),
+            // Bottom gradient
+            const Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.bottomCenter,
+                    end: Alignment.topCenter,
+                    colors: [Colors.black87, Colors.transparent],
+                    stops: [0.0, 0.6],
+                  ),
+                ),
+              ),
+            ),
+            // Title + metadata
+            Positioned(
+              left: 20,
+              right: 20,
+              bottom: 20,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    item.name,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      height: 1.2,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      if (item.year != null)
+                        Text('${item.year}',
+                            style: const TextStyle(
+                                color: Colors.white70, fontSize: 13)),
+                      if (item.year != null && item.rating != null)
+                        const Text('  ·  ',
+                            style: TextStyle(color: Colors.white38)),
+                      if (item.rating != null)
+                        Text('★ ${item.rating!.toStringAsFixed(1)}',
+                            style: const TextStyle(
+                                color: Colors.amber, fontSize: 13)),
+                      if (item.runtimeLabel.isNotEmpty) ...[
+                        const Text('  ·  ',
+                            style: TextStyle(color: Colors.white38)),
+                        Text(item.runtimeLabel,
+                            style: const TextStyle(
+                                color: Colors.white70, fontSize: 13)),
+                      ],
+                    ],
+                  ),
+                  if (item.overview != null && item.overview!.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      item.overview!,
+                      style: const TextStyle(
+                          color: Colors.white60, fontSize: 12, height: 1.4),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  // Play button
+                  SizedBox(
+                    height: 36,
+                    child: FilledButton.icon(
+                      onPressed: () => _openItem(item),
+                      icon: const Icon(Icons.play_arrow_rounded, size: 20),
+                      label: const Text('播放'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: Colors.black,
+                        textStyle: const TextStyle(
+                            fontSize: 13, fontWeight: FontWeight.w600),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(6)),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -312,8 +461,9 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
     final items = _previewCache[lib.id];
     final loading = _loadingPreviews.contains(lib.id);
     final hasItems = items != null && items.isNotEmpty;
+    final rowHeight = _posterHeight;
 
-    // Hide empty libraries (0 items) to keep the page clean
+    // Hide empty libraries
     if (items != null && items.isEmpty) return const SizedBox.shrink();
 
     return Column(
@@ -321,22 +471,31 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
       children: [
         // ── Section header ──
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 18, 12, 8),
+          padding: const EdgeInsets.fromLTRB(16, 20, 12, 10),
           child: Row(
             children: [
               Icon(lib.icon,
                   size: 16, color: EmbyTheme.textSecondary(context)),
               const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  lib.name,
-                  style: TextStyle(
-                    color: EmbyTheme.textPrimary(context),
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
+              Text(
+                lib.name,
+                style: TextStyle(
+                  color: EmbyTheme.textPrimary(context),
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
+              if (hasItems) ...[
+                const SizedBox(width: 6),
+                Text(
+                  '${items!.length}',
+                  style: TextStyle(
+                    color: EmbyTheme.textTertiary(context),
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+              const Spacer(),
               if (hasItems)
                 GestureDetector(
                   onTap: () => _openLibraryGrid(lib),
@@ -357,7 +516,7 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
         ),
         // ── Horizontal poster row ──
         SizedBox(
-          height: 180,
+          height: rowHeight,
           child: loading
               ? _buildRowSkeleton()
               : !hasItems
@@ -372,7 +531,7 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
                       itemCount: items!.length,
                       separatorBuilder: (_, __) => const SizedBox(width: 10),
                       itemBuilder: (_, i) =>
-                          _buildRowPoster(items[i], height: 180),
+                          _buildRowPoster(items[i], height: rowHeight),
                     ),
         ),
       ],
@@ -380,14 +539,15 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
   }
 
   Widget _buildRowPoster(_Item item, {required double height}) {
-    final posterWidth = height * 2 / 3; // 2:3 aspect ratio
+    final posterWidth = height * 2 / 3;
+    final titleSize = height > 200 ? 13.0 : 11.0;
     return GestureDetector(
       onTap: () => _openItem(item),
       child: SizedBox(
         width: posterWidth,
         height: height,
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(6),
+          borderRadius: BorderRadius.circular(8),
           child: Stack(
             fit: StackFit.expand,
             children: [
@@ -396,36 +556,59 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
                   api: _api,
                   itemId: item.id,
                   fit: BoxFit.cover,
-                  width: 200,
+                  width: height > 200 ? 300 : 200,
                   placeholder: _posterPlaceholder(item),
                 )
               else
                 _posterPlaceholder(item),
-              // Bottom gradient with title
+              // Bottom gradient with title + metadata
               Positioned(
                 left: 0,
                 right: 0,
                 bottom: 0,
                 child: Container(
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                   decoration: const BoxDecoration(
                     gradient: LinearGradient(
                       begin: Alignment.bottomCenter,
                       end: Alignment.topCenter,
-                      colors: [Colors.black87, Colors.transparent],
+                      colors: [Colors.black, Colors.transparent],
+                      stops: [0.0, 0.95],
                     ),
                   ),
-                  child: Text(
-                    item.name,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
-                      height: 1.2,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        item.name,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: titleSize,
+                          fontWeight: FontWeight.w500,
+                          height: 1.2,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 3),
+                      Row(
+                        children: [
+                          if (item.year != null)
+                            Text('${item.year}',
+                                style: const TextStyle(
+                                    color: Colors.white54, fontSize: 10)),
+                          if (item.rating != null) ...[
+                            if (item.year != null)
+                              const SizedBox(width: 6),
+                            Text('★${item.rating!.toStringAsFixed(1)}',
+                                style: const TextStyle(
+                                    color: Colors.amber, fontSize: 10)),
+                          ],
+                        ],
+                      ),
+                    ],
                   ),
                 ),
               ),

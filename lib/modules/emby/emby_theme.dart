@@ -57,7 +57,7 @@ class EmbyTheme {
 
   /// Unselected pill.
   static Color pillUnselected(BuildContext context) =>
-      _dark(context) ? Colors.white12 : Colors.black.withValues(alpha: 0.06);
+      _dark(context) ? Colors.white.withValues(alpha: 0.15) : Colors.black.withValues(alpha: 0.06);
 
   static Color pillUnselectedText(BuildContext context) =>
       _dark(context) ? YLColors.zinc300 : YLColors.zinc600;

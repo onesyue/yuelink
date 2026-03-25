@@ -711,7 +711,7 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> {
             .join(' · '),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
