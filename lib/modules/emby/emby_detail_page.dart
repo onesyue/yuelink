@@ -311,14 +311,16 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> {
             SliverToBoxAdapter(child: _buildInfo(ctx)),
             if (widget.overview != null && widget.overview!.isNotEmpty)
               SliverToBoxAdapter(child: _buildOverview()),
+            // Recommendations right after overview (Netflix pattern:
+            // don't waste space — show related content immediately)
+            if (_similar != null && _similar!.isNotEmpty)
+              SliverToBoxAdapter(child: _buildSimilarSection()),
             if (_isSeries) ...[
               SliverToBoxAdapter(child: _buildSeasonTabs(ctx)),
               _buildEpisodeList(),
             ],
             if (_cast != null && _cast!.isNotEmpty)
               SliverToBoxAdapter(child: _buildCastSection()),
-            if (_similar != null && _similar!.isNotEmpty)
-              SliverToBoxAdapter(child: _buildSimilarSection()),
             const SliverToBoxAdapter(child: SizedBox(height: 40)),
           ],
         ),
