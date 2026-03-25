@@ -144,7 +144,11 @@ class EmbyImage extends StatelessWidget {
       fit: fit,
       fadeInDuration: const Duration(milliseconds: 200),
       memCacheHeight: width ~/ 2 * 3, // ~aspect ratio 2:3
-      placeholder: (_, __) => Container(color: const Color(0xFF1C1C1E)),
+      placeholder: (_, __) => Container(
+        color: Theme.of(context).brightness == Brightness.dark
+            ? const Color(0xFF1C1C1E)
+            : const Color(0xFFE4E4E7), // YLColors.zinc200
+      ),
       errorWidget: (_, __, ___) => placeholder,
     );
   }

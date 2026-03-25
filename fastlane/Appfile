@@ -1,0 +1,14 @@
+# App identifiers and Apple/Google credentials.
+#
+# Set via environment variables in CI (GitHub Secrets):
+#   APPLE_ID, ITC_TEAM_ID, TEAM_ID
+#   PLAY_STORE_JSON_KEY (path to Google Play service account JSON)
+
+app_identifier("com.yueto.yuelink")
+
+# apple_id(ENV["APPLE_ID"])
+# itc_team_id(ENV["ITC_TEAM_ID"])
+# team_id(ENV["TEAM_ID"])
+
+json_key_file(ENV["PLAY_STORE_JSON_KEY"] || "fastlane/play-store-key.json")
+package_name("com.yueto.yuelink")

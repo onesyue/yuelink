@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/emby/emby_info_entity.dart';
-import '../../infrastructure/datasources/xboard_api.dart';
+import '../yue_auth/providers/yue_auth_providers.dart';
 import '../../infrastructure/emby/emby_repository.dart';
 import '../../modules/yue_auth/providers/yue_auth_providers.dart';
 

@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -99,6 +102,35 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                     foregroundColor: isDark ? Colors.white : YLColors.primary,
                   ),
                 ),
+                PopupMenuButton<String>(
+                  icon: Icon(Icons.more_vert, size: 20, color: YLColors.zinc500),
+                  tooltip: s.isEn ? 'More' : '更多',
+                  onSelected: (action) {
+                    switch (action) {
+                      case 'export_all':
+                        _exportAllProfiles(context, ref);
+                      case 'import_all':
+                        _importAllProfiles(context, ref);
+                      case 'import_file':
+                        _importLocalFile(context, ref);
+                    }
+                  },
+                  itemBuilder: (_) => [
+                    PopupMenuItem(
+                      value: 'export_all',
+                      child: _menuItem(Icons.upload_file_outlined, s.exportAllProfiles),
+                    ),
+                    PopupMenuItem(
+                      value: 'import_all',
+                      child: _menuItem(Icons.download_for_offline_outlined, s.importAllProfiles),
+                    ),
+                    const PopupMenuDivider(),
+                    PopupMenuItem(
+                      value: 'import_file',
+                      child: _menuItem(Icons.file_upload_outlined, s.importLocalFile),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -158,6 +190,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                         onEdit: () => _showEditDialog(context, ref, profile),
                         onViewConfig: () =>
                             _showConfigViewer(context, profile),
+                        onExport: () => _exportProfile(context, ref, profile),
                         onDelete: () =>
                             _confirmDelete(context, ref, profile),
                       );
@@ -508,6 +541,200 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     });
   }
 
+  // ── Import / Export ───────────────────────────────────────────────
+
+  /// Import a single YAML/YML file as a local profile.
+  Future<void> _importLocalFile(BuildContext context, WidgetRef ref) async {
+    final s = S.of(context);
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['yaml', 'yml'],
+      withData: true,
+    );
+    if (result == null || result.files.isEmpty) return;
+    final file = result.files.first;
+    final bytes = file.bytes;
+    if (bytes == null) return;
+
+    String content;
+    try {
+      content = utf8.decode(bytes);
+    } catch (_) {
+      if (context.mounted) AppNotifier.error(s.importLocalFileFailed);
+      return;
+    }
+
+    final defaultName = file.name.replaceAll(
+        RegExp(r'\.(yaml|yml)$', caseSensitive: false), '');
+    if (!context.mounted) return;
+
+    final nameCtrl = TextEditingController(text: defaultName);
+    final name = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(s.importLocalFile),
+        content: TextField(
+          controller: nameCtrl,
+          autofocus: true,
+          decoration: InputDecoration(
+            labelText: s.nameLabel,
+            hintText: s.importLocalNameHint,
+            prefixIcon: const Icon(Icons.label_outline),
+          ),
+          textInputAction: TextInputAction.done,
+          onSubmitted: (v) {
+            final n = v.trim();
+            Navigator.pop(ctx, n.isEmpty ? defaultName : n);
+          },
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: Text(s.cancel)),
+          FilledButton(
+            onPressed: () {
+              final n = nameCtrl.text.trim();
+              Navigator.pop(ctx, n.isEmpty ? defaultName : n);
+            },
+            child: Text(s.add),
+          ),
+        ],
+      ),
+    );
+    nameCtrl.dispose();
+    if (name == null || !context.mounted) return;
+
+    try {
+      final profile = await ref
+          .read(profileRepositoryProvider)
+          .addLocalProfile(name: name, configContent: content);
+      ref.read(profilesProvider.notifier).addLocal(profile);
+      AppNotifier.success(s.importLocalFileSuccess);
+    } catch (_) {
+      if (context.mounted) AppNotifier.error(s.importLocalFileFailed);
+    }
+  }
+
+  /// Export a single profile's config as {name}.yaml.
+  Future<void> _exportProfile(
+      BuildContext context, WidgetRef ref, Profile profile) async {
+    final s = S.of(context);
+    final config =
+        await ref.read(profileRepositoryProvider).loadConfig(profile.id);
+    if (config == null) {
+      AppNotifier.error(s.exportFailed);
+      return;
+    }
+    // Strip characters that are invalid in filenames on Windows/macOS/Linux.
+    final safeName =
+        profile.name.replaceAll(RegExp(r'[<>:"/\\|?*\x00-\x1f]'), '_');
+    try {
+      await FilePicker.platform.saveFile(
+        dialogTitle: s.exportProfile,
+        fileName: '$safeName.yaml',
+        bytes: Uint8List.fromList(utf8.encode(config)),
+        type: FileType.custom,
+        allowedExtensions: ['yaml'],
+      );
+      AppNotifier.success(s.exportProfileSuccess(profile.name));
+    } catch (_) {
+      if (context.mounted) AppNotifier.error(s.exportFailed);
+    }
+  }
+
+  /// Export all profiles as a single JSON bundle.
+  Future<void> _exportAllProfiles(BuildContext context, WidgetRef ref) async {
+    final s = S.of(context);
+    final profiles = ref.read(profilesProvider).valueOrNull;
+    if (profiles == null || profiles.isEmpty) {
+      AppNotifier.info(s.isEn ? 'No subscriptions to export' : '没有可导出的订阅');
+      return;
+    }
+    final repo = ref.read(profileRepositoryProvider);
+    final entries = <Map<String, dynamic>>[];
+    for (final p in profiles) {
+      final config = await repo.loadConfig(p.id);
+      entries.add({
+        'name': p.name,
+        'url': p.url,
+        'updateIntervalHours': p.updateInterval.inHours,
+        'config': config ?? '',
+      });
+    }
+    final bundle = <String, dynamic>{
+      'version': 1,
+      'profiles': entries,
+    };
+    final jsonStr = const JsonEncoder.withIndent('  ').convert(bundle);
+    try {
+      await FilePicker.platform.saveFile(
+        dialogTitle: s.exportAllProfiles,
+        fileName: 'yuelink_profiles.json',
+        bytes: Uint8List.fromList(utf8.encode(jsonStr)),
+        type: FileType.custom,
+        allowedExtensions: ['json'],
+      );
+      AppNotifier.success(s.isEn
+          ? 'Exported ${profiles.length} subscriptions'
+          : '已导出 ${profiles.length} 个订阅');
+    } catch (_) {
+      if (context.mounted) AppNotifier.error(s.exportFailed);
+    }
+  }
+
+  /// Import profiles from a previously exported JSON bundle.
+  Future<void> _importAllProfiles(BuildContext context, WidgetRef ref) async {
+    final s = S.of(context);
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['json'],
+      withData: true,
+    );
+    if (result == null || result.files.isEmpty) return;
+    final bytes = result.files.first.bytes;
+    if (bytes == null) return;
+
+    Map<String, dynamic> bundle;
+    try {
+      final jsonStr = utf8.decode(bytes);
+      bundle = jsonDecode(jsonStr) as Map<String, dynamic>;
+      if (bundle['version'] != 1 || bundle['profiles'] is! List) {
+        throw const FormatException('invalid bundle');
+      }
+    } catch (_) {
+      if (context.mounted) AppNotifier.error(s.importBundleFailed);
+      return;
+    }
+
+    final profileList = bundle['profiles'] as List;
+    final repo = ref.read(profileRepositoryProvider);
+    int ok = 0, failed = 0;
+    for (final entry in profileList) {
+      try {
+        final name = (entry['name'] as String?)?.trim() ?? s.importLocalNameHint;
+        final config = (entry['config'] as String?) ?? '';
+        final url = (entry['url'] as String?) ?? '';
+        final intervalHours = (entry['updateIntervalHours'] as int?) ?? 24;
+        if (config.isEmpty) {
+          failed++;
+          continue;
+        }
+        final profile = await repo.addLocalProfile(
+          name: name.isEmpty ? s.importLocalNameHint : name,
+          configContent: config,
+          url: url,
+          updateInterval: Duration(hours: intervalHours),
+        );
+        ref.read(profilesProvider.notifier).addLocal(profile);
+        ok++;
+      } catch (_) {
+        failed++;
+      }
+    }
+    if (context.mounted) AppNotifier.success(s.importAllResult(ok, failed));
+  }
+
+  // ── Config viewer ─────────────────────────────────────────────────
+
   void _showConfigViewer(BuildContext context, Profile profile) async {
     final s = S.of(context);
     final config = await ref.read(profileRepositoryProvider).loadConfig(profile.id);
@@ -548,6 +775,15 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   }
 }
 
+/// Small icon+label row for popup menu items.
+Widget _menuItem(IconData icon, String label) => Row(
+      children: [
+        Icon(icon, size: 16, color: Colors.grey),
+        const SizedBox(width: 10),
+        Text(label),
+      ],
+    );
+
 class _ProfileCard extends StatelessWidget {
   final Profile profile;
   final bool isActive;
@@ -555,6 +791,7 @@ class _ProfileCard extends StatelessWidget {
   final VoidCallback onUpdate;
   final VoidCallback onEdit;
   final VoidCallback onViewConfig;
+  final VoidCallback onExport;
   final VoidCallback onDelete;
 
   const _ProfileCard({
@@ -564,6 +801,7 @@ class _ProfileCard extends StatelessWidget {
     required this.onUpdate,
     required this.onEdit,
     required this.onViewConfig,
+    required this.onExport,
     required this.onDelete,
   });
 
@@ -625,6 +863,8 @@ class _ProfileCard extends StatelessWidget {
                           onEdit();
                         case 'config':
                           onViewConfig();
+                        case 'export':
+                          onExport();
                         case 'copy':
                           Clipboard.setData(
                               ClipboardData(text: profile.url));
@@ -641,7 +881,10 @@ class _ProfileCard extends StatelessWidget {
                       PopupMenuItem(
                           value: 'config', child: Text(s.viewConfig)),
                       PopupMenuItem(
+                          value: 'export', child: Text(s.exportProfile)),
+                      PopupMenuItem(
                           value: 'copy', child: Text(s.copyLink)),
+                      const PopupMenuDivider(),
                       PopupMenuItem(
                           value: 'delete',
                           child: Text(s.delete,

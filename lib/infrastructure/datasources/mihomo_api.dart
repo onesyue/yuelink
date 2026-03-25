@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -330,7 +331,13 @@ class MihomoApi {
     if (resp.statusCode != 200) {
       throw MihomoApiException(resp.statusCode, resp.body);
     }
-    return json.decode(resp.body) as Map<String, dynamic>;
+    // Large responses (e.g. /proxies with 1000+ nodes) can be several MB.
+    // Decode in a background isolate to avoid UI jank on low-end devices.
+    final body = resp.body;
+    if (body.length > 50000) {
+      return Isolate.run(() => json.decode(body) as Map<String, dynamic>);
+    }
+    return json.decode(body) as Map<String, dynamic>;
   });
 
   Future<http.Response> _put(String path,

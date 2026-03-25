@@ -5,6 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/storage/auth_token_service.dart';
 import '../../../infrastructure/datasources/xboard_api.dart';
+// Re-export shared types so other modules import from auth, not datasources.
+export '../../../infrastructure/datasources/xboard_api.dart'
+    show XBoardApi, XBoardApiException, UserProfile, SubscribeData;
 import '../../../l10n/app_strings.dart';
 import '../../../modules/profiles/providers/profiles_providers.dart';
 import '../../../core/kernel/core_manager.dart';

@@ -21,7 +21,7 @@ flutter test test/models/                          # Run single test directory
 flutter build apk|ios|macos|windows                # Release builds
 ```
 
-Go >= 1.22 required for core compilation. Flutter >= 3.22, Dart >= 3.4. CI uses Flutter 3.27.4, Go 1.23.
+Go >= 1.22 required for core compilation. Flutter >= 3.27, Dart >= 3.6. CI uses Flutter 3.41.5, Go 1.23.
 Xcode >= 15 for iOS/macOS builds. Android NDK r26+ for Android builds.
 
 **macOS universal binary** (two separate arch builds, then `install` merges via `lipo`):

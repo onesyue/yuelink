@@ -23,6 +23,7 @@ import '../../shared/app_notifier.dart';
 import '../../core/kernel/geodata_service.dart';
 import '../../core/storage/settings_service.dart';
 import '../../modules/nodes/providers/nodes_providers.dart';
+import '../../core/env_config.dart';
 import '../../services/update_checker.dart';
 import '../../theme.dart';
 import '../mine/widgets/account_card.dart';
@@ -405,6 +406,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               _SettingsCard(
                 child: Column(
                   children: [
+                    // "Check for updates" — hidden in store builds to pass
+                    // App Store / Google Play review (self-update is prohibited).
+                    if (EnvConfig.isStandalone) ...[
                     YLInfoRow(
                       label: s.checkUpdate,
                       value: ref.watch(appVersionProvider).valueOrNull ?? '',
@@ -426,8 +430,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                               ? () => _showUpdateDialog(context, _pendingUpdate!)
                               : () async {
                                   setState(() => _checkingUpdate = true);
+                                  // Manual check ignores skipped versions
                                   final info =
-                                      await UpdateChecker.instance.check();
+                                      await UpdateChecker.instance.check(ignoreSkipped: true);
                                   if (mounted) {
                                     setState(() {
                                       _pendingUpdate = info;
@@ -442,6 +447,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                                 },
                     ),
                     Divider(height: 1, thickness: 0.5, color: dividerColor),
+                    ],
                     YLInfoRow(
                       label: s.mineTelegramGroup,
                       trailing: const Icon(Icons.chevron_right,

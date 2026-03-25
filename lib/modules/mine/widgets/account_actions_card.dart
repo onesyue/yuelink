@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../../infrastructure/datasources/xboard_api.dart';
+import '../../yue_auth/providers/yue_auth_providers.dart';
 import '../../../l10n/app_strings.dart';
 import '../../../modules/store/order_history_page.dart';
 import '../../../modules/profiles/profiles_page.dart';

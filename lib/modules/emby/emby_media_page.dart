@@ -121,7 +121,10 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
   String? _error;
   String _query = '';
 
-  /// Per-library item cache — switching tabs is instant on revisit.
+  /// Per-library item cache with LRU eviction (max 5 libraries).
+  /// Dart's default Map (LinkedHashMap) maintains insertion order, so
+  /// remove + re-insert moves a key to the end (most recently used).
+  static const _maxCachedLibraries = 5;
   final Map<String, List<_Item>> _itemsCache = {};
 
   List<_Item>? get _items =>
@@ -164,22 +167,13 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
     try {
       final data = await _api.get('/emby/Users/${widget.userId}/Views');
       if (!mounted) return;
-      // Group by CollectionType (movies→tvshows→music→others).
-      // Within the same type, preserve server-returned order so display
-      // sequence is controlled from the Emby admin panel — no code changes
-      // needed when new libraries or storage are added.
-      const typeOrder = {'movies': 0, 'tvshows': 1, 'music': 2};
-      final rawLibs = (data['Items'] as List<dynamic>)
+      // Emby already returns Views sorted by each library's SortName field.
+      // Use server order directly — no client-side sort needed.
+      // To change display order, set SortName on the Emby server
+      // (e.g. "00_电影", "01_电视剧", "02_动漫").
+      final libs = (data['Items'] as List<dynamic>)
           .map((e) => _Library.fromJson(e as Map<String, dynamic>))
           .toList();
-      final libs = List<_Library>.from(rawLibs)
-        ..sort((a, b) {
-          final ai = typeOrder[a.type] ?? 99;
-          final bi = typeOrder[b.type] ?? 99;
-          if (ai != bi) return ai.compareTo(bi);
-          // Same type: keep original server order (stable).
-          return rawLibs.indexOf(a).compareTo(rawLibs.indexOf(b));
-        });
       setState(() {
         _libraries = libs;
         _loadingLibs = false;
@@ -198,8 +192,11 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
   }
 
   Future<void> _loadItems(String libraryId) async {
-    // Return cached data instantly.
+    // Return cached data instantly; touch LRU order.
     if (_itemsCache.containsKey(libraryId)) {
+      // Move to end (most recently used)
+      final cached = _itemsCache.remove(libraryId)!;
+      _itemsCache[libraryId] = cached;
       setState(() => _loadingItems = false);
       return;
     }
@@ -222,6 +219,10 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
           .toList();
       setState(() {
         _itemsCache[libraryId] = items;
+        // Evict oldest (first) entries when over LRU limit
+        while (_itemsCache.length > _maxCachedLibraries) {
+          _itemsCache.remove(_itemsCache.keys.first);
+        }
         _loadingItems = false;
       });
     } catch (_) {
@@ -271,7 +272,7 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
             style: TextStyle(color: EmbyTheme.textPrimary(context), fontWeight: FontWeight.w600)),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh_rounded, color: Colors.white70),
+            icon: const Icon(Icons.refresh_rounded),
             onPressed: () {
               _itemsCache.clear();
               setState(() => _query = '');
@@ -285,14 +286,11 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
   }
 
   Widget _buildBody() {
-    if (_loadingLibs) {
-      return Center(
-          child: CircularProgressIndicator(color: EmbyTheme.textSecondary(context)));
-    }
+    if (_loadingLibs) return _buildSkeleton();
     if (_error != null) return _buildError(_error!);
     if (_libraries == null || _libraries!.isEmpty) {
-      return const Center(
-        child: Text('暂无媒体库', style: TextStyle(color: Colors.white54)),
+      return Center(
+        child: Text('暂无媒体库', style: TextStyle(color: EmbyTheme.textSecondary(context))),
       );
     }
     return Column(
@@ -363,7 +361,7 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
       child: TextField(
         onChanged: (v) => setState(() => _query = v),
-        style: const TextStyle(color: Colors.white, fontSize: 14),
+        style: TextStyle(color: EmbyTheme.textPrimary(context), fontSize: 14),
         decoration: InputDecoration(
           hintText: '搜索...',
           hintStyle: TextStyle(color: EmbyTheme.textSecondary(context), fontSize: 14),
@@ -388,16 +386,14 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
   }
 
   Widget _buildItemsArea() {
-    if (_loadingItems) {
-      return const Center(
-          child: CircularProgressIndicator(color: Colors.white54));
-    }
+    if (_loadingItems) return _buildSkeletonGrid();
+
     final items = _filteredItems;
     if (items.isEmpty) {
       return Center(
         child: Text(
           _query.isNotEmpty ? '无匹配结果' : '暂无内容',
-          style: const TextStyle(color: Colors.white38),
+          style: TextStyle(color: EmbyTheme.textTertiary(context)),
         ),
       );
     }
@@ -405,7 +401,7 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
     final cols = screenWidth > 1200 ? 7 : screenWidth > 900 ? 5 : screenWidth > 600 ? 4 : 3;
     final hPad = screenWidth > 900 ? (screenWidth - 900) / 2 + 16 : 12.0;
     return RefreshIndicator(
-      color: Colors.white70,
+      color: EmbyTheme.textSecondary(context),
       backgroundColor: EmbyTheme.appBarBg(context),
       onRefresh: () async {
         _itemsCache.remove(_selectedId);
@@ -497,7 +493,7 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
         children: [
           Icon(
             item.type == 'Series' ? Icons.tv_outlined : Icons.movie_outlined,
-            color: Colors.white24,
+            color: EmbyTheme.textTertiary(context),
             size: 36,
           ),
           const SizedBox(height: 8),
@@ -505,13 +501,69 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
             padding: const EdgeInsets.symmetric(horizontal: 8),
             child: Text(
               item.name,
-              style: const TextStyle(color: Colors.white38, fontSize: 11),
+              style: TextStyle(color: EmbyTheme.textTertiary(context), fontSize: 11),
               textAlign: TextAlign.center,
               maxLines: 3,
               overflow: TextOverflow.ellipsis,
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  // ── Skeleton loading ─────────────────────────────────────────────
+
+  Widget _buildSkeleton() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final shimmer = isDark ? const Color(0xFF27272A) : const Color(0xFFE4E4E7);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Skeleton pills
+        SizedBox(
+          height: 44,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+            itemCount: 4,
+            separatorBuilder: (_, __) => const SizedBox(width: 8),
+            itemBuilder: (_, __) => Container(
+              width: 72,
+              decoration: BoxDecoration(
+                color: shimmer,
+                borderRadius: BorderRadius.circular(20),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        // Skeleton grid
+        Expanded(child: _buildSkeletonGrid()),
+      ],
+    );
+  }
+
+  Widget _buildSkeletonGrid() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final shimmer = isDark ? const Color(0xFF27272A) : const Color(0xFFE4E4E7);
+    final screenWidth = MediaQuery.of(context).size.width;
+    final cols = screenWidth > 1200 ? 7 : screenWidth > 900 ? 5 : screenWidth > 600 ? 4 : 3;
+    final hPad = screenWidth > 900 ? (screenWidth - 900) / 2 + 16 : 12.0;
+    return GridView.builder(
+      padding: EdgeInsets.fromLTRB(hPad, 4, hPad, 24),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: cols,
+        childAspectRatio: 2 / 3,
+        crossAxisSpacing: 8,
+        mainAxisSpacing: 8,
+      ),
+      itemCount: cols * 3,
+      itemBuilder: (_, __) => Container(
+        decoration: BoxDecoration(
+          color: shimmer,
+          borderRadius: BorderRadius.circular(6),
+        ),
       ),
     );
   }
@@ -523,18 +575,18 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.wifi_off_rounded,
-                color: Colors.white38, size: 48),
+            Icon(Icons.wifi_off_rounded,
+                color: EmbyTheme.textTertiary(context), size: 48),
             const SizedBox(height: 16),
             Text(message,
-                style: const TextStyle(color: Colors.white54),
+                style: TextStyle(color: EmbyTheme.textSecondary(context)),
                 textAlign: TextAlign.center),
             const SizedBox(height: 24),
             OutlinedButton(
               onPressed: _loadLibraries,
               style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.white70,
-                side: const BorderSide(color: Colors.white24),
+                foregroundColor: EmbyTheme.textSecondary(context),
+                side: BorderSide(color: EmbyTheme.textTertiary(context)),
               ),
               child: const Text('重试'),
             ),

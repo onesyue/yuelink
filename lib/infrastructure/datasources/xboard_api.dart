@@ -26,6 +26,10 @@ class XBoardApi {
 
   static const _kTimeout = Duration(seconds: 20);
 
+  /// Override in tests to inject a mock [http.Client].
+  @visibleForTesting
+  static http.Client Function()? testClientFactory;
+
   /// Build an [http.Client] backed by [dart:io]'s [HttpClient].
   ///
   /// This ensures:
@@ -33,6 +37,7 @@ class XBoardApi {
   ///   - Connection / idle timeouts are explicit.
   ///   - Works correctly on all Flutter platforms (Android, iOS, macOS, Windows).
   static http.Client _buildClient() {
+    if (testClientFactory != null) return testClientFactory!();
     final inner = HttpClient()
       ..connectionTimeout = const Duration(seconds: 20)
       ..idleTimeout = const Duration(seconds: 30);
@@ -373,7 +378,11 @@ class XBoardApi {
         return await fn();
       } catch (e) {
         final isLast = attempt == _maxRetries - 1;
-        if (isLast || !_isTransient(e)) rethrow;
+        if (isLast) {
+          debugPrint('[XBoardApi] All $_maxRetries retries exhausted: $e');
+          rethrow;
+        }
+        if (!_isTransient(e)) rethrow;
         debugPrint('[XBoardApi] Retry ${attempt + 1}/$_maxRetries after: $e');
         await Future.delayed(_retryDelays[attempt]);
       }

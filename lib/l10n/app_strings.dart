@@ -151,6 +151,18 @@ class S {
   String get snackStartFailed =>
       _e ? 'Connection failed, please try again' : '连接失败，请稍后重试';
 
+  // VPN permission pre-auth dialog (first connection on mobile)
+  String get vpnPermTitle =>
+      _e ? 'VPN Permission Required' : '需要 VPN 权限';
+  String get vpnPermBody => _e
+      ? 'YueLink needs to create a local VPN tunnel to route your traffic securely. '
+        'No personal data is sent to our servers — all processing happens on your device.\n\n'
+        'Tap "Continue" to grant the VPN permission.'
+      : '悦通需要创建本地 VPN 隧道来安全转发你的网络流量。'
+        '不会将任何个人数据发送至服务器——所有处理均在本地完成。\n\n'
+        '点击「继续」授予 VPN 权限。';
+  String get vpnPermContinue => _e ? 'Continue' : '继续';
+
   // ── Proxy page ────────────────────────────────────────────────────
   String get notConnectedHintProxy =>
       _e ? 'Connect first to view proxy nodes' : '请先连接以查看代理节点';
@@ -245,6 +257,17 @@ class S {
   String get importLocalFileFailed =>
       _e ? 'Import failed: no valid YAML file selected' : '导入失败：未选择有效的 YAML 文件';
   String get importLocalNameHint => _e ? 'My Config' : '我的配置';
+  String get exportProfile => _e ? 'Export config' : '导出配置';
+  String exportProfileSuccess(String name) =>
+      _e ? 'Exported: $name.yaml' : '已导出: $name.yaml';
+  String get exportAllProfiles => _e ? 'Export all configs' : '导出全部订阅配置';
+  String get importAllProfiles => _e ? 'Import all configs' : '导入全部订阅配置';
+  String get exportFailed => _e ? 'Export failed' : '导出失败';
+  String importAllResult(int ok, int failed) => failed == 0
+      ? (_e ? 'Imported $ok subscriptions' : '成功导入 $ok 个订阅')
+      : (_e ? 'Imported $ok, failed $failed' : '成功 $ok 个，失败 $failed 个');
+  String get importBundleFailed =>
+      _e ? 'Import failed: invalid backup file' : '导入失败：无效的备份文件';
 
   // ── Split tunneling (Android) ─────────────────────────────────────
   String get sectionSplitTunnel =>

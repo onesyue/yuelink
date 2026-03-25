@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:web_socket_channel/io.dart';
 
 import '../../domain/logs/log_entry.dart';
 export '../../domain/logs/log_entry.dart';
@@ -82,7 +82,7 @@ class MihomoStream {
   Stream<Map<String, dynamic>> _connectWithRetry(String path) {
     late StreamController<Map<String, dynamic>> controller;
     bool cancelled = false;
-    WebSocketChannel? activeChannel;
+    IOWebSocketChannel? activeChannel;
 
     Future<void> connect() async {
       var retryDelay = const Duration(seconds: 2);
@@ -90,11 +90,15 @@ class MihomoStream {
 
       while (!cancelled) {
         try {
-          final sep = path.contains('?') ? '&' : '?';
-          final authPath =
-              secret != null ? '$path${sep}token=$secret' : path;
-          final uri = Uri.parse('$_wsBase$authPath');
-          final channel = WebSocketChannel.connect(uri);
+          final uri = Uri.parse('$_wsBase$path');
+          // Pass token via HTTP header instead of URL query parameter
+          // to prevent it from appearing in proxy/server access logs.
+          final channel = IOWebSocketChannel.connect(
+            uri,
+            headers: secret != null
+                ? {'Authorization': 'Bearer $secret'}
+                : null,
+          );
           activeChannel = channel;
           var gotFirstMessage = false;
 

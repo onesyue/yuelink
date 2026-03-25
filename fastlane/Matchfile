@@ -1,0 +1,18 @@
+# Match configuration for iOS certificate management.
+#
+# Setup:
+#   1. Create a private Git repo for certificates (e.g. github.com/onesyue/certs)
+#   2. Run: fastlane match init
+#   3. Run: fastlane match appstore (generates + stores certs)
+#
+# CI: Set MATCH_PASSWORD env var in GitHub Secrets.
+
+git_url(ENV["MATCH_GIT_URL"] || "https://github.com/onesyue/yuelink-certs.git")
+
+storage_mode("git")
+
+type("appstore")
+
+app_identifier(["com.yueto.yuelink", "com.yueto.yuelink.PacketTunnel"])
+
+# team_id("YOUR_TEAM_ID")  # Uncomment and set your Apple Developer Team ID

@@ -7,7 +7,6 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../domain/store/payment_method.dart';
 import '../../domain/store/store_order.dart';
 import '../../domain/store/store_plan.dart';
-import '../../infrastructure/datasources/xboard_api.dart';
 import '../../infrastructure/store/store_repository.dart';
 import '../../modules/yue_auth/providers/yue_auth_providers.dart';
 import 'state/purchase_state.dart';

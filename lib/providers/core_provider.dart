@@ -11,6 +11,7 @@ import '../l10n/app_strings.dart';
 import '../shared/app_notifier.dart';
 import '../shared/event_log.dart';
 import '../core/kernel/core_manager.dart';
+import '../core/kernel/recovery_manager.dart';
 import '../infrastructure/datasources/mihomo_api.dart';
 
 // Re-export traffic stream providers and chart UI state
@@ -484,11 +485,7 @@ final coreHeartbeatProvider = Provider<void>((ref) {
             if (!proxyOk) {
               debugPrint('[Heartbeat] system proxy conflict — another client took over port $port');
               AppNotifier.warning(S.current.msgSystemProxyConflict);
-              ref.read(coreStatusProvider.notifier).state = CoreStatus.stopped;
-              ref.read(trafficProvider.notifier).state = const Traffic();
-              ref.read(trafficHistoryProvider.notifier).state = TrafficHistory();
-              ref.read(trafficHistoryVersionProvider.notifier).state = 0;
-              manager.stop().catchError((_) {});
+              resetCoreToStopped(ref, clearDesktopProxy: false);
               failures = 0;
               return;
             }
@@ -501,15 +498,7 @@ final coreHeartbeatProvider = Provider<void>((ref) {
           'ffi.isRunning=$ffiRunning, api=$apiOk');
       if (failures >= 3) {
         debugPrint('[Heartbeat] core dead, cleaning up');
-        ref.read(coreStatusProvider.notifier).state = CoreStatus.stopped;
-        ref.read(trafficProvider.notifier).state = const Traffic();
-        ref.read(trafficHistoryProvider.notifier).state = TrafficHistory();
-        ref.read(trafficHistoryVersionProvider.notifier).state = 0;
-        // Clear desktop system proxy to prevent dead-proxy network blackout
-        if (Platform.isMacOS || Platform.isWindows) {
-          CoreActions.clearSystemProxyStatic().catchError((_) {});
-        }
-        manager.stop().catchError((_) {});
+        resetCoreToStopped(ref);
         failures = 0;
       }
     }

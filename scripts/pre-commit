@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# Git pre-commit hook — runs before every commit.
+#
+# Install: cp scripts/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+# Or:      ln -sf ../../scripts/pre-commit .git/hooks/pre-commit
+#
+# Checks:
+#   1. flutter analyze (errors only, warnings/infos are non-fatal)
+#   2. flutter test (all unit tests)
+#   3. Architecture import rules (scripts/check_imports.sh)
+
+set -e
+
+echo "🔧 Pre-commit: running checks..."
+
+# 1. Static analysis (errors only)
+echo "  [1/3] flutter analyze..."
+flutter analyze --no-fatal-infos --no-fatal-warnings
+if [ $? -ne 0 ]; then
+  echo "❌ flutter analyze failed. Fix errors before committing."
+  exit 1
+fi
+
+# 2. Unit tests
+echo "  [2/3] flutter test..."
+flutter test --no-pub
+if [ $? -ne 0 ]; then
+  echo "❌ flutter test failed. Fix failing tests before committing."
+  exit 1
+fi
+
+# 3. Architecture import guard
+echo "  [3/3] Architecture import check..."
+bash scripts/check_imports.sh
+if [ $? -ne 0 ]; then
+  echo "❌ Architecture violations found. Fix imports before committing."
+  exit 1
+fi
+
+echo "✅ All pre-commit checks passed."
