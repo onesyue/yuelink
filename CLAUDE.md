@@ -291,3 +291,24 @@ The Emby module (`lib/modules/emby/`) is fully data-driven from the Emby server:
 - **Responsive poster sizing** — 180px (mobile) / 240px (tablet >900px) / 280px (desktop >1200px).
 - **Hero Banner** — auto-selects first item with backdrop from any library for the featured 16:9 banner.
 - **LRU preview cache** — max 5 libraries cached in memory; `_previewCache` auto-evicts oldest.
+- **STRM library support** — `_Library.includeItemTypes` returns `Movie,Video` (movies), `Series,Video` (tvshows), `MusicAlbum` (music). The `Video` type is required for STRM-based 搬运 servers where Emby indexes files as generic `Video` items instead of `Movie`/`Series` when metadata scraping is incomplete. Without `Video`, item count returns 0 for these libraries.
+
+### CloudFront fallback
+
+`_kDefaultApiHost` is the CloudFront CDN endpoint. `_kDirectOriginUrl` (`http://66.55.76.208:8001`) is the direct origin fallback. `XBoardApi` accepts `fallbackUrl` in its constructor — after exhausting retries on 502/503, it automatically retries the full request on the fallback URL. All `XBoardApi` instantiations in `yue_auth_providers.dart` must include `fallbackUrl: _kDirectOriginUrl`. This is critical: CloudFront→origin can be unreliable, and without the fallback, users get login failures that appear as network errors.
+
+### Checkin API server
+
+Runs on `23.80.91.14:8011`, nginx-proxied via `yue.yuebao.website`. Deploy: `scp main.py root@23.80.91.14:/opt/checkin-api/main.py && ssh root@23.80.91.14 systemctl restart checkin-api`. **Critical**: XBoard `/api/v1/user/info` does NOT return `id` — the server resolves user ID by querying `v2_user` by `email` from the info response. `XBOARD_BASE` must be set to `http://66.55.76.208:8001` (direct origin) in `.env`, NOT the CloudFront domain — XBoard's nginx blocks non-CloudFront traffic by UA and the Python urllib UA is rejected.
+
+### Android signing
+
+Keystore: `android/app/yuelink.jks`, alias `yuelink`, store/key password `yuelink2024`. Build signed release:
+```bash
+KEYSTORE_PATH="$(pwd)/android/app/yuelink.jks" \
+KEYSTORE_PASSWORD="yuelink2024" \
+KEY_ALIAS="yuelink" \
+KEY_PASSWORD="yuelink2024" \
+flutter build apk --release --split-per-abi
+```
+Output: `build/app/outputs/flutter-apk/app-arm64-v8a-release.apk` (recommended for distribution, ~93MB).
