@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../l10n/app_strings.dart';
 import '../../../modules/announcements/presentation/announcements_page.dart';
+import '../../../modules/emby/emby_media_page.dart';
 import '../../../modules/emby/emby_providers.dart';
 import '../../../modules/emby/emby_web_page.dart';
 import '../../../modules/yue_auth/providers/yue_auth_providers.dart';
@@ -45,14 +46,25 @@ class _QuickActionsCardState extends ConsumerState<QuickActionsCard> {
       AppNotifier.warning(s.mineEmbyNoAccess);
       return;
     }
-    _launchUrl(emby.launchUrl!);
-  }
-
-  void _launchUrl(String url) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => EmbyWebPage(url: url)),
-    );
+    // Prefer native media browser when parsed info is available
+    if (emby.hasNativeAccess) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => EmbyMediaPage(
+            serverUrl: emby.serverBaseUrl!,
+            userId: emby.parsedUserId!,
+            accessToken: emby.parsedAccessToken!,
+            serverId: emby.parsedServerId ?? '',
+          ),
+        ),
+      );
+    } else {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => EmbyWebPage(url: emby.launchUrl!)),
+      );
+    }
   }
 
   @override

@@ -4,7 +4,6 @@ import '../../../domain/announcements/announcement_entity.dart';
 import '../../../infrastructure/announcements/announcements_local_datasource.dart';
 import '../../../infrastructure/announcements/announcements_repository.dart';
 import '../../yue_auth/providers/yue_auth_providers.dart';
-import '../../../modules/yue_auth/providers/yue_auth_providers.dart';
 
 // ── DI: Infrastructure instances ────────────────────────────────────────────
 

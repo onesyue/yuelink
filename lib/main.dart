@@ -8,7 +8,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:launch_at_startup/launch_at_startup.dart';
-import 'package:path_provider/path_provider.dart';
+
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -38,6 +38,7 @@ import 'services/profile_service.dart';
 import 'services/subscription_sync_service.dart';
 import 'services/update_checker.dart';
 import 'core/storage/settings_service.dart';
+import 'modules/emby/emby_media_page.dart';
 import 'modules/emby/emby_providers.dart';
 import 'modules/emby/emby_web_page.dart';
 import 'theme.dart';
@@ -985,10 +986,26 @@ class _MainShellState extends ConsumerState<MainShell> {
       AppNotifier.warning(s.mineEmbyNoAccess);
       return;
     }
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => EmbyWebPage(url: emby.launchUrl!)),
-    );
+    // Prefer native media browser when full parsed info is available,
+    // fall back to in-app WebView otherwise.
+    if (emby.hasNativeAccess) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => EmbyMediaPage(
+            serverUrl: emby.serverBaseUrl!,
+            userId: emby.parsedUserId!,
+            accessToken: emby.parsedAccessToken!,
+            serverId: emby.parsedServerId ?? '',
+          ),
+        ),
+      );
+    } else {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => EmbyWebPage(url: emby.launchUrl!)),
+      );
+    }
   }
 
   static const _pages = [

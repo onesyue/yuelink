@@ -4,7 +4,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:yuelink/core/kernel/core_manager.dart';
-import 'package:yuelink/core/ffi/core_controller.dart';
 
 /// CoreManager tests run in **mock mode** (no native library / FFI).
 ///

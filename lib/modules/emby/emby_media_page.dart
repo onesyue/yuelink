@@ -35,8 +35,10 @@ class _Library {
     switch (type) {
       case 'music':
         return 'MusicAlbum';
+      case 'tvshows':
+        return 'Series,Video';
       default:
-        return 'Movie,Series';
+        return 'Movie,Video';
     }
   }
 }
@@ -485,10 +487,10 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
                   fontWeight: FontWeight.w600,
                 ),
               ),
-              if (hasItems) ...[
+              if (items case final items? when items.isNotEmpty) ...[
                 const SizedBox(width: 6),
                 Text(
-                  '${items!.length}',
+                  '${items.length}',
                   style: TextStyle(
                     color: EmbyTheme.textTertiary(context),
                     fontSize: 13,
@@ -528,7 +530,7 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
                   : ListView.separated(
                       scrollDirection: Axis.horizontal,
                       padding: const EdgeInsets.symmetric(horizontal: 16),
-                      itemCount: items!.length,
+                      itemCount: items.length,
                       separatorBuilder: (_, __) => const SizedBox(width: 10),
                       itemBuilder: (_, i) =>
                           _buildRowPoster(items[i], height: rowHeight),

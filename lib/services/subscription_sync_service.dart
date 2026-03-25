@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/kernel/core_manager.dart';
-import '../domain/models/profile.dart';
 import '../infrastructure/repositories/profile_repository.dart';
 import '../modules/profiles/providers/profiles_providers.dart';
 import '../shared/event_log.dart';
@@ -64,17 +63,8 @@ Future<void> _syncStaleProfiles(Ref ref) async {
       await repo.updateProfile(profile, proxyPort: proxyPort);
       EventLog.write('[Sync] updated ${profile.name}');
 
-      // Update in-memory state
-      final list = ref.read(profilesProvider).valueOrNull;
-      if (list != null) {
-        final idx = list.indexWhere((p) => p.id == profile.id);
-        if (idx != -1) {
-          final updated = [...list];
-          updated[idx] = profile;
-          ref.read(profilesProvider.notifier).state =
-              AsyncValue.data(updated);
-        }
-      }
+      // Refresh in-memory profiles list
+      ref.read(profilesProvider.notifier).load();
     } catch (e) {
       debugPrint('[SubscriptionSync] failed to update ${profile.name}: $e');
       EventLog.write('[Sync] failed ${profile.name}: $e');

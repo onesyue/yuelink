@@ -68,12 +68,15 @@ class AuthState {
 /// Must match the CloudFront custom domain so TLS SNI handshake succeeds.
 const _kDefaultApiHost = 'https://d7ccm19ki90mg.cloudfront.net';
 
+/// Direct origin URL — used as fallback when CloudFront returns 502/503.
+const _kDirectOriginUrl = 'http://66.55.76.208:8001';
+
 /// Tracks the current API host — updated on login and restored from storage.
 final _apiHostProvider = StateProvider<String>((ref) => _kDefaultApiHost);
 
 final xboardApiProvider = Provider<XBoardApi>((ref) {
   final host = ref.watch(_apiHostProvider);
-  return XBoardApi(baseUrl: host);
+  return XBoardApi(baseUrl: host, fallbackUrl: _kDirectOriginUrl);
 });
 
 // ------------------------------------------------------------------
@@ -137,7 +140,7 @@ class AuthNotifier extends Notifier<AuthState> {
     try {
       // Resolve API host
       final host = apiHost ?? _kDefaultApiHost;
-      final api = XBoardApi(baseUrl: host);
+      final api = XBoardApi(baseUrl: host, fallbackUrl: _kDirectOriginUrl);
 
       // 1. Login
       final loginResp = await api.login(email, password);
@@ -270,7 +273,7 @@ class AuthNotifier extends Notifier<AuthState> {
   Future<void> _refreshUserInfo(String token) async {
     try {
       final host = await _authService.getApiHost() ?? _kDefaultApiHost;
-      final api = XBoardApi(baseUrl: host);
+      final api = XBoardApi(baseUrl: host, fallbackUrl: _kDirectOriginUrl);
       final sub = await api.getSubscribeData(token);
       await _authService.cacheProfile(sub.profile);
       // Also update subscribe URL in case it changed
@@ -292,7 +295,7 @@ class AuthNotifier extends Notifier<AuthState> {
     if (token == null) return;
     try {
       final host = await _authService.getApiHost() ?? _kDefaultApiHost;
-      final api = XBoardApi(baseUrl: host);
+      final api = XBoardApi(baseUrl: host, fallbackUrl: _kDirectOriginUrl);
       // Always fetch fresh from server — also updates profile data
       final sub = await api.getSubscribeData(token);
       await _authService.cacheProfile(sub.profile);

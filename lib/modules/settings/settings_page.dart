@@ -469,22 +469,14 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                       label: s.minePrivacyPolicy,
                       trailing: const Icon(Icons.chevron_right,
                           size: 18, color: YLColors.zinc400),
-                      onTap: () async {
+                      onTap: () {
                         const tosUrl = 'https://yue.to/tos.html';
-                        if (Platform.isAndroid || Platform.isIOS) {
-                          Navigator.of(context).push(MaterialPageRoute(
-                            builder: (_) => InAppWebPage(
-                              title: s.minePrivacyPolicy,
-                              url: tosUrl,
-                            ),
-                          ));
-                        } else {
-                          final uri = Uri.parse(tosUrl);
-                          if (await canLaunchUrl(uri)) {
-                            await launchUrl(uri,
-                                mode: LaunchMode.externalApplication);
-                          }
-                        }
+                        Navigator.of(context).push(MaterialPageRoute(
+                          builder: (_) => InAppWebPage(
+                            title: s.minePrivacyPolicy,
+                            url: tosUrl,
+                          ),
+                        ));
                       },
                     ),
                     Divider(height: 1, thickness: 0.5, color: dividerColor),

@@ -834,13 +834,15 @@ class _ProfileCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: isActive
             ? (isDark
-                ? YLColors.primary.withValues(alpha: 0.10)
+                ? YLColors.primaryDark.withValues(alpha: 0.10)
                 : YLColors.primaryLight)
             : (isDark ? YLColors.zinc800 : Colors.white),
         borderRadius: BorderRadius.circular(YLRadius.xl),
         border: Border.all(
           color: isActive
-              ? YLColors.primary.withValues(alpha: 0.20)
+              ? (isDark
+                  ? YLColors.primaryDark.withValues(alpha: 0.30)
+                  : YLColors.primary.withValues(alpha: 0.20))
               : (isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.08)),
           width: 0.5,
         ),
@@ -862,8 +864,8 @@ class _ProfileCard extends StatelessWidget {
                         ? Icons.check_circle
                         : Icons.circle_outlined,
                     color: isActive
-                        ? YLColors.primary
-                        : YLColors.zinc400,
+                        ? (isDark ? YLColors.primaryDark : YLColors.primary)
+                        : (isDark ? YLColors.zinc400 : YLColors.zinc500),
                     size: 20,
                   ),
                   const SizedBox(width: 8),

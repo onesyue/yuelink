@@ -2,12 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../yue_auth/providers/yue_auth_providers.dart';
 import '../../../l10n/app_strings.dart';
 import '../../../modules/store/order_history_page.dart';
 import '../../../modules/profiles/profiles_page.dart';
 import '../../../modules/store/store_page.dart';
-import '../../../modules/yue_auth/providers/yue_auth_providers.dart';
+import '../../yue_auth/providers/yue_auth_providers.dart';
 import '../../../shared/app_notifier.dart';
 import '../../../theme.dart';
 
