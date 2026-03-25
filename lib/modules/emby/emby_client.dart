@@ -138,12 +138,16 @@ class EmbyImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Request higher resolution for high-DPI screens (2x/3x).
+    // A 150px logical width on a 3x screen needs 450px actual pixels.
+    final dpr = MediaQuery.of(context).devicePixelRatio.clamp(1.0, 3.0);
+    final physicalWidth = (width * dpr).toInt();
     return CachedNetworkImage(
-      imageUrl: url ?? api.imageUrl(itemId, width: width),
+      imageUrl: url ?? api.imageUrl(itemId, width: physicalWidth),
       cacheManager: EmbyClient.imageCacheManager,
       fit: fit,
       fadeInDuration: const Duration(milliseconds: 200),
-      memCacheHeight: width ~/ 2 * 3, // ~aspect ratio 2:3
+      memCacheHeight: physicalWidth ~/ 2 * 3, // ~aspect ratio 2:3
       placeholder: (_, __) => Container(
         color: Theme.of(context).brightness == Brightness.dark
             ? const Color(0xFF1C1C1E)

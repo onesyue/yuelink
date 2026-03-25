@@ -435,7 +435,7 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
                 api: _api,
                 itemId: item.id,
                 fit: BoxFit.cover,
-                width: 150,
+                width: 200,
                 placeholder: _posterPlaceholder(item),
               )
             else
