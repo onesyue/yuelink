@@ -30,9 +30,9 @@ class SettingsService {
     }
     try {
       _cache = json.decode(await file.readAsString()) as Map<String, dynamic>;
-    } catch (_) {
+    } catch (e) {
       // Corrupt JSON (crash during write, bad WebDAV sync) — fall back to empty.
-      debugPrint('[SettingsService] corrupt settings.json, resetting to empty');
+      debugPrint('[SettingsService] corrupt settings.json ($e), resetting to empty');
       _cache = {};
     }
     return _cache!;
@@ -55,9 +55,10 @@ class SettingsService {
       final tmp = File('${file.path}.tmp');
       await tmp.writeAsString(json.encode(settings));
       await tmp.rename(file.path);
-    }, onError: (_) {
+    }, onError: (e) {
       // Swallow errors in chained saves so _saveGuard never stays in a
       // rejected state (which would block all subsequent saves).
+      debugPrint('[SettingsService] save failed: $e');
     });
     return _saveGuard;
   }

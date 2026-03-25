@@ -176,10 +176,16 @@ class ProfileRepository {
     return profile;
   }
 
-  /// Import a local YAML file as a profile (no URL, no auto-update).
+  /// Import a local YAML file as a profile.
+  ///
+  /// [url] — optional subscription URL; if provided, the profile can be
+  /// updated later via [updateProfile]. Leave empty for local-only configs.
+  /// [updateInterval] — defaults to [Duration.zero] (no auto-update).
   Future<Profile> addLocalProfile({
     required String name,
     required String configContent,
+    String url = '',
+    Duration updateInterval = Duration.zero,
   }) async {
     final id = DateTime.now().millisecondsSinceEpoch.toString();
 
@@ -192,11 +198,11 @@ class ProfileRepository {
     final profile = Profile(
       id: id,
       name: name,
-      url: '', // no remote URL
+      url: url,
       configContent: finalContent,
       lastUpdated: DateTime.now(),
       subInfo: SubscriptionInfo(),
-      updateInterval: Duration.zero, // never auto-update
+      updateInterval: updateInterval,
     );
 
     final dir = await _getProfilesDir();

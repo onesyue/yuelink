@@ -6,7 +6,13 @@ import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../core/env_config.dart';
+import '../core/storage/settings_service.dart';
+
 /// Checks GitHub releases for a newer version of YueLink.
+///
+/// Only active when [EnvConfig.isStandalone] is true. Store builds
+/// (App Store / Google Play) must not contain self-update logic.
 class UpdateChecker {
   UpdateChecker._();
   static final instance = UpdateChecker._();
@@ -14,8 +20,11 @@ class UpdateChecker {
   static const _repoApi =
       'https://api.github.com/repos/onesyue/yuelink/releases/latest';
 
-  /// Check for updates. Returns null if already on latest or check fails.
-  Future<UpdateInfo?> check() async {
+  /// Check for updates. Returns null if already on latest, check fails,
+  /// version was skipped by user, or running in store mode.
+  Future<UpdateInfo?> check({bool ignoreSkipped = false}) async {
+    if (!EnvConfig.isStandalone) return null;
+
     try {
       final response = await http.get(
         Uri.parse(_repoApi),
@@ -38,6 +47,12 @@ class UpdateChecker {
 
       if (!_isNewer(latestVersion, currentVersion)) return null;
 
+      // Check if user has skipped this specific version
+      if (!ignoreSkipped) {
+        final skipped = await SettingsService.get<String>('skippedVersion');
+        if (skipped == latestVersion) return null;
+      }
+
       // Parse assets for direct download URL
       final assets = data['assets'] as List<dynamic>? ?? [];
       final downloadUrl = _findAssetUrl(assets);
@@ -54,6 +69,16 @@ class UpdateChecker {
       debugPrint('[UpdateChecker] check failed: $e');
       return null;
     }
+  }
+
+  /// Mark a version as skipped — won't prompt again for this version.
+  static Future<void> skipVersion(String version) async {
+    await SettingsService.set('skippedVersion', version);
+  }
+
+  /// Clear skipped version (e.g., on manual "check for updates" tap).
+  static Future<void> clearSkipped() async {
+    await SettingsService.set('skippedVersion', null);
   }
 
   /// Find the download URL for the current platform from release assets.

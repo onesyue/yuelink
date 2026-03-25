@@ -71,6 +71,19 @@ class EmbyClient {
       '$serverUrl/emby/Items/$itemId/Images/Backdrop'
       '?maxWidth=$width&quality=90&api_key=$accessToken';
 
+  /// POST to Emby REST API. Errors are silently ignored (fire-and-forget for
+  /// progress reporting).
+  Future<void> post(String path, Map<String, dynamic> body) async {
+    try {
+      final uri = Uri.parse('$serverUrl$path');
+      await _inner
+          .post(uri,
+              headers: {..._headers, 'Content-Type': 'application/json'},
+              body: jsonEncode(body))
+          .timeout(const Duration(seconds: 10));
+    } catch (_) {}
+  }
+
   void close() => _inner.close();
 
   // ── Proxy-aware image cache (shared across all pages) ─────────────────
@@ -125,13 +138,21 @@ class EmbyImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Request higher resolution for high-DPI screens (2x/3x).
+    // A 150px logical width on a 3x screen needs 450px actual pixels.
+    final dpr = MediaQuery.of(context).devicePixelRatio.clamp(1.0, 3.0);
+    final physicalWidth = (width * dpr).toInt();
     return CachedNetworkImage(
-      imageUrl: url ?? api.imageUrl(itemId, width: width),
+      imageUrl: url ?? api.imageUrl(itemId, width: physicalWidth),
       cacheManager: EmbyClient.imageCacheManager,
       fit: fit,
       fadeInDuration: const Duration(milliseconds: 200),
-      memCacheHeight: width ~/ 2 * 3, // ~aspect ratio 2:3
-      placeholder: (_, __) => Container(color: const Color(0xFF1C1C1E)),
+      memCacheHeight: physicalWidth ~/ 2 * 3, // ~aspect ratio 2:3
+      placeholder: (_, __) => Container(
+        color: Theme.of(context).brightness == Brightness.dark
+            ? const Color(0xFF1C1C1E)
+            : const Color(0xFFE4E4E7), // YLColors.zinc200
+      ),
       errorWidget: (_, __, ___) => placeholder,
     );
   }

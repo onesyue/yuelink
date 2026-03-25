@@ -70,8 +70,12 @@ class GroupListSection extends ConsumerWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final testing = ref.watch(delayTestingProvider);
     final isGroupTesting = testing.any((n) => group.all.contains(n));
-    // Read delays for sort order only; NodeTile handles rendering.
-    final delays = ref.watch(delayResultsProvider);
+    // Read delays for sort order only; NodeTile handles per-node rendering.
+    // Skip watching when sort is default — avoids rebuilding 1000 tiles
+    // every time any node's delay test completes.
+    final delays = sortMode == NodeSortMode.defaultOrder
+        ? const <String, int>{}
+        : ref.watch(delayResultsProvider);
     final sorted = _sortedNodes(group.all, sortMode, delays);
     final query = searchQuery.trim().toLowerCase();
     final nodeList = query.isEmpty

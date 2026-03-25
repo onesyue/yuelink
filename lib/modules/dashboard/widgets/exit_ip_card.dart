@@ -28,10 +28,12 @@ class ExitIpCard extends ConsumerWidget {
         : (async.hasError ? YLColors.error : YLColors.zinc400);
 
     return GestureDetector(
-      onTap: () {
-        ref.invalidate(exitIpInfoProvider);
-        ref.invalidate(aiUnlockTestProvider);
-      },
+      onTap: isLoading
+          ? null
+          : () {
+              ref.invalidate(exitIpInfoProvider);
+              ref.invalidate(aiUnlockTestProvider);
+            },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         constraints: const BoxConstraints(minHeight: 100),

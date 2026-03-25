@@ -168,8 +168,7 @@ class _NodesPageState extends ConsumerState<NodesPage> {
                       ]),
                     );
                   },
-                  loading: () =>
-                      const SliverToBoxAdapter(child: SizedBox.shrink()),
+                  loading: () => _buildOfflineSkeleton(context),
                   error: (_, __) =>
                       const SliverToBoxAdapter(child: SizedBox.shrink()),
                 ),
@@ -581,6 +580,29 @@ class _FullWidthRoutingMode extends ConsumerWidget {
       ),
     );
   }
+}
+
+// ── Offline Skeleton ────────────────────────────────────────────────────────
+
+Widget _buildOfflineSkeleton(BuildContext context) {
+  final isDark = Theme.of(context).brightness == Brightness.dark;
+  final shimmer = isDark ? YLColors.zinc800 : YLColors.zinc200;
+  return SliverList(
+    delegate: SliverChildBuilderDelegate(
+      (_, __) => Padding(
+        padding: const EdgeInsets.fromLTRB(
+            YLSpacing.xl, 0, YLSpacing.xl, YLSpacing.lg),
+        child: Container(
+          height: 80,
+          decoration: BoxDecoration(
+            color: shimmer,
+            borderRadius: BorderRadius.circular(YLRadius.xl),
+          ),
+        ),
+      ),
+      childCount: 3,
+    ),
+  );
 }
 
 // ── Offline Preview Banner ──────────────────────────────────────────────────

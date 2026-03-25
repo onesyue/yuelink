@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../infrastructure/datasources/xboard_api.dart';
+import '../../../infrastructure/store/store_repository.dart';
 import '../../../l10n/app_strings.dart';
 import '../../../theme.dart';
 

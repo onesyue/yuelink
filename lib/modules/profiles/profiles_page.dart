@@ -1,3 +1,7 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -99,6 +103,28 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                     foregroundColor: isDark ? Colors.white : YLColors.primary,
                   ),
                 ),
+                PopupMenuButton<String>(
+                  icon: Icon(Icons.more_vert, size: 20, color: YLColors.zinc500),
+                  tooltip: s.isEn ? 'More' : '更多',
+                  onSelected: (action) {
+                    switch (action) {
+                      case 'export_all':
+                        _exportAllProfiles(context, ref);
+                      case 'import_files':
+                        _importLocalFile(context, ref);
+                    }
+                  },
+                  itemBuilder: (_) => [
+                    PopupMenuItem(
+                      value: 'export_all',
+                      child: _menuItem(Icons.upload_file_outlined, s.exportAllProfiles),
+                    ),
+                    PopupMenuItem(
+                      value: 'import_files',
+                      child: _menuItem(Icons.file_upload_outlined, s.importMultipleFiles),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -158,6 +184,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                         onEdit: () => _showEditDialog(context, ref, profile),
                         onViewConfig: () =>
                             _showConfigViewer(context, profile),
+                        onExport: () => _exportProfile(context, ref, profile),
                         onDelete: () =>
                             _confirmDelete(context, ref, profile),
                       );
@@ -508,6 +535,223 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     });
   }
 
+  // ── Import / Export ───────────────────────────────────────────────
+
+  /// Import one or more YAML/YML files as local profiles.
+  ///
+  /// Supports multi-select: user can pick multiple files in one dialog.
+  /// Each file is imported independently — single failures don't block others.
+  /// File names (without extension) are used as profile names automatically.
+  Future<void> _importLocalFile(BuildContext context, WidgetRef ref) async {
+    final s = S.of(context);
+    // Use FileType.any because Android doesn't register YAML MIME type —
+    // FileType.custom with ['yaml','yml'] causes the picker to show nothing
+    // or not open at all on many devices. Filter by extension in code instead.
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.any,
+      allowMultiple: true,
+      withData: true,
+    );
+    if (result == null || result.files.isEmpty) return;
+
+    // Filter to YAML files only (user may have picked non-YAML files)
+    final yamlFiles = result.files.where((f) {
+      final ext = f.name.toLowerCase();
+      return ext.endsWith('.yaml') || ext.endsWith('.yml') || ext.endsWith('.txt');
+    }).toList();
+    if (yamlFiles.isEmpty) {
+      if (context.mounted) AppNotifier.error(s.importLocalFileFailed);
+      return;
+    }
+
+    // Single file → show name dialog (existing UX)
+    if (yamlFiles.length == 1) {
+      final file = yamlFiles.first;
+      final bytes = file.bytes;
+      if (bytes == null) return;
+      String content;
+      try {
+        content = utf8.decode(bytes);
+      } catch (_) {
+        if (context.mounted) AppNotifier.error(s.importLocalFileFailed);
+        return;
+      }
+      final defaultName = file.name.replaceAll(
+          RegExp(r'\.(yaml|yml)$', caseSensitive: false), '');
+      if (!context.mounted) return;
+
+      final nameCtrl = TextEditingController(text: defaultName);
+      final name = await showDialog<String>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(s.importLocalFile),
+          content: TextField(
+            controller: nameCtrl,
+            autofocus: true,
+            decoration: InputDecoration(
+              labelText: s.nameLabel,
+              hintText: s.importLocalNameHint,
+              prefixIcon: const Icon(Icons.label_outline),
+            ),
+            textInputAction: TextInputAction.done,
+            onSubmitted: (v) {
+              final n = v.trim();
+              Navigator.pop(ctx, n.isEmpty ? defaultName : n);
+            },
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx), child: Text(s.cancel)),
+            FilledButton(
+              onPressed: () {
+                final n = nameCtrl.text.trim();
+                Navigator.pop(ctx, n.isEmpty ? defaultName : n);
+              },
+              child: Text(s.add),
+            ),
+          ],
+        ),
+      );
+      nameCtrl.dispose();
+      if (name == null || !context.mounted) return;
+      try {
+        final profile = await ref
+            .read(profileRepositoryProvider)
+            .addLocalProfile(name: name, configContent: content);
+        ref.read(profilesProvider.notifier).addLocal(profile);
+        AppNotifier.success(s.importLocalFileSuccess);
+      } catch (_) {
+        if (context.mounted) AppNotifier.error(s.importLocalFileFailed);
+      }
+      return;
+    }
+
+    // Multiple files → batch import, use filenames as names
+    final repo = ref.read(profileRepositoryProvider);
+    int ok = 0, failed = 0;
+    for (final file in yamlFiles) {
+      final bytes = file.bytes;
+      if (bytes == null) { failed++; continue; }
+      try {
+        final content = utf8.decode(bytes);
+        final name = file.name.replaceAll(
+            RegExp(r'\.(yaml|yml)$', caseSensitive: false), '');
+        final profile = await repo.addLocalProfile(
+          name: name.isEmpty ? s.importLocalNameHint : name,
+          configContent: content,
+        );
+        ref.read(profilesProvider.notifier).addLocal(profile);
+        ok++;
+      } catch (_) {
+        failed++;
+      }
+    }
+    if (context.mounted) AppNotifier.success(s.importAllResult(ok, failed));
+  }
+
+  /// Export a single profile's config as {name}.yaml.
+  Future<void> _exportProfile(
+      BuildContext context, WidgetRef ref, Profile profile) async {
+    final s = S.of(context);
+    final config =
+        await ref.read(profileRepositoryProvider).loadConfig(profile.id);
+    if (config == null) {
+      AppNotifier.error(s.exportFailed);
+      return;
+    }
+    // Strip characters that are invalid in filenames on Windows/macOS/Linux.
+    final safeName =
+        profile.name.replaceAll(RegExp(r'[<>:"/\\|?*\x00-\x1f]'), '_');
+    try {
+      await FilePicker.platform.saveFile(
+        dialogTitle: s.exportProfile,
+        fileName: '$safeName.yaml',
+        bytes: Uint8List.fromList(utf8.encode(config)),
+        type: FileType.custom,
+        allowedExtensions: ['yaml'],
+      );
+      AppNotifier.success(s.exportProfileSuccess(profile.name));
+    } catch (_) {
+      if (context.mounted) AppNotifier.error(s.exportFailed);
+    }
+  }
+
+  /// Export all profiles as individual YAML files.
+  ///
+  /// Desktop: user picks a directory, files are written directly.
+  /// Mobile: falls back to saving each file individually via save dialog.
+  Future<void> _exportAllProfiles(BuildContext context, WidgetRef ref) async {
+    final s = S.of(context);
+    final profiles = ref.read(profilesProvider).valueOrNull;
+    if (profiles == null || profiles.isEmpty) {
+      AppNotifier.info(s.isEn ? 'No subscriptions to export' : '没有可导出的订阅');
+      return;
+    }
+
+    final repo = ref.read(profileRepositoryProvider);
+    final isDesktop = Platform.isMacOS || Platform.isWindows || Platform.isLinux;
+
+    if (isDesktop) {
+      // Desktop: pick a directory, write all YAML files there
+      final dir = await FilePicker.platform.getDirectoryPath(
+        dialogTitle: s.exportSelectDir,
+      );
+      if (dir == null) return;
+
+      int ok = 0;
+      final usedNames = <String>{};
+      for (final p in profiles) {
+        final config = await repo.loadConfig(p.id);
+        if (config == null) continue;
+        var safeName = _safeFileName(p.name);
+        // Deduplicate filenames
+        var finalName = safeName;
+        var counter = 1;
+        while (usedNames.contains(finalName)) {
+          finalName = '${safeName}_$counter';
+          counter++;
+        }
+        usedNames.add(finalName);
+        try {
+          await File('$dir/$finalName.yaml').writeAsString(config);
+          ok++;
+        } catch (_) {}
+      }
+      if (context.mounted) AppNotifier.success(s.exportAllDone(ok));
+    } else {
+      // Mobile: save each file individually (FilePicker.saveFile per profile)
+      int ok = 0;
+      for (final p in profiles) {
+        final config = await repo.loadConfig(p.id);
+        if (config == null) continue;
+        final safeName = _safeFileName(p.name);
+        try {
+          await FilePicker.platform.saveFile(
+            dialogTitle: '${s.exportProfile}: ${p.name}',
+            fileName: '$safeName.yaml',
+            bytes: Uint8List.fromList(utf8.encode(config)),
+            type: FileType.custom,
+            allowedExtensions: ['yaml'],
+          );
+          ok++;
+        } catch (_) {
+          // User cancelled or error — continue with next
+        }
+      }
+      if (ok > 0 && context.mounted) {
+        AppNotifier.success(s.exportAllDone(ok));
+      }
+    }
+  }
+
+  /// Sanitize profile name for use as a filename.
+  /// Preserves emoji and Unicode, strips only filesystem-unsafe characters.
+  static String _safeFileName(String name) {
+    return name.replaceAll(RegExp(r'[<>:"/\\|?*\x00-\x1f]'), '_').trim();
+  }
+
+  // ── Config viewer ─────────────────────────────────────────────────
+
   void _showConfigViewer(BuildContext context, Profile profile) async {
     final s = S.of(context);
     final config = await ref.read(profileRepositoryProvider).loadConfig(profile.id);
@@ -548,6 +792,15 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   }
 }
 
+/// Small icon+label row for popup menu items.
+Widget _menuItem(IconData icon, String label) => Row(
+      children: [
+        Icon(icon, size: 16, color: Colors.grey),
+        const SizedBox(width: 10),
+        Text(label),
+      ],
+    );
+
 class _ProfileCard extends StatelessWidget {
   final Profile profile;
   final bool isActive;
@@ -555,6 +808,7 @@ class _ProfileCard extends StatelessWidget {
   final VoidCallback onUpdate;
   final VoidCallback onEdit;
   final VoidCallback onViewConfig;
+  final VoidCallback onExport;
   final VoidCallback onDelete;
 
   const _ProfileCard({
@@ -564,6 +818,7 @@ class _ProfileCard extends StatelessWidget {
     required this.onUpdate,
     required this.onEdit,
     required this.onViewConfig,
+    required this.onExport,
     required this.onDelete,
   });
 
@@ -579,13 +834,15 @@ class _ProfileCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: isActive
             ? (isDark
-                ? YLColors.primary.withValues(alpha: 0.10)
+                ? YLColors.primaryDark.withValues(alpha: 0.10)
                 : YLColors.primaryLight)
             : (isDark ? YLColors.zinc800 : Colors.white),
         borderRadius: BorderRadius.circular(YLRadius.xl),
         border: Border.all(
           color: isActive
-              ? YLColors.primary.withValues(alpha: 0.20)
+              ? (isDark
+                  ? YLColors.primaryDark.withValues(alpha: 0.30)
+                  : YLColors.primary.withValues(alpha: 0.20))
               : (isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.08)),
           width: 0.5,
         ),
@@ -607,8 +864,8 @@ class _ProfileCard extends StatelessWidget {
                         ? Icons.check_circle
                         : Icons.circle_outlined,
                     color: isActive
-                        ? YLColors.primary
-                        : YLColors.zinc400,
+                        ? (isDark ? YLColors.primaryDark : YLColors.primary)
+                        : (isDark ? YLColors.zinc400 : YLColors.zinc500),
                     size: 20,
                   ),
                   const SizedBox(width: 8),
@@ -625,6 +882,8 @@ class _ProfileCard extends StatelessWidget {
                           onEdit();
                         case 'config':
                           onViewConfig();
+                        case 'export':
+                          onExport();
                         case 'copy':
                           Clipboard.setData(
                               ClipboardData(text: profile.url));
@@ -641,7 +900,10 @@ class _ProfileCard extends StatelessWidget {
                       PopupMenuItem(
                           value: 'config', child: Text(s.viewConfig)),
                       PopupMenuItem(
+                          value: 'export', child: Text(s.exportProfile)),
+                      PopupMenuItem(
                           value: 'copy', child: Text(s.copyLink)),
+                      const PopupMenuDivider(),
                       PopupMenuItem(
                           value: 'delete',
                           child: Text(s.delete,

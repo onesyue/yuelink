@@ -29,6 +29,15 @@ class CoreManager {
   static CoreManager? _instance;
   static CoreManager get instance => _instance ??= CoreManager._();
 
+  /// Reset singleton state for testing. Never call in production.
+  @visibleForTesting
+  static void resetForTesting() {
+    _instance?._running = false;
+    _instance?._initialized = false;
+    _instance?._pendingOperation = null;
+    _instance?.lastReport = null;
+  }
+
   late final CoreController _core;
   late CoreMode _mode;
   MihomoApi? _api;

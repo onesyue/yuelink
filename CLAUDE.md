@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project Overview
 
 YueLink (悦通) is a cross-platform proxy client built with Flutter + mihomo (Clash.Meta) Go core.
-Supports: Android, iOS, macOS, Windows. (No Linux support.)
+Supports: Android, iOS, macOS, Windows, Linux (AppImage).
 
 ## Build Commands
 
@@ -21,7 +21,7 @@ flutter test test/models/                          # Run single test directory
 flutter build apk|ios|macos|windows                # Release builds
 ```
 
-Go >= 1.22 required for core compilation. Flutter >= 3.22, Dart >= 3.4. CI uses Flutter 3.27.4, Go 1.23.
+Go >= 1.22 required for core compilation. Flutter >= 3.27, Dart >= 3.6. CI uses Flutter 3.41.5, Go 1.23.
 Xcode >= 15 for iOS/macOS builds. Android NDK r26+ for Android builds.
 
 **macOS universal binary** (two separate arch builds, then `install` merges via `lipo`):
@@ -77,7 +77,7 @@ Do not move code between layers without a reason. When adding new features, use 
 |--------|----------|
 | `yue_auth/` | Login page, `AuthNotifier` (StateNotifier), `AuthState`, `xboardApiProvider` |
 | `announcements/` | `AnnouncementBanner` widget, `AnnouncementsPage`, `AnnouncementReadService`, `announcementsProvider`, `readAnnouncementIdsProvider` |
-| `emby/` | `embyProvider` (FutureProvider<EmbyInfo?>) — placeholder feature |
+| `emby/` | Netflix-style media streaming: `EmbyMediaPage` (hero banner + horizontal poster rows per library), `EmbyDetailPage` (backdrop + info + cast + episodes + similar), `EmbyPlayerPage` (media_kit native player with subtitle size control, playback progress tracking via Emby Sessions API, resume prompt). `EmbyClient` (keep-alive HTTP + proxy-aware image cache with HiDPI `devicePixelRatio` scaling). `EmbyTheme` (dark/light adaptive colors). All content is data-driven from Emby server — no hardcoded library names/order. |
 | `mine/` | `AccountCard` (with inline change-password + logout icons), `TrafficUsageCard` (always shows XBoard `u`/`d`/`transfer_enable` — no VPN required) — the 我的 page widgets |
 | `store/` | `StorePage`, `PlanCard`, `PlanDetailSheet`, `CurrentPlanCard`, `PurchaseNotifier` (state machine: Idle→Loading→AwaitingPayment→Polling→Success/Failed; `payExistingOrder()` skips `createOrder` for pending orders from history), `OrderHistoryPage` (pending orders show Pay Now + `PaymentMethodSelector` + Cancel) |
 | `dashboard/` | `HeroCard`, `QuickActionsCard`, `AnnouncementBanner`, `SubscriptionCard` (tappable → StorePage), `ExitIpCard` (with AI unlock badge), `ChartCard`, `StatsCard` |
@@ -158,7 +158,7 @@ client.connectionTimeout = const Duration(seconds: 10);
 - **Android notification permission**: `POST_NOTIFICATIONS` is requested at runtime in `MainActivity.onStart()` on Android 13+ (API 33+). Without it the foreground VPN notification is silently suppressed, and the service may be killed. The permission is declared in `AndroidManifest.xml` and requested via `checkSelfPermission`/`requestPermissions` (no AndroidX dependency needed).
 - **Android Secure Folder (Samsung)**: Apps installed inside Samsung Secure Folder run as user 95 (not user 0). `VpnService.establish()` always returns null for non-primary users — TUN fd will be -1 and VPN will never work. Only one VPN can be active system-wide; a Secure Folder instance running its VPN blocks the main-space instance. Verify with `adb shell dumpsys package com.yueto.yuelink | grep dataDir` — must show `/data/user/0/`.
 - **Android TUN config**: `ConfigTemplate._injectTunFd()` replaces the entire `tun:` section with Android-safe settings: `stack: gvisor`, `auto-route: false`, `auto-detect-interface: false` (netlink banned on Android 14+), `find-process-mode: off`. Never set `auto-route: true` when using VpnService fd.
-- **iOS TUN config**: `PacketTunnelProvider.injectTunConfig()` uses `stack: gvisor`. Also forces `find-process-mode: off`, injects full DNS fallback config when no dns section exists, and calls `ensureDnsPatched()` when a dns section is present (ensures `enable: true` + `nameserver-policy` for Apple/iCloud — mirrors Dart `_ensureDns` behavior).
+- **iOS TUN config**: `PacketTunnelProvider.injectTunConfig()` uses `stack: gvisor`, forces `find-process-mode: off`, injects keep-alive-interval. **DNS config is handled entirely by Dart's `ConfigTemplate._ensureDns()`** before the config reaches Swift — do NOT add DNS injection in Swift (it was removed to eliminate 130 lines of duplicated logic). Swift only injects TUN fd-related config.
 - Connection mode UI is hidden on mobile — only shown on desktop (`isDesktop = Platform.isMacOS || Platform.isWindows`).
 - MethodChannel name: `com.yueto.yuelink/vpn` (consistent across all platforms).
 - Package/Bundle ID: `com.yueto.yuelink`
@@ -207,7 +207,7 @@ Uses "ensure" pattern: only injects when missing, never overwrites subscription-
 
 **YAML injection safety rule**: Never inject into an existing YAML block with hardcoded indentation. Always detect the actual indent from existing sibling keys first (see `_ensureDns` indent detection pattern). String injection at section boundaries only works safely for top-level keys (0 indent) appended at EOF. `ConfigTemplate.setMixedPort()` is the only method that replaces an existing top-level scalar — it uses a regex on the `mixed-port: N` line.
 
-iOS PacketTunnelProvider has its own `injectTunConfig()` in Swift with equivalent logic (runs in separate process, can't use Dart ConfigTemplate).
+iOS PacketTunnelProvider has `injectTunConfig()` in Swift for TUN fd injection only. DNS/performance/find-process-mode config is handled by Dart `ConfigTemplate.process()` before the config reaches Swift via App Group. Do NOT duplicate DNS logic in Swift.
 
 ### Core startup sequence & diagnostics
 
@@ -252,9 +252,42 @@ Groups are ordered by the `GLOBAL` group's `all` field from the mihomo API (`/pr
 ## Testing
 
 ```bash
-flutter test                          # Run all tests
+flutter test                          # Run all tests (207 tests)
 flutter test test/models/             # Model tests (profile, proxy, traffic, rule, connection)
-flutter test test/services/           # Service tests (config_template, mihomo_api, mihomo_stream, subscription_parser)
+flutter test test/services/           # Service tests (config_template, mihomo_api, mihomo_stream, subscription_parser, xboard_api, core_manager)
 flutter test test/ffi/                # FFI/mock tests
 flutter test test/providers/          # Provider tests
+bash scripts/check_imports.sh         # Architecture import guard (modules must not import datasources directly)
 ```
+
+### Architecture enforcement
+
+- **Import rules**: `scripts/check_imports.sh` enforces `modules/ → repository/auth layer` (never `datasources/` directly). `yue_auth` re-exports `XBoardApiException`, `UserProfile` etc. via `yue_auth_providers.dart`. `store_repository.dart` re-exports store types.
+- **Pre-commit hook**: `scripts/pre-commit` runs `flutter analyze` + `flutter test` + import check. Install: `ln -sf ../../scripts/pre-commit .git/hooks/pre-commit`.
+- **analysis_options.yaml**: Extended with `cancel_subscriptions`, `close_sinks`, `prefer_const_constructors`, `avoid_unnecessary_containers` etc.
+
+### Recovery & error handling
+
+- **RecoveryManager** (`lib/core/kernel/recovery_manager.dart`): Centralises the "reset to stopped" pattern used by heartbeat, resume check, and VPN revocation. Call `resetCoreToStopped(ref)` instead of manually writing 4 provider states.
+- **ErrorLogger** (`lib/services/error_logger.dart`): Unified crash handler — writes to `crash.log` + `EventLog` + optional remote (`RemoteReporter` interface for Sentry/Crashlytics). Initialized in `main()` via `ErrorLogger.init()`.
+- **LogExportService** (`lib/services/log_export_service.dart`): Collects core.log + crash.log + event.log + startup_report.json with PII redaction (11 regex patterns for tokens, IPs, emails, UUIDs).
+
+### Environment configuration
+
+- **EnvConfig** (`lib/core/env_config.dart`): `isStandalone` flag (default `true`) gates self-update features. Build for store: `flutter build ios --dart-define=STANDALONE=false`.
+- **UpdateChecker**: Only runs when `EnvConfig.isStandalone`. Supports skip-version persistence via `SettingsService`.
+- **SubscriptionSyncService**: Background timer (30min) auto-updates stale profiles. Activated via `ref.watch(subscriptionSyncProvider)` in root widget.
+
+### WebSocket authentication
+
+`MihomoStream` passes the secret token via HTTP `Authorization: Bearer` header (not URL query parameter) to prevent token exposure in proxy/server logs. Uses `IOWebSocketChannel.connect(uri, headers: ...)`.
+
+### Emby module architecture
+
+The Emby module (`lib/modules/emby/`) is fully data-driven from the Emby server:
+- **No hardcoded library names/order** — reads from `/emby/Users/{uid}/Views` API, server controls order via SortName.
+- **Empty libraries auto-hidden** — if a library has 0 items, its row is not rendered.
+- **HiDPI image scaling** — `EmbyImage` multiplies requested width by `devicePixelRatio` (1-3x). Backdrop URLs use 1920px directly.
+- **Responsive poster sizing** — 180px (mobile) / 240px (tablet >900px) / 280px (desktop >1200px).
+- **Hero Banner** — auto-selects first item with backdrop from any library for the featured 16:9 banner.
+- **LRU preview cache** — max 5 libraries cached in memory; `_previewCache` auto-evicts oldest.

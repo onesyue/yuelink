@@ -5,6 +5,10 @@ import '../../domain/store/store_order.dart';
 import '../../domain/store/store_plan.dart';
 import '../datasources/xboard_api.dart';
 
+// Re-export types that store module consumers need, so they never
+// import the datasource layer directly.
+export '../datasources/xboard_api.dart' show XBoardApiException, UserProfile;
+
 /// Thin wrapper around [XBoardApi] for all store-related operations.
 ///
 /// Centralises store API calls so providers don't import XBoardApi directly.

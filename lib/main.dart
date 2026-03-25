@@ -8,7 +8,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:launch_at_startup/launch_at_startup.dart';
-import 'package:path_provider/path_provider.dart';
+
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -23,18 +23,22 @@ import 'modules/onboarding/onboarding_page.dart';
 import 'modules/carrier/carrier_provider.dart';
 import 'modules/yue_auth/presentation/yue_auth_page.dart';
 import 'modules/yue_auth/providers/yue_auth_providers.dart';
-import 'domain/models/traffic.dart';
-import 'domain/models/traffic_history.dart';
 import 'modules/connections/providers/connections_providers.dart';
 import 'modules/dashboard/providers/dashboard_providers.dart';
 import 'providers/core_provider.dart';
 import 'providers/profile_provider.dart';
 import 'shared/app_notifier.dart';
 import 'core/kernel/core_manager.dart';
+import 'core/kernel/recovery_manager.dart';
 import 'core/platform/vpn_service.dart';
 import 'core/storage/auth_token_service.dart';
+import 'core/env_config.dart';
+import 'services/error_logger.dart';
 import 'services/profile_service.dart';
+import 'services/subscription_sync_service.dart';
+import 'services/update_checker.dart';
 import 'core/storage/settings_service.dart';
+import 'modules/emby/emby_media_page.dart';
 import 'modules/emby/emby_providers.dart';
 import 'modules/emby/emby_web_page.dart';
 import 'theme.dart';
@@ -94,8 +98,8 @@ final initialBuiltTabsProvider = Provider<List<int>>((ref) => [0]);
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // ── Crash logging ────────────────────────────────────────────────────────
-  _setupCrashLogging();
+  // ── Error logging (local crash.log + optional remote Sentry/Crashlytics) ──
+  ErrorLogger.init();
 
   // Restore persisted settings — single disk read, then all sync from cache.
   await SettingsService.load();
@@ -276,6 +280,7 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
           ref.read(recoveryInProgressProvider.notifier).state = false;
         }
         _checkSubscriptionExpiry();
+        _checkForUpdateOnLaunch();
         _initDeepLinks();
         if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
           _registerHotkeys();
@@ -372,11 +377,7 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
         return;
       }
       debugPrint('[App] VPN revoked — resetting state');
-      ref.read(coreStatusProvider.notifier).state = CoreStatus.stopped;
-      ref.read(trafficProvider.notifier).state = const Traffic();
-      ref.read(trafficHistoryProvider.notifier).state = TrafficHistory();
-      ref.read(trafficHistoryVersionProvider.notifier).state = 0;
-      CoreManager.instance.stop().catchError((_) {});
+      resetCoreToStopped(ref);
       AppNotifier.warning(S.current.disconnectedUnexpected);
     });
   }
@@ -466,21 +467,8 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
     if (status != CoreStatus.running) {
       ref.read(recoveryInProgressProvider.notifier).state = true;
       try {
-        // On iOS the Go core runs in the PacketTunnel extension process;
-        // isCoreActuallyRunning (FFI IsRunning) always returns false in the
-        // main app. Check the REST API directly instead.
-        final bool coreAlive;
-        final bool apiOk;
-        if (Platform.isIOS) {
-          apiOk = await manager.api
-              .isAvailable()
-              .timeout(const Duration(seconds: 2), onTimeout: () => false);
-          coreAlive = apiOk;
-        } else {
-          coreAlive = manager.isCoreActuallyRunning;
-          apiOk = coreAlive ? await manager.api.isAvailable() : false;
-        }
-        if (coreAlive && apiOk) {
+        final health = await RecoveryManager.checkCoreHealth();
+        if (health.alive && health.apiOk) {
           debugPrint('[AppLifecycle] core alive but Dart state was $status — recovering');
           // Restore Dart state + ports to match reality
           await manager.markRunning();
@@ -515,15 +503,7 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
       final apiOk = await manager.api.isAvailable();
       if (!running || !apiOk) {
         debugPrint('[AppLifecycle] core dead after resume — resetting state');
-        ref.read(coreStatusProvider.notifier).state = CoreStatus.stopped;
-        ref.read(trafficProvider.notifier).state = const Traffic();
-        ref.read(trafficHistoryProvider.notifier).state = TrafficHistory();
-        ref.read(trafficHistoryVersionProvider.notifier).state = 0;
-        // Clear desktop system proxy to prevent dead-proxy network blackout
-        if (Platform.isMacOS || Platform.isWindows) {
-          CoreActions.clearSystemProxyStatic().catchError((_) {});
-        }
-        manager.stop().catchError((_) {});
+        resetCoreToStopped(ref);
       } else {
         // Core alive — refresh data but do NOT invalidate trafficStreamProvider.
         // Invalidating it creates a new TrafficHistory(), wiping the chart.
@@ -852,6 +832,21 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
     }
   }
 
+  /// Auto-check for app updates on launch (standalone distribution only).
+  /// Skipped versions and store builds are filtered by UpdateChecker.check().
+  void _checkForUpdateOnLaunch() {
+    if (!EnvConfig.isStandalone) return;
+    UpdateChecker.instance.check().then((info) {
+      if (info != null && mounted) {
+        AppNotifier.info(
+          S.current.isEn
+              ? 'New version v${info.latestVersion} available'
+              : '发现新版本 v${info.latestVersion}',
+        );
+      }
+    });
+  }
+
   void _checkSubscriptionExpiry() {
     final profiles = ref.read(profilesProvider);
     profiles.whenData((list) {
@@ -876,6 +871,9 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
     // Activate heartbeat at root level so it runs regardless of active tab.
     // The provider itself guards: only runs while CoreStatus.running.
     ref.watch(coreHeartbeatProvider);
+
+    // Silently update stale subscriptions in the background (30min interval).
+    ref.watch(subscriptionSyncProvider);
 
     return MaterialApp(
       title: AppConstants.appName,
@@ -988,10 +986,26 @@ class _MainShellState extends ConsumerState<MainShell> {
       AppNotifier.warning(s.mineEmbyNoAccess);
       return;
     }
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => EmbyWebPage(url: emby.launchUrl!)),
-    );
+    // Prefer native media browser when full parsed info is available,
+    // fall back to in-app WebView otherwise.
+    if (emby.hasNativeAccess) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => EmbyMediaPage(
+            serverUrl: emby.serverBaseUrl!,
+            userId: emby.parsedUserId!,
+            accessToken: emby.parsedAccessToken!,
+            serverId: emby.parsedServerId ?? '',
+          ),
+        ),
+      );
+    } else {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => EmbyWebPage(url: emby.launchUrl!)),
+      );
+    }
   }
 
   static const _pages = [
@@ -1257,26 +1271,6 @@ class _SidebarItem extends StatelessWidget {
 
 // ── Crash logging ─────────────────────────────────────────────────────────────
 
-void _setupCrashLogging() {
-  FlutterError.onError = (details) {
-    FlutterError.presentError(details);
-    _writeCrashLog(details.exceptionAsString(), details.stack.toString());
-  };
-  PlatformDispatcher.instance.onError = (error, stack) {
-    _writeCrashLog(error.toString(), stack.toString());
-    // On mobile, return true to absorb unhandled async errors and prevent
-    // the OS from killing the app. On desktop, return false so the platform
-    // can present the error.
-    return Platform.isAndroid || Platform.isIOS;
-  };
-}
-
-Future<void> _writeCrashLog(String error, String stack) async {
-  try {
-    final dir = await getApplicationSupportDirectory();
-    final logFile = File('${dir.path}/crash.log');
-    final timestamp = DateTime.now().toIso8601String();
-    final entry = '[$timestamp]\n$error\n$stack\n\n';
-    await logFile.writeAsString(entry, mode: FileMode.append);
-  } catch (_) {}
-}
+// Error logging moved to ErrorLogger (lib/services/error_logger.dart).
+// Call ErrorLogger.init() in main() to set up FlutterError.onError +
+// PlatformDispatcher.onError + optional remote reporting (Sentry etc.).

@@ -259,6 +259,7 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> {
         builder: (_) => EmbyPlayerPage(
           serverUrl: widget.serverUrl,
           accessToken: widget.accessToken,
+          userId: widget.userId,
           streamUrl: widget.api.streamUrl(id),
           itemId: id,
           title: widget.itemName,
@@ -338,7 +339,7 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> {
               ? EmbyImage(
                   api: widget.api,
                   itemId: widget.itemId,
-                  url: widget.api.backdropUrl(widget.itemId, width: 800),
+                  url: widget.api.backdropUrl(widget.itemId, width: 1920),
                   fit: BoxFit.cover,
                   width: 800,
                   placeholder: Container(color: const Color(0xFF27272A)),
@@ -348,7 +349,7 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> {
                       api: widget.api,
                       itemId: widget.itemId,
                       fit: BoxFit.cover,
-                      width: 400,
+                      width: 600,
                       placeholder: Container(color: const Color(0xFF27272A)),
                     )
                   : Container(color: const Color(0xFF27272A)),
@@ -710,7 +711,7 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> {
             .join(' · '),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -724,7 +725,7 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> {
                         api: widget.api,
                         itemId: ep.id,
                         fit: BoxFit.cover,
-                        width: 300,
+                        width: 400,
                         placeholder: _thumbPlaceholder(),
                       )
                     : _thumbPlaceholder(),

@@ -1,0 +1,143 @@
+# YueLink Fastlane Configuration
+#
+# Usage:
+#   bundle exec fastlane ios beta       # Build + upload to TestFlight
+#   bundle exec fastlane android beta   # Build + upload to Play Internal Track
+#   bundle exec fastlane ios release    # Build + submit to App Store
+#   bundle exec fastlane android release # Build + upload to Play Production
+#
+# Setup:
+#   gem install bundler && bundle install
+#   fastlane match init  (for iOS cert management)
+#
+# CI trigger: push a v*.*.* tag to trigger the release workflow.
+
+default_platform(:ios)
+
+# ── Shared ────────────────────────────────────────────────────────────────
+
+before_all do
+  ensure_git_status_clean unless is_ci
+end
+
+# ── Version helper ────────────────────────────────────────────────────────
+
+def app_version
+  # Read version from pubspec.yaml (single source of truth)
+  yaml = File.read("../pubspec.yaml")
+  version = yaml.match(/^version:\s*(.+)\+/)[1]
+  build = yaml.match(/^version:\s*.+\+(\d+)/)[1]
+  { version: version, build: build.to_i }
+end
+
+# ══════════════════════════════════════════════════════════════════════════
+# iOS
+# ══════════════════════════════════════════════════════════════════════════
+
+platform :ios do
+  desc "Sync certificates via match (read-only in CI)"
+  lane :certs do
+    match(
+      type: "appstore",
+      app_identifier: ["com.yueto.yuelink", "com.yueto.yuelink.PacketTunnel"],
+      readonly: is_ci,
+    )
+  end
+
+  desc "Build IPA and upload to TestFlight"
+  lane :beta do
+    certs
+
+    v = app_version
+    sh("cd .. && flutter build ios --release " \
+       "--build-name=#{v[:version]} --build-number=#{v[:build]}")
+
+    build_app(
+      workspace: "ios/Runner.xcworkspace",
+      scheme: "Runner",
+      configuration: "Release",
+      export_method: "app-store",
+      output_directory: "build/ios",
+      output_name: "YueLink.ipa",
+      skip_build_archive: true,  # Flutter already built the archive
+      archive_path: "build/ios/archive/Runner.xcarchive",
+    )
+
+    upload_to_testflight(
+      skip_waiting_for_build_processing: true,
+      apple_id: ENV["APPLE_ID"],
+      itc_team_id: ENV["ITC_TEAM_ID"],
+    )
+
+    UI.success("✅ iOS beta uploaded to TestFlight")
+  end
+
+  desc "Build and submit to App Store (manual review)"
+  lane :release do
+    certs
+
+    v = app_version
+    sh("cd .. && flutter build ios --release " \
+       "--build-name=#{v[:version]} --build-number=#{v[:build]}")
+
+    build_app(
+      workspace: "ios/Runner.xcworkspace",
+      scheme: "Runner",
+      configuration: "Release",
+      export_method: "app-store",
+    )
+
+    upload_to_app_store(
+      skip_metadata: true,
+      skip_screenshots: true,
+      precheck_include_in_app_purchases: false,
+    )
+
+    UI.success("✅ iOS release submitted to App Store")
+  end
+end
+
+# ══════════════════════════════════════════════════════════════════════════
+# Android
+# ══════════════════════════════════════════════════════════════════════════
+
+platform :android do
+  desc "Build APK + AAB and upload to Play Internal Track"
+  lane :beta do
+    v = app_version
+
+    # Build AAB for Play Store
+    sh("cd .. && flutter build appbundle --release " \
+       "--build-name=#{v[:version]} --build-number=#{v[:build]}")
+
+    # Build APK for direct distribution (TrollStore, sideload)
+    sh("cd .. && flutter build apk --release " \
+       "--build-name=#{v[:version]} --build-number=#{v[:build]}")
+
+    upload_to_play_store(
+      track: "internal",
+      aab: "build/app/outputs/bundle/release/app-release.aab",
+      skip_upload_metadata: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true,
+      json_key: ENV["PLAY_STORE_JSON_KEY"] || "fastlane/play-store-key.json",
+    )
+
+    UI.success("✅ Android beta uploaded to Play Internal Track")
+  end
+
+  desc "Promote internal build to production"
+  lane :release do
+    upload_to_play_store(
+      track: "internal",
+      track_promote_to: "production",
+      skip_upload_aab: true,
+      skip_upload_metadata: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true,
+      json_key: ENV["PLAY_STORE_JSON_KEY"] || "fastlane/play-store-key.json",
+    )
+
+    UI.success("✅ Android promoted to production")
+  end
+end

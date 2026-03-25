@@ -1,7 +1,10 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/storage/settings_service.dart';
 import '../../l10n/app_strings.dart';
 import '../../modules/yue_auth/providers/yue_auth_providers.dart';
 import '../../providers/core_provider.dart';
@@ -206,6 +209,34 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
       if (config == null) {
         AppNotifier.warning(s.snackConfigMissing);
         return;
+      }
+
+      // First-time VPN permission explanation (mobile only).
+      // Shows a friendly dialog BEFORE the system VPN permission popup,
+      // so users understand why the permission is needed.
+      if ((Platform.isAndroid || Platform.isIOS) && mounted) {
+        final seen = await SettingsService.get<bool>('hasSeenVpnHint') ?? false;
+        if (!seen) {
+          final proceed = await showDialog<bool>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: Text(s.vpnPermTitle),
+              content: Text(s.vpnPermBody),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: Text(s.cancel),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  child: Text(s.vpnPermContinue),
+                ),
+              ],
+            ),
+          );
+          if (proceed != true) return;
+          await SettingsService.set('hasSeenVpnHint', true);
+        }
       }
 
       final ok = await actions.start(config);

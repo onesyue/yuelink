@@ -20,11 +20,19 @@ import '../../domain/store/store_plan.dart';
 /// Handles authentication, user info, and subscription retrieval.
 /// Uses IOClient (dart:io HttpClient) for proper TLS SNI on all platforms.
 class XBoardApi {
-  XBoardApi({required this.baseUrl});
+  XBoardApi({required this.baseUrl, this.fallbackUrl});
 
   final String baseUrl;
 
+  /// Direct origin URL used when CloudFront (baseUrl) returns 502/503.
+  /// Set via AuthTokenService / provider — typically http://origin:port.
+  final String? fallbackUrl;
+
   static const _kTimeout = Duration(seconds: 20);
+
+  /// Override in tests to inject a mock [http.Client].
+  @visibleForTesting
+  static http.Client Function()? testClientFactory;
 
   /// Build an [http.Client] backed by [dart:io]'s [HttpClient].
   ///
@@ -33,6 +41,7 @@ class XBoardApi {
   ///   - Connection / idle timeouts are explicit.
   ///   - Works correctly on all Flutter platforms (Android, iOS, macOS, Windows).
   static http.Client _buildClient() {
+    if (testClientFactory != null) return testClientFactory!();
     final inner = HttpClient()
       ..connectionTimeout = const Duration(seconds: 20)
       ..idleTimeout = const Duration(seconds: 30);
@@ -367,18 +376,40 @@ class XBoardApi {
 
   /// Execute [fn] with automatic retry on transient errors.
   /// Non-retryable errors (auth, business logic) propagate immediately.
-  Future<T> _withRetry<T>(Future<T> Function() fn) async {
+  ///
+  /// When [fallbackUrl] is set, a CloudFront 502/503 after all retries will
+  /// trigger one final attempt against the direct origin URL.
+  Future<T> _withRetry<T>(Future<T> Function(String url) fn) async {
+    Object? lastError;
     for (var attempt = 0; attempt < _maxRetries; attempt++) {
       try {
-        return await fn();
+        return await fn(baseUrl);
       } catch (e) {
+        lastError = e;
         final isLast = attempt == _maxRetries - 1;
-        if (isLast || !_isTransient(e)) rethrow;
+        if (isLast) break;
+        if (!_isTransient(e)) rethrow;
         debugPrint('[XBoardApi] Retry ${attempt + 1}/$_maxRetries after: $e');
         await Future.delayed(_retryDelays[attempt]);
       }
     }
-    throw StateError('unreachable'); // loop always returns or rethrows
+
+    // Fallback: try direct origin when CDN is down (502/503).
+    if (fallbackUrl != null &&
+        lastError is XBoardApiException &&
+        (lastError.statusCode == 502 || lastError.statusCode == 503)) {
+      debugPrint('[XBoardApi] CDN down, trying direct origin: $fallbackUrl');
+      try {
+        return await fn(fallbackUrl!);
+      } catch (e) {
+        debugPrint('[XBoardApi] Direct origin also failed: $e');
+        // Throw the fallback error — it's more relevant than the CDN 502.
+        rethrow;
+      }
+    }
+
+    debugPrint('[XBoardApi] All $_maxRetries retries exhausted: $lastError');
+    throw lastError!;
   }
 
   Map<String, String> _headers({String? token}) => {
@@ -388,11 +419,11 @@ class XBoardApi {
       };
 
   Future<Map<String, dynamic>> _get(String path, {String? token}) =>
-      _withRetry(() async {
+      _withRetry((url) async {
     final client = _buildClient();
     try {
       final resp = await client
-          .get(Uri.parse('$baseUrl$path'), headers: _headers(token: token))
+          .get(Uri.parse('$url$path'), headers: _headers(token: token))
           .timeout(_kTimeout);
 
       if (resp.statusCode != 200) {
@@ -413,12 +444,12 @@ class XBoardApi {
   Future<Map<String, dynamic>> _post(String path, {
     Map<String, dynamic>? body,
     String? token,
-  }) => _withRetry(() async {
+  }) => _withRetry((url) async {
     final client = _buildClient();
     try {
       final resp = await client
           .post(
-            Uri.parse('$baseUrl$path'),
+            Uri.parse('$url$path'),
             headers: _headers(token: token),
             body: body != null ? jsonEncode(body) : null,
           )
@@ -444,10 +475,10 @@ class XBoardApi {
     String path, {
     String? token,
     Map<String, String>? queryParams,
-  }) => _withRetry(() async {
+  }) => _withRetry((url) async {
     final client = _buildClient();
     try {
-      var uri = Uri.parse('$baseUrl$path');
+      var uri = Uri.parse('$url$path');
       if (queryParams != null && queryParams.isNotEmpty) {
         uri = uri.replace(queryParameters: queryParams);
       }
@@ -472,12 +503,12 @@ class XBoardApi {
     String path, {
     Map<String, dynamic>? body,
     String? token,
-  }) => _withRetry(() async {
+  }) => _withRetry((url) async {
     final client = _buildClient();
     try {
       final resp = await client
           .post(
-            Uri.parse('$baseUrl$path'),
+            Uri.parse('$url$path'),
             headers: _headers(token: token),
             body: body != null ? jsonEncode(body) : null,
           )
@@ -688,6 +719,13 @@ class XBoardApiException implements Exception {
   late final String message = _extractMessage();
 
   String _extractMessage() {
+    // HTML error pages (e.g. CloudFront 502) — extract a short summary.
+    if (_body.contains('<HTML') || _body.contains('<html')) {
+      if (statusCode == 502) return '服务暂时不可用，请稍后重试';
+      if (statusCode == 503) return '服务维护中，请稍后重试';
+      if (statusCode == 504) return '服务响应超时，请稍后重试';
+      return '服务器错误 ($statusCode)';
+    }
     // If _assertSuccess already extracted the message, body is plain text — return as-is.
     // Only attempt JSON decode when body looks like a JSON object.
     if (!_body.startsWith('{')) return _body;

@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  FLUTTER_VERSION: '3.27.4'
+  FLUTTER_VERSION: '3.41.5'
   GO_VERSION: '1.23'
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -41,7 +41,17 @@ jobs:
 
       - run: flutter pub get
       - run: flutter analyze --no-fatal-infos --no-fatal-warnings
-      - run: flutter test
+      - run: flutter test --coverage
+
+      - name: Upload coverage to Codecov
+        if: always()
+        uses: codecov/codecov-action@v4
+        with:
+          files: coverage/lcov.info
+          flags: flutter
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Job 2: Build Go core libraries per platform (tag push only)
@@ -132,6 +142,14 @@ jobs:
             libasound2-dev libmpv-dev \
             pkg-config cmake clang
 
+      # ── Go tests ──────────────────────────────────────────────────────────
+      - name: Run Go tests
+        shell: bash
+        run: |
+          cd core
+          go test ./... -count=1 -timeout 120s || true
+          cd ..
+
       # ── Build ─────────────────────────────────────────────────────────────
       - name: Build core (${{ matrix.platform }})
         shell: bash
@@ -151,7 +169,7 @@ jobs:
         with:
           name: core-${{ matrix.platform }}
           path: core/build/
-          retention-days: 1
+          retention-days: 7
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Job 3: Flutter builds (tag push only, depend on analyze + build-core)
@@ -398,6 +416,7 @@ jobs:
 
       - name: Package macOS .dmg
         run: |
+          set +e
           create-dmg \
             --volname "YueLink" \
             --window-pos 200 120 \
@@ -407,11 +426,17 @@ jobs:
             --app-drop-link 480 170 \
             --hide-extension "YueLink.app" \
             "YueLink-macOS.dmg" \
-            "build/macos/Build/Products/Release/YueLink.app" \
-          || true
-          # create-dmg exits 2 on success when no code signing identity found
+            "build/macos/Build/Products/Release/YueLink.app"
+          DMG_EXIT=$?
+          set -e
+          # create-dmg exits 2 when DMG is created but no code signing identity
+          # is found (expected in CI). Any other non-zero exit is a real failure.
+          if [ $DMG_EXIT -ne 0 ] && [ $DMG_EXIT -ne 2 ]; then
+            echo "ERROR: create-dmg failed with exit code $DMG_EXIT"
+            exit 1
+          fi
           if [ ! -f YueLink-macOS.dmg ]; then
-            echo "ERROR: DMG was not created!"
+            echo "ERROR: DMG was not created despite exit code $DMG_EXIT!"
             exit 1
           fi
           ls -lh YueLink-macOS.dmg
