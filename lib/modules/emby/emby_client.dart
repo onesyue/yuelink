@@ -71,6 +71,19 @@ class EmbyClient {
       '$serverUrl/emby/Items/$itemId/Images/Backdrop'
       '?maxWidth=$width&quality=90&api_key=$accessToken';
 
+  /// POST to Emby REST API. Errors are silently ignored (fire-and-forget for
+  /// progress reporting).
+  Future<void> post(String path, Map<String, dynamic> body) async {
+    try {
+      final uri = Uri.parse('$serverUrl$path');
+      await _inner
+          .post(uri,
+              headers: {..._headers, 'Content-Type': 'application/json'},
+              body: jsonEncode(body))
+          .timeout(const Duration(seconds: 10));
+    } catch (_) {}
+  }
+
   void close() => _inner.close();
 
   // ── Proxy-aware image cache (shared across all pages) ─────────────────

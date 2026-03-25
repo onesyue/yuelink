@@ -259,6 +259,7 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> {
         builder: (_) => EmbyPlayerPage(
           serverUrl: widget.serverUrl,
           accessToken: widget.accessToken,
+          userId: widget.userId,
           streamUrl: widget.api.streamUrl(id),
           itemId: id,
           title: widget.itemName,

@@ -13,6 +13,7 @@ import 'emby_client.dart';
 class EmbyPlayerPage extends StatefulWidget {
   final String serverUrl;
   final String accessToken;
+  final String userId;
   final String streamUrl;
   final String itemId;
   final String title;
@@ -22,6 +23,7 @@ class EmbyPlayerPage extends StatefulWidget {
     super.key,
     required this.serverUrl,
     required this.accessToken,
+    required this.userId,
     required this.streamUrl,
     required this.itemId,
     required this.title,
@@ -33,16 +35,28 @@ class EmbyPlayerPage extends StatefulWidget {
 }
 
 class _EmbyPlayerPageState extends State<EmbyPlayerPage> {
+  // Session-wide subtitle font size (persists while app is running).
+  static double _savedFontSize = 22.0;
+
   static bool _mediaKitReady = false;
   late final Player _player;
   late final VideoController _controller;
+  late final EmbyClient _api;
 
   StreamSubscription<bool>? _bufferingSub;
   StreamSubscription<Tracks>? _tracksSub;
+  StreamSubscription<Duration>? _positionSub;
+  Timer? _progressTimer;
 
   bool _loading = true;
   String? _error;
   double _playbackRate = 1.0;
+  double _subtitleFontSize = _savedFontSize;
+
+  // Emby playback-session tracking.
+  final String _sessionId =
+      DateTime.now().millisecondsSinceEpoch.toRadixString(36);
+  bool _playbackStarted = false;
 
   List<Map<String, dynamic>> _embyAudio = [];
   List<Map<String, dynamic>> _embySubs = [];
@@ -50,12 +64,18 @@ class _EmbyPlayerPageState extends State<EmbyPlayerPage> {
   @override
   void initState() {
     super.initState();
+    _subtitleFontSize = _savedFontSize;
     if (!_mediaKitReady) {
       MediaKit.ensureInitialized();
       _mediaKitReady = true;
     }
     _player = Player();
     _controller = VideoController(_player);
+    _api = EmbyClient(
+      serverUrl: widget.serverUrl,
+      accessToken: widget.accessToken,
+      userId: widget.userId,
+    );
     if (Platform.isAndroid || Platform.isIOS) {
       SystemChrome.setPreferredOrientations([
         DeviceOrientation.landscapeLeft,
@@ -68,9 +88,13 @@ class _EmbyPlayerPageState extends State<EmbyPlayerPage> {
 
   @override
   void dispose() {
+    _progressTimer?.cancel();
     _bufferingSub?.cancel();
     _tracksSub?.cancel();
+    _positionSub?.cancel();
+    if (_playbackStarted) _reportStop(); // fire-and-forget before close
     _player.dispose();
+    _api.close();
     if (Platform.isAndroid || Platform.isIOS) {
       SystemChrome.setPreferredOrientations([
         DeviceOrientation.portraitUp,
@@ -82,6 +106,8 @@ class _EmbyPlayerPageState extends State<EmbyPlayerPage> {
     }
     super.dispose();
   }
+
+  // ── Playback setup ────────────────────────────────────────────────────
 
   Future<void> _setupAndPlay() async {
     try {
@@ -106,18 +132,129 @@ class _EmbyPlayerPageState extends State<EmbyPlayerPage> {
         if (mounted) setState(() {});
       });
       _fetchMediaStreams();
+      _checkResume();
+      _startProgressReporting();
     } catch (e) {
       if (mounted) setState(() { _loading = false; _error = '$e'; });
     }
   }
 
-  Future<void> _fetchMediaStreams() async {
-    final api = EmbyClient(
-        serverUrl: widget.serverUrl,
-        accessToken: widget.accessToken,
-        userId: '');
+  // ── Resume detection ──────────────────────────────────────────────────
+
+  Future<void> _checkResume() async {
     try {
-      final info = await api.get('/emby/Items/${widget.itemId}',
+      final data = await _api.get(
+        '/emby/Users/${widget.userId}/Items/${widget.itemId}',
+        {'Fields': 'UserData'},
+      );
+      final userData = data['UserData'] as Map<String, dynamic>?;
+      if (userData == null) return;
+      final posTicks = userData['PlaybackPositionTicks'] as int? ?? 0;
+      if (posTicks <= 0) return;
+      final posSeconds = posTicks ~/ 10000000;
+      if (posSeconds < 30) return;
+      // Skip if already near the end (> 95% played).
+      final totalTicks = data['RunTimeTicks'] as int?;
+      if (totalTicks != null && totalTicks > 0 && posTicks / totalTicks > 0.95)
+        return;
+      if (!mounted) return;
+      final resume = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => AlertDialog(
+          backgroundColor: const Color(0xFF1C1C1E),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          title: const Text('继续上次播放',
+              style: TextStyle(color: Colors.white, fontSize: 16)),
+          content: Text(_formatPosition(posSeconds),
+              style: const TextStyle(color: Colors.white70)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('重新开始',
+                  style: TextStyle(color: Colors.white54)),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child:
+                  const Text('继续', style: TextStyle(color: Colors.redAccent)),
+            ),
+          ],
+        ),
+      );
+      if (resume == true && mounted) {
+        await _player.seek(Duration(seconds: posSeconds));
+      }
+    } catch (_) {}
+  }
+
+  String _formatPosition(int seconds) {
+    final d = Duration(seconds: seconds);
+    final h = d.inHours;
+    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    final ts = h > 0 ? '$h:$m:$s' : '$m:$s';
+    return '上次播放到 $ts';
+  }
+
+  // ── Emby progress reporting ───────────────────────────────────────────
+
+  int get _positionTicks => _player.state.position.inMicroseconds * 10;
+
+  void _startProgressReporting() {
+    // Detect first non-zero position → report playback start.
+    _positionSub = _player.stream.position.listen((pos) {
+      if (!_playbackStarted && pos.inSeconds > 0) {
+        _playbackStarted = true;
+        _reportStart();
+      }
+    });
+    // Report progress every 10 s.
+    _progressTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+      if (_playbackStarted) _reportProgress();
+    });
+  }
+
+  Future<void> _reportStart() async {
+    await _api.post('/emby/Sessions/Playing', {
+      'ItemId': widget.itemId,
+      'MediaSourceId': widget.itemId,
+      'PositionTicks': _positionTicks,
+      'IsPaused': false,
+      'IsMuted': false,
+      'PlayMethod': 'DirectPlay',
+      'PlaySessionId': _sessionId,
+    });
+  }
+
+  Future<void> _reportProgress() async {
+    await _api.post('/emby/Sessions/Playing/Progress', {
+      'ItemId': widget.itemId,
+      'MediaSourceId': widget.itemId,
+      'PositionTicks': _positionTicks,
+      'IsPaused': !_player.state.playing,
+      'IsMuted': false,
+      'PlayMethod': 'DirectPlay',
+      'PlaySessionId': _sessionId,
+    });
+  }
+
+  Future<void> _reportStop() async {
+    await _api.post('/emby/Sessions/Playing/Stopped', {
+      'ItemId': widget.itemId,
+      'MediaSourceId': widget.itemId,
+      'PositionTicks': _positionTicks,
+      'PlayMethod': 'DirectPlay',
+      'PlaySessionId': _sessionId,
+    });
+  }
+
+  // ── Media streams ─────────────────────────────────────────────────────
+
+  Future<void> _fetchMediaStreams() async {
+    try {
+      final info = await _api.get('/emby/Items/${widget.itemId}',
           {'Fields': 'MediaSources'});
       final sources = info['MediaSources'] as List<dynamic>?;
       if (sources == null || sources.isEmpty) return;
@@ -135,12 +272,10 @@ class _EmbyPlayerPageState extends State<EmbyPlayerPage> {
             .cast<Map<String, dynamic>>()
             .toList();
       });
-    } catch (_) {} finally {
-      api.close();
-    }
+    } catch (_) {}
   }
 
-  // ── Netflix settings panel ────────────────────────────────────────────
+  // ── Settings panel ────────────────────────────────────────────────────
 
   void _showSettings() {
     showModalBottomSheet(
@@ -155,9 +290,16 @@ class _EmbyPlayerPageState extends State<EmbyPlayerPage> {
         itemId: widget.itemId,
         accessToken: widget.accessToken,
         currentRate: _playbackRate,
+        subtitleFontSize: _subtitleFontSize,
         onRateChanged: (r) {
           _player.setRate(r);
           setState(() => _playbackRate = r);
+        },
+        onSubtitleSizeChanged: (size) {
+          setState(() {
+            _subtitleFontSize = size;
+            _savedFontSize = size;
+          });
         },
       ),
     );
@@ -200,7 +342,6 @@ class _EmbyPlayerPageState extends State<EmbyPlayerPage> {
                 ],
               ),
             ),
-            // Speed badge
             if (_playbackRate != 1.0)
               Padding(
                 padding: const EdgeInsets.only(right: 4),
@@ -216,7 +357,6 @@ class _EmbyPlayerPageState extends State<EmbyPlayerPage> {
                           color: Colors.white, fontSize: 11)),
                 ),
               ),
-            // Netflix-style settings button (single entry point)
             IconButton(
               icon: const Icon(Icons.tune_rounded,
                   color: Colors.white, size: 22),
@@ -244,14 +384,14 @@ class _EmbyPlayerPageState extends State<EmbyPlayerPage> {
             Video(
               controller: _controller,
               controls: MaterialVideoControls,
-              subtitleViewConfiguration: const SubtitleViewConfiguration(
+              subtitleViewConfiguration: SubtitleViewConfiguration(
                 style: TextStyle(
-                    fontSize: 22,
+                    fontSize: _subtitleFontSize,
                     color: Colors.white,
-                    backgroundColor: Color(0x99000000),
+                    backgroundColor: const Color(0x99000000),
                     height: 1.4),
                 textAlign: TextAlign.center,
-                padding: EdgeInsets.fromLTRB(24, 0, 24, 60),
+                padding: const EdgeInsets.fromLTRB(24, 0, 24, 60),
               ),
             ),
             if (_loading)
@@ -314,7 +454,9 @@ class _SettingsPanel extends StatefulWidget {
   final String itemId;
   final String accessToken;
   final double currentRate;
+  final double subtitleFontSize;
   final ValueChanged<double> onRateChanged;
+  final ValueChanged<double> onSubtitleSizeChanged;
 
   const _SettingsPanel({
     required this.player,
@@ -324,7 +466,9 @@ class _SettingsPanel extends StatefulWidget {
     required this.itemId,
     required this.accessToken,
     required this.currentRate,
+    required this.subtitleFontSize,
     required this.onRateChanged,
+    required this.onSubtitleSizeChanged,
   });
 
   @override
@@ -334,11 +478,13 @@ class _SettingsPanel extends StatefulWidget {
 class _SettingsPanelState extends State<_SettingsPanel>
     with SingleTickerProviderStateMixin {
   late final TabController _tab;
+  late double _currentSize;
 
   @override
   void initState() {
     super.initState();
     _tab = TabController(length: 3, vsync: this);
+    _currentSize = widget.subtitleFontSize;
   }
 
   @override
@@ -367,7 +513,6 @@ class _SettingsPanelState extends State<_SettingsPanel>
             ),
           ),
           const SizedBox(height: 8),
-          // Tab bar
           TabBar(
             controller: _tab,
             indicatorColor: Colors.red,
@@ -384,7 +529,6 @@ class _SettingsPanelState extends State<_SettingsPanel>
               Tab(text: '速度'),
             ],
           ),
-          // Tab content
           Expanded(
             child: TabBarView(
               controller: _tab,
@@ -444,9 +588,12 @@ class _SettingsPanelState extends State<_SettingsPanel>
   // ── Subtitle tab ──────────────────────────────────────────────────────
 
   Widget _buildSubtitleTab() {
+    // Subtitle size presets.
+    const sizes = <String, double>{'小': 16, '中': 22, '大': 30, '特大': 40};
     return ListView(
       padding: const EdgeInsets.symmetric(vertical: 8),
       children: [
+        // Track selection.
         _OptionTile(
           label: '关闭',
           selected:
@@ -456,7 +603,6 @@ class _SettingsPanelState extends State<_SettingsPanel>
             Navigator.pop(context);
           },
         ),
-        // Emby external subtitles
         for (int i = 0; i < widget.embySubs.length; i++)
           _OptionTile(
             label: _subLabel(i),
@@ -466,7 +612,6 @@ class _SettingsPanelState extends State<_SettingsPanel>
               Navigator.pop(context);
             },
           ),
-        // Fallback: mpv embedded subs if no Emby metadata
         if (widget.embySubs.isEmpty)
           for (int i = 2;
               i < widget.player.state.tracks.subtitle.length;
@@ -483,6 +628,46 @@ class _SettingsPanelState extends State<_SettingsPanel>
                 Navigator.pop(context);
               },
             ),
+        // ── Subtitle size ──────────────────────────────────────────────
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 20, 24, 4),
+          child: Row(
+            children: [
+              const Text('字幕大小',
+                  style: TextStyle(color: Colors.white54, fontSize: 12)),
+              const SizedBox(width: 16),
+              ...sizes.entries.map((e) => Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: GestureDetector(
+                      onTap: () {
+                        widget.onSubtitleSizeChanged(e.value);
+                        setState(() => _currentSize = e.value);
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: _currentSize == e.value
+                              ? Colors.red
+                              : Colors.white12,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(e.key,
+                            style: TextStyle(
+                              color: _currentSize == e.value
+                                  ? Colors.white
+                                  : Colors.white54,
+                              fontSize: 13,
+                              fontWeight: _currentSize == e.value
+                                  ? FontWeight.w600
+                                  : FontWeight.normal,
+                            )),
+                      ),
+                    ),
+                  )),
+            ],
+          ),
+        ),
       ],
     );
   }
@@ -492,8 +677,7 @@ class _SettingsPanelState extends State<_SettingsPanel>
     final parts = <String>[
       s['DisplayLanguage'] as String? ?? s['Language'] as String? ?? '',
       s['DisplayTitle'] as String? ?? s['Title'] as String? ?? '',
-      if ((s['Codec'] as String? ?? '').isNotEmpty)
-        '(${s['Codec']})',
+      if ((s['Codec'] as String? ?? '').isNotEmpty) '(${s['Codec']})',
     ].where((s) => s.isNotEmpty);
     return parts.isNotEmpty ? parts.join(' ') : '字幕 ${i + 1}';
   }
@@ -531,7 +715,7 @@ class _SettingsPanelState extends State<_SettingsPanel>
   }
 }
 
-// ── Shared tile ──────────────────────────────────────────────────────────────
+// ── Shared option tile ────────────────────────────────────────────────────────
 
 class _OptionTile extends StatelessWidget {
   final String label;
@@ -552,7 +736,6 @@ class _OptionTile extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
         child: Row(
           children: [
-            // Selection indicator (Netflix red dot)
             Container(
               width: 6,
               height: 6,
