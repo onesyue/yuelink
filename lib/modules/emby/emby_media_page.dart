@@ -143,14 +143,17 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
     try {
       final data = await _api.get('/emby/Users/${widget.userId}/Views');
       if (!mounted) return;
-      const order = ['电影', '电视剧', '动漫', '音乐'];
+      // Sort by CollectionType priority so any library name works,
+      // and new storage can be added to Emby without touching this code.
+      const typeOrder = {'movies': 0, 'tvshows': 1, 'music': 2};
       final libs = (data['Items'] as List<dynamic>)
           .map((e) => _Library.fromJson(e as Map<String, dynamic>))
           .toList()
         ..sort((a, b) {
-          final ai = order.indexOf(a.name);
-          final bi = order.indexOf(b.name);
-          return (ai < 0 ? 999 : ai).compareTo(bi < 0 ? 999 : bi);
+          final ai = typeOrder[a.type] ?? 99;
+          final bi = typeOrder[b.type] ?? 99;
+          if (ai != bi) return ai.compareTo(bi);
+          return a.name.compareTo(b.name);
         });
       setState(() {
         _libraries = libs;
