@@ -353,7 +353,7 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
               EmbyImage(
                 api: _api,
                 itemId: item.id,
-                url: _api.backdropUrl(item.id, width: 1200),
+                url: _api.backdropUrl(item.id, width: 1920),
                 fit: BoxFit.cover,
                 width: 1200,
               )

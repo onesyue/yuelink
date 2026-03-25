@@ -311,16 +311,14 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> {
             SliverToBoxAdapter(child: _buildInfo(ctx)),
             if (widget.overview != null && widget.overview!.isNotEmpty)
               SliverToBoxAdapter(child: _buildOverview()),
-            // Recommendations right after overview (Netflix pattern:
-            // don't waste space — show related content immediately)
-            if (_similar != null && _similar!.isNotEmpty)
-              SliverToBoxAdapter(child: _buildSimilarSection()),
             if (_isSeries) ...[
               SliverToBoxAdapter(child: _buildSeasonTabs(ctx)),
               _buildEpisodeList(),
             ],
             if (_cast != null && _cast!.isNotEmpty)
               SliverToBoxAdapter(child: _buildCastSection()),
+            if (_similar != null && _similar!.isNotEmpty)
+              SliverToBoxAdapter(child: _buildSimilarSection()),
             const SliverToBoxAdapter(child: SizedBox(height: 40)),
           ],
         ),
@@ -341,7 +339,7 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> {
               ? EmbyImage(
                   api: widget.api,
                   itemId: widget.itemId,
-                  url: widget.api.backdropUrl(widget.itemId, width: 800),
+                  url: widget.api.backdropUrl(widget.itemId, width: 1920),
                   fit: BoxFit.cover,
                   width: 800,
                   placeholder: Container(color: const Color(0xFF27272A)),
@@ -351,7 +349,7 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> {
                       api: widget.api,
                       itemId: widget.itemId,
                       fit: BoxFit.cover,
-                      width: 400,
+                      width: 600,
                       placeholder: Container(color: const Color(0xFF27272A)),
                     )
                   : Container(color: const Color(0xFF27272A)),
@@ -727,7 +725,7 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> {
                         api: widget.api,
                         itemId: ep.id,
                         fit: BoxFit.cover,
-                        width: 300,
+                        width: 400,
                         placeholder: _thumbPlaceholder(),
                       )
                     : _thumbPlaceholder(),
