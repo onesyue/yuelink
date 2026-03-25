@@ -261,8 +261,12 @@ class S {
   String exportProfileSuccess(String name) =>
       _e ? 'Exported: $name.yaml' : '已导出: $name.yaml';
   String get exportAllProfiles => _e ? 'Export all configs' : '导出全部订阅配置';
-  String get importAllProfiles => _e ? 'Import all configs' : '导入全部订阅配置';
+  String get importAllProfiles => _e ? 'Import backup (.json)' : '导入备份文件 (.json)';
+  String get importMultipleFiles => _e ? 'Import config files' : '导入配置文件';
   String get exportFailed => _e ? 'Export failed' : '导出失败';
+  String get exportSelectDir => _e ? 'Select export folder' : '选择导出目录';
+  String exportAllDone(int count) =>
+      _e ? 'Exported $count YAML files' : '已导出 $count 个配置文件';
   String importAllResult(int ok, int failed) => failed == 0
       ? (_e ? 'Imported $ok subscriptions' : '成功导入 $ok 个订阅')
       : (_e ? 'Imported $ok, failed $failed' : '成功 $ok 个，失败 $failed 个');

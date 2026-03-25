@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -109,10 +110,10 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                     switch (action) {
                       case 'export_all':
                         _exportAllProfiles(context, ref);
-                      case 'import_all':
-                        _importAllProfiles(context, ref);
-                      case 'import_file':
+                      case 'import_files':
                         _importLocalFile(context, ref);
+                      case 'import_backup':
+                        _importAllProfiles(context, ref);
                     }
                   },
                   itemBuilder: (_) => [
@@ -121,13 +122,13 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                       child: _menuItem(Icons.upload_file_outlined, s.exportAllProfiles),
                     ),
                     PopupMenuItem(
-                      value: 'import_all',
-                      child: _menuItem(Icons.download_for_offline_outlined, s.importAllProfiles),
+                      value: 'import_files',
+                      child: _menuItem(Icons.file_upload_outlined, s.importMultipleFiles),
                     ),
                     const PopupMenuDivider(),
                     PopupMenuItem(
-                      value: 'import_file',
-                      child: _menuItem(Icons.file_upload_outlined, s.importLocalFile),
+                      value: 'import_backup',
+                      child: _menuItem(Icons.download_for_offline_outlined, s.importAllProfiles),
                     ),
                   ],
                 ),
@@ -543,75 +544,104 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
 
   // ── Import / Export ───────────────────────────────────────────────
 
-  /// Import a single YAML/YML file as a local profile.
+  /// Import one or more YAML/YML files as local profiles.
+  ///
+  /// Supports multi-select: user can pick multiple files in one dialog.
+  /// Each file is imported independently — single failures don't block others.
+  /// File names (without extension) are used as profile names automatically.
   Future<void> _importLocalFile(BuildContext context, WidgetRef ref) async {
     final s = S.of(context);
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['yaml', 'yml'],
+      allowMultiple: true,
       withData: true,
     );
     if (result == null || result.files.isEmpty) return;
-    final file = result.files.first;
-    final bytes = file.bytes;
-    if (bytes == null) return;
 
-    String content;
-    try {
-      content = utf8.decode(bytes);
-    } catch (_) {
-      if (context.mounted) AppNotifier.error(s.importLocalFileFailed);
+    // Single file → show name dialog (existing UX)
+    if (result.files.length == 1) {
+      final file = result.files.first;
+      final bytes = file.bytes;
+      if (bytes == null) return;
+      String content;
+      try {
+        content = utf8.decode(bytes);
+      } catch (_) {
+        if (context.mounted) AppNotifier.error(s.importLocalFileFailed);
+        return;
+      }
+      final defaultName = file.name.replaceAll(
+          RegExp(r'\.(yaml|yml)$', caseSensitive: false), '');
+      if (!context.mounted) return;
+
+      final nameCtrl = TextEditingController(text: defaultName);
+      final name = await showDialog<String>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(s.importLocalFile),
+          content: TextField(
+            controller: nameCtrl,
+            autofocus: true,
+            decoration: InputDecoration(
+              labelText: s.nameLabel,
+              hintText: s.importLocalNameHint,
+              prefixIcon: const Icon(Icons.label_outline),
+            ),
+            textInputAction: TextInputAction.done,
+            onSubmitted: (v) {
+              final n = v.trim();
+              Navigator.pop(ctx, n.isEmpty ? defaultName : n);
+            },
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx), child: Text(s.cancel)),
+            FilledButton(
+              onPressed: () {
+                final n = nameCtrl.text.trim();
+                Navigator.pop(ctx, n.isEmpty ? defaultName : n);
+              },
+              child: Text(s.add),
+            ),
+          ],
+        ),
+      );
+      nameCtrl.dispose();
+      if (name == null || !context.mounted) return;
+      try {
+        final profile = await ref
+            .read(profileRepositoryProvider)
+            .addLocalProfile(name: name, configContent: content);
+        ref.read(profilesProvider.notifier).addLocal(profile);
+        AppNotifier.success(s.importLocalFileSuccess);
+      } catch (_) {
+        if (context.mounted) AppNotifier.error(s.importLocalFileFailed);
+      }
       return;
     }
 
-    final defaultName = file.name.replaceAll(
-        RegExp(r'\.(yaml|yml)$', caseSensitive: false), '');
-    if (!context.mounted) return;
-
-    final nameCtrl = TextEditingController(text: defaultName);
-    final name = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(s.importLocalFile),
-        content: TextField(
-          controller: nameCtrl,
-          autofocus: true,
-          decoration: InputDecoration(
-            labelText: s.nameLabel,
-            hintText: s.importLocalNameHint,
-            prefixIcon: const Icon(Icons.label_outline),
-          ),
-          textInputAction: TextInputAction.done,
-          onSubmitted: (v) {
-            final n = v.trim();
-            Navigator.pop(ctx, n.isEmpty ? defaultName : n);
-          },
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx), child: Text(s.cancel)),
-          FilledButton(
-            onPressed: () {
-              final n = nameCtrl.text.trim();
-              Navigator.pop(ctx, n.isEmpty ? defaultName : n);
-            },
-            child: Text(s.add),
-          ),
-        ],
-      ),
-    );
-    nameCtrl.dispose();
-    if (name == null || !context.mounted) return;
-
-    try {
-      final profile = await ref
-          .read(profileRepositoryProvider)
-          .addLocalProfile(name: name, configContent: content);
-      ref.read(profilesProvider.notifier).addLocal(profile);
-      AppNotifier.success(s.importLocalFileSuccess);
-    } catch (_) {
-      if (context.mounted) AppNotifier.error(s.importLocalFileFailed);
+    // Multiple files → batch import, use filenames as names
+    final repo = ref.read(profileRepositoryProvider);
+    int ok = 0, failed = 0;
+    for (final file in result.files) {
+      final bytes = file.bytes;
+      if (bytes == null) { failed++; continue; }
+      try {
+        final content = utf8.decode(bytes);
+        final name = file.name.replaceAll(
+            RegExp(r'\.(yaml|yml)$', caseSensitive: false), '');
+        final profile = await repo.addLocalProfile(
+          name: name.isEmpty ? s.importLocalNameHint : name,
+          configContent: content,
+        );
+        ref.read(profilesProvider.notifier).addLocal(profile);
+        ok++;
+      } catch (_) {
+        failed++;
+      }
     }
+    if (context.mounted) AppNotifier.success(s.importAllResult(ok, failed));
   }
 
   /// Export a single profile's config as {name}.yaml.
@@ -641,7 +671,10 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     }
   }
 
-  /// Export all profiles as a single JSON bundle.
+  /// Export all profiles as individual YAML files.
+  ///
+  /// Desktop: user picks a directory, files are written directly.
+  /// Mobile: falls back to saving each file individually via save dialog.
   Future<void> _exportAllProfiles(BuildContext context, WidgetRef ref) async {
     final s = S.of(context);
     final profiles = ref.read(profilesProvider).valueOrNull;
@@ -649,36 +682,67 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       AppNotifier.info(s.isEn ? 'No subscriptions to export' : '没有可导出的订阅');
       return;
     }
+
     final repo = ref.read(profileRepositoryProvider);
-    final entries = <Map<String, dynamic>>[];
-    for (final p in profiles) {
-      final config = await repo.loadConfig(p.id);
-      entries.add({
-        'name': p.name,
-        'url': p.url,
-        'updateIntervalHours': p.updateInterval.inHours,
-        'config': config ?? '',
-      });
-    }
-    final bundle = <String, dynamic>{
-      'version': 1,
-      'profiles': entries,
-    };
-    final jsonStr = const JsonEncoder.withIndent('  ').convert(bundle);
-    try {
-      await FilePicker.platform.saveFile(
-        dialogTitle: s.exportAllProfiles,
-        fileName: 'yuelink_profiles.json',
-        bytes: Uint8List.fromList(utf8.encode(jsonStr)),
-        type: FileType.custom,
-        allowedExtensions: ['json'],
+    final isDesktop = Platform.isMacOS || Platform.isWindows || Platform.isLinux;
+
+    if (isDesktop) {
+      // Desktop: pick a directory, write all YAML files there
+      final dir = await FilePicker.platform.getDirectoryPath(
+        dialogTitle: s.exportSelectDir,
       );
-      AppNotifier.success(s.isEn
-          ? 'Exported ${profiles.length} subscriptions'
-          : '已导出 ${profiles.length} 个订阅');
-    } catch (_) {
-      if (context.mounted) AppNotifier.error(s.exportFailed);
+      if (dir == null) return;
+
+      int ok = 0;
+      final usedNames = <String>{};
+      for (final p in profiles) {
+        final config = await repo.loadConfig(p.id);
+        if (config == null) continue;
+        var safeName = _safeFileName(p.name);
+        // Deduplicate filenames
+        var finalName = safeName;
+        var counter = 1;
+        while (usedNames.contains(finalName)) {
+          finalName = '${safeName}_$counter';
+          counter++;
+        }
+        usedNames.add(finalName);
+        try {
+          await File('$dir/$finalName.yaml').writeAsString(config);
+          ok++;
+        } catch (_) {}
+      }
+      if (context.mounted) AppNotifier.success(s.exportAllDone(ok));
+    } else {
+      // Mobile: save each file individually (FilePicker.saveFile per profile)
+      int ok = 0;
+      for (final p in profiles) {
+        final config = await repo.loadConfig(p.id);
+        if (config == null) continue;
+        final safeName = _safeFileName(p.name);
+        try {
+          await FilePicker.platform.saveFile(
+            dialogTitle: '${s.exportProfile}: ${p.name}',
+            fileName: '$safeName.yaml',
+            bytes: Uint8List.fromList(utf8.encode(config)),
+            type: FileType.custom,
+            allowedExtensions: ['yaml'],
+          );
+          ok++;
+        } catch (_) {
+          // User cancelled or error — continue with next
+        }
+      }
+      if (ok > 0 && context.mounted) {
+        AppNotifier.success(s.exportAllDone(ok));
+      }
     }
+  }
+
+  /// Sanitize profile name for use as a filename.
+  /// Preserves emoji and Unicode, strips only filesystem-unsafe characters.
+  static String _safeFileName(String name) {
+    return name.replaceAll(RegExp(r'[<>:"/\\|?*\x00-\x1f]'), '_').trim();
   }
 
   /// Import profiles from a previously exported JSON bundle.
