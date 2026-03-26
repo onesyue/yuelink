@@ -487,16 +487,6 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
                   fontWeight: FontWeight.w600,
                 ),
               ),
-              if (items case final items? when items.isNotEmpty) ...[
-                const SizedBox(width: 6),
-                Text(
-                  '${items.length}',
-                  style: TextStyle(
-                    color: EmbyTheme.textTertiary(context),
-                    fontSize: 13,
-                  ),
-                ),
-              ],
               const Spacer(),
               if (hasItems)
                 GestureDetector(
@@ -653,27 +643,28 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
 
   Widget _buildSearchBar() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+      padding: const EdgeInsets.fromLTRB(16, 2, 16, 2),
       child: TextField(
         onChanged: (v) => setState(() => _query = v),
         style:
-            TextStyle(color: EmbyTheme.textPrimary(context), fontSize: 14),
+            TextStyle(color: EmbyTheme.textPrimary(context), fontSize: 13),
         decoration: InputDecoration(
           hintText: '搜索所有媒体库...',
           hintStyle: TextStyle(
-              color: EmbyTheme.textSecondary(context), fontSize: 14),
+              color: EmbyTheme.textSecondary(context), fontSize: 13),
           prefixIcon: Icon(Icons.search_rounded,
-              color: EmbyTheme.textSecondary(context), size: 18),
+              color: EmbyTheme.textSecondary(context), size: 16),
+          prefixIconConstraints: const BoxConstraints(minWidth: 36, minHeight: 36),
           suffixIcon: _query.isNotEmpty
               ? GestureDetector(
                   onTap: () => setState(() => _query = ''),
                   child: Icon(Icons.close_rounded,
-                      color: EmbyTheme.textSecondary(context), size: 18),
+                      color: EmbyTheme.textSecondary(context), size: 16),
                 )
               : null,
           filled: true,
           fillColor: EmbyTheme.pillUnselected(context),
-          contentPadding: const EdgeInsets.symmetric(vertical: 8),
+          contentPadding: const EdgeInsets.symmetric(vertical: 6),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(20),
             borderSide: BorderSide.none,
@@ -899,20 +890,21 @@ class _LibraryGridPageState extends State<_LibraryGridPage> {
         children: [
           // Search
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 4, 12, 6),
+            padding: const EdgeInsets.fromLTRB(16, 2, 16, 2),
             child: TextField(
               onChanged: (v) => setState(() => _query = v),
               style: TextStyle(
-                  color: EmbyTheme.textPrimary(context), fontSize: 14),
+                  color: EmbyTheme.textPrimary(context), fontSize: 13),
               decoration: InputDecoration(
                 hintText: '搜索${widget.lib.name}...',
                 hintStyle: TextStyle(
-                    color: EmbyTheme.textSecondary(context), fontSize: 14),
+                    color: EmbyTheme.textSecondary(context), fontSize: 13),
                 prefixIcon: Icon(Icons.search_rounded,
-                    color: EmbyTheme.textSecondary(context), size: 18),
+                    color: EmbyTheme.textSecondary(context), size: 16),
+                prefixIconConstraints: const BoxConstraints(minWidth: 36, minHeight: 36),
                 filled: true,
                 fillColor: EmbyTheme.pillUnselected(context),
-                contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                contentPadding: const EdgeInsets.symmetric(vertical: 6),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(20),
                   borderSide: BorderSide.none,
