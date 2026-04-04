@@ -15,7 +15,7 @@ final accountRepositoryProvider = Provider<AccountRepository>((ref) {
 
 /// 账户总览数据（需要 token，用户未登录时返回 null）。
 final accountOverviewProvider = FutureProvider<AccountOverview?>((ref) async {
-  final token = ref.watch(authProvider).token;
+  final token = ref.watch(authProvider.select((s) => s.token));
   if (token == null) return null;
   final repo = ref.read(accountRepositoryProvider);
   return repo.getAccountOverview(token);
@@ -23,7 +23,7 @@ final accountOverviewProvider = FutureProvider<AccountOverview?>((ref) async {
 
 /// 用户通知列表（需要 token，未登录时返回空列表）。
 final accountNoticesProvider = FutureProvider<List<AccountNotice>>((ref) async {
-  final token = ref.watch(authProvider).token;
+  final token = ref.watch(authProvider.select((s) => s.token));
   if (token == null) return [];
   final repo = ref.read(accountRepositoryProvider);
   return repo.getNotices(token);

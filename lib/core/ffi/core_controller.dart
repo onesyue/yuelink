@@ -16,7 +16,7 @@ class CoreController {
       // On iOS, DynamicLibrary.process() always succeeds but the Go symbols
       // may not exist (e.g. simulator or Runner without static lib).
       // Probe a symbol to verify the core is actually linked.
-      bindings.isRunning;
+      final _ = bindings.isRunning; // probe symbol to verify core is linked
       _bindings = bindings;
       _useMock = false;
     } catch (_) {

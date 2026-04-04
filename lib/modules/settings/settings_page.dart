@@ -161,9 +161,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage> with WidgetsBinding
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      // App 从后台恢复时刷新账户数据
+      // Refresh account overview shown on this page (我的 card).
+      // Do NOT invalidate accountNoticesProvider here — NoticesCard on Dashboard
+      // uses when(loading: () => SizedBox.shrink()), causing it to flash empty
+      // on every background→foreground cycle. Notices are refreshed via
+      // _onAppResumed() → refreshUserInfo() at the app level.
       ref.invalidate(accountOverviewProvider);
-      ref.invalidate(accountNoticesProvider);
     }
   }
 
@@ -464,16 +467,16 @@ class _SettingsPageState extends ConsumerState<SettingsPage> with WidgetsBinding
                                   // Manual check ignores skipped versions
                                   final info =
                                       await UpdateChecker.instance.check(ignoreSkipped: true);
-                                  if (mounted) {
-                                    setState(() {
-                                      _pendingUpdate = info;
-                                      _checkingUpdate = false;
-                                    });
-                                    if (info == null) {
-                                      AppNotifier.info(s.alreadyLatest);
-                                    } else {
-                                      _showUpdateDialog(context, info);
-                                    }
+                                  if (!mounted) return;
+                                  setState(() {
+                                    _pendingUpdate = info;
+                                    _checkingUpdate = false;
+                                  });
+                                  if (info == null) {
+                                    AppNotifier.info(s.alreadyLatest);
+                                  } else if (mounted) {
+                                    // ignore: use_build_context_synchronously
+                                    _showUpdateDialog(context, info);
                                   }
                                 },
                     ),

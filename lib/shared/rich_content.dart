@@ -129,5 +129,5 @@ class RichContent extends StatelessWidget {
   }
 
   static String _colorToCss(Color c) =>
-      'rgba(${c.red},${c.green},${c.blue},${c.opacity.toStringAsFixed(2)})';
+      'rgba(${(c.r * 255).round()},${(c.g * 255).round()},${(c.b * 255).round()},${c.a.toStringAsFixed(2)})';
 }

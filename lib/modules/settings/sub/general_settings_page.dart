@@ -624,7 +624,7 @@ class _SplitTunnelSectionState extends ConsumerState<_SplitTunnelSection> {
                                 child: Column(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Icon(Icons.apps_outlined, size: 40, color: YLColors.zinc400),
+                                    const Icon(Icons.apps_outlined, size: 40, color: YLColors.zinc400),
                                     const SizedBox(height: 12),
                                     Text(
                                       _loadError ?? (_search.isNotEmpty

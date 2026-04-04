@@ -71,7 +71,7 @@ void main() {
     });
 
     test('formattedPrice formats yuan correctly', () {
-      final plan = StorePlan(id: 1, name: 'test', monthPrice: 1800, yearPrice: 0);
+      final plan = const StorePlan(id: 1, name: 'test', monthPrice: 1800, yearPrice: 0);
 
       expect(plan.formattedPrice(PlanPeriod.monthly), '¥18');
       expect(plan.formattedPrice(PlanPeriod.yearly), '免费');
@@ -79,37 +79,37 @@ void main() {
     });
 
     test('formattedPrice handles decimal yuan', () {
-      final plan = StorePlan(id: 1, name: 'test', monthPrice: 1850);
+      final plan = const StorePlan(id: 1, name: 'test', monthPrice: 1850);
 
       expect(plan.formattedPrice(PlanPeriod.monthly), '¥18.50');
     });
 
     test('trafficLabel displays GB or unlimited', () {
       expect(
-        StorePlan(id: 1, name: 'a', transferEnable: 100).trafficLabel,
+        const StorePlan(id: 1, name: 'a', transferEnable: 100).trafficLabel,
         '100 GB',
       );
       expect(
-        StorePlan(id: 1, name: 'b', transferEnable: null).trafficLabel,
+        const StorePlan(id: 1, name: 'b', transferEnable: null).trafficLabel,
         '不限',
       );
       expect(
-        StorePlan(id: 1, name: 'c', transferEnable: 0).trafficLabel,
+        const StorePlan(id: 1, name: 'c', transferEnable: 0).trafficLabel,
         '不限',
       );
     });
 
     test('speedLabel displays Mbps/Gbps or unlimited', () {
       expect(
-        StorePlan(id: 1, name: 'a', speedLimit: 500).speedLabel,
+        const StorePlan(id: 1, name: 'a', speedLimit: 500).speedLabel,
         '500 Mbps',
       );
       expect(
-        StorePlan(id: 1, name: 'b', speedLimit: 1000).speedLabel,
+        const StorePlan(id: 1, name: 'b', speedLimit: 1000).speedLabel,
         '1.0 Gbps',
       );
       expect(
-        StorePlan(id: 1, name: 'c').speedLabel,
+        const StorePlan(id: 1, name: 'c').speedLabel,
         '不限',
       );
     });
@@ -156,19 +156,19 @@ void main() {
 
     test('formattedAmount formats correctly', () {
       expect(
-        StoreOrder(tradeNo: '', planId: 0, period: '', totalAmount: 1800,
+        const StoreOrder(tradeNo: '', planId: 0, period: '', totalAmount: 1800,
             status: OrderStatus.pending, createdAt: 0, updatedAt: 0)
             .formattedAmount,
         '¥18',
       );
       expect(
-        StoreOrder(tradeNo: '', planId: 0, period: '', totalAmount: 0,
+        const StoreOrder(tradeNo: '', planId: 0, period: '', totalAmount: 0,
             status: OrderStatus.pending, createdAt: 0, updatedAt: 0)
             .formattedAmount,
         '免费',
       );
       expect(
-        StoreOrder(tradeNo: '', planId: 0, period: '', totalAmount: 1850,
+        const StoreOrder(tradeNo: '', planId: 0, period: '', totalAmount: 1850,
             status: OrderStatus.pending, createdAt: 0, updatedAt: 0)
             .formattedAmount,
         '¥18.50',

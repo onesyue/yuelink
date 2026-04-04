@@ -47,6 +47,13 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
           _showAddDialog(context, ref, prefilledUrl: url);
         }
       });
+      // listenManual only fires on future changes — also check any URL that
+      // was set before this page mounted (e.g. cold-start deep link).
+      final pendingUrl = ref.read(deepLinkUrlProvider);
+      if (pendingUrl != null && pendingUrl.isNotEmpty) {
+        ref.read(deepLinkUrlProvider.notifier).state = null;
+        _showAddDialog(context, ref, prefilledUrl: pendingUrl);
+      }
     });
   }
 
@@ -703,7 +710,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       for (final p in profiles) {
         final config = await repo.loadConfig(p.id);
         if (config == null) continue;
-        var safeName = _safeFileName(p.name);
+        final safeName = _safeFileName(p.name);
         // Deduplicate filenames
         var finalName = safeName;
         var counter = 1;

@@ -11,6 +11,7 @@ export '../../../infrastructure/datasources/xboard_api.dart'
 import '../../../l10n/app_strings.dart';
 import '../../../modules/profiles/providers/profiles_providers.dart';
 import '../../../core/kernel/core_manager.dart';
+import '../../../core/kernel/recovery_manager.dart';
 import '../../../infrastructure/repositories/profile_repository.dart';
 import '../../../shared/app_notifier.dart';
 import '../../../shared/event_log.dart';
@@ -231,10 +232,12 @@ class AuthNotifier extends Notifier<AuthState> {
 
   /// Logout and clear all auth data, profiles, and stop VPN.
   Future<void> logout() async {
-    // Stop running VPN/core before clearing data
+    // Stop running VPN/core and reset all Riverpod state before clearing data.
+    // Must use resetCoreToStopped (not CoreManager.stop() directly) so that
+    // coreStatusProvider, trafficProvider, historyProvider, etc. are cleared.
+    // Otherwise re-login shows stale "Connected" status for up to 30 seconds.
     try {
-      final manager = CoreManager.instance;
-      if (manager.isRunning) await manager.stop();
+      resetCoreToStopped(ref, clearDesktopProxy: true);
     } catch (e) {
       debugPrint('[Auth] stop core on logout failed: $e');
     }

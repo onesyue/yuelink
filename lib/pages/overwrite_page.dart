@@ -47,7 +47,7 @@ class _OverwriteData {
     }
 
     // Extra YAML: remove the known keys we structured
-    var extra = yaml
+    final extra = yaml
         .replaceAll(RegExp(r'^mode:\s*\S+[ \t]*\n?', multiLine: true), '')
         .replaceAll(
             RegExp(r'^mixed-port:\s*\d+[ \t]*\n?', multiLine: true), '')

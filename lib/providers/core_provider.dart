@@ -486,6 +486,8 @@ final coreHeartbeatProvider = Provider<void>((ref) {
               debugPrint('[Heartbeat] system proxy conflict — another client took over port $port');
               AppNotifier.warning(S.current.msgSystemProxyConflict);
               resetCoreToStopped(ref, clearDesktopProxy: false);
+              ref.read(delayResultsProvider.notifier).state = {};
+              ref.read(delayTestingProvider.notifier).state = {};
               failures = 0;
               return;
             }
@@ -499,6 +501,8 @@ final coreHeartbeatProvider = Provider<void>((ref) {
       if (failures >= 3) {
         debugPrint('[Heartbeat] core dead, cleaning up');
         resetCoreToStopped(ref);
+        ref.read(delayResultsProvider.notifier).state = {};
+        ref.read(delayTestingProvider.notifier).state = {};
         failures = 0;
       }
     }

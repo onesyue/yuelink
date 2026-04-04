@@ -5,7 +5,6 @@ import 'package:yuelink/domain/store/coupon_result.dart';
 import 'package:yuelink/domain/store/payment_method.dart';
 import 'package:yuelink/domain/store/store_order.dart';
 import 'package:yuelink/domain/store/store_plan.dart';
-import 'package:yuelink/domain/store/order_list_result.dart';
 import 'package:yuelink/modules/store/store_providers.dart';
 import 'package:yuelink/infrastructure/store/store_repository.dart';
 // ignore: unused_import (AuthState used in overrides)

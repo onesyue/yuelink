@@ -16,7 +16,7 @@ final embyRepositoryProvider = Provider<EmbyRepository>((ref) {
 /// Fetches the current user's Emby service info.
 /// Returns null when not logged in or no Emby access.
 final embyProvider = FutureProvider<EmbyInfo?>((ref) async {
-  final token = ref.watch(authProvider).token;
+  final token = ref.watch(authProvider.select((s) => s.token));
   if (token == null) return null;
 
   final repo = ref.watch(embyRepositoryProvider);

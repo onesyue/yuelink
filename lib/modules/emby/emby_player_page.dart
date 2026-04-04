@@ -123,9 +123,15 @@ class _EmbyPlayerPageState extends State<EmbyPlayerPage> with WidgetsBindingObse
     _bufferingSub?.cancel();
     _tracksSub?.cancel();
     _positionSub?.cancel();
-    if (_playbackStarted) _reportStop(); // fire-and-forget before close
+    // Capture position before player is disposed — _positionTicks reads player state.
+    final finalTicks = _playbackStarted ? _positionTicks : 0;
     _player.dispose();
-    _api.close();
+    // Chain _api.close() after the stop report so the HTTP request isn't aborted.
+    if (_playbackStarted) {
+      _reportStop(positionTicks: finalTicks).whenComplete(_api.close);
+    } else {
+      _api.close();
+    }
     if (Platform.isAndroid || Platform.isIOS) {
       SystemChrome.setPreferredOrientations([
         DeviceOrientation.portraitUp,
@@ -192,8 +198,9 @@ class _EmbyPlayerPageState extends State<EmbyPlayerPage> with WidgetsBindingObse
       if (posSeconds < 30) return;
       // Skip if already near the end (> 95% played).
       final totalTicks = data['RunTimeTicks'] as int?;
-      if (totalTicks != null && totalTicks > 0 && posTicks / totalTicks > 0.95)
+      if (totalTicks != null && totalTicks > 0 && posTicks / totalTicks > 0.95) {
         return;
+      }
       if (!mounted) return;
       final resume = await showDialog<bool>(
         context: context,
@@ -277,11 +284,11 @@ class _EmbyPlayerPageState extends State<EmbyPlayerPage> with WidgetsBindingObse
     });
   }
 
-  Future<void> _reportStop() async {
+  Future<void> _reportStop({int? positionTicks}) async {
     await _api.post('/emby/Sessions/Playing/Stopped', {
       'ItemId': widget.itemId,
       'MediaSourceId': widget.itemId,
-      'PositionTicks': _positionTicks,
+      'PositionTicks': positionTicks ?? _positionTicks,
       'PlayMethod': 'DirectPlay',
       'PlaySessionId': _sessionId,
     });

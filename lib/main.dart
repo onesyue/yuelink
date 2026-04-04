@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:app_links/app_links.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -381,6 +380,8 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
       }
       debugPrint('[App] VPN revoked — resetting state');
       resetCoreToStopped(ref);
+      ref.read(delayResultsProvider.notifier).state = {};
+      ref.read(delayTestingProvider.notifier).state = {};
       AppNotifier.warning(S.current.disconnectedUnexpected);
     });
   }
@@ -507,6 +508,8 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
       if (!running || !apiOk) {
         debugPrint('[AppLifecycle] core dead after resume — resetting state');
         resetCoreToStopped(ref);
+        ref.read(delayResultsProvider.notifier).state = {};
+        ref.read(delayTestingProvider.notifier).state = {};
       } else {
         // Core alive — refresh data but do NOT invalidate trafficStreamProvider.
         // Invalidating it creates a new TrafficHistory(), wiping the chart.

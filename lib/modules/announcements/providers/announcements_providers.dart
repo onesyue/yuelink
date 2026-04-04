@@ -24,7 +24,7 @@ final announcementsLocalDatasourceProvider =
 /// Fetches announcements from XBoard. Returns empty list when not logged in.
 final announcementsProvider =
     FutureProvider<List<Announcement>>((ref) async {
-  final token = ref.watch(authProvider).token;
+  final token = ref.watch(authProvider.select((s) => s.token));
   if (token == null) return [];
 
   final repo = ref.watch(announcementsRepositoryProvider);

@@ -575,11 +575,11 @@ class ConfigTemplate {
       // resolution so the proxy can start in the first place.
       if (!dnsSection.contains('proxy-server-nameserver:')) {
         final proxyNs = '${indent}proxy-server-nameserver:\n'
-            '${entryIndent}- 223.5.5.5\n'
-            '${entryIndent}- 119.29.29.29\n'
-            '${entryIndent}- 8.8.8.8\n'
-            '${entryIndent}- https://doh.pub/dns-query\n'
-            '${entryIndent}- https://dns.alidns.com/dns-query\n';
+            '$entryIndent- 223.5.5.5\n'
+            '$entryIndent- 119.29.29.29\n'
+            '$entryIndent- 8.8.8.8\n'
+            '$entryIndent- https://doh.pub/dns-query\n'
+            '$entryIndent- https://dns.alidns.com/dns-query\n';
         config =
             config.substring(0, dnsEnd) + proxyNs + config.substring(dnsEnd);
         dnsEnd += proxyNs.length;

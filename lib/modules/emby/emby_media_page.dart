@@ -332,6 +332,7 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
     _loadLibraries();
   }
 
+  @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final dividerColor = isDark

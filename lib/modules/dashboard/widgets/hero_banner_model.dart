@@ -95,7 +95,7 @@ class HeroBannerItem {
   /// }
   /// ```
   factory HeroBannerItem.fromJson(Map<String, dynamic> json) {
-    Color _parseHex(String? hex, Color fallback) {
+    Color parseHex(String? hex, Color fallback) {
       if (hex == null || hex.isEmpty) return fallback;
       final s = hex.replaceFirst('#', '');
       final value = int.tryParse(s.length == 6 ? 'FF$s' : s, radix: 16);
@@ -108,9 +108,9 @@ class HeroBannerItem {
       subtitle: json['subtitle'] as String? ?? '',
       imageUrl: json['imageUrl'] as String?,
       gradientStart:
-          _parseHex(json['gradientStart'] as String?, const Color(0xFF1a1a2e)),
+          parseHex(json['gradientStart'] as String?, const Color(0xFF1a1a2e)),
       gradientEnd:
-          _parseHex(json['gradientEnd'] as String?, const Color(0xFF16213e)),
+          parseHex(json['gradientEnd'] as String?, const Color(0xFF16213e)),
       iconEmoji: json['iconEmoji'] as String?,
       actionType: BannerActionType.values.firstWhere(
         (t) => t.name == json['actionType'],

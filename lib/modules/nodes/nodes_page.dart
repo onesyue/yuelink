@@ -83,7 +83,11 @@ class _NodesPageState extends ConsumerState<NodesPage> {
           final configYaml = await ref.read(profileRepositoryProvider).loadConfig(activeId);
           if (configYaml != null) {
             await ref.read(coreActionsProvider).stop();
-            await ref.read(coreActionsProvider).start(configYaml);
+            final ok = await ref.read(coreActionsProvider).start(configYaml);
+            if (!ok) {
+              if (mounted) AppNotifier.error(s.snackStartFailed);
+              return;
+            }
           }
         }
       }

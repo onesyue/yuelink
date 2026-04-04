@@ -189,9 +189,11 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
       // First-time VPN permission explanation (mobile only).
       // Shows a friendly dialog BEFORE the system VPN permission popup,
       // so users understand why the permission is needed.
-      if ((Platform.isAndroid || Platform.isIOS) && mounted) {
+      if (Platform.isAndroid || Platform.isIOS) {
         final seen = await SettingsService.get<bool>('hasSeenVpnHint') ?? false;
         if (!seen) {
+          if (!mounted) return;
+          // ignore: use_build_context_synchronously
           final proceed = await showDialog<bool>(
             context: context,
             builder: (ctx) => AlertDialog(
