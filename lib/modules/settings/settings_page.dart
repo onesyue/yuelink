@@ -28,6 +28,8 @@ import '../../services/update_checker.dart';
 import '../../shared/rich_content.dart';
 import '../../theme.dart';
 import '../mine/providers/account_providers.dart';
+import '../surge_modules/pages/modules_page.dart';
+import '../surge_modules/providers/module_provider.dart';
 
 // ── Settings-level providers ─────────────────────────────────────────────────
 
@@ -404,6 +406,50 @@ class _SettingsPageState extends ConsumerState<SettingsPage> with WidgetsBinding
                       ),
                     ],
                   ],
+                ),
+              ),
+
+              // ══ 模块管理 ══════════════════════════════════════════
+              _SectionTitle(s.sectionModules),
+              _SettingsCard(
+                child: YLInfoRow(
+                  label: s.modulesLabel,
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Consumer(builder: (ctx, ref, _) {
+                        final state = ref.watch(moduleProvider);
+                        final count =
+                            state.modules.where((m) => m.enabled).length;
+                        if (count == 0) return const SizedBox.shrink();
+                        return Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: (isDark
+                                    ? YLColors.primaryDark
+                                    : YLColors.primary)
+                                .withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            '$count',
+                            style: YLText.caption.copyWith(
+                                color: isDark
+                                    ? YLColors.primaryDark
+                                    : YLColors.primary),
+                          ),
+                        );
+                      }),
+                      const SizedBox(width: 4),
+                      const Icon(Icons.chevron_right,
+                          size: 18, color: YLColors.zinc400),
+                    ],
+                  ),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                        builder: (_) => const ModulesPage()),
+                  ),
                 ),
               ),
 

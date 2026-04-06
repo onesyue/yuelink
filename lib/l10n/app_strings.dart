@@ -928,4 +928,21 @@ class S {
   String get repairNeedLogin => _e ? 'Please login first' : '请先登录';
   String get dataMonitor => _e ? 'Data Monitor' : '数据监控';
   String get vpnNotRunning => _e ? 'Not connected' : '未连接';
+
+  // ── Surge Rule Modules ────────────────────────────────────
+  String get sectionModules => _e ? 'Modules' : '模块';
+  String get modulesLabel => _e ? 'Rule Modules' : '规则模块';
+  String get modulesEmpty => _e ? 'No modules installed' : '暂无模块';
+  String get moduleAddUrl => _e ? 'Module URL' : '模块地址';
+  String get moduleAdding => _e ? 'Adding module…' : '正在添加…';
+  String get moduleAddSuccess => _e ? 'Module added' : '模块已添加';
+  String get moduleRefresh => _e ? 'Refresh' : '刷新';
+  String get moduleDelete => _e ? 'Delete module' : '删除模块';
+  String get moduleDeleteConfirm => _e ? 'Delete this module?' : '确认删除此模块？';
+  String get moduleRuleCount => _e ? 'Rules' : '规则';
+  String get moduleNotActive => _e ? 'Not active in current version' : '当前版本未启用';
+  String get moduleMitmDetected => _e ? 'MITM hostnames detected' : '检测到 MITM 域名';
+  String get moduleScriptDetected => _e ? 'Scripts detected' : '检测到脚本';
+  String get moduleRewriteDetected => _e ? 'URL Rewrites detected' : '检测到 URL 改写';
+  String get moduleFutureVersion => _e ? '— will be enabled in a future version' : '将在后续版本开放';
 }

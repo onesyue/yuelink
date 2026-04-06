@@ -15,6 +15,7 @@ import '../../services/overwrite_service.dart';
 import '../../services/process_manager.dart';
 import '../storage/settings_service.dart';
 import '../platform/vpn_service.dart' as vpn;
+import '../../modules/surge_modules/infrastructure/module_rule_injector.dart';
 
 /// How mihomo is managed.
 enum CoreMode { ffi, subprocess, mock }
@@ -209,6 +210,9 @@ class CoreManager {
       Future<String> prepareConfig() async {
         final overwrite = await OverwriteService.load();
         var withOverwrite = OverwriteService.apply(configYaml, overwrite);
+
+        // [ModuleRuntime] inject enabled module rules
+        withOverwrite = await ModuleRuleInjector.inject(withOverwrite);
 
         final upstream = await SettingsService.getUpstreamProxy();
         if (upstream != null && (upstream['server'] as String).isNotEmpty) {
@@ -439,6 +443,9 @@ class CoreManager {
           () async {
         final overwrite = await OverwriteService.load();
         var withOverwrite = OverwriteService.apply(configYaml, overwrite);
+
+        // [ModuleRuntime] inject enabled module rules
+        withOverwrite = await ModuleRuleInjector.inject(withOverwrite);
 
         // Inject upstream proxy if configured
         final upstream = await SettingsService.getUpstreamProxy();
