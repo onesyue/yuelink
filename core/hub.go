@@ -6,6 +6,7 @@ package main
 import "C"
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -23,6 +24,7 @@ import (
 	"github.com/metacubex/mihomo/hub/executor"
 	"github.com/metacubex/mihomo/listener"
 	"github.com/metacubex/mihomo/log"
+	"github.com/user/yuelink/core/mitm"
 
 	logrus "github.com/sirupsen/logrus"
 )
@@ -271,6 +273,149 @@ func UpdateConfig(configStr *C.char) *C.char {
 func GetVersion() *C.char {
 	v := fmt.Sprintf("mihomo Meta %s", mihomoConst.Version)
 	return C.CString(v)
+}
+
+// --------------------------------------------------------------------
+// MITM Engine
+// --------------------------------------------------------------------
+
+// StartMITMEngine starts the MITM proxy engine singleton.
+// Pass 0 as port to use the default port (9091); the engine will fall back
+// to an OS-assigned port if the preferred port is busy.
+// Returns empty string on success, error message on failure.
+// Caller must free the returned string via FreeCString.
+//
+//export StartMITMEngine
+func StartMITMEngine(port C.int) (result *C.char) {
+	defer func() {
+		if r := recover(); r != nil {
+			result = C.CString(fmt.Sprintf("PANIC: %v", r))
+		}
+	}()
+	state.lock()
+	defer state.unlock()
+
+	if err := mitm.StartMITMEngine(int(port)); err != nil {
+		return C.CString(err.Error())
+	}
+	return C.CString("")
+}
+
+// StopMITMEngine stops the MITM proxy engine singleton.
+// Returns empty string on success, error message on failure.
+// Caller must free the returned string via FreeCString.
+//
+//export StopMITMEngine
+func StopMITMEngine() (result *C.char) {
+	defer func() {
+		if r := recover(); r != nil {
+			result = C.CString(fmt.Sprintf("PANIC: %v", r))
+		}
+	}()
+	state.lock()
+	defer state.unlock()
+
+	if err := mitm.StopMITMEngine(); err != nil {
+		return C.CString(err.Error())
+	}
+	return C.CString("")
+}
+
+// GetMITMEngineStatus returns the current MITM engine status as a JSON string.
+// JSON shape: {"running":bool,"port":int,"address":"...","started_at":"...","healthy":bool,"last_error":"..."}
+// Returns "{}" on marshal error.
+// Caller must free the returned string via FreeCString.
+// Note: no state lock needed — GetMITMEngineStatus is internally synchronized.
+//
+//export GetMITMEngineStatus
+func GetMITMEngineStatus() (result *C.char) {
+	defer func() {
+		if r := recover(); r != nil {
+			result = C.CString("{}")
+		}
+	}()
+
+	status := mitm.GetMITMEngineStatus()
+	data, err := json.Marshal(status)
+	if err != nil {
+		return C.CString("{}")
+	}
+	return C.CString(string(data))
+}
+
+// GenerateRootCA generates (or reuses) the MITM Root CA certificate.
+// Stores key material under <homeDir>/mitm/.
+// Returns JSON of RootCAStatus on success, or {"error":"..."} on failure.
+// Caller must free the returned string via FreeCString.
+//
+//export GenerateRootCA
+func GenerateRootCA() (result *C.char) {
+	defer func() {
+		if r := recover(); r != nil {
+			errJSON := fmt.Sprintf(`{"error":"PANIC: %v"}`, r)
+			result = C.CString(errJSON)
+		}
+	}()
+	state.lock()
+	defer state.unlock()
+
+	if !state.isInit {
+		return C.CString(`{"error":"core not initialized, call InitCore first"}`)
+	}
+
+	caStatus, err := mitm.GenerateRootCA(state.homeDir)
+	if err != nil {
+		errJSON := fmt.Sprintf(`{"error":"%s"}`, jsonEscapeString(err.Error()))
+		return C.CString(errJSON)
+	}
+	rootStatus := mitm.CertStatusToRootCAStatus(caStatus)
+	data, err := json.Marshal(rootStatus)
+	if err != nil {
+		return C.CString(`{"error":"failed to marshal CA status"}`)
+	}
+	return C.CString(string(data))
+}
+
+// GetRootCAStatus returns the current Root CA status as a JSON string.
+// JSON shape: RootCAStatus (see types.go).
+// Returns "{}" if the CA does not exist or is invalid.
+// Caller must free the returned string via FreeCString.
+//
+//export GetRootCAStatus
+func GetRootCAStatus() (result *C.char) {
+	defer func() {
+		if r := recover(); r != nil {
+			result = C.CString("{}")
+		}
+	}()
+	state.lock()
+	defer state.unlock()
+
+	if !state.isInit {
+		return C.CString("{}")
+	}
+
+	cs := mitm.GetRootCAStatus(state.homeDir)
+	rootStatus := mitm.CertStatusToRootCAStatus(cs) // handles nil cs safely
+	data, err := json.Marshal(rootStatus)
+	if err != nil {
+		return C.CString("{}")
+	}
+	return C.CString(string(data))
+}
+
+// jsonEscapeString escapes a string for safe embedding in a JSON string literal.
+// Handles backslash, double-quote, and common control characters.
+func jsonEscapeString(s string) string {
+	b, err := json.Marshal(s)
+	if err != nil {
+		return "unknown error"
+	}
+	// json.Marshal wraps in quotes; strip them.
+	if len(b) >= 2 {
+		return string(b[1 : len(b)-1])
+	}
+	return string(b)
 }
 
 // --------------------------------------------------------------------

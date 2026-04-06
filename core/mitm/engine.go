@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net"
 	"net/http"
 	"sync"
@@ -14,17 +13,21 @@ import (
 const (
 	defaultMITMPort = 9091
 	shutdownTimeout = 5 * time.Second
+	healthCheckPath = "/ping"
 )
 
 // Engine is the MITM proxy engine.
 type Engine struct {
-	port    int
-	server  *http.Server
-	running bool
-	mu      sync.Mutex
+	port      int
+	server    *http.Server
+	listener  net.Listener
+	running   bool
+	startedAt *time.Time
+	lastError string
+	mu        sync.Mutex
 }
 
-// NewEngine creates a new engine on the given port.
+// NewEngine creates a new engine with the given preferred port.
 // Pass 0 to use the default port (9091).
 func NewEngine(port int) *Engine {
 	if port <= 0 {
@@ -33,7 +36,9 @@ func NewEngine(port int) *Engine {
 	return &Engine{port: port}
 }
 
-// Start starts the engine. Returns error if already running or port is busy.
+// Start starts the engine. Tries the preferred port first; falls back to an
+// OS-assigned port if the preferred port is busy. Updates e.port with the
+// actual bound port.
 func (e *Engine) Start() error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -42,10 +47,25 @@ func (e *Engine) Start() error {
 		return fmt.Errorf("[MITM] engine is already running on port %d", e.port)
 	}
 
+	// Try preferred port, then fall back to OS-assigned.
+	preferredAddr := fmt.Sprintf("127.0.0.1:%d", e.port)
+	ln, err := net.Listen("tcp", preferredAddr)
+	if err != nil {
+		logEngine("preferred port %d busy, falling back to OS-assigned port", e.port)
+		ln, err = net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			return fmt.Errorf("[MITM] cannot bind: %w", err)
+		}
+	}
+
+	// Record the actual port from the listener.
+	e.port = ln.Addr().(*net.TCPAddr).Port
+	e.listener = ln
+
 	mux := http.NewServeMux()
 
 	// Health-check endpoint.
-	mux.HandleFunc("/ping", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc(healthCheckPath, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"status":"ok","engine":"YueLink Module Runtime"}`))
@@ -54,37 +74,29 @@ func (e *Engine) Start() error {
 	// All other requests (including CONNECT) go to the main handler.
 	mux.HandleFunc("/", e.handleRequest)
 
-	addr := fmt.Sprintf("127.0.0.1:%d", e.port)
 	e.server = &http.Server{
-		Addr:    addr,
 		Handler: mux,
 	}
 
-	// Start listening in a goroutine; capture bind errors synchronously via
-	// a small channel.
-	errCh := make(chan error, 1)
+	logEngine("starting on 127.0.0.1:%d", e.port)
+
+	// Serve on the pre-bound listener so we own the port immediately.
 	go func() {
-		log.Printf("[MITM] Engine starting on %s", addr)
-		if err := e.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			errCh <- err
-		} else {
-			errCh <- nil
+		if serveErr := e.server.Serve(ln); serveErr != nil && serveErr != http.ErrServerClosed {
+			e.mu.Lock()
+			e.lastError = serveErr.Error()
+			e.running = false
+			e.startedAt = nil
+			e.mu.Unlock()
+			logEngine("serve error: %v", serveErr)
 		}
 	}()
 
-	// Give the server a moment to bind; a quick error means the port is busy.
-	select {
-	case err := <-errCh:
-		if err != nil {
-			return fmt.Errorf("[MITM] failed to start engine: %w", err)
-		}
-		return fmt.Errorf("[MITM] engine stopped unexpectedly before accepting connections")
-	case <-time.After(100 * time.Millisecond):
-		// No error within 100 ms → assume bind succeeded.
-	}
-
+	now := time.Now().UTC()
+	e.startedAt = &now
 	e.running = true
-	log.Printf("[MITM] Engine started on %s", addr)
+	e.lastError = ""
+	logEngine("started on 127.0.0.1:%d", e.port)
 	return nil
 }
 
@@ -97,7 +109,7 @@ func (e *Engine) Stop() error {
 		return nil // idempotent
 	}
 
-	log.Printf("[MITM] Engine stopping …")
+	logEngine("stopping …")
 	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 
@@ -106,8 +118,10 @@ func (e *Engine) Stop() error {
 	}
 
 	e.running = false
+	e.startedAt = nil
 	e.server = nil
-	log.Printf("[MITM] Engine stopped")
+	e.listener = nil
+	logEngine("stopped")
 	return nil
 }
 
@@ -118,18 +132,68 @@ func (e *Engine) IsRunning() bool {
 	return e.running
 }
 
-// Status returns an EngineStatus snapshot.
-func (e *Engine) Status() EngineStatus {
+// Port returns the actual bound port (valid after Start succeeds).
+func (e *Engine) Port() int {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	return e.port
+}
+
+// HealthCheck pings the engine's own /ping endpoint to verify it is actually
+// responding to connections. Returns nil if healthy.
+func (e *Engine) HealthCheck() error {
+	e.mu.Lock()
+	port := e.port
+	running := e.running
+	e.mu.Unlock()
+
+	if !running {
+		return fmt.Errorf("[MITM] engine not running")
+	}
+
+	url := fmt.Sprintf("http://127.0.0.1:%d%s", port, healthCheckPath)
+	client := &http.Client{Timeout: 2 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		return fmt.Errorf("[MITM] health check failed: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("[MITM] health check returned HTTP %d", resp.StatusCode)
+	}
+	return nil
+}
+
+// Status returns a MitmEngineStatus snapshot.
+func (e *Engine) Status() MitmEngineStatus {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
 	addr := ""
 	if e.running {
 		addr = fmt.Sprintf("127.0.0.1:%d", e.port)
 	}
-	return EngineStatus{
-		Running: e.running,
-		Port:    e.port,
-		Address: addr,
+
+	healthy := false
+	if e.running {
+		// Non-blocking health probe: dial the port rather than doing an HTTP GET
+		// (avoids a recursive lock). A successful dial is a good-enough liveness
+		// check inside a lock-free fast path; callers that need the full HTTP
+		// probe can call HealthCheck() directly.
+		conn, dialErr := net.DialTimeout("tcp", addr, 200*time.Millisecond)
+		if dialErr == nil {
+			conn.Close()
+			healthy = true
+		}
+	}
+
+	return MitmEngineStatus{
+		Running:   e.running,
+		Port:      e.port,
+		Address:   addr,
+		StartedAt: e.startedAt,
+		Healthy:   healthy,
+		LastError: e.lastError,
 	}
 }
 
@@ -141,7 +205,7 @@ func (e *Engine) handleRequest(w http.ResponseWriter, r *http.Request) {
 		e.handleConnect(w, r)
 		return
 	}
-	log.Printf("[MITM] Unsupported method %s %s (Phase 1 passthrough only)", r.Method, r.RequestURI)
+	logEngine("unsupported method %s %s (Phase 1 passthrough only)", r.Method, r.RequestURI)
 	http.Error(w, "Method Not Allowed — YueLink Module Runtime Phase 1", http.StatusNotImplemented)
 }
 
@@ -149,7 +213,7 @@ func (e *Engine) handleRequest(w http.ResponseWriter, r *http.Request) {
 // Phase 1: logs the target host, hijacks the connection, dials the remote,
 // and copies bytes in both directions.
 func (e *Engine) handleConnect(w http.ResponseWriter, r *http.Request) {
-	log.Printf("[MITM] CONNECT %s (passthrough, Phase 1)", r.Host)
+	logEngine("CONNECT %s (passthrough, Phase 1)", r.Host)
 
 	hj, ok := w.(http.Hijacker)
 	if !ok {
@@ -159,21 +223,21 @@ func (e *Engine) handleConnect(w http.ResponseWriter, r *http.Request) {
 
 	clientConn, _, err := hj.Hijack()
 	if err != nil {
-		log.Printf("[MITM] CONNECT hijack error: %v", err)
+		logEngine("CONNECT hijack error: %v", err)
 		return
 	}
 	defer clientConn.Close()
 
 	// Respond 200 Connection Established.
 	if _, werr := clientConn.Write([]byte("HTTP/1.1 200 Connection Established\r\n\r\n")); werr != nil {
-		log.Printf("[MITM] CONNECT write 200 error: %v", werr)
+		logEngine("CONNECT write 200 error: %v", werr)
 		return
 	}
 
 	// Dial the upstream target.
 	targetConn, err := net.DialTimeout("tcp", r.Host, 10*time.Second)
 	if err != nil {
-		log.Printf("[MITM] CONNECT dial %s failed: %v", r.Host, err)
+		logEngine("CONNECT dial %s failed: %v", r.Host, err)
 		return
 	}
 	defer targetConn.Close()
@@ -210,6 +274,7 @@ var (
 )
 
 // StartMITMEngine starts the global MITM engine singleton on the given port.
+// Pass 0 to use the default port.
 func StartMITMEngine(port int) error {
 	globalEngineMu.Lock()
 	defer globalEngineMu.Unlock()
@@ -235,12 +300,12 @@ func StopMITMEngine() error {
 }
 
 // GetMITMEngineStatus returns the status of the global MITM engine.
-func GetMITMEngineStatus() EngineStatus {
+func GetMITMEngineStatus() MitmEngineStatus {
 	globalEngineMu.Lock()
 	defer globalEngineMu.Unlock()
 
 	if globalEngine == nil {
-		return EngineStatus{Running: false, Port: defaultMITMPort}
+		return MitmEngineStatus{Running: false, Port: defaultMITMPort}
 	}
 	return globalEngine.Status()
 }

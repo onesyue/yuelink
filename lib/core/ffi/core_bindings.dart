@@ -156,6 +156,41 @@ class CoreBindings {
   );
 
   // ------------------------------------------------------------------
+  // MITM Engine
+  // ------------------------------------------------------------------
+
+  /// char* StartMITMEngine() — returns "" on success, error message on failure.
+  late final Pointer<Utf8> Function() startMitmEngine =
+      _lib.lookupFunction<Pointer<Utf8> Function(), Pointer<Utf8> Function()>(
+    'StartMITMEngine',
+  );
+
+  /// char* StopMITMEngine() — returns "" on success, error message on failure.
+  late final Pointer<Utf8> Function() stopMitmEngine =
+      _lib.lookupFunction<Pointer<Utf8> Function(), Pointer<Utf8> Function()>(
+    'StopMITMEngine',
+  );
+
+  /// char* GetMITMEngineStatus() — returns JSON of MitmEngineStatus.
+  late final Pointer<Utf8> Function() getMitmEngineStatus =
+      _lib.lookupFunction<Pointer<Utf8> Function(), Pointer<Utf8> Function()>(
+    'GetMITMEngineStatus',
+  );
+
+  /// char* GenerateRootCA() — returns JSON of RootCAStatus on success,
+  /// or error message on failure.
+  late final Pointer<Utf8> Function() generateRootCA =
+      _lib.lookupFunction<Pointer<Utf8> Function(), Pointer<Utf8> Function()>(
+    'GenerateRootCA',
+  );
+
+  /// char* GetRootCAStatus() — returns JSON of RootCAStatus, or "{}" if absent.
+  late final Pointer<Utf8> Function() getRootCAStatus =
+      _lib.lookupFunction<Pointer<Utf8> Function(), Pointer<Utf8> Function()>(
+    'GetRootCAStatus',
+  );
+
+  // ------------------------------------------------------------------
   // Memory management
   // ------------------------------------------------------------------
 

@@ -63,12 +63,12 @@ func (u UnsupportedCounts) Total() int {
 
 // ModuleRecord is the persisted module entity
 type ModuleRecord struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	Desc     string `json:"desc"`
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Desc      string `json:"desc"`
 	SourceURL string `json:"source_url"`
-	Checksum string `json:"checksum"`
-	Enabled  bool   `json:"enabled"`
+	Checksum  string `json:"checksum"`
+	Enabled   bool   `json:"enabled"`
 
 	VersionTag string `json:"version_tag,omitempty"`
 	Author     string `json:"author,omitempty"`
@@ -92,7 +92,7 @@ type ModuleRecord struct {
 	LastAppliedAt *time.Time `json:"last_applied_at,omitempty"`
 }
 
-// CertStatus holds CA certificate information
+// CertStatus holds CA certificate information (internal cert.go use).
 type CertStatus struct {
 	Exists      bool      `json:"exists"`
 	Fingerprint string    `json:"fingerprint"` // SHA256, hex
@@ -101,9 +101,41 @@ type CertStatus struct {
 	PEMPath     string    `json:"pem_path"`
 }
 
-// EngineStatus holds MITM engine state
-type EngineStatus struct {
-	Running bool   `json:"running"`
-	Port    int    `json:"port"`
-	Address string `json:"address"` // "127.0.0.1:9091"
+// MitmEngineStatus is the canonical status for the MITM engine, returned via FFI JSON.
+type MitmEngineStatus struct {
+	Running   bool       `json:"running"`
+	Port      int        `json:"port"`
+	Address   string     `json:"address"`               // "127.0.0.1:PORT" or ""
+	StartedAt *time.Time `json:"started_at,omitempty"`
+	Healthy   bool       `json:"healthy"`
+	LastError string     `json:"last_error,omitempty"`
+}
+
+// EngineStatus is kept for backward compatibility — maps to MitmEngineStatus.
+type EngineStatus = MitmEngineStatus
+
+// RootCAStatus is the canonical status for the Root CA, returned via FFI JSON.
+type RootCAStatus struct {
+	Exists      bool       `json:"exists"`
+	Fingerprint string     `json:"fingerprint,omitempty"`
+	CreatedAt   *time.Time `json:"created_at,omitempty"`
+	ExpiresAt   *time.Time `json:"expires_at,omitempty"`
+	ExportPath  string     `json:"export_path,omitempty"`
+}
+
+// CertStatusToRootCAStatus converts an internal CertStatus into the FFI-facing RootCAStatus.
+// cs may be nil (CA not found) — returns a RootCAStatus with Exists=false.
+func CertStatusToRootCAStatus(cs *CertStatus) RootCAStatus {
+	if cs == nil {
+		return RootCAStatus{Exists: false}
+	}
+	createdAt := cs.CreatedAt
+	expiresAt := cs.ExpiresAt
+	return RootCAStatus{
+		Exists:      cs.Exists,
+		Fingerprint: cs.Fingerprint,
+		CreatedAt:   &createdAt,
+		ExpiresAt:   &expiresAt,
+		ExportPath:  cs.PEMPath,
+	}
 }

@@ -945,4 +945,21 @@ class S {
   String get moduleScriptDetected => _e ? 'Scripts detected' : '检测到脚本';
   String get moduleRewriteDetected => _e ? 'URL Rewrites detected' : '检测到 URL 改写';
   String get moduleFutureVersion => _e ? '— will be enabled in a future version' : '将在后续版本开放';
+
+  // ── MITM Engine ───────────────────────────────────────────────
+  String get mitmEngine => _e ? 'MITM Engine' : 'MITM 引擎';
+  String get mitmEngineRunning => _e ? 'Running' : '运行中';
+  String get mitmEngineStopped => _e ? 'Stopped' : '已停止';
+  String get mitmEngineStart => _e ? 'Start' : '启动';
+  String get mitmEngineStop => _e ? 'Stop' : '停止';
+  String get mitmEnginePort => _e ? 'Port' : '端口';
+  String get mitmCertTitle => _e ? 'Root CA Certificate' : '根证书';
+  String get mitmCertInstall => _e ? 'Install Certificate' : '安装证书';
+  String get mitmCertGenerate => _e ? 'Generate' : '生成证书';
+  String get mitmCertExport => _e ? 'Export PEM' : '导出 PEM';
+  String get mitmCertFingerprint => _e ? 'SHA-256 Fingerprint' : 'SHA-256 指纹';
+  String get mitmCertExpiry => _e ? 'Expires' : '有效期至';
+  String get mitmCertNotFound => _e ? 'No certificate yet' : '暂无证书';
+  String get mitmCertGuideTitle => _e ? 'Certificate Installation' : '证书安装向导';
+  String get mitmHostnameCount => _e ? 'MITM Hostnames' : 'MITM 域名';
 }

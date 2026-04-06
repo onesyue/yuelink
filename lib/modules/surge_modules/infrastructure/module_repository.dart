@@ -145,6 +145,17 @@ class ModuleRepository {
     });
   }
 
+  /// Returns all MITM hostnames from all enabled modules (deduplicated).
+  Future<List<String>> getEnabledMitmHostnames() async {
+    final all = await loadAll();
+    final seen = <String>{};
+    for (final module in all) {
+      if (!module.enabled) continue;
+      seen.addAll(module.mitmHostnames);
+    }
+    return seen.toList();
+  }
+
   /// Returns flattened raw rule strings from all enabled modules.
   /// Rules are in Clash/mihomo format (TYPE,TARGET,ACTION).
   Future<List<String>> getEnabledRules() async {

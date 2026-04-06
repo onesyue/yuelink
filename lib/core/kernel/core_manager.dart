@@ -211,8 +211,9 @@ class CoreManager {
         final overwrite = await OverwriteService.load();
         var withOverwrite = OverwriteService.apply(configYaml, overwrite);
 
-        // [ModuleRuntime] inject enabled module rules
-        withOverwrite = await ModuleRuleInjector.inject(withOverwrite);
+        // [ModuleRuntime] inject enabled module rules (+ MITM routing if engine running)
+        final mitmPort = CoreController.instance.getMitmEnginePort();
+        withOverwrite = await ModuleRuleInjector.inject(withOverwrite, mitmPort: mitmPort);
 
         final upstream = await SettingsService.getUpstreamProxy();
         if (upstream != null && (upstream['server'] as String).isNotEmpty) {
@@ -444,8 +445,9 @@ class CoreManager {
         final overwrite = await OverwriteService.load();
         var withOverwrite = OverwriteService.apply(configYaml, overwrite);
 
-        // [ModuleRuntime] inject enabled module rules
-        withOverwrite = await ModuleRuleInjector.inject(withOverwrite);
+        // [ModuleRuntime] inject enabled module rules (+ MITM routing if engine running)
+        final mitmPort = CoreController.instance.getMitmEnginePort();
+        withOverwrite = await ModuleRuleInjector.inject(withOverwrite, mitmPort: mitmPort);
 
         // Inject upstream proxy if configured
         final upstream = await SettingsService.getUpstreamProxy();

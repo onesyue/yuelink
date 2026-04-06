@@ -11,7 +11,6 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"log"
 	"math/big"
 	"os"
 	"path/filepath"
@@ -49,7 +48,7 @@ func GenerateRootCA(homeDir string) (*CertStatus, error) {
 
 	// Attempt to reuse existing files if they are valid.
 	if status := loadExistingCA(certPath, keyPath); status != nil {
-		log.Printf("[MITM] Reusing existing Root CA (expires %s)", status.ExpiresAt.Format("2006-01-02"))
+		logCA("reusing existing Root CA (expires %s)", status.ExpiresAt.Format("2006-01-02"))
 		return status, nil
 	}
 
@@ -58,7 +57,7 @@ func GenerateRootCA(homeDir string) (*CertStatus, error) {
 		return nil, fmt.Errorf("[MITM] failed to create mitm dir: %w", err)
 	}
 
-	log.Printf("[MITM] Generating new ECDSA P-256 Root CA …")
+	logCA("generating new ECDSA P-256 Root CA …")
 
 	// Generate ECDSA P-256 key pair.
 	privKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -118,7 +117,7 @@ func GenerateRootCA(homeDir string) (*CertStatus, error) {
 	}
 
 	fingerprint := sha256Fingerprint(certDER)
-	log.Printf("[MITM] Root CA generated, fingerprint: %s", fingerprint)
+	logCA("Root CA generated, fingerprint: %s", fingerprint)
 
 	return &CertStatus{
 		Exists:      true,
@@ -168,7 +167,7 @@ func loadExistingCA(certPath, keyPath string) *CertStatus {
 		return nil
 	}
 	if time.Now().After(cert.NotAfter) {
-		log.Printf("[MITM] Existing CA expired on %s, will regenerate", cert.NotAfter.Format("2006-01-02"))
+		logCA("existing CA expired on %s, will regenerate", cert.NotAfter.Format("2006-01-02"))
 		return nil
 	}
 

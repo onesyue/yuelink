@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:ffi';
 
 import 'package:ffi/ffi.dart';
@@ -121,6 +122,74 @@ class CoreController {
       return null;
     }
     return _callStringFn(_bindings!.updateConfig, configYaml);
+  }
+
+  // ------------------------------------------------------------------
+  // MITM Engine
+  // ------------------------------------------------------------------
+
+  /// Call a no-argument FFI function that returns a C string error/success.
+  /// Returns null on success (NULL or empty), non-null = error message.
+  String? _callNoArgStringFn(Pointer<Utf8> Function() fn) {
+    final resultPtr = fn();
+    if (resultPtr.address == 0) return null;
+    final result = resultPtr.toDartString();
+    _bindings!.freeCString(resultPtr);
+    return result.isEmpty ? null : result;
+  }
+
+  /// Call a no-argument FFI function that returns a JSON C string.
+  /// NULL → '{}', empty → '{}', otherwise the JSON string.
+  String _callNoArgJsonFn(Pointer<Utf8> Function() fn) {
+    final resultPtr = fn();
+    if (resultPtr.address == 0) return '{}';
+    final result = resultPtr.toDartString();
+    _bindings!.freeCString(resultPtr);
+    return result.isEmpty ? '{}' : result;
+  }
+
+  /// Start the MITM engine. Returns null on success, error message on failure.
+  String? startMitmEngine() {
+    if (_useMock) return null;
+    return _callNoArgStringFn(_bindings!.startMitmEngine);
+  }
+
+  /// Stop the MITM engine. Returns null on success, error message on failure.
+  String? stopMitmEngine() {
+    if (_useMock) return null;
+    return _callNoArgStringFn(_bindings!.stopMitmEngine);
+  }
+
+  /// Get MITM engine status as a JSON string.
+  String getMitmEngineStatusJson() {
+    if (_useMock) {
+      return '{"running":false,"port":9091,"address":"","healthy":false}';
+    }
+    return _callNoArgJsonFn(_bindings!.getMitmEngineStatus);
+  }
+
+  /// Generate Root CA. Returns JSON of RootCAStatus on success,
+  /// or '{}' on failure.
+  String generateRootCaJson() {
+    if (_useMock) return '{"exists":false}';
+    return _callNoArgJsonFn(_bindings!.generateRootCA);
+  }
+
+  /// Get Root CA status as JSON. Returns '{}' if CA doesn't exist.
+  String getRootCaStatusJson() {
+    if (_useMock) return '{}';
+    return _callNoArgJsonFn(_bindings!.getRootCAStatus);
+  }
+
+  /// Convenience: returns the actual bound MITM engine port (0 = not running).
+  int getMitmEnginePort() {
+    try {
+      final map = jsonDecode(getMitmEngineStatusJson()) as Map<String, dynamic>;
+      if (map['running'] == true) {
+        return (map['port'] as num?)?.toInt() ?? 0;
+      }
+    } catch (_) {}
+    return 0;
   }
 
   // ------------------------------------------------------------------
