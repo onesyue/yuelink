@@ -47,11 +47,12 @@
 ### macOS
 
 1. 打开 `.dmg`，将 `YueLink.app` 拖入 `Applications` 文件夹
-2. 首次打开时若 Gatekeeper 提示"无法验证开发者"，在终端执行：
-
-```bash
-xattr -cr /Applications/YueLink.app
-```
+2. 首次打开时若提示"无法打开"或"无法验证开发者"，有两种方式修复：
+   - **方式一（推荐）**：双击 DMG 中的 `修复无法打开.command` 脚本，输入密码即可
+   - **方式二**：在终端执行：
+     ```bash
+     sudo xattr -cr /Applications/YueLink.app
+     ```
 
 **系统要求：** macOS 12 Monterey 及以上（Apple Silicon + Intel，无需 Rosetta）
 

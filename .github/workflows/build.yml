@@ -416,17 +416,26 @@ jobs:
 
       - name: Package macOS .dmg
         run: |
+          # Prepare DMG source directory with app + fix script
+          DMG_SRC=dmg_source
+          mkdir -p "$DMG_SRC"
+          cp -R build/macos/Build/Products/Release/YueLink.app "$DMG_SRC/"
+          cp assets/fix-gatekeeper.command "$DMG_SRC/修复无法打开.command"
+          chmod +x "$DMG_SRC/修复无法打开.command"
+
           set +e
           create-dmg \
             --volname "YueLink" \
+            --background "assets/dmg_background.png" \
             --window-pos 200 120 \
             --window-size 660 400 \
             --icon-size 80 \
             --icon "YueLink.app" 180 170 \
             --app-drop-link 480 170 \
+            --icon "修复无法打开.command" 330 340 \
             --hide-extension "YueLink.app" \
             "YueLink-macOS.dmg" \
-            "build/macos/Build/Products/Release/YueLink.app"
+            "$DMG_SRC"
           DMG_EXIT=$?
           set -e
           # create-dmg exits 2 when DMG is created but no code signing identity
