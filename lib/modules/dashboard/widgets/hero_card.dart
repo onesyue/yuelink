@@ -55,6 +55,15 @@ class HeroCard extends ConsumerWidget {
             ? s.routeModeGlobal
             : s.routeModeDirect;
 
+    // Connection mode pill (desktop only — mobile is always VPN/TUN)
+    final connectionMode = ref.watch(connectionModeProvider);
+    final showModePill = isRunning &&
+        (Theme.of(context).platform == TargetPlatform.macOS ||
+            Theme.of(context).platform == TargetPlatform.windows ||
+            Theme.of(context).platform == TargetPlatform.linux);
+    final modePillLabel =
+        connectionMode == 'tun' ? 'TUN' : s.modeSystemProxy;
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -148,6 +157,7 @@ class HeroCard extends ConsumerWidget {
               runSpacing: 6,
               children: [
                 Pill(routeLabel, primary: true),
+                if (showModePill) Pill(modePillLabel),
                 if (profileName != null) Pill(profileName),
               ],
             ),

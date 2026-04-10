@@ -142,6 +142,8 @@ class CoreManager {
     String configYaml, {
     String connectionMode = 'systemProxy',
     String desktopTunStack = AppConstants.defaultDesktopTunStack,
+    List<String> tunBypassAddresses = const [],
+    List<String> tunBypassProcesses = const [],
   }) async {
     debugPrint('[CoreManager] ══════ START ══════');
     if (_running) return true;
@@ -164,6 +166,8 @@ class CoreManager {
           steps,
           connectionMode: connectionMode,
           desktopTunStack: desktopTunStack,
+          tunBypassAddresses: tunBypassAddresses,
+          tunBypassProcesses: tunBypassProcesses,
         );
       }
 
@@ -173,6 +177,8 @@ class CoreManager {
           steps,
           connectionMode: connectionMode,
           desktopTunStack: desktopTunStack,
+          tunBypassAddresses: tunBypassAddresses,
+          tunBypassProcesses: tunBypassProcesses,
         );
       }
       _serviceModeActive = false;
@@ -260,6 +266,8 @@ class CoreManager {
             secret: _apiSecret,
             connectionMode: connectionMode,
             desktopTunStack: desktopTunStack,
+          tunBypassAddresses: tunBypassAddresses,
+          tunBypassProcesses: tunBypassProcesses,
             tunFd: tunFd,
           );
           _apiPort = ConfigTemplate.getApiPort(processed);
@@ -280,6 +288,8 @@ class CoreManager {
             secret: _apiSecret,
             connectionMode: connectionMode,
             desktopTunStack: desktopTunStack,
+          tunBypassAddresses: tunBypassAddresses,
+          tunBypassProcesses: tunBypassProcesses,
             tunFd: tunFd,
           );
           _apiPort = ConfigTemplate.getApiPort(processed);
@@ -446,6 +456,8 @@ class CoreManager {
     List<StartupStep> steps, {
     String connectionMode = 'systemProxy',
     String desktopTunStack = AppConstants.defaultDesktopTunStack,
+    List<String> tunBypassAddresses = const [],
+    List<String> tunBypassProcesses = const [],
   }) async {
     String processed = configYaml;
 
@@ -477,6 +489,8 @@ class CoreManager {
           secret: _apiSecret,
           connectionMode: connectionMode,
           desktopTunStack: desktopTunStack,
+          tunBypassAddresses: tunBypassAddresses,
+          tunBypassProcesses: tunBypassProcesses,
         );
         _apiPort = ConfigTemplate.getApiPort(processed);
         _mixedPort = ConfigTemplate.getMixedPort(processed);
@@ -543,6 +557,8 @@ class CoreManager {
     List<StartupStep> steps, {
     required String connectionMode,
     required String desktopTunStack,
+    List<String> tunBypassAddresses = const [],
+    List<String> tunBypassProcesses = const [],
   }) async {
     String processed = configYaml;
     String? homeDir;
@@ -565,6 +581,8 @@ class CoreManager {
           secret: _apiSecret,
           connectionMode: connectionMode,
           desktopTunStack: desktopTunStack,
+          tunBypassAddresses: tunBypassAddresses,
+          tunBypassProcesses: tunBypassProcesses,
         );
         _apiPort = ConfigTemplate.getApiPort(processed);
         _mixedPort = ConfigTemplate.getMixedPort(processed);

@@ -218,3 +218,69 @@ final aiUnlockTestProvider = FutureProvider.autoDispose<AiUnlockInfo?>((ref) asy
     );
   }
 });
+
+// ── DNS Leak Test ──────────────────────────────────────────────────────────
+
+class DnsLeakResult {
+  final bool leaked;
+  final List<String> resolverIps;
+  final String? error;
+  const DnsLeakResult({
+    required this.leaked,
+    this.resolverIps = const [],
+    this.error,
+  });
+}
+
+/// Test for DNS leaks by resolving a unique domain through mihomo's DNS
+/// and comparing with direct system DNS resolution.
+/// If system DNS resolves differently from mihomo DNS, DNS is leaking.
+final dnsLeakTestProvider =
+    FutureProvider.autoDispose<DnsLeakResult>((ref) async {
+  final status = ref.watch(coreStatusProvider);
+  if (status != CoreStatus.running) {
+    return const DnsLeakResult(leaked: false, error: 'Core not running');
+  }
+
+  final manager = CoreManager.instance;
+  if (manager.isMockMode) {
+    return const DnsLeakResult(leaked: false);
+  }
+
+  try {
+    // Query a well-known domain through mihomo's internal DNS
+    final mihomoResult =
+        await manager.api.queryDns('whoami.akamai.net', type: 'A');
+    final mihomoAnswers = (mihomoResult['Answer'] as List?)
+            ?.map((a) => (a as Map)['data'] as String? ?? '')
+            .where((ip) => ip.isNotEmpty)
+            .toList() ??
+        [];
+
+    // Query the same domain via system DNS (bypassing mihomo)
+    final systemResult = await InternetAddress.lookup('whoami.akamai.net');
+    final systemIps = systemResult.map((a) => a.address).toList();
+
+    // If mihomo answers with fake-ip range (198.18.x.x), DNS is properly
+    // intercepted — no leak. If system DNS returns real IPs that don't
+    // match mihomo's answers, DNS is leaking.
+    final hasFakeIp =
+        mihomoAnswers.any((ip) => ip.startsWith('198.18.'));
+    if (hasFakeIp) {
+      return DnsLeakResult(leaked: false, resolverIps: mihomoAnswers);
+    }
+
+    // Compare: if system IPs differ from mihomo IPs, there's a leak
+    final mihomoSet = mihomoAnswers.toSet();
+    final systemSet = systemIps.toSet();
+    final leaked = systemSet.difference(mihomoSet).isNotEmpty;
+
+    return DnsLeakResult(
+      leaked: leaked,
+      resolverIps: [...mihomoAnswers, ...systemIps].toSet().toList(),
+    );
+  } catch (e) {
+    debugPrint('[DnsLeak] test error: $e');
+    return DnsLeakResult(leaked: false, error: e.toString().split('\n').first);
+  }
+});

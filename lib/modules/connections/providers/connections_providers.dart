@@ -93,6 +93,47 @@ final filteredConnectionsProvider =
 });
 
 // ------------------------------------------------------------------
+// Per-proxy aggregated stats
+// ------------------------------------------------------------------
+
+class ProxyStats {
+  final String proxyName;
+  int connectionCount;
+  int totalDownload;
+  int totalUpload;
+
+  ProxyStats({
+    required this.proxyName,
+    this.connectionCount = 0,
+    this.totalDownload = 0,
+    this.totalUpload = 0,
+  });
+}
+
+/// Aggregate connection stats by the last proxy in the chain (the exit node).
+final proxyStatsProvider = Provider<List<ProxyStats>>((ref) {
+  final snapshot = ref.watch(connectionsSnapshotProvider);
+  final statsMap = <String, ProxyStats>{};
+
+  for (final conn in snapshot.connections) {
+    // The last element in chains is the exit proxy
+    final proxyName =
+        conn.chains.isNotEmpty ? conn.chains.last : 'DIRECT';
+    final stats = statsMap.putIfAbsent(
+      proxyName,
+      () => ProxyStats(proxyName: proxyName),
+    );
+    stats.connectionCount++;
+    stats.totalDownload += conn.download;
+    stats.totalUpload += conn.upload;
+  }
+
+  final result = statsMap.values.toList()
+    ..sort((a, b) => b.totalDownload.compareTo(a.totalDownload));
+  return result;
+});
+
+// ------------------------------------------------------------------
 // Connection actions
 // ------------------------------------------------------------------
 

@@ -141,6 +141,28 @@ class SettingsService {
     await set('desktopTunStack', stack);
   }
 
+  // ── Desktop TUN bypass (route exclusion) ────────────────────────────────
+
+  /// Get TUN bypass addresses (IP-CIDR list, e.g. ["192.168.0.0/16"]).
+  static Future<List<String>> getTunBypassAddresses() async {
+    final raw = await get<List<dynamic>>('tunBypassAddresses');
+    return raw?.cast<String>() ?? [];
+  }
+
+  static Future<void> setTunBypassAddresses(List<String> addrs) async {
+    await set('tunBypassAddresses', addrs);
+  }
+
+  /// Get TUN bypass processes (process name list, e.g. ["ssh", "Parallels"]).
+  static Future<List<String>> getTunBypassProcesses() async {
+    final raw = await get<List<dynamic>>('tunBypassProcesses');
+    return raw?.cast<String>() ?? [];
+  }
+
+  static Future<void> setTunBypassProcesses(List<String> procs) async {
+    await set('tunBypassProcesses', procs);
+  }
+
   // ── Desktop Service Mode auth token / port ──────────────────────────────
 
   static Future<String?> getServiceAuthToken() async {

@@ -12,6 +12,7 @@ import '../shared/app_notifier.dart';
 import '../shared/event_log.dart';
 import '../core/kernel/core_manager.dart';
 import '../core/kernel/recovery_manager.dart';
+import '../core/storage/settings_service.dart';
 import '../infrastructure/datasources/mihomo_api.dart';
 
 // Re-export traffic stream providers and chart UI state
@@ -96,11 +97,17 @@ class CoreActions {
     final manager = CoreManager.instance;
 
     try {
+      // Load TUN bypass settings for desktop
+      final bypassAddrs = await SettingsService.getTunBypassAddresses();
+      final bypassProcs = await SettingsService.getTunBypassProcesses();
+
       // Start Core — all steps (including VPN permission) are tracked inside CoreManager
       final ok = await manager.start(
         configYaml,
         connectionMode: ref.read(connectionModeProvider),
         desktopTunStack: ref.read(desktopTunStackProvider),
+        tunBypassAddresses: bypassAddrs,
+        tunBypassProcesses: bypassProcs,
       );
       if (!ok) {
         ref.read(coreStatusProvider.notifier).state = CoreStatus.stopped;
@@ -122,7 +129,8 @@ class CoreActions {
 
       // 4. System proxy or TUN DNS (desktop only)
       final connMode = ref.read(connectionModeProvider);
-      if (!manager.isMockMode && (Platform.isMacOS || Platform.isWindows)) {
+      if (!manager.isMockMode &&
+          (Platform.isMacOS || Platform.isWindows || Platform.isLinux)) {
         if (connMode == 'tun' && Platform.isMacOS) {
           // TUN mode: set system DNS to public resolvers to prevent DNS leak
           await setTunDns();
@@ -175,7 +183,7 @@ class CoreActions {
     try {
       // Always clear system proxy on stop — even if the user disabled
       // "set system proxy on connect", a previous session may have set it.
-      if (Platform.isMacOS || Platform.isWindows) {
+      if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
         await clearSystemProxy();
       }
       // Restore macOS system DNS if TUN mode was active
@@ -201,6 +209,65 @@ class CoreActions {
       // subscription sync (which calls stop() + start() + refresh()).
       ref.read(delayResultsProvider.notifier).state = {};
       ref.read(delayTestingProvider.notifier).state = {};
+    }
+  }
+
+  /// Hot-switch connection mode (TUN ↔ systemProxy) while core is running.
+  /// Uses mihomo PATCH /configs to toggle TUN without stop+start.
+  Future<void> hotSwitchConnectionMode(String newMode) async {
+    final manager = CoreManager.instance;
+    if (!manager.isRunning || manager.isMockMode) return;
+
+    try {
+      if (newMode == 'tun') {
+        // Switch to TUN mode
+        final stack = ref.read(desktopTunStackProvider);
+        final ok = await manager.api.patchConfig({
+          'tun': {
+            'enable': true,
+            'stack': stack,
+            'auto-route': true,
+            'auto-detect-interface': true,
+            'dns-hijack': ['any:53'],
+            'mtu': 9000,
+          },
+        });
+        if (!ok) {
+          AppNotifier.error(S.current.errTunSwitchFailed);
+          return;
+        }
+        // Clear system proxy (no longer needed in TUN mode)
+        if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
+          await clearSystemProxy();
+        }
+        // Set macOS system DNS for TUN
+        if (Platform.isMacOS) {
+          await setTunDns();
+        }
+        AppNotifier.success(S.current.msgSwitchedToTun);
+      } else {
+        // Switch to systemProxy mode
+        final ok = await manager.api.patchConfig({
+          'tun': {'enable': false},
+        });
+        if (!ok) {
+          AppNotifier.error(S.current.errTunSwitchFailed);
+          return;
+        }
+        // Restore macOS DNS
+        if (Platform.isMacOS) {
+          await restoreTunDns();
+        }
+        // Apply system proxy
+        if ((Platform.isMacOS || Platform.isWindows || Platform.isLinux) &&
+            ref.read(systemProxyOnConnectProvider)) {
+          await applySystemProxy();
+        }
+        AppNotifier.success(S.current.msgSwitchedToSystemProxy);
+      }
+    } catch (e) {
+      debugPrint('[CoreActions] hotSwitchConnectionMode error: $e');
+      AppNotifier.error(S.current.errTunSwitchFailed);
     }
   }
 
@@ -321,7 +388,91 @@ class CoreActions {
       // Notify WinINet of the proxy change so browsers pick it up immediately
       _notifyWindowsProxyChanged();
       return true;
+    } else if (Platform.isLinux) {
+      return _setLinuxProxy(mixedPort);
     }
+    return false;
+  }
+
+  /// Set Linux system proxy via gsettings (GNOME) or kwriteconfig (KDE).
+  static Future<bool> _setLinuxProxy(int mixedPort) async {
+    // Try GNOME gsettings first (works on GNOME, Cinnamon, Budgie, Unity)
+    try {
+      final r1 = await Process.run('gsettings', [
+        'set', 'org.gnome.system.proxy', 'mode', "'manual'",
+      ]);
+      if (r1.exitCode == 0) {
+        await Future.wait([
+          Process.run('gsettings', [
+            'set', 'org.gnome.system.proxy.http', 'host', "'127.0.0.1'",
+          ]),
+          Process.run('gsettings', [
+            'set', 'org.gnome.system.proxy.http', 'port', '$mixedPort',
+          ]),
+          Process.run('gsettings', [
+            'set', 'org.gnome.system.proxy.https', 'host', "'127.0.0.1'",
+          ]),
+          Process.run('gsettings', [
+            'set', 'org.gnome.system.proxy.https', 'port', '$mixedPort',
+          ]),
+          Process.run('gsettings', [
+            'set', 'org.gnome.system.proxy.socks', 'host', "'127.0.0.1'",
+          ]),
+          Process.run('gsettings', [
+            'set', 'org.gnome.system.proxy.socks', 'port', '$mixedPort',
+          ]),
+        ]);
+        debugPrint('[SystemProxy] Linux GNOME proxy set to port $mixedPort');
+        return true;
+      }
+    } catch (e) {
+      debugPrint('[SystemProxy] gsettings not available: $e');
+    }
+
+    // Fallback: KDE kwriteconfig5/6
+    for (final cmd in ['kwriteconfig6', 'kwriteconfig5']) {
+      try {
+        final r = await Process.run(cmd, [
+          '--file', 'kioslaverc',
+          '--group', 'Proxy Settings',
+          '--key', 'ProxyType', '1',
+        ]);
+        if (r.exitCode == 0) {
+          await Future.wait([
+            Process.run(cmd, [
+              '--file', 'kioslaverc',
+              '--group', 'Proxy Settings',
+              '--key', 'httpProxy', 'http://127.0.0.1:$mixedPort',
+            ]),
+            Process.run(cmd, [
+              '--file', 'kioslaverc',
+              '--group', 'Proxy Settings',
+              '--key', 'httpsProxy', 'http://127.0.0.1:$mixedPort',
+            ]),
+            Process.run(cmd, [
+              '--file', 'kioslaverc',
+              '--group', 'Proxy Settings',
+              '--key', 'socksProxy', 'socks://127.0.0.1:$mixedPort',
+            ]),
+          ]);
+          // Notify KDE to reload
+          try {
+            await Process.run('dbus-send', [
+              '--type=signal',
+              '/KIO/Scheduler',
+              'org.kde.KIO.Scheduler.reparseSlaveConfiguration',
+              'string:',
+            ]);
+          } catch (_) {}
+          debugPrint('[SystemProxy] Linux KDE proxy set via $cmd');
+          return true;
+        }
+      } catch (_) {
+        continue;
+      }
+    }
+
+    debugPrint('[SystemProxy] Linux: no supported desktop environment found');
     return false;
   }
 
@@ -382,6 +533,22 @@ class CoreActions {
       } catch (e) {
         debugPrint('[SystemProxy] Windows verification error: $e');
         return false;
+      }
+    } else if (Platform.isLinux) {
+      try {
+        final r = await Process.run('gsettings', [
+          'get', 'org.gnome.system.proxy', 'mode',
+        ]);
+        final mode = (r.stdout as String).trim();
+        if (mode != "'manual'") return false;
+        final r2 = await Process.run('gsettings', [
+          'get', 'org.gnome.system.proxy.http', 'port',
+        ]);
+        final port = int.tryParse((r2.stdout as String).trim()) ?? 0;
+        return port == mixedPort;
+      } catch (_) {
+        // gsettings not available — can't verify
+        return true;
       }
     }
     return true;
@@ -492,6 +659,26 @@ class CoreActions {
       await Process.run('reg', ['delete', regKey, '/v', 'ProxyOverride', '/f']);
       // Notify WinINet of the proxy change
       _notifyWindowsProxyChanged();
+    } else if (Platform.isLinux) {
+      // GNOME
+      try {
+        await Process.run('gsettings', [
+          'set', 'org.gnome.system.proxy', 'mode', "'none'",
+        ]);
+      } catch (_) {}
+      // KDE
+      for (final cmd in ['kwriteconfig6', 'kwriteconfig5']) {
+        try {
+          await Process.run(cmd, [
+            '--file', 'kioslaverc',
+            '--group', 'Proxy Settings',
+            '--key', 'ProxyType', '0',
+          ]);
+        } catch (_) {
+          continue;
+        }
+        break;
+      }
     }
   }
 
@@ -582,7 +769,7 @@ final coreHeartbeatProvider = Provider<void>((ref) {
       // Proxy Guard: every 30s on desktop, check if system proxy was tampered.
       // First attempt: silently restore. If restore also fails (another
       // client actively fighting), then stop gracefully.
-      if (Platform.isMacOS || Platform.isWindows) {
+      if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
         proxyCheckTick++;
         if (proxyCheckTick >= 3) {
           proxyCheckTick = 0;

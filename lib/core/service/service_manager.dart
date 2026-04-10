@@ -10,7 +10,8 @@ import 'service_models.dart';
 class ServiceManager {
   ServiceManager._();
 
-  static bool get isSupported => Platform.isMacOS || Platform.isWindows;
+  static bool get isSupported =>
+      Platform.isMacOS || Platform.isWindows || Platform.isLinux;
 
   /// Expected service version — must match the Go binary's Version variable.
   /// Updated together with the Go build (set via -ldflags).
@@ -54,6 +55,12 @@ class ServiceManager {
           File(_macInstalledMihomoPath).existsSync();
     }
 
+    if (Platform.isLinux) {
+      return File(_linuxUnitPath).existsSync() &&
+          File(_linuxInstalledHelperPath).existsSync() &&
+          File(_linuxInstalledMihomoPath).existsSync();
+    }
+
     final result = await Process.run(
       'sc',
       ['query', AppConstants.desktopServiceName],
@@ -64,7 +71,7 @@ class ServiceManager {
   static Future<void> install() async {
     if (!isSupported) {
       throw UnsupportedError(
-          'Desktop service mode is only available on macOS and Windows');
+          'Desktop service mode is only available on macOS, Windows and Linux');
     }
 
     final token =
@@ -76,18 +83,27 @@ class ServiceManager {
     final tempDir = await Directory.systemTemp.createTemp('yuelink_service_');
 
     try {
+      String mihomoInstallPath;
+      String helperLogPath;
+      if (Platform.isMacOS) {
+        mihomoInstallPath = _macInstalledMihomoPath;
+        helperLogPath = _macInstalledHelperLogPath;
+      } else if (Platform.isLinux) {
+        mihomoInstallPath = _linuxInstalledMihomoPath;
+        helperLogPath = _linuxInstalledHelperLogPath;
+      } else {
+        mihomoInstallPath = _windowsInstalledMihomoPath;
+        helperLogPath = _windowsInstalledHelperLogPath;
+      }
+
       final configFile = File('${tempDir.path}/service-config.json');
       await configFile.writeAsString(
         const JsonEncoder.withIndent('  ').convert({
           'token': token,
           'listen_host': AppConstants.serviceListenHost,
           'listen_port': AppConstants.serviceListenPort,
-          'mihomo_path': Platform.isMacOS
-              ? _macInstalledMihomoPath
-              : _windowsInstalledMihomoPath,
-          'helper_log_path': Platform.isMacOS
-              ? _macInstalledHelperLogPath
-              : _windowsInstalledHelperLogPath,
+          'mihomo_path': mihomoInstallPath,
+          'helper_log_path': helperLogPath,
         }),
       );
 
@@ -103,6 +119,17 @@ class ServiceManager {
         await script.setLastModified(DateTime.now());
         await Process.run('chmod', ['700', script.path]);
         await _runMacElevated(script.path);
+      } else if (Platform.isLinux) {
+        final script = File('${tempDir.path}/install_service.sh');
+        await script.writeAsString(
+          _linuxInstallScript(
+            helperSource: binaries.helperPath,
+            mihomoSource: binaries.mihomoPath,
+            configSource: configFile.path,
+          ),
+        );
+        await Process.run('chmod', ['700', script.path]);
+        await _runLinuxElevated(script.path);
       } else if (Platform.isWindows) {
         final script = File('${tempDir.path}/install_service.ps1');
         await script.writeAsString(
@@ -123,6 +150,87 @@ class ServiceManager {
     }
   }
 
+  /// Update the service in-place: stop → replace binaries → restart.
+  /// Faster than uninstall+install — preserves token and config.
+  static Future<void> update() async {
+    if (!isSupported) return;
+    if (!await isInstalled()) {
+      // Not installed — do a fresh install instead
+      await install();
+      return;
+    }
+
+    final binaries = await _resolveSourceBinaries();
+
+    if (Platform.isMacOS) {
+      final script = '''
+#!/bin/sh
+set -eu
+launchctl bootout system/${AppConstants.desktopServiceLabel} >/dev/null 2>&1 || true
+sleep 1
+cp ${_shellQuote(binaries.helperPath)} ${_shellQuote(_macInstalledHelperPath)}
+cp ${_shellQuote(binaries.mihomoPath)} ${_shellQuote(_macInstalledMihomoPath)}
+chmod 755 ${_shellQuote(_macInstalledHelperPath)} ${_shellQuote(_macInstalledMihomoPath)}
+chown root:wheel ${_shellQuote(_macInstalledHelperPath)} ${_shellQuote(_macInstalledMihomoPath)}
+launchctl bootstrap system ${_shellQuote(_macPlistPath)}
+launchctl kickstart -k system/${AppConstants.desktopServiceLabel}
+''';
+      final tempDir = await Directory.systemTemp.createTemp('yuelink_update_');
+      try {
+        final scriptFile = File('${tempDir.path}/update_service.sh');
+        await scriptFile.writeAsString(script);
+        await Process.run('chmod', ['700', scriptFile.path]);
+        await _runMacElevated(scriptFile.path);
+      } finally {
+        try { await tempDir.delete(recursive: true); } catch (_) {}
+      }
+    } else if (Platform.isLinux) {
+      final script = '''
+#!/bin/sh
+set -eu
+systemctl stop ${AppConstants.desktopServiceLabel} >/dev/null 2>&1 || true
+cp ${_shellQuote(binaries.helperPath)} ${_shellQuote(_linuxInstalledHelperPath)}
+cp ${_shellQuote(binaries.mihomoPath)} ${_shellQuote(_linuxInstalledMihomoPath)}
+chmod 755 ${_shellQuote(_linuxInstalledHelperPath)} ${_shellQuote(_linuxInstalledMihomoPath)}
+systemctl restart ${AppConstants.desktopServiceLabel}
+''';
+      final tempDir = await Directory.systemTemp.createTemp('yuelink_update_');
+      try {
+        final scriptFile = File('${tempDir.path}/update_service.sh');
+        await scriptFile.writeAsString(script);
+        await Process.run('chmod', ['700', scriptFile.path]);
+        await _runLinuxElevated(scriptFile.path);
+      } finally {
+        try { await tempDir.delete(recursive: true); } catch (_) {}
+      }
+    } else if (Platform.isWindows) {
+      final script = r'''
+$ErrorActionPreference = "Stop"
+$serviceName = '__SERVICE_NAME__'
+Stop-Service -Name $serviceName -Force -ErrorAction SilentlyContinue
+Start-Sleep -Seconds 1
+Copy-Item -Force __HELPER_SRC__ __HELPER_DST__
+Copy-Item -Force __MIHOMO_SRC__ __MIHOMO_DST__
+Start-Service -Name $serviceName
+'''
+          .replaceAll('__SERVICE_NAME__', AppConstants.desktopServiceName)
+          .replaceAll('__HELPER_SRC__', _powershellQuoted(binaries.helperPath))
+          .replaceAll('__HELPER_DST__', _powershellQuoted(_windowsInstalledHelperPath))
+          .replaceAll('__MIHOMO_SRC__', _powershellQuoted(binaries.mihomoPath))
+          .replaceAll('__MIHOMO_DST__', _powershellQuoted(_windowsInstalledMihomoPath));
+      final tempDir = await Directory.systemTemp.createTemp('yuelink_update_');
+      try {
+        final scriptFile = File('${tempDir.path}/update_service.ps1');
+        await scriptFile.writeAsString(script);
+        await _runWindowsElevated(scriptFile.path);
+      } finally {
+        try { await tempDir.delete(recursive: true); } catch (_) {}
+      }
+    }
+
+    await _waitUntilReachable();
+  }
+
   static Future<void> uninstall() async {
     if (!isSupported) return;
 
@@ -133,6 +241,11 @@ class ServiceManager {
         await script.writeAsString(_macUninstallScript());
         await Process.run('chmod', ['700', script.path]);
         await _runMacElevated(script.path);
+      } else if (Platform.isLinux) {
+        final script = File('${tempDir.path}/uninstall_service.sh');
+        await script.writeAsString(_linuxUninstallScript());
+        await Process.run('chmod', ['700', script.path]);
+        await _runLinuxElevated(script.path);
       } else if (Platform.isWindows) {
         final script = File('${tempDir.path}/uninstall_service.ps1');
         await script.writeAsString(_windowsUninstallScript());
@@ -168,6 +281,17 @@ class ServiceManager {
         '$cwd/service/build/macos-universal/yuelink-mihomo',
         '$cwd/service/build/macos-arm64/yuelink-mihomo',
         '$cwd/service/build/macos-amd64/yuelink-mihomo',
+      ]);
+    } else if (Platform.isLinux) {
+      helperCandidates.addAll([
+        '$execDir/yuelink-service-helper',
+        '$cwd/service/build/linux-amd64/yuelink-service-helper',
+        '$cwd/service/build/linux-arm64/yuelink-service-helper',
+      ]);
+      mihomoCandidates.addAll([
+        '$execDir/yuelink-mihomo',
+        '$cwd/service/build/linux-amd64/yuelink-mihomo',
+        '$cwd/service/build/linux-arm64/yuelink-mihomo',
       ]);
     } else if (Platform.isWindows) {
       helperCandidates.addAll([
@@ -444,6 +568,98 @@ if (Test-Path $serviceDir) {
       '$_windowsServiceDir\\service-config.json';
   static String get _windowsInstalledHelperLogPath =>
       '$_windowsServiceDir\\helper.log';
+
+  // ── Linux paths ────────────────────────────────────────────────────
+  static const _linuxServiceDir = '/opt/yuelink-service';
+  static String get _linuxInstalledHelperPath =>
+      '$_linuxServiceDir/yuelink-service-helper';
+  static String get _linuxInstalledMihomoPath =>
+      '$_linuxServiceDir/yuelink-mihomo';
+  static String get _linuxInstalledConfigPath =>
+      '$_linuxServiceDir/service-config.json';
+  static String get _linuxInstalledHelperLogPath =>
+      '$_linuxServiceDir/helper.log';
+  static String get _linuxUnitPath =>
+      '/etc/systemd/system/${AppConstants.desktopServiceLabel}.service';
+
+  static String _linuxInstallScript({
+    required String helperSource,
+    required String mihomoSource,
+    required String configSource,
+  }) {
+    return '''
+#!/bin/sh
+set -eu
+
+SERVICE_DIR=${_shellQuote(_linuxServiceDir)}
+HELPER_SRC=${_shellQuote(helperSource)}
+MIHOMO_SRC=${_shellQuote(mihomoSource)}
+CONFIG_SRC=${_shellQuote(configSource)}
+
+mkdir -p ${_shellQuote(_linuxServiceDir)}
+cp "\$HELPER_SRC" ${_shellQuote(_linuxInstalledHelperPath)}
+cp "\$MIHOMO_SRC" ${_shellQuote(_linuxInstalledMihomoPath)}
+cp "\$CONFIG_SRC" ${_shellQuote(_linuxInstalledConfigPath)}
+
+chmod 755 ${_shellQuote(_linuxInstalledHelperPath)} ${_shellQuote(_linuxInstalledMihomoPath)}
+chmod 600 ${_shellQuote(_linuxInstalledConfigPath)}
+
+cat > ${_shellQuote(_linuxUnitPath)} <<'UNIT'
+[Unit]
+Description=YueLink Service Helper
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=$_linuxInstalledHelperPath -config $_linuxInstalledConfigPath
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+systemctl daemon-reload
+systemctl enable ${AppConstants.desktopServiceLabel}
+systemctl restart ${AppConstants.desktopServiceLabel}
+''';
+  }
+
+  static String _linuxUninstallScript() {
+    return '''
+#!/bin/sh
+set -eu
+
+systemctl stop ${AppConstants.desktopServiceLabel} >/dev/null 2>&1 || true
+systemctl disable ${AppConstants.desktopServiceLabel} >/dev/null 2>&1 || true
+rm -f ${_shellQuote(_linuxUnitPath)}
+systemctl daemon-reload
+rm -rf ${_shellQuote(_linuxServiceDir)}
+''';
+  }
+
+  static Future<void> _runLinuxElevated(String scriptPath) async {
+    // Try pkexec first (graphical sudo), fallback to sudo
+    for (final elevator in ['pkexec', 'sudo']) {
+      try {
+        final result =
+            await Process.run(elevator, ['/bin/sh', scriptPath]);
+        if (result.exitCode == 0) return;
+        if (elevator == 'pkexec') continue; // try sudo next
+        throw ProcessException(
+          elevator,
+          ['/bin/sh', scriptPath],
+          '${result.stderr}'.trim().isEmpty
+              ? '${result.stdout}'.trim()
+              : '${result.stderr}'.trim(),
+          result.exitCode,
+        );
+      } catch (e) {
+        if (elevator == 'pkexec') continue;
+        rethrow;
+      }
+    }
+  }
 }
 
 class _ServiceBinaries {

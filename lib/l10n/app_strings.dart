@@ -466,6 +466,11 @@ class S {
   String serviceModeNeedsUpdate(String version) => _e
       ? 'Version mismatch ($version) — please reinstall'
       : '版本不匹配 ($version) — 请重新安装';
+  String get serviceModeUpdate => _e ? 'Update' : '更新';
+  String get serviceModeUpdateOk =>
+      _e ? 'Service updated successfully' : '服务更新成功';
+  String serviceModeUpdateFailed(String error) =>
+      _e ? 'Service update failed: $error' : '服务更新失败: $error';
   String get serviceModeInstallOk =>
       _e ? 'Desktop service installed' : '桌面服务已安装';
   String serviceModeInstallFailed(String error) =>
@@ -474,6 +479,21 @@ class S {
       _e ? 'Desktop service removed' : '桌面服务已卸载';
   String serviceModeUninstallFailed(String error) =>
       _e ? 'Uninstall service failed: $error' : '卸载服务失败: $error';
+  String get msgSwitchedToTun =>
+      _e ? 'Switched to TUN mode' : '已切换到 TUN 模式';
+  String get msgSwitchedToSystemProxy =>
+      _e ? 'Switched to system proxy' : '已切换到系统代理';
+  String get errTunSwitchFailed =>
+      _e ? 'Failed to switch mode' : '模式切换失败';
+  String get tunBypassLabel => _e ? 'TUN Bypass' : 'TUN 绕过';
+  String get tunBypassSub =>
+      _e ? 'Exclude addresses or processes from TUN' : '排除指定地址或进程不走 TUN';
+  String get tunBypassAddrHint =>
+      _e ? 'Bypass addresses (one per line, CIDR)' : '绕过地址（每行一个，CIDR 格式）';
+  String get tunBypassProcHint =>
+      _e ? 'Bypass processes (one per line)' : '绕过进程（每行一个）';
+  String get tunBypassSaved =>
+      _e ? 'TUN bypass settings saved' : 'TUN 绕过设置已保存';
   String get tunStackLabel => _e ? 'TUN Stack' : 'TUN 栈';
   String get tunStackMixed => _e ? 'Mixed' : 'Mixed';
   String get tunStackSystem => _e ? 'System' : 'System';

@@ -144,7 +144,19 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: _SummaryBar(snapshot: snapshot),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 8),
+
+          // Proxy stats (collapsible)
+          if (snapshot.connections.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Consumer(builder: (context, ref, _) {
+                final stats = ref.watch(proxyStatsProvider);
+                if (stats.isEmpty) return const SizedBox.shrink();
+                return _ProxyStatsBar(stats: stats.take(5).toList());
+              }),
+            ),
+          const SizedBox(height: 8),
 
           // Search + actions bar
           Padding(
@@ -797,5 +809,51 @@ class _ConnectionsDataTable extends StatelessWidget {
     if (bytes < 1024) return '$bytes B';
     if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
     return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+  }
+}
+
+// ------------------------------------------------------------------
+// Proxy stats bar — top 5 proxies by download
+// ------------------------------------------------------------------
+
+class _ProxyStatsBar extends StatelessWidget {
+  final List<ProxyStats> stats;
+  const _ProxyStatsBar({required this.stats});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Wrap(
+      spacing: 6,
+      runSpacing: 4,
+      children: stats.map((ps) {
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.06)
+                : Colors.black.withValues(alpha: 0.04),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Text(
+            '${ps.proxyName}  ${ps.connectionCount}  ${_fmtBytes(ps.totalDownload)}',
+            style: TextStyle(
+              fontSize: 11,
+              fontFamily: 'monospace',
+              color: isDark ? YLColors.zinc400 : YLColors.zinc600,
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  static String _fmtBytes(int bytes) {
+    if (bytes < 1024) return '${bytes}B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(0)}K';
+    if (bytes < 1024 * 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)}M';
+    }
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)}G';
   }
 }

@@ -69,6 +69,8 @@ class ConfigTemplate {
     String? secret,
     String connectionMode = 'systemProxy',
     String desktopTunStack = AppConstants.defaultDesktopTunStack,
+    List<String> tunBypassAddresses = const [],
+    List<String> tunBypassProcesses = const [],
     int? tunFd,
   }) {
     var config = rawConfig;
@@ -133,7 +135,12 @@ class ConfigTemplate {
 
     if (Platform.isMacOS || Platform.isWindows) {
       if (connectionMode == 'tun') {
-        config = _ensureDesktopTun(config, desktopTunStack);
+        config = _ensureDesktopTun(
+          config,
+          desktopTunStack,
+          bypassAddresses: tunBypassAddresses,
+          bypassProcesses: tunBypassProcesses,
+        );
       } else {
         config = _disableTun(config);
       }
@@ -345,7 +352,12 @@ class ConfigTemplate {
   /// Without it, DNS resolution for proxied domains fails because TUN
   /// intercepts raw IP packets, not domain-based connections. This matches
   /// Clash Verge Rev's `use_tun()` which forces fake-ip when TUN is enabled.
-  static String _ensureDesktopTun(String config, String stack) {
+  static String _ensureDesktopTun(
+    String config,
+    String stack, {
+    List<String> bypassAddresses = const [],
+    List<String> bypassProcesses = const [],
+  }) {
     final normalizedStack = switch (stack) {
       'system' => 'system',
       'gvisor' => 'gvisor',
@@ -365,14 +377,33 @@ class ConfigTemplate {
     // Force fake-ip DNS mode for TUN (CVR does the same in use_tun())
     config = _ensureFakeIpForTun(config);
 
-    return '$config\ntun:\n'
-        '  enable: true\n'
-        '  stack: $normalizedStack\n'
-        '  auto-route: true\n'
-        '  auto-detect-interface: true\n'
-        '  dns-hijack:\n'
-        '    - any:53\n'
-        '  mtu: 9000\n';
+    final buf = StringBuffer()
+      ..write('$config\ntun:\n')
+      ..write('  enable: true\n')
+      ..write('  stack: $normalizedStack\n')
+      ..write('  auto-route: true\n')
+      ..write('  auto-detect-interface: true\n')
+      ..write('  dns-hijack:\n')
+      ..write('    - any:53\n')
+      ..write('  mtu: 9000\n');
+
+    // TUN bypass: exclude addresses from TUN routing
+    if (bypassAddresses.isNotEmpty) {
+      buf.write('  route-exclude-address:\n');
+      for (final addr in bypassAddresses) {
+        buf.write('    - $addr\n');
+      }
+    }
+
+    // TUN bypass: exclude processes from TUN
+    if (bypassProcesses.isNotEmpty) {
+      buf.write('  exclude-package:\n');
+      for (final proc in bypassProcesses) {
+        buf.write('    - $proc\n');
+      }
+    }
+
+    return buf.toString();
   }
 
   /// Force fake-ip DNS mode within the existing dns section.

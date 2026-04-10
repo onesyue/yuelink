@@ -92,6 +92,25 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
     }
   }
 
+  Future<void> _updateDesktopService() async {
+    if (_serviceBusy) return;
+    final s = S.of(context);
+    setState(() => _serviceBusy = true);
+    try {
+      await ServiceManager.update();
+      await _refreshDesktopService();
+      if (!mounted) return;
+      AppNotifier.success(s.serviceModeUpdateOk);
+    } catch (e) {
+      if (!mounted) return;
+      AppNotifier.error(
+        s.serviceModeUpdateFailed(e.toString().split('\n').first),
+      );
+    } finally {
+      if (mounted) setState(() => _serviceBusy = false);
+    }
+  }
+
   String _serviceDescription(
     S s,
     AsyncValue<DesktopServiceInfo> serviceInfo,
@@ -115,6 +134,91 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
       return s.serviceModeRunning(info.pid ?? 0);
     }
     return s.serviceModeIdle;
+  }
+
+  Future<void> _showTunBypassEditor(BuildContext context) async {
+    final s = S.of(context);
+    final addrs = await SettingsService.getTunBypassAddresses();
+    final procs = await SettingsService.getTunBypassProcesses();
+    final addrCtrl = TextEditingController(text: addrs.join('\n'));
+    final procCtrl = TextEditingController(text: procs.join('\n'));
+
+    if (!mounted) return;
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(s.tunBypassLabel),
+        content: SizedBox(
+          width: 400,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(s.tunBypassAddrHint,
+                    style: YLText.caption
+                        .copyWith(color: YLColors.zinc500)),
+                const SizedBox(height: 4),
+                TextField(
+                  controller: addrCtrl,
+                  maxLines: 5,
+                  style: YLText.body,
+                  decoration: InputDecoration(
+                    hintText: '192.168.0.0/16\n10.0.0.0/8',
+                    hintStyle: YLText.body.copyWith(color: YLColors.zinc400),
+                    border: const OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(s.tunBypassProcHint,
+                    style: YLText.caption
+                        .copyWith(color: YLColors.zinc500)),
+                const SizedBox(height: 4),
+                TextField(
+                  controller: procCtrl,
+                  maxLines: 5,
+                  style: YLText.body,
+                  decoration: InputDecoration(
+                    hintText: 'ssh\nParallels Desktop',
+                    hintStyle: YLText.body.copyWith(color: YLColors.zinc400),
+                    border: const OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(s.cancel),
+          ),
+          FilledButton(
+            onPressed: () async {
+              final newAddrs = addrCtrl.text
+                  .split('\n')
+                  .map((l) => l.trim())
+                  .where((l) => l.isNotEmpty)
+                  .toList();
+              final newProcs = procCtrl.text
+                  .split('\n')
+                  .map((l) => l.trim())
+                  .where((l) => l.isNotEmpty)
+                  .toList();
+              await SettingsService.setTunBypassAddresses(newAddrs);
+              await SettingsService.setTunBypassProcesses(newProcs);
+              if (ctx.mounted) Navigator.pop(ctx);
+              AppNotifier.success(s.tunBypassSaved);
+            },
+            child: Text(s.save),
+          ),
+        ],
+      ),
+    );
+    addrCtrl.dispose();
+    procCtrl.dispose();
   }
 
   @override
@@ -257,9 +361,8 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
                         ),
                       ),
                     ),
-                    // Connection mode & system proxy: macOS/Windows only
-                    // (Linux has no system proxy implementation)
-                    if (Platform.isMacOS || Platform.isWindows) ...[
+                    // Connection mode & system proxy: desktop only
+                    if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) ...[
                       Divider(height: 1, thickness: 0.5, color: dividerColor),
                       YLInfoRow(
                         label: s.connectionMode,
@@ -279,9 +382,17 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
                                 child: Text(s.modeSystemProxy)),
                           ],
                           onChanged: (v) async {
-                            if (v == null) return;
+                            if (v == null || v == connectionMode) return;
                             ref.read(connectionModeProvider.notifier).state = v;
                             await SettingsService.setConnectionMode(v);
+
+                            // Hot-switch: if core is running, apply mode
+                            // change without stop+start
+                            final status = ref.read(coreStatusProvider);
+                            if (status == CoreStatus.running) {
+                              final actions = ref.read(coreActionsProvider);
+                              await actions.hotSwitchConnectionMode(v);
+                            }
                           },
                         ),
                       ),
@@ -315,7 +426,26 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
                                     ),
                                     const SizedBox(width: 4),
                                     if (serviceInfo.valueOrNull?.installed ==
-                                        true)
+                                        true) ...[
+                                      if (serviceInfo
+                                              .valueOrNull?.needsReinstall ==
+                                          true)
+                                        FilledButton(
+                                          onPressed: _updateDesktopService,
+                                          style: FilledButton.styleFrom(
+                                            visualDensity:
+                                                VisualDensity.compact,
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 12,
+                                              vertical: 8,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            s.serviceModeUpdate,
+                                            style:
+                                                const TextStyle(fontSize: 12),
+                                          ),
+                                        ),
                                       TextButton(
                                         onPressed: () =>
                                             _uninstallDesktopService(status),
@@ -328,8 +458,8 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
                                           s.serviceModeUninstall,
                                           style: const TextStyle(fontSize: 12),
                                         ),
-                                      )
-                                    else
+                                      ),
+                                    ] else
                                       FilledButton(
                                         onPressed: _installDesktopService,
                                         style: FilledButton.styleFrom(
@@ -379,6 +509,20 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
                                   v;
                               await SettingsService.setDesktopTunStack(v);
                             },
+                          ),
+                        ),
+                        Divider(height: 1, thickness: 0.5, color: dividerColor),
+                        GestureDetector(
+                          onTap: () => _showTunBypassEditor(context),
+                          behavior: HitTestBehavior.opaque,
+                          child: YLSettingsRow(
+                            title: s.tunBypassLabel,
+                            description: s.tunBypassSub,
+                            trailing: Icon(
+                              Icons.chevron_right,
+                              color:
+                                  isDark ? YLColors.zinc400 : YLColors.zinc500,
+                            ),
                           ),
                         ),
                       ],
