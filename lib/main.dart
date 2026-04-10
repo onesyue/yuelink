@@ -430,7 +430,8 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
       // The double call causes race conditions (concurrent API checks,
       // duplicate stream invalidations, state flip-flop).
       if (Platform.isAndroid && !_initialRecoveryDone) {
-        debugPrint('[AppLifecycle] skipping resumed — initial recovery pending');
+        debugPrint(
+            '[AppLifecycle] skipping resumed — initial recovery pending');
         return;
       }
       _onAppResumed().then((_) {
@@ -473,7 +474,8 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
       try {
         final health = await RecoveryManager.checkCoreHealth();
         if (health.alive && health.apiOk) {
-          debugPrint('[AppLifecycle] core alive but Dart state was $status — recovering');
+          debugPrint(
+              '[AppLifecycle] core alive but Dart state was $status — recovering');
           // Restore Dart state + ports to match reality
           await manager.markRunning();
           // Invalidate streams BEFORE setting status to running.
@@ -557,7 +559,8 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
   Future<void> _registerHotkeys() async {
     // Linux: global hotkeys unreliable under Wayland — skip silently
     if (Platform.isLinux) {
-      debugPrint('[Hotkey] Skipping global hotkey on Linux (Wayland not supported)');
+      debugPrint(
+          '[Hotkey] Skipping global hotkey on Linux (Wayland not supported)');
       return;
     }
     try {
@@ -663,8 +666,7 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
     try {
       await trayManager.setContextMenu(Menu(items: [
         MenuItem(
-            key: 'toggle',
-            label: isRunning ? s.trayDisconnect : s.trayConnect),
+            key: 'toggle', label: isRunning ? s.trayDisconnect : s.trayConnect),
         MenuItem(key: 'show', label: s.trayShowWindow),
         if (proxySubMenus.isNotEmpty) ...[
           MenuItem.separator(),
@@ -777,7 +779,9 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
       // Always clear system proxy on exit regardless of settings/state,
       // so quitting the app never leaves a dead proxy configured.
       if (Platform.isMacOS || Platform.isWindows) {
-        try { await _singleInstanceServer?.close(); } catch (_) {}
+        try {
+          await _singleInstanceServer?.close();
+        } catch (_) {}
         await CoreActions.clearSystemProxyStatic().catchError((_) {});
         await windowManager.setPreventClose(false);
         // Use destroy() instead of close() — close() triggers onWindowClose
@@ -825,11 +829,13 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
 
       final config = await ProfileService.loadConfig(activeId);
       if (config == null) {
-        debugPrint('[AutoConnect] config file not found for profile: $activeId');
+        debugPrint(
+            '[AutoConnect] config file not found for profile: $activeId');
         return;
       }
 
-      debugPrint('[AutoConnect] starting with profile: $activeId (${config.length} bytes)');
+      debugPrint(
+          '[AutoConnect] starting with profile: $activeId (${config.length} bytes)');
       final ok = await ref.read(coreActionsProvider).start(config);
       debugPrint('[AutoConnect] result: $ok');
     } catch (e) {
@@ -949,9 +955,9 @@ class MainShell extends ConsumerStatefulWidget {
 
   /// Tab indices for programmatic navigation.
   static const tabDashboard = 0;
-  static const tabProxies   = 1;
-  static const tabEmby      = 2;
-  static const tabSettings  = 3;
+  static const tabProxies = 1;
+  static const tabEmby = 2;
+  static const tabSettings = 3;
 
   static void switchToTab(BuildContext context, int index) {
     context.findAncestorStateOfType<_MainShellState>()?.switchTab(index);
@@ -986,7 +992,8 @@ class _MainShellState extends ConsumerState<MainShell> {
   @override
   void initState() {
     super.initState();
-    _currentIndex = ref.read(initialTabIndexProvider).clamp(0, _pages.length - 1);
+    _currentIndex =
+        ref.read(initialTabIndexProvider).clamp(0, _pages.length - 1);
     // Restore previously visited tabs from persistence (Android process restore)
     final savedTabs = ref.read(initialBuiltTabsProvider);
     _builtTabs = <int, bool>{
@@ -1028,7 +1035,9 @@ class _MainShellState extends ConsumerState<MainShell> {
                   index: _currentIndex,
                   children: [
                     for (int i = 0; i < _pages.length; i++)
-                      _builtTabs[i] == true ? _pages[i] : const SizedBox.shrink(),
+                      _builtTabs[i] == true
+                          ? _pages[i]
+                          : const SizedBox.shrink(),
                   ],
                 ),
               ),
@@ -1041,14 +1050,26 @@ class _MainShellState extends ConsumerState<MainShell> {
     // ── Mobile bottom navigation ─────────────────────────────────
     final s = S.of(context);
     final mobileItems = [
-      (const Icon(Icons.home_outlined, size: 20),
-       const Icon(Icons.home_filled, size: 20), s.navHome),
-      (const Icon(Icons.public_outlined, size: 20),
-       const Icon(Icons.public, size: 20), s.navProxies),
-      (const Icon(Icons.play_circle_outline, size: 20),
-       const Icon(Icons.play_circle_filled, size: 20), s.navEmby),
-      (const Icon(Icons.person_outline_rounded, size: 20),
-       const Icon(Icons.person_rounded, size: 20), s.navMine),
+      (
+        const Icon(Icons.home_outlined, size: 20),
+        const Icon(Icons.home_filled, size: 20),
+        s.navHome
+      ),
+      (
+        const Icon(Icons.public_outlined, size: 20),
+        const Icon(Icons.public, size: 20),
+        s.navProxies
+      ),
+      (
+        const Icon(Icons.play_circle_outline, size: 20),
+        const Icon(Icons.play_circle_filled, size: 20),
+        s.navEmby
+      ),
+      (
+        const Icon(Icons.person_outline_rounded, size: 20),
+        const Icon(Icons.person_rounded, size: 20),
+        s.navMine
+      ),
     ];
 
     return Scaffold(
@@ -1072,8 +1093,7 @@ class _MainShellState extends ConsumerState<MainShell> {
                 ))
             .toList(),
         height: 60,
-        labelBehavior:
-            NavigationDestinationLabelBehavior.onlyShowSelected,
+        labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
       ),
     );
   }
@@ -1100,7 +1120,9 @@ class _Sidebar extends StatelessWidget {
 
     return Container(
       width: 230,
-      color: isDark ? YLColors.zinc900 : YLColors.zinc50, // Sidebar one shade lighter than zinc100 bg
+      color: isDark
+          ? YLColors.zinc900
+          : YLColors.zinc50, // Sidebar one shade lighter than zinc100 bg
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1110,12 +1132,14 @@ class _Sidebar extends StatelessWidget {
             child: Row(
               children: [
                 Container(
-                  width: 40, height: 40,
+                  width: 40,
+                  height: 40,
                   decoration: BoxDecoration(
                     color: YLColors.primary,
                     borderRadius: BorderRadius.circular(YLRadius.xl),
                   ),
-                  child: const Icon(Icons.link_rounded, size: 20, color: Colors.white),
+                  child: const Icon(Icons.link_rounded,
+                      size: 20, color: Colors.white),
                 ),
                 const SizedBox(width: 12),
                 Column(

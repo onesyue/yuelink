@@ -192,8 +192,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
       if (Platform.isAndroid || Platform.isIOS) {
         final seen = await SettingsService.get<bool>('hasSeenVpnHint') ?? false;
         if (!seen) {
-          if (!mounted) return;
-          // ignore: use_build_context_synchronously
+          if (!context.mounted) return;
           final proceed = await showDialog<bool>(
             context: context,
             builder: (ctx) => AlertDialog(

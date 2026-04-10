@@ -214,6 +214,9 @@ class MitmNotifier extends StateNotifier<MitmState> {
         final code = s.scriptContent;
         if (code == null || code.isEmpty) continue;
         if (s.pattern == null || s.pattern!.isEmpty) continue;
+        // Basic sanity: reject excessively large scripts (>512KB) to prevent
+        // memory pressure in the Go MITM engine.
+        if (code.length > 512 * 1024) continue;
         scripts.add({'pattern': s.pattern, 'code': code});
       }
     }

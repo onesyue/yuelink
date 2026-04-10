@@ -113,8 +113,10 @@ class CoreActions {
       await _applyRoutingMode(manager);
 
       // 4. System proxy (desktop, real mode only — mock has no proxy port)
+      // Only set system proxy when connectionMode is 'systemProxy' (not 'tun')
       if (!manager.isMockMode &&
           (Platform.isMacOS || Platform.isWindows) &&
+          ref.read(connectionModeProvider) == 'systemProxy' &&
           ref.read(systemProxyOnConnectProvider)) {
         await applySystemProxy();
       }

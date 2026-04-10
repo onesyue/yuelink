@@ -42,7 +42,9 @@ class ErrorLogger {
 
     PlatformDispatcher.instance.onError = (error, stack) {
       _capture(error.toString(), stack, source: 'PlatformDispatcher');
-      return Platform.isAndroid || Platform.isIOS;
+      // Return true on all platforms to prevent the framework from propagating
+      // the error further (which can crash/exit the app on desktop).
+      return true;
     };
   }
 

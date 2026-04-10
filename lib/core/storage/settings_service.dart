@@ -4,8 +4,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 
-import 'secure_storage_service.dart';
-
 /// Persistent settings storage using a simple JSON file.
 class SettingsService {
   static const _fileName = 'settings.json';
@@ -31,14 +29,15 @@ class SettingsService {
     try {
       _cache = json.decode(await file.readAsString()) as Map<String, dynamic>;
     } catch (e) {
-      // Corrupt JSON (crash during write, bad WebDAV sync) — fall back to empty.
-      debugPrint('[SettingsService] corrupt settings.json ($e), resetting to empty');
+      // Corrupt JSON (for example after an interrupted write) — fall back to empty.
+      debugPrint(
+          '[SettingsService] corrupt settings.json ($e), resetting to empty');
       _cache = {};
     }
     return _cache!;
   }
 
-  /// Invalidate in-memory cache (e.g., after WebDAV download).
+  /// Invalidate the in-memory cache so the next read comes from disk.
   static void invalidateCache() => _cache = null;
 
   static Future<void> save(Map<String, dynamic> settings) {
@@ -363,20 +362,4 @@ class SettingsService {
   static Future<void> setHasSeenOnboarding(bool value) async {
     await set('hasSeenOnboarding', value);
   }
-
-  // ── WebDAV (credentials stored in OS secure storage, not plain JSON) ────────
-
-  static Future<Map<String, String>> getWebDavConfig() =>
-      SecureStorageService.instance.getWebDavConfig();
-
-  static Future<void> setWebDavConfig({
-    required String url,
-    required String username,
-    required String password,
-  }) =>
-      SecureStorageService.instance.setWebDavConfig(
-        url: url,
-        username: username,
-        password: password,
-      );
 }

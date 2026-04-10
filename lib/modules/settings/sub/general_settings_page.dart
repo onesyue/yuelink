@@ -180,7 +180,9 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
                         ),
                       ),
                     ),
-                    if (isDesktop) ...[
+                    // Connection mode & system proxy: macOS/Windows only
+                    // (Linux has no system proxy implementation)
+                    if (Platform.isMacOS || Platform.isWindows) ...[
                       Divider(height: 1, thickness: 0.5, color: dividerColor),
                       YLInfoRow(
                         label: s.connectionMode,
@@ -222,6 +224,8 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
                           },
                         ),
                       ),
+                    ],
+                    if (isDesktop) ...[
                       Divider(height: 1, thickness: 0.5, color: dividerColor),
                       YLSettingsRow(
                         title: s.launchAtStartupLabel,

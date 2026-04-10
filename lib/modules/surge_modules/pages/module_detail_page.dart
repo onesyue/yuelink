@@ -64,9 +64,9 @@ class _ModuleDetailPageState extends ConsumerState<ModuleDetailPage> {
         ],
       ),
     );
-    if (confirmed == true && mounted) {
+    if (confirmed == true && context.mounted) {
       await ref.read(moduleProvider.notifier).deleteModule(widget.moduleId);
-      if (mounted) Navigator.of(context).pop();
+      if (context.mounted) Navigator.of(context).pop();
     }
   }
 

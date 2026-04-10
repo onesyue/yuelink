@@ -99,16 +99,65 @@ class OverwriteService {
     // Append custom proxies
     final customProxies = _extractListBlock(overwrite, 'proxies');
     if (customProxies.isNotEmpty) {
-      config = config.replaceFirstMapped(
-        RegExp(r'^(proxies:\s*\n)', multiLine: true),
-        (m) {
-          // Find end of proxies block and append
-          return '${m.group(1)}$customProxies\n';
-        },
-      );
+      config = _appendToListBlock(config, 'proxies', customProxies);
+    }
+
+    // Append custom proxy-groups
+    final customGroups = _extractListBlock(overwrite, 'proxy-groups');
+    if (customGroups.isNotEmpty) {
+      config = _appendToListBlock(config, 'proxy-groups', customGroups);
+    }
+
+    // Merge block-type keys: dns, tun, sniffer, hosts, listeners
+    // Overwrite entries are injected into the existing block, or appended as
+    // a new top-level section if absent.
+    for (final blockKey in ['dns', 'tun', 'sniffer', 'hosts', 'listeners']) {
+      final customBlock = _extractListBlock(overwrite, blockKey);
+      if (customBlock.isNotEmpty) {
+        config = _mergeBlockSection(config, blockKey, customBlock);
+      }
     }
 
     return config;
+  }
+
+  /// Append entries to an existing YAML list block, or create it if absent.
+  static String _appendToListBlock(String config, String key, String entries) {
+    final keyPattern = RegExp('^$key:\\s*\\n', multiLine: true);
+    if (keyPattern.hasMatch(config)) {
+      // Find the end of the block (next top-level key or EOF) and insert before it
+      final keyMatch = keyPattern.firstMatch(config)!;
+      final afterKey = config.substring(keyMatch.end);
+      final nextTopLevel = RegExp(r'^\S', multiLine: true);
+      final endMatch = nextTopLevel.firstMatch(afterKey);
+      final insertPos =
+          endMatch != null ? keyMatch.end + endMatch.start : config.length;
+      return '${config.substring(0, insertPos)}$entries\n${config.substring(insertPos)}';
+    } else {
+      // Section doesn't exist — create it
+      return '$config\n$key:\n$entries\n';
+    }
+  }
+
+  /// Merge a block section (dns, tun, sniffer, etc.) from overwrite into config.
+  /// Overwrite child lines are appended into the existing block, or the entire
+  /// block is added as a new top-level section if absent in config.
+  static String _mergeBlockSection(
+      String config, String key, String childLines) {
+    final keyPattern = RegExp('^$key:\\s*\\n', multiLine: true);
+    if (keyPattern.hasMatch(config)) {
+      // Insert overwrite children at the end of the existing block
+      final keyMatch = keyPattern.firstMatch(config)!;
+      final afterKey = config.substring(keyMatch.end);
+      final nextTopLevel = RegExp(r'^\S', multiLine: true);
+      final endMatch = nextTopLevel.firstMatch(afterKey);
+      final insertPos =
+          endMatch != null ? keyMatch.end + endMatch.start : config.length;
+      return '${config.substring(0, insertPos)}$childLines\n${config.substring(insertPos)}';
+    } else {
+      // Section doesn't exist — create it
+      return '$config\n$key:\n$childLines\n';
+    }
   }
 
   /// Extract a YAML list block (indented lines) for a given key.

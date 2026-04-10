@@ -39,7 +39,9 @@ class _AddModuleSheetState extends ConsumerState<AddModuleSheet> {
   bool _isValidUrl(String url) {
     try {
       final uri = Uri.parse(url.trim());
-      return uri.isAbsolute && (uri.scheme == 'http' || uri.scheme == 'https');
+      // Only HTTPS — module content is injected into MITM config,
+      // so HTTP would allow man-in-the-middle code injection.
+      return uri.isAbsolute && uri.scheme == 'https';
     } catch (_) {
       return false;
     }
@@ -49,7 +51,7 @@ class _AddModuleSheetState extends ConsumerState<AddModuleSheet> {
     final url = _controller.text.trim();
     if (!_isValidUrl(url)) {
       setState(() {
-        _error = 'Please enter a valid http/https URL';
+        _error = 'Please enter a valid HTTPS URL';
       });
       return;
     }

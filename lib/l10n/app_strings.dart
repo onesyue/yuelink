@@ -63,8 +63,7 @@ class S {
   String get noData => _e ? 'No data' : '无数据';
 
   // ── Disconnect notification ───────────────────────────────────────
-  String get disconnectedUnexpected =>
-      _e ? 'Connection dropped' : '连接已断开';
+  String get disconnectedUnexpected => _e ? 'Connection dropped' : '连接已断开';
 
   // ── Subscription expiry ───────────────────────────────────────────
   String subExpired(String name) =>
@@ -93,9 +92,8 @@ class S {
   String get routeModeDirect => _e ? 'Direct' : '直连';
   String get routingModeSetting => _e ? 'Routing Mode' : '路由模式';
   String get modeSwitched => _e ? 'Mode switched' : '模式已切换';
-  String get directModeDesc => _e
-      ? 'All traffic connects directly without proxy'
-      : '所有流量直接连接，不经过代理节点';
+  String get directModeDesc =>
+      _e ? 'All traffic connects directly without proxy' : '所有流量直接连接，不经过代理节点';
   String get globalModeDesc => _e
       ? 'All traffic routes through the selected node below'
       : '所有流量通过下方选择的节点转发';
@@ -153,27 +151,26 @@ class S {
       _e ? 'Connection failed, please try again' : '连接失败，请稍后重试';
 
   // Network permission pre-auth dialog (first connection on mobile)
-  String get vpnPermTitle =>
-      _e ? 'Network Permission Required' : '需要网络权限';
+  String get vpnPermTitle => _e ? 'Network Permission Required' : '需要网络权限';
   String get vpnPermBody => _e
       ? 'YueLink needs to set up a secure tunnel to route your traffic. '
-        'No personal data is sent to our servers — all processing happens on your device.\n\n'
-        'Tap "Continue" to grant the permission.'
+          'No personal data is sent to our servers — all processing happens on your device.\n\n'
+          'Tap "Continue" to grant the permission.'
       : '悦通需要建立安全隧道来转发你的网络流量。'
-        '不会将任何个人数据发送至服务器——所有处理均在本地完成。\n\n'
-        '点击「继续」授予权限。';
+          '不会将任何个人数据发送至服务器——所有处理均在本地完成。\n\n'
+          '点击「继续」授予权限。';
   String get vpnPermContinue => _e ? 'Continue' : '继续';
 
   // ── Proxy page ────────────────────────────────────────────────────
   String get notConnectedHintProxy =>
       _e ? 'Connect first to view proxy nodes' : '请先连接以查看代理节点';
-  String get connectToViewProxiesDesc =>
-      _e ? 'Connect to the core to view and manage proxies.' : '连接内核以查看和管理代理节点。';
+  String get connectToViewProxiesDesc => _e
+      ? 'Connect to the core to view and manage proxies.'
+      : '连接内核以查看和管理代理节点。';
   String nodesCountLabel(int n) => _e ? '$n Nodes' : '$n 个节点';
   String switchedTo(String name) => _e ? 'Switched to $name' : '已切换至 $name';
   String get switchFailed => _e ? 'Failed to switch node' : '切换节点失败';
-  String testingGroup(String name) =>
-      _e ? 'Testing $name...' : '正在测试 $name...';
+  String testingGroup(String name) => _e ? 'Testing $name...' : '正在测试 $name...';
   String get directAuto => _e ? 'Direct / Auto' : '直连 / 自动';
   String get searchNodesHint => _e ? 'Search nodes...' : '搜索节点...';
   String get sortByDelay => _e ? 'Sort by delay' : '按延迟排序';
@@ -203,8 +200,7 @@ class S {
   String get noProfiles => _e ? 'No subscriptions' : '暂无订阅';
   String get addSubscriptionHint =>
       _e ? 'Click the button below to add a subscription' : '点击下方按钮添加机场订阅';
-  String get pasteFromClipboard =>
-      _e ? 'Paste from clipboard' : '从剪贴板粘贴';
+  String get pasteFromClipboard => _e ? 'Paste from clipboard' : '从剪贴板粘贴';
   String get addSubscription => _e ? 'Add Subscription' : '添加订阅';
   String get downloadingSubscription =>
       _e ? 'Downloading subscription...' : '正在下载订阅...';
@@ -216,15 +212,13 @@ class S {
   String get confirmDelete => _e ? 'Confirm Delete' : '确认删除';
   String confirmDeleteMessage(String name) =>
       _e ? 'Are you sure to delete "$name"?' : '确定要删除「$name」吗？';
-  String get addSubscriptionDialogTitle =>
-      _e ? 'Add Subscription' : '添加订阅';
-  String get editSubscriptionDialogTitle =>
-      _e ? 'Edit Subscription' : '编辑订阅';
+  String get addSubscriptionDialogTitle => _e ? 'Add Subscription' : '添加订阅';
+  String get editSubscriptionDialogTitle => _e ? 'Edit Subscription' : '编辑订阅';
   String get nameLabel => _e ? 'Name' : '名称';
   String get nameHint => _e ? 'My Subscription' : '我的机场';
   String get urlLabel => _e ? 'Subscription URL' : '订阅链接';
   String get updateInterval => _e ? 'Update Interval' : '更新间隔';
-  String get followGlobal => _e ? 'Follow Global' : '跟随全局';
+  String get followGlobal => _e ? 'Default (24h)' : '默认 (24h)';
   String get days7 => _e ? '7 days' : '7 天';
   String get hours6 => _e ? '6 hours' : '6 小时';
   String get hours12 => _e ? '12 hours' : '12 小时';
@@ -233,28 +227,23 @@ class S {
   String usageLabel(String used, String total) =>
       _e ? 'Used $used / $total' : '已用 $used / $total';
   String get expired => _e ? 'Expired' : '已过期';
-  String daysRemaining(int days) =>
-      _e ? '$days days left' : '剩余 $days 天';
+  String daysRemaining(int days) => _e ? '$days days left' : '剩余 $days 天';
   String get needsUpdate => _e ? 'Needs update' : '需要更新';
-  String updatedAt(String time) =>
-      _e ? 'Updated at $time' : '更新于 $time';
+  String updatedAt(String time) => _e ? 'Updated at $time' : '更新于 $time';
   String get noConfig => _e ? 'Config file not found' : '配置文件不存在';
   String get copyConfig => _e ? 'Copy config' : '复制配置';
   String get copiedConfig => _e ? 'Config copied' : '已复制配置内容';
   String get copyLink => _e ? 'Copy link' : '复制链接';
-  String get copiedLink =>
-      _e ? 'Subscription link copied' : '已复制订阅链接';
+  String get copiedLink => _e ? 'Subscription link copied' : '已复制订阅链接';
   String get viewConfig => _e ? 'View config' : '查看配置';
-  String get updateSubscription =>
-      _e ? 'Update subscription' : '更新订阅';
+  String get updateSubscription => _e ? 'Update subscription' : '更新订阅';
   String get clipboardNoUrl =>
       _e ? 'No valid subscription URL in clipboard' : '剪贴板中没有有效的订阅链接';
   String get addSuccess => _e ? 'Added successfully' : '添加成功';
   String addFailed(String error) =>
       _e ? 'Failed to add: $error' : '添加失败: $error';
   String get importLocalFile => _e ? 'Import local file' : '从本地文件导入';
-  String get importLocalFileSuccess =>
-      _e ? 'Imported successfully' : '导入成功';
+  String get importLocalFileSuccess => _e ? 'Imported successfully' : '导入成功';
   String get importLocalFileFailed =>
       _e ? 'Import failed: no valid YAML file selected' : '导入失败：未选择有效的 YAML 文件';
   String get importLocalNameHint => _e ? 'My Config' : '我的配置';
@@ -274,26 +263,23 @@ class S {
       _e ? 'Import failed: invalid backup file' : '导入失败：无效的备份文件';
 
   // ── Split tunneling (Android) ─────────────────────────────────────
-  String get sectionSplitTunnel =>
-      _e ? 'Split Tunneling' : '分应用代理';
+  String get sectionSplitTunnel => _e ? 'Split Tunneling' : '分应用代理';
   String get splitTunnelMode => _e ? 'Mode' : '代理模式';
   String get splitTunnelModeAll => _e ? 'All apps' : '全部应用';
   String get splitTunnelModeWhitelist =>
       _e ? 'Proxy listed apps only' : '仅代理选定应用';
-  String get splitTunnelModeBlacklist =>
-      _e ? 'Bypass listed apps' : '绕过选定应用';
+  String get splitTunnelModeBlacklist => _e ? 'Bypass listed apps' : '绕过选定应用';
   String get splitTunnelApps => _e ? 'App List' : '应用列表';
   String get splitTunnelManage => _e ? 'Manage Apps' : '管理应用';
-  String get splitTunnelSearchHint =>
-      _e ? 'Search apps...' : '搜索应用...';
+  String get splitTunnelSearchHint => _e ? 'Search apps...' : '搜索应用...';
   String get splitTunnelEffectHint =>
       _e ? 'Changes take effect on next connect' : '下次连接时生效';
 
   // ── Geo resources ─────────────────────────────────────────────────
   String get sectionGeoResources => _e ? 'Geo Resources' : 'GeoIP/GeoSite 资源';
-  String get geoResourcesHint =>
-      _e ? 'mihomo uses these files for rule-based routing'
-         : 'mihomo 路由分流所需的地理数据库文件';
+  String get geoResourcesHint => _e
+      ? 'mihomo uses these files for rule-based routing'
+      : 'mihomo 路由分流所需的地理数据库文件';
   String get geoUpdateAll => _e ? 'Update All' : '一键更新';
   String get geoUpdateSuccess => _e ? 'Geo resources updated' : 'Geo 资源更新成功';
   String get geoUpdateFailed => _e ? 'Update failed' : '更新失败';
@@ -302,9 +288,9 @@ class S {
 
   // ── Config rollback ───────────────────────────────────────────────
   String get rollbackTitle => _e ? 'Start Failed' : '启动失败';
-  String get rollbackContent =>
-      _e ? 'The configuration failed to start. Rollback to the last known-good config?'
-         : '配置启动失败，是否回退到上一次可用的配置？';
+  String get rollbackContent => _e
+      ? 'The configuration failed to start. Rollback to the last known-good config?'
+      : '配置启动失败，是否回退到上一次可用的配置？';
   String get rollbackConfirm => _e ? 'Rollback' : '回退';
   String get rollbackSuccess => _e ? 'Rolled back successfully' : '已回退到上次可用配置';
   String get rollbackFailed => _e ? 'Rollback failed' : '回退也失败了，请检查配置';
@@ -340,19 +326,15 @@ class S {
       _e ? '$count connections' : '$count 个连接';
   String connectionsCountFiltered(int count) =>
       _e ? '$count connections (filtered)' : '$count 个连接（已过滤）';
-  String get noActiveConnections =>
-      _e ? 'No active connections' : '暂无活跃连接';
-  String get noMatchingConnections =>
-      _e ? 'No matching results' : '无匹配结果';
-  String get closeAllDialogTitle =>
-      _e ? 'Close All Connections' : '断开所有连接';
+  String get noActiveConnections => _e ? 'No active connections' : '暂无活跃连接';
+  String get noMatchingConnections => _e ? 'No matching results' : '无匹配结果';
+  String get closeAllDialogTitle => _e ? 'Close All Connections' : '断开所有连接';
   String get closeAllDialogMessage =>
       _e ? 'Are you sure to close all active connections?' : '确定要断开所有活跃连接吗？';
   String get statConnections => _e ? 'Connections' : '连接数';
   String get statTotalDownload => _e ? 'Total Download' : '累计下载';
   String get statTotalUpload => _e ? 'Total Upload' : '累计上传';
-  String get connectionDetailTitle =>
-      _e ? 'Connection Details' : '连接详情';
+  String get connectionDetailTitle => _e ? 'Connection Details' : '连接详情';
   String get detailTarget => _e ? 'Target' : '目标';
   String get detailProtocol => _e ? 'Protocol' : '协议';
   String get detailSource => _e ? 'Source' : '来源';
@@ -376,15 +358,11 @@ class S {
   String get clearLogs => _e ? 'Clear logs' : '清空日志';
   String get noLogs => _e ? 'No logs' : '暂无日志';
   String logsCount(int count) => _e ? '$count logs' : '$count 条日志';
-  String logLevelLabel(String level) =>
-      _e ? 'Level: $level' : '级别: $level';
-  String rulesCount(int count) =>
-      _e ? '$count rules' : '共 $count 条规则';
-  String matchedRulesCount(int count) =>
-      _e ? '$count matched' : '匹配 $count 条';
+  String logLevelLabel(String level) => _e ? 'Level: $level' : '级别: $level';
+  String rulesCount(int count) => _e ? '$count rules' : '共 $count 条规则';
+  String matchedRulesCount(int count) => _e ? '$count matched' : '匹配 $count 条';
   String get searchRulesHint => _e ? 'Search rules...' : '搜索规则...';
-  String get noMatchingRules =>
-      _e ? 'No matching rules' : '未找到匹配的规则';
+  String get noMatchingRules => _e ? 'No matching rules' : '未找到匹配的规则';
 
   // ── Overwrite page ────────────────────────────────────────────────
   String get overwriteTitle => _e ? 'Config Overwrite' : '配置覆写';
@@ -392,10 +370,12 @@ class S {
   String get overwriteRulesDescription => _e
       ? '• Scalar keys (mode, log-level, etc.) replace values in the subscription config\n'
           '• rules list is prepended before subscription rules\n'
-          '• proxies / proxy-groups lists are appended after the subscription'
+          '• proxies / proxy-groups lists are appended after the subscription\n'
+          '• dns / tun / sniffer / hosts / listeners blocks are merged into existing sections'
       : '• 标量键（mode, log-level 等）会替换订阅中的对应值\n'
           '• rules 列表会插入到订阅规则之前\n'
-          '• proxies / proxy-groups 列表会追加到订阅之后';
+          '• proxies / proxy-groups 列表会追加到订阅之后\n'
+          '• dns / tun / sniffer / hosts / listeners 块会合并到已有配置段';
   String get overwriteHintText => _e
       ? '# Example:\n# mode: rule\n# rules:\n#   - DOMAIN-SUFFIX,example.com,DIRECT'
       : '# 示例:\n# mode: rule\n# rules:\n#   - DOMAIN-SUFFIX,example.com,DIRECT';
@@ -406,7 +386,6 @@ class S {
   String get sectionConnection => _e ? 'Connection' : '连接';
   String get sectionCore => _e ? 'Core' : '内核';
   String get sectionSubscription => _e ? 'Subscription' : '订阅';
-  String get sectionWebDav => _e ? 'WebDAV Sync' : 'WebDAV 同步';
   String get sectionAppearance => _e ? 'Appearance' : '外观';
   String get sectionStatus => _e ? 'Status' : '状态';
   String get sectionTools => _e ? 'Tools' : '工具';
@@ -418,8 +397,9 @@ class S {
   String get sectionAccountActions => _e ? 'Account' : '账号';
   // Upstream proxy
   String get upstreamProxy => _e ? 'Upstream Proxy' : '上游代理';
-  String get upstreamProxySub =>
-      _e ? 'Route through a local gateway (e.g. soft router)' : '通过本地网关出站（如软路由）';
+  String get upstreamProxySub => _e
+      ? 'Route through a local gateway (e.g. soft router)'
+      : '通过本地网关出站（如软路由）';
   String get upstreamProxyServer => _e ? 'Server' : '服务器地址';
   String get upstreamProxyPort => _e ? 'Port' : '端口';
   String get upstreamProxyType => _e ? 'Type' : '类型';
@@ -441,7 +421,8 @@ class S {
   String get closeBehaviorTray => _e ? 'Minimize to tray' : '最小化到托盘';
   String get closeBehaviorExit => _e ? 'Exit application' : '退出应用';
   // Hotkey
-  String get toggleConnectionHotkey => _e ? 'Toggle Connection Hotkey' : '连接快捷键';
+  String get toggleConnectionHotkey =>
+      _e ? 'Toggle Connection Hotkey' : '连接快捷键';
   String get hotkeyEdit => _e ? 'Edit' : '编辑';
   String get hotkeyListening => _e ? 'Press a key combination...' : '请按下组合键...';
   String get hotkeySaved => _e ? 'Hotkey saved' : '快捷键已保存';
@@ -452,9 +433,11 @@ class S {
   String get geoUpdated => _e ? 'Geo database updated' : '地理数据库已更新';
   String geoLastUpdated(String date) => _e ? 'Updated: $date' : '更新于 $date';
   // Linux-specific
-  String get linuxProxyNotice =>
-      _e ? 'System proxy not managed automatically on Linux' : 'Linux 不自动管理系统代理';
-  String get linuxProxyManual => _e ? 'Manual proxy: 127.0.0.1:7890' : '手动代理: 127.0.0.1:7890';
+  String get linuxProxyNotice => _e
+      ? 'System proxy not managed automatically on Linux'
+      : 'Linux 不自动管理系统代理';
+  String get linuxProxyManual =>
+      _e ? 'Manual proxy: 127.0.0.1:7890' : '手动代理: 127.0.0.1:7890';
   String get hotkeyLinuxNotice =>
       _e ? 'Not supported on all Linux desktops' : '部分 Linux 桌面不支持全局快捷键';
   // Diagnostics
@@ -477,12 +460,7 @@ class S {
   String get configOverwrite => _e ? 'Config Overwrite' : '配置覆写';
   String get configOverwriteSub =>
       _e ? 'Add custom rules on top of subscription config' : '在订阅配置之上叠加自定义规则';
-  String get updateAllNow =>
-      _e ? 'Update all subscriptions now' : '立即更新所有订阅';
-  String get webdavUrl => _e ? 'WebDAV URL' : 'WebDAV 地址';
-  String get username => _e ? 'Username' : '用户名';
-  String get password => _e ? 'Password' : '密码';
-  String get testConnection => _e ? 'Test Connection' : '测试连接';
+  String get updateAllNow => _e ? 'Update all subscriptions now' : '立即更新所有订阅';
   String get themeLabel => _e ? 'Theme' : '主题';
   String get themeSystem => _e ? 'System' : '跟随系统';
   String get themeLight => _e ? 'Light' : '浅色';
@@ -500,41 +478,31 @@ class S {
   String get versionLabel => _e ? 'Version' : '版本';
   String get coreLabel => _e ? 'Core' : '内核';
   String get projectHome => _e ? 'Project Home' : '项目主页';
-  String get openSourceLicense =>
-      _e ? 'Open Source License' : '开源许可';
-  String get updatingAll =>
-      _e ? 'Updating subscriptions...' : '正在更新订阅...';
+  String get openSourceLicense => _e ? 'Open Source License' : '开源许可';
+  String get updatingAll => _e ? 'Updating subscriptions...' : '正在更新订阅...';
   String updateAllResult(int updated, int failed) => _e
       ? 'Update done: $updated succeeded, $failed failed'
       : '更新完成：成功 $updated 个，失败 $failed 个';
-  String get dnsCacheCleared =>
-      _e ? 'DNS cache cleared' : 'DNS 缓存已清除';
+  String get dnsCacheCleared => _e ? 'DNS cache cleared' : 'DNS 缓存已清除';
   String get fakeIpCacheCleared =>
       _e ? 'Fake-IP cache cleared' : 'Fake-IP 缓存已清除';
-  String get connectionSuccess =>
-      _e ? 'Connection successful' : '连接成功';
-  String get connectionFailed =>
-      _e ? 'Connection failed, check URL and credentials' : '连接失败，请检查地址和凭据';
-  String get uploadSuccess => _e ? 'Upload successful' : '上传成功';
-  String uploadFailed(String error) =>
-      _e ? 'Upload failed: $error' : '上传失败: $error';
-  String get downloadSuccess =>
-      _e ? 'Downloaded successfully, restart to apply' : '下载成功，重启后生效';
-  String downloadFailed(String error) =>
-      _e ? 'Download failed: $error' : '下载失败: $error';
-
   // ── Error helpers ─────────────────────────────────────────────────
-  String get errorTimeout => _e ? 'Request timed out, check your network' : '请求超时，请检查网络连接';
-  String get errorNetwork => _e ? 'Network error, check your connection' : '网络错误，请检查网络连接';
-  String get overwritePortInvalid => _e ? 'Port must be between 1 and 65535' : '端口号必须在 1 到 65535 之间';
+  String get errorTimeout =>
+      _e ? 'Request timed out, check your network' : '请求超时，请检查网络连接';
+  String get errorNetwork =>
+      _e ? 'Network error, check your connection' : '网络错误，请检查网络连接';
+  String get overwritePortInvalid =>
+      _e ? 'Port must be between 1 and 65535' : '端口号必须在 1 到 65535 之间';
   String get proxyTypeAll => _e ? 'All' : '全部';
 
   // ── Sub-Store ─────────────────────────────────────────────────────
   String get sectionSubStore => _e ? 'Sub-Store Conversion' : 'Sub-Store 订阅转换';
   String get subStoreUrlLabel => _e ? 'Sub-Store Server URL' : 'Sub-Store 服务地址';
-  String get subStoreUrlHint => _e ? 'http://127.0.0.1:25500' : 'http://127.0.0.1:25500';
-  String get subStoreUrlSub =>
-      _e ? 'Convert V2Ray/SS links to Clash format automatically' : '自动将 V2Ray/SS 订阅转换为 Clash 格式';
+  String get subStoreUrlHint =>
+      _e ? 'http://127.0.0.1:25500' : 'http://127.0.0.1:25500';
+  String get subStoreUrlSub => _e
+      ? 'Convert V2Ray/SS links to Clash format automatically'
+      : '自动将 V2Ray/SS 订阅转换为 Clash 格式';
   String get subStoreUrlSaved => _e ? 'Sub-Store URL saved' : 'Sub-Store 地址已保存';
 
   // ── Overwrite tabs ────────────────────────────────────────────────
@@ -544,12 +512,14 @@ class S {
   String get overwriteModeLabel => _e ? 'Override Mode' : '覆写模式';
   String get overwriteModeNone => _e ? 'No override' : '不覆写';
   String get overwritePortLabel => _e ? 'Mixed Port' : 'Mixed 端口';
-  String get overwritePortHint => _e ? 'e.g. 7890 (leave blank to skip)' : '如 7890，留空则不覆写';
+  String get overwritePortHint =>
+      _e ? 'e.g. 7890 (leave blank to skip)' : '如 7890，留空则不覆写';
   String get overwriteCustomRulesLabel =>
       _e ? 'Custom Rules (prepended)' : '自定义规则（插入到订阅规则前）';
   String get overwriteAddRule => _e ? 'Add Rule' : '添加规则';
-  String get overwriteRuleHint =>
-      _e ? 'e.g. DOMAIN-SUFFIX,example.com,DIRECT' : '如 DOMAIN-SUFFIX,example.com,DIRECT';
+  String get overwriteRuleHint => _e
+      ? 'e.g. DOMAIN-SUFFIX,example.com,DIRECT'
+      : '如 DOMAIN-SUFFIX,example.com,DIRECT';
   String get overwriteExtraYamlLabel =>
       _e ? 'Extra YAML (appended)' : '额外 YAML（追加到覆写末尾）';
 
@@ -567,37 +537,31 @@ class S {
 
   // ── Proxy Provider ──────────────────────────────────────────────
   String get proxyProviderTitle => _e ? 'Proxy Providers' : '代理提供者';
-  String get proxyProviderEmpty =>
-      _e ? 'No proxy providers' : '无代理提供者';
-  String providerNodeCount(int count) =>
-      _e ? '$count nodes' : '$count 个节点';
+  String get proxyProviderEmpty => _e ? 'No proxy providers' : '无代理提供者';
+  String providerNodeCount(int count) => _e ? '$count nodes' : '$count 个节点';
   String get providerUpdate => _e ? 'Update' : '更新';
   String get providerHealthCheck => _e ? 'Health Check' : '健康检查';
-  String get providerUpdateSuccess =>
-      _e ? 'Provider updated' : '提供者已更新';
-  String get providerUpdateFailed =>
-      _e ? 'Provider update failed' : '提供者更新失败';
-  String get providerHealthCheckDone =>
-      _e ? 'Health check complete' : '健康检查完成';
+  String get providerUpdateSuccess => _e ? 'Provider updated' : '提供者已更新';
+  String get providerUpdateFailed => _e ? 'Provider update failed' : '提供者更新失败';
+  String get providerHealthCheckDone => _e ? 'Health check complete' : '健康检查完成';
 
   // ── Connection mode display ─────────────────────────────────────
   String get connectionModeLabel => _e ? 'Mode' : '模式';
 
   // ── Core error messages ───────────────────────────────────────
-  String get errVpnPermission =>
-      _e ? 'Network permission denied, cannot enable TUN mode' : '缺少网络权限，无法开启 TUN 模式';
-  String get errCoreStartFailed =>
-      _e ? 'Core failed to start, check config or port conflicts' : '内核启动失败，请检查配置格式或端口占用';
-  String get errVpnTunnelFailed =>
-      _e ? 'Tunnel setup failed' : '隧道建立失败';
+  String get errVpnPermission => _e
+      ? 'Network permission denied, cannot enable TUN mode'
+      : '缺少网络权限，无法开启 TUN 模式';
+  String get errCoreStartFailed => _e
+      ? 'Core failed to start, check config or port conflicts'
+      : '内核启动失败，请检查配置格式或端口占用';
+  String get errVpnTunnelFailed => _e ? 'Tunnel setup failed' : '隧道建立失败';
   String get msgConnected => _e ? 'Connected' : '已成功连接';
   String errApiError(int code, String body) =>
       _e ? 'API error: $code - $body' : 'API 错误: $code - $body';
-  String errStartFailed(String msg) =>
-      _e ? 'Start failed: $msg' : '启动失败: $msg';
+  String errStartFailed(String msg) => _e ? 'Start failed: $msg' : '启动失败: $msg';
   String get msgDisconnected => _e ? 'Disconnected' : '已断开连接';
-  String get errStopFailed =>
-      _e ? 'Error while disconnecting' : '断开连接时发生错误';
+  String get errStopFailed => _e ? 'Error while disconnecting' : '断开连接时发生错误';
   String get errSystemProxyFailed => _e
       ? 'System proxy setup failed. Configure proxy manually at 127.0.0.1'
       : '系统代理设置失败，请手动设置代理 127.0.0.1';
@@ -644,10 +608,8 @@ class S {
       _e ? 'Sign out and clear local data?' : '确定退出登录并清除本地数据？';
   String get authSyncingSubscription =>
       _e ? 'Syncing subscription...' : '正在同步订阅...';
-  String get authSyncSuccess =>
-      _e ? 'Subscription synced' : '订阅同步成功';
-  String get authSyncFailed =>
-      _e ? 'Subscription sync failed' : '订阅同步失败';
+  String get authSyncSuccess => _e ? 'Subscription synced' : '订阅同步成功';
+  String get authSyncFailed => _e ? 'Subscription sync failed' : '订阅同步失败';
   String get authAccountInfo => _e ? 'Account' : '账号信息';
   String get authPlan => _e ? 'Plan' : '套餐';
   String get dashMyPlan => _e ? 'My Plan' : '我的套餐';
@@ -665,8 +627,9 @@ class S {
       _e ? 'Incorrect email or password' : '账号或密码错误，请重试';
   String get authErrorNetwork =>
       _e ? 'Network error, please check your connection' : '网络连接失败，请检查网络后重试';
-  String get authErrorServer =>
-      _e ? 'Service temporarily unavailable, please try again later' : '服务暂时不可用，请稍后重试';
+  String get authErrorServer => _e
+      ? 'Service temporarily unavailable, please try again later'
+      : '服务暂时不可用，请稍后重试';
 
   // ── Mine / Account center ────────────────────────────────────────
   String get mineTrafficTitle => _e ? 'Traffic Usage' : '流量使用';
@@ -690,8 +653,7 @@ class S {
   String get mineEmbyNoAccess =>
       _e ? 'No 悦视频 access for this account' : '当前账户暂无悦视频服务';
   String get mineEmbyOpening => _e ? 'Opening 悦视频…' : '正在打开悦视频…';
-  String get mineEmbyOpenFailed =>
-      _e ? 'Unable to open 悦视频' : '无法打开悦视频，请稍后重试';
+  String get mineEmbyOpenFailed => _e ? 'Unable to open 悦视频' : '无法打开悦视频，请稍后重试';
   String get mineEmbyNeedsVpn =>
       _e ? 'Please connect first to access Media' : '请先连接悦通，再访问悦视频';
   String get minePrivacyPolicy => _e ? 'Terms of Service' : '服务条款';
@@ -717,8 +679,10 @@ class S {
   String get storeOrderFailed => _e ? 'Order Failed' : '订单失败';
   String get storeOrderCancelled => _e ? 'Order Cancelled' : '订单已取消';
   String get storeReturnToStore => _e ? 'Back to Store' : '返回套餐中心';
-  String get storeRenewalReminder => _e ? 'Plan expiring soon — renew now' : '套餐即将到期，点击续费';
-  String get storeExpiredReminder => _e ? 'Plan expired — buy now' : '套餐已过期，点击购买';
+  String get storeRenewalReminder =>
+      _e ? 'Plan expiring soon — renew now' : '套餐即将到期，点击续费';
+  String get storeExpiredReminder =>
+      _e ? 'Plan expired — buy now' : '套餐已过期，点击购买';
   String get storePlanDetail => _e ? 'Plan Details' : '套餐详情';
   String get storeCheckResult => _e ? 'Check Result' : '查询支付结果';
   String get storeCancelOrder => _e ? 'Cancel Order' : '取消订单';
@@ -754,8 +718,7 @@ class S {
   String get dashSyncLabel => _e ? 'Update Lines' : '更新线路';
   String get dashAnnouncementsLabel => _e ? 'Announcements' : '最新公告';
   String get mineSyncLine => _e ? 'Sync Lines' : '同步线路';
-  String get mineSubscriptionManage =>
-      _e ? 'Subscription Management' : '订阅管理';
+  String get mineSubscriptionManage => _e ? 'Subscription Management' : '订阅管理';
   String get dashAccountLabel => _e ? 'Account' : '账户';
   String get dashLatestAnnouncement => _e ? 'Latest Announcements' : '最新公告';
   String get noNetworkConnection => _e ? 'No network connection' : '网络连接不可用';
@@ -770,8 +733,7 @@ class S {
   String get newPassword => _e ? 'New Password' : '新密码';
   String get passwordChangedSuccess =>
       _e ? 'Password changed successfully' : '密码修改成功';
-  String get passwordChangeFailed =>
-      _e ? 'Password change failed' : '密码修改失败';
+  String get passwordChangeFailed => _e ? 'Password change failed' : '密码修改失败';
 
   // ── Sync subscription (nodes page) ─────────────────────────────
   String get syncing => _e ? 'Syncing...' : '同步中...';
@@ -830,7 +792,8 @@ class S {
       : '在线路页面长按节点或策略组即可加入链路';
   String get chainAddHint => _e ? 'Added to proxy chain' : '已添加到链式代理';
   String get chainPickerTitle => _e ? 'Add to Chain' : '添加到链路';
-  String get chainPickerSearch => _e ? 'Search nodes / groups...' : '搜索节点 / 策略组…';
+  String get chainPickerSearch =>
+      _e ? 'Search nodes / groups...' : '搜索节点 / 策略组…';
   String get chainSectionGroups => _e ? 'Proxy Groups' : '策略组';
   String get chainSectionNodes => _e ? 'Nodes' : '节点';
   String get msgSystemProxyConflict => _e
@@ -839,9 +802,8 @@ class S {
 
   // ── Checkin ──────────────────────────────────────────────────
   String get checkinTitle => _e ? 'Daily Check-in' : '每日签到';
-  String get checkinDesc => _e
-      ? 'Check in to get traffic or balance rewards'
-      : '签到领取流量或余额奖励';
+  String get checkinDesc =>
+      _e ? 'Check in to get traffic or balance rewards' : '签到领取流量或余额奖励';
   String get checkinAction => _e ? 'Check in' : '签到';
   String get checkinDone => _e ? 'Checked in' : '已签到';
   String get checkinAlready => _e ? 'Already checked in today' : '今日已签到';
@@ -875,8 +837,9 @@ class S {
 
   // ── Emby Preview Row ──────────────────────────────────────
   String get embyEnter => _e ? 'Enter' : '进入';
-  String get embyNoAccessHint =>
-      _e ? 'Subscribe to YueVideo to watch movies, TV shows and anime' : '开通悦视频套餐即可观看电影、电视剧和动漫';
+  String get embyNoAccessHint => _e
+      ? 'Subscribe to YueVideo to watch movies, TV shows and anime'
+      : '开通悦视频套餐即可观看电影、电视剧和动漫';
   String get embyWebHint => _e ? 'Tap to enter YueVideo' : '点击进入悦视频';
   String get embyNoContent => _e ? 'No content' : '暂无内容';
   String get embyNoLibrary => _e ? 'No library' : '暂无媒体库';
@@ -886,29 +849,40 @@ class S {
 
   // ── Overview / Startup Error ──────────────────────────────
   String get errNativeLib => _e ? 'Native library load failed' : '原生库加载失败';
-  String get errNativeLibHint => _e ? 'Package may be corrupted, please reinstall' : '安装包可能损坏，请重新安装应用';
+  String get errNativeLibHint =>
+      _e ? 'Package may be corrupted, please reinstall' : '安装包可能损坏，请重新安装应用';
   String get errCoreInit => _e ? 'Core init failed' : '核心初始化失败';
-  String get errCoreInitHint => _e ? 'Try restarting or clearing local cache' : '可尝试重启应用，或清除本地缓存后重试';
+  String get errCoreInitHint =>
+      _e ? 'Try restarting or clearing local cache' : '可尝试重启应用，或清除本地缓存后重试';
   String get errVpnDenied => _e ? 'Network permission denied' : '网络权限被拒绝';
-  String get errVpnDeniedHint => _e ? 'Authorize in system settings' : '请在系统设置中授权悦通';
+  String get errVpnDeniedHint =>
+      _e ? 'Authorize in system settings' : '请在系统设置中授权悦通';
   String get errTunnel => _e ? 'Tunnel creation failed' : '隧道创建失败';
-  String get errTunnelHint => _e ? 'Try rebuilding network config' : '可尝试重建网络配置，重新授权系统权限';
+  String get errTunnelHint =>
+      _e ? 'Try rebuilding network config' : '可尝试重建网络配置，重新授权系统权限';
   String get errConfig => _e ? 'Config parse failed' : '配置解析失败';
-  String get errConfigHint => _e ? 'Try re-syncing subscription' : '订阅配置可能有误，可尝试重新同步订阅';
+  String get errConfigHint =>
+      _e ? 'Try re-syncing subscription' : '订阅配置可能有误，可尝试重新同步订阅';
   String get errCoreStart => _e ? 'Core start failed' : '核心启动失败';
-  String get errCoreStartHint => _e ? 'Check diagnostics report' : '配置内容可能存在冲突，建议查看诊断报告';
-  String get errApiTimeout => _e ? 'API timeout, core may have crashed' : 'API 超时，核心进程可能已崩溃';
-  String get errApiTimeoutHint => _e ? 'Check diagnostics for details' : '可查看诊断报告了解详情，或尝试重建网络配置';
+  String get errCoreStartHint =>
+      _e ? 'Check diagnostics report' : '配置内容可能存在冲突，建议查看诊断报告';
+  String get errApiTimeout =>
+      _e ? 'API timeout, core may have crashed' : 'API 超时，核心进程可能已崩溃';
+  String get errApiTimeoutHint =>
+      _e ? 'Check diagnostics for details' : '可查看诊断报告了解详情，或尝试重建网络配置';
   String get errCoreCrash => _e ? 'Core crashed after start' : '核心启动后崩溃';
-  String get errCoreCrashHint => _e ? 'Check Go Core log in diagnostics' : '请查看诊断报告中的 Go Core 日志';
+  String get errCoreCrashHint =>
+      _e ? 'Check Go Core log in diagnostics' : '请查看诊断报告中的 Go Core 日志';
   String get errGeo => _e ? 'Geo data file error' : '地理规则文件异常';
   String get errGeoHint => _e ? 'Try clearing local cache' : '可尝试清除本地缓存后重新连接';
   String get errGeneric => _e ? 'Connection failed' : '连接失败';
-  String get errGenericHint => _e ? 'Go to repair page for details' : '请前往修复页查看详情';
+  String get errGenericHint =>
+      _e ? 'Go to repair page for details' : '请前往修复页查看详情';
   String get goRepair => _e ? 'Go to Repair' : '前往修复';
   String get copyReport => _e ? 'Copy Report' : '复制报告';
   String get reportCopied => _e ? 'Startup report copied' : '已复制启动报告';
-  String goCoreLogs(int count) => _e ? 'Go Core log (last $count lines):' : 'Go Core 日志 (最后$count行):';
+  String goCoreLogs(int count) =>
+      _e ? 'Go Core log (last $count lines):' : 'Go Core 日志 (最后$count行):';
 
   // ── Nodes Page ────────────────────────────────────────────
   String get recentlyUsed => _e ? 'Recently Used' : '最近使用';
@@ -916,13 +890,20 @@ class S {
   // ── Repair Page ───────────────────────────────────────────
   String get repairTools => _e ? 'Repair Tools' : '修复工具';
   String get repairRebuildVpn => _e ? 'Rebuild Network Config' : '重建网络配置';
-  String get repairRebuildVpnHint => _e ? 'Remove old tunnel, re-create on next connect' : '删除旧隧道，下次连接时重新创建并弹出系统授权';
+  String get repairRebuildVpnHint => _e
+      ? 'Remove old tunnel, re-create on next connect'
+      : '删除旧隧道，下次连接时重新创建并弹出系统授权';
   String get repairClearTunnel => _e ? 'Clear Tunnel Config' : '清除隧道配置';
-  String get repairClearTunnelHint => _e ? 'Delete App Group config and GEO data' : '删除 App Group 中的 config.yaml 和 GEO 数据，强制重新生成';
+  String get repairClearTunnelHint => _e
+      ? 'Delete App Group config and GEO data'
+      : '删除 App Group 中的 config.yaml 和 GEO 数据，强制重新生成';
   String get repairResync => _e ? 'Re-sync Subscription' : '重新同步订阅';
-  String get repairResyncHint => _e ? 'Re-fetch subscription config from server' : '重新从服务端拉取订阅配置并解析';
+  String get repairResyncHint =>
+      _e ? 'Re-fetch subscription config from server' : '重新从服务端拉取订阅配置并解析';
   String get repairClearCache => _e ? 'Clear Local Cache' : '清除本地缓存';
-  String get repairClearCacheHint => _e ? 'Delete local config files, logs, startup report' : '删除本地配置文件、日志、启动报告';
+  String get repairClearCacheHint => _e
+      ? 'Delete local config files, logs, startup report'
+      : '删除本地配置文件、日志、启动报告';
   String get repairOneClick => _e ? 'One-Click Repair All' : '一键修复全部';
   String get repairRunning => _e ? 'Repairing...' : '修复中...';
   String get repairNeedLogin => _e ? 'Please login first' : '请先登录';
@@ -940,11 +921,15 @@ class S {
   String get moduleDelete => _e ? 'Delete module' : '删除模块';
   String get moduleDeleteConfirm => _e ? 'Delete this module?' : '确认删除此模块？';
   String get moduleRuleCount => _e ? 'Rules' : '规则';
-  String get moduleNotActive => _e ? 'Not active in current version' : '当前版本未启用';
-  String get moduleMitmDetected => _e ? 'MITM hostnames detected' : '检测到 MITM 域名';
+  String get moduleNotActive =>
+      _e ? 'Not active in current version' : '当前版本未启用';
+  String get moduleMitmDetected =>
+      _e ? 'MITM hostnames detected' : '检测到 MITM 域名';
   String get moduleScriptDetected => _e ? 'Scripts detected' : '检测到脚本';
-  String get moduleRewriteDetected => _e ? 'URL Rewrites detected' : '检测到 URL 改写';
-  String get moduleFutureVersion => _e ? '— will be enabled in a future version' : '将在后续版本开放';
+  String get moduleRewriteDetected =>
+      _e ? 'URL Rewrites detected' : '检测到 URL 改写';
+  String get moduleFutureVersion =>
+      _e ? '— will be enabled in a future version' : '将在后续版本开放';
 
   // ── MITM Engine ───────────────────────────────────────────────
   String get mitmEngine => _e ? 'MITM Engine' : 'MITM 引擎';

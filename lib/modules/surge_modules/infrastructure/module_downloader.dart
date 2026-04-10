@@ -21,11 +21,18 @@ class ModuleDownloader {
   static Future<String> download(String url) async {
     debugPrint('[ModuleDownloader] downloading: $url');
 
+    final uri = Uri.parse(url);
+    // Reject HTTP — module/script content is injected into MITM config,
+    // so plaintext transport allows man-in-the-middle code injection.
+    if (uri.scheme != 'https') {
+      throw Exception(
+          'Insecure URL rejected: only HTTPS module URLs are allowed');
+    }
+
     final client = HttpClient();
     client.connectionTimeout = _timeout;
     // Per CLAUDE.md: set properties as separate statements (cascade bug)
     try {
-      final uri = Uri.parse(url);
       final request = await client.getUrl(uri).timeout(_timeout);
       request.headers.set(HttpHeaders.userAgentHeader, _userAgent);
       request.headers.set(HttpHeaders.acceptHeader, 'text/plain, */*');
@@ -159,8 +166,10 @@ class ModuleDownloader {
         continue;
       }
       final path = s.scriptPath.trim();
-      if (!path.startsWith('http://') && !path.startsWith('https://')) {
-        debugPrint('[ModuleDownloader] skipping non-URL script path: $path');
+      if (!path.startsWith('https://')) {
+        // Reject non-HTTPS script paths (including http://) — scripts are
+        // injected into MITM engine, so plaintext transport is unsafe.
+        debugPrint('[ModuleDownloader] skipping non-HTTPS script path: $path');
         result.add(s);
         continue;
       }

@@ -65,25 +65,46 @@ class ProfileRepository {
 
   /// Load all saved profiles.
   /// JSON decode runs in a background Isolate to avoid jank on large index files.
+  /// Recovers gracefully from corrupted JSON — returns empty list and removes
+  /// the damaged file so subsequent writes start fresh.
   Future<List<Profile>> loadProfiles() async {
     final file = await _getProfilesFile();
     if (!await file.exists()) return [];
     final jsonStr = await file.readAsString();
-    return Isolate.run(() {
-      final list = json.decode(jsonStr) as List;
-      return list
-          .map((e) => Profile.fromJson(e as Map<String, dynamic>))
-          .toList();
-    });
+    if (jsonStr.trim().isEmpty) return [];
+    try {
+      return await Isolate.run(() {
+        final list = json.decode(jsonStr) as List;
+        return list
+            .map((e) => Profile.fromJson(e as Map<String, dynamic>))
+            .toList();
+      });
+    } catch (e) {
+      debugPrint('[ProfileRepository] profiles.json corrupted, resetting: $e');
+      // Preserve corrupted file for debugging, then start fresh
+      try {
+        await file.rename('${file.path}.corrupted');
+      } catch (_) {
+        await file.delete();
+      }
+      return [];
+    }
   }
 
   /// Save profiles index.
   /// JSON encode runs in a background Isolate to avoid jank.
+  /// Uses tmp+rename for atomic write — prevents corruption on crash/kill.
   Future<void> saveProfiles(List<Profile> profiles) async {
     final file = await _getProfilesFile();
+    final dir = file.parent;
+    if (!dir.existsSync()) {
+      await dir.create(recursive: true);
+    }
     final jsonList = profiles.map((p) => p.toJson()).toList();
     final encoded = await Isolate.run(() => json.encode(jsonList));
-    await file.writeAsString(encoded);
+    final tmp = File('${file.path}.tmp');
+    await tmp.writeAsString(encoded);
+    await tmp.rename(file.path);
   }
 
   /// Download a subscription and save the config content.
@@ -161,6 +182,9 @@ class ProfileRepository {
     profile.configContent = finalContent;
     profile.lastUpdated = DateTime.now();
     profile.subInfo = result.subInfo;
+    if (result.subInfo.updateInterval != null) {
+      profile.updateInterval = Duration(hours: result.subInfo.updateInterval!);
+    }
 
     final dir = await _getProfilesDir();
     await File('${dir.path}/${profile.id}.yaml')
@@ -174,6 +198,17 @@ class ProfileRepository {
     });
 
     return profile;
+  }
+
+  /// Save only profile metadata (name, url, updateInterval) without downloading.
+  /// Used when editing a profile's display name or interval without needing network.
+  Future<void> saveProfileMetadata(Profile profile) async {
+    await _withIndexLock(() async {
+      final profiles = await loadProfiles();
+      final idx = profiles.indexWhere((p) => p.id == profile.id);
+      if (idx >= 0) profiles[idx] = profile;
+      await saveProfiles(profiles);
+    });
   }
 
   /// Import a local YAML file as a profile.

@@ -69,8 +69,13 @@ class AuthState {
 /// Must match the CloudFront custom domain so TLS SNI handshake succeeds.
 const _kDefaultApiHost = 'https://yue.yuebao.website';
 
-/// Direct origin URL — used as fallback when CloudFront returns 502/503.
-const _kDirectOriginUrl = 'https://yue.yuebao.website';
+/// Direct origin fallback is intentionally disabled.
+/// The origin server (66.55.76.208:8001) only supports HTTP — falling back
+/// to it would send auth tokens and credentials in cleartext.
+/// XBoard nginx also blocks non-CloudFront traffic by UA, making HTTP
+/// fallback unreliable anyway. If CloudFront is down, users see an explicit
+/// error rather than silently leaking credentials.
+const String? _kDirectOriginUrl = null;
 
 /// Tracks the current API host — updated on login and restored from storage.
 final _apiHostProvider = StateProvider<String>((ref) => _kDefaultApiHost);
@@ -317,7 +322,7 @@ class AuthNotifier extends Notifier<AuthState> {
 
   /// Internal: download and save subscription config.
   Future<void> _syncSubscription(String subscribeUrl) async {
-    debugPrint('[Auth] Syncing subscription from: ${subscribeUrl.substring(0, subscribeUrl.length.clamp(0, 50))}...');
+    assert(() { debugPrint('[Auth] Syncing subscription from: ${subscribeUrl.substring(0, subscribeUrl.length.clamp(0, 50))}...'); return true; }());
 
     // Use ProfileRepository for consistent config processing.
     // Check if we already have a "悦通" profile — update it instead of adding.

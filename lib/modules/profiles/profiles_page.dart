@@ -13,6 +13,7 @@ import '../../providers/core_provider.dart';
 import 'providers/profiles_providers.dart';
 import '../../shared/app_notifier.dart';
 import '../../infrastructure/repositories/profile_repository.dart';
+import '../../services/core_manager.dart';
 import '../../shared/formatters/subscription_parser.dart';
 import '../../theme.dart';
 import '../../widgets/loading_overlay.dart';
@@ -213,11 +214,14 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     AppNotifier.info(s.updatingAll);
     final repo = ref.read(profileRepositoryProvider);
     final profiles = await repo.loadProfiles();
+    final proxyPort = CoreManager.instance.isRunning
+        ? CoreManager.instance.mixedPort
+        : null;
     int updated = 0, failed = 0;
     for (final p in profiles) {
       if (p.url.isEmpty) continue;
       try {
-        await repo.updateProfile(p);
+        await repo.updateProfile(p, proxyPort: proxyPort);
         updated++;
       } catch (_) {
         failed++;
@@ -430,6 +434,18 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
 
 
 
+  /// Save only profile metadata (name, interval) without re-downloading.
+  Future<void> _saveProfileMetadata(WidgetRef ref, Profile profile) async {
+    try {
+      final repo = ref.read(profileRepositoryProvider);
+      await repo.saveProfileMetadata(profile);
+      ref.read(profilesProvider.notifier).load();
+      AppNotifier.success(S.current.saved);
+    } catch (e) {
+      AppNotifier.error(e.toString());
+    }
+  }
+
   Future<void> _doUpdateProfile(
       BuildContext context, WidgetRef ref, Profile profile) async {
     final s = S.of(context);
@@ -521,15 +537,22 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
               onPressed: () {
                 final name = nameCtrl.text.trim();
                 final url = urlCtrl.text.trim();
-                if (name.isEmpty || url.isEmpty) return;
+                if (name.isEmpty) return;
 
+                final urlChanged = url != profile.url;
                 profile.name = name;
                 profile.url = url;
                 profile.updateInterval = intervalHours == 0
                     ? const Duration(hours: 24)
                     : Duration(hours: intervalHours);
                 Navigator.pop(ctx);
-                _doUpdateProfile(context, ref, profile);
+                if (url.isNotEmpty && urlChanged) {
+                  // URL changed — re-download subscription
+                  _doUpdateProfile(context, ref, profile);
+                } else {
+                  // Metadata-only change — save index without network
+                  _saveProfileMetadata(ref, profile);
+                }
               },
               child: Text(s.save),
             ),

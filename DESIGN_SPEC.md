@@ -207,7 +207,7 @@ sm=4  md=6  lg=8  xl=12
 **Shows** (5 sections):
 1. **General** — Auto-connect, launch at startup, theme, language
 2. **Proxy** — Connection mode (TUN/system proxy), system proxy on connect, routing default
-3. **Subscription & Sync** — Auto-update interval, update all now, Sub-Store URL, WebDAV sync
+3. **Subscription & Sync** — Auto-update interval, update all now, Sub-Store URL
 4. **Core** — Log level, config overwrite, geo resources
 5. **Diagnostics** — DNS query, running config viewer, flush DNS/Fake-IP cache, split tunneling (Android), logs
 
@@ -415,7 +415,6 @@ Settings
 │   ├── Auto-update interval           [Dropdown]
 │   ├── Update all now                 [Action row]
 │   ├── Sub-Store server URL           [TextField row]
-│   └── WebDAV sync                    [Expandable subsection]
 ├── Core
 │   ├── Log level                      [Dropdown]
 │   └── Config overwrite               [Nav row → OverwritePage]
