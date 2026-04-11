@@ -112,24 +112,42 @@ bool _isModifierKey(LogicalKeyboardKey key) {
 
 LogicalKeyboardKey _logicalKeyFromLabel(String label) {
   const map = {
-    'a': LogicalKeyboardKey.keyA, 'b': LogicalKeyboardKey.keyB,
-    'c': LogicalKeyboardKey.keyC, 'd': LogicalKeyboardKey.keyD,
-    'e': LogicalKeyboardKey.keyE, 'f': LogicalKeyboardKey.keyF,
-    'g': LogicalKeyboardKey.keyG, 'h': LogicalKeyboardKey.keyH,
-    'i': LogicalKeyboardKey.keyI, 'j': LogicalKeyboardKey.keyJ,
-    'k': LogicalKeyboardKey.keyK, 'l': LogicalKeyboardKey.keyL,
-    'm': LogicalKeyboardKey.keyM, 'n': LogicalKeyboardKey.keyN,
-    'o': LogicalKeyboardKey.keyO, 'p': LogicalKeyboardKey.keyP,
-    'q': LogicalKeyboardKey.keyQ, 'r': LogicalKeyboardKey.keyR,
-    's': LogicalKeyboardKey.keyS, 't': LogicalKeyboardKey.keyT,
-    'u': LogicalKeyboardKey.keyU, 'v': LogicalKeyboardKey.keyV,
-    'w': LogicalKeyboardKey.keyW, 'x': LogicalKeyboardKey.keyX,
-    'y': LogicalKeyboardKey.keyY, 'z': LogicalKeyboardKey.keyZ,
-    '0': LogicalKeyboardKey.digit0, '1': LogicalKeyboardKey.digit1,
-    '2': LogicalKeyboardKey.digit2, '3': LogicalKeyboardKey.digit3,
-    '4': LogicalKeyboardKey.digit4, '5': LogicalKeyboardKey.digit5,
-    '6': LogicalKeyboardKey.digit6, '7': LogicalKeyboardKey.digit7,
-    '8': LogicalKeyboardKey.digit8, '9': LogicalKeyboardKey.digit9,
+    'a': LogicalKeyboardKey.keyA,
+    'b': LogicalKeyboardKey.keyB,
+    'c': LogicalKeyboardKey.keyC,
+    'd': LogicalKeyboardKey.keyD,
+    'e': LogicalKeyboardKey.keyE,
+    'f': LogicalKeyboardKey.keyF,
+    'g': LogicalKeyboardKey.keyG,
+    'h': LogicalKeyboardKey.keyH,
+    'i': LogicalKeyboardKey.keyI,
+    'j': LogicalKeyboardKey.keyJ,
+    'k': LogicalKeyboardKey.keyK,
+    'l': LogicalKeyboardKey.keyL,
+    'm': LogicalKeyboardKey.keyM,
+    'n': LogicalKeyboardKey.keyN,
+    'o': LogicalKeyboardKey.keyO,
+    'p': LogicalKeyboardKey.keyP,
+    'q': LogicalKeyboardKey.keyQ,
+    'r': LogicalKeyboardKey.keyR,
+    's': LogicalKeyboardKey.keyS,
+    't': LogicalKeyboardKey.keyT,
+    'u': LogicalKeyboardKey.keyU,
+    'v': LogicalKeyboardKey.keyV,
+    'w': LogicalKeyboardKey.keyW,
+    'x': LogicalKeyboardKey.keyX,
+    'y': LogicalKeyboardKey.keyY,
+    'z': LogicalKeyboardKey.keyZ,
+    '0': LogicalKeyboardKey.digit0,
+    '1': LogicalKeyboardKey.digit1,
+    '2': LogicalKeyboardKey.digit2,
+    '3': LogicalKeyboardKey.digit3,
+    '4': LogicalKeyboardKey.digit4,
+    '5': LogicalKeyboardKey.digit5,
+    '6': LogicalKeyboardKey.digit6,
+    '7': LogicalKeyboardKey.digit7,
+    '8': LogicalKeyboardKey.digit8,
+    '9': LogicalKeyboardKey.digit9,
   };
   return map[label.toLowerCase()] ?? LogicalKeyboardKey.keyC;
 }
@@ -143,18 +161,15 @@ class SettingsPage extends ConsumerStatefulWidget {
   ConsumerState<SettingsPage> createState() => _SettingsPageState();
 }
 
-class _SettingsPageState extends ConsumerState<SettingsPage> with WidgetsBindingObserver {
+class _SettingsPageState extends ConsumerState<SettingsPage>
+    with WidgetsBindingObserver {
   UpdateInfo? _pendingUpdate;
   bool _checkingUpdate = false;
-  String _updateChannel = 'stable';
-  bool _autoCheckUpdates = true;
-  DateTime? _lastUpdateCheck;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _loadUpdatePrefs();
     _checkForUpdate();
   }
 
@@ -176,39 +191,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage> with WidgetsBinding
     }
   }
 
-  Future<void> _loadUpdatePrefs() async {
-    final ch = await UpdateChecker.getChannel();
-    final auto = await UpdateChecker.getAutoCheck();
-    final last = await UpdateChecker.getLastCheck();
-    if (mounted) {
-      setState(() {
-        _updateChannel = ch;
-        _autoCheckUpdates = auto;
-        _lastUpdateCheck = last;
-      });
-    }
-  }
-
   Future<void> _checkForUpdate() async {
     // auto: true → respects the user's auto-check toggle (skip if disabled).
     final info = await UpdateChecker.instance.check(auto: true);
     if (!mounted) return;
-    final last = await UpdateChecker.getLastCheck();
     setState(() {
       if (info != null) _pendingUpdate = info;
-      _lastUpdateCheck = last;
     });
-  }
-
-  /// Render "刚刚 / N 分钟前 / N 小时前 / yyyy-MM-dd" relative time
-  String _formatLastChecked(DateTime? dt) {
-    if (dt == null) return '从未检查';
-    final diff = DateTime.now().difference(dt);
-    if (diff.inSeconds < 60) return '刚刚';
-    if (diff.inMinutes < 60) return '${diff.inMinutes} 分钟前';
-    if (diff.inHours < 24) return '${diff.inHours} 小时前';
-    if (diff.inDays < 30) return '${diff.inDays} 天前';
-    return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
   }
 
   void _showUpdateDialog(BuildContext context, UpdateInfo info) {
@@ -236,14 +225,16 @@ class _SettingsPageState extends ConsumerState<SettingsPage> with WidgetsBinding
                       child: SingleChildScrollView(
                         child: RichContent(
                           content: info.releaseNotes,
-                          textStyle: YLText.body.copyWith(color: YLColors.zinc500),
+                          textStyle:
+                              YLText.body.copyWith(color: YLColors.zinc500),
                         ),
                       ),
                     ),
                     const SizedBox(height: 16),
                   ],
                   if (downloading) ...[
-                    LinearProgressIndicator(value: progress > 0 ? progress : null),
+                    LinearProgressIndicator(
+                        value: progress > 0 ? progress : null),
                     const SizedBox(height: 8),
                     Text(
                       progress > 0
@@ -284,8 +275,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> with WidgetsBinding
                               expectedSha256: info.sha256,
                               onProgress: (received, total) {
                                 if (total > 0) {
-                                  setDialog(() =>
-                                      progress = received / total);
+                                  setDialog(() => progress = received / total);
                                 }
                               },
                             );
@@ -398,7 +388,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> with WidgetsBinding
         children: [
           // ── Top bar ──────────────────────────────────────────────
           Padding(
-            padding: EdgeInsets.fromLTRB(32, MediaQuery.of(context).padding.top + 16, 32, 20),
+            padding: EdgeInsets.fromLTRB(
+                32, MediaQuery.of(context).padding.top + 16, 32, 20),
             child: Text(
               s.navMine,
               style: TextStyle(
@@ -422,305 +413,241 @@ class _SettingsPageState extends ConsumerState<SettingsPage> with WidgetsBinding
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
                   children: [
+                    // ══ 0. Profile ═══════════════════════════════════════════
+                    if (isGuest || isLoggedOut) ...[
+                      _GuestLoginCard(isDark: isDark),
+                    ] else ...[
+                      // ── Profile row（Apple Settings 风格）──
+                      _ProfileRow(isDark: isDark),
 
-              // ══ 0. Profile ═══════════════════════════════════════════
-              if (isGuest || isLoggedOut) ...[
-                _GuestLoginCard(isDark: isDark),
-              ] else ...[
-                // ── Profile row（Apple Settings 风格）──
-                _ProfileRow(isDark: isDark),
-
-                // ── 流量 ──
-                _SectionTitle('流量'),
-                _MineTrafficSection(isDark: isDark),
-
-
-              ],
-
-              // ══ 1. Service (订阅相关) ══════════════════════════════
-              _SectionTitle(s.sectionService),
-              _SettingsCard(
-                child: Column(
-                  children: [
-                    YLInfoRow(
-                      label: s.mineSubscriptionManage,
-                      trailing: const Icon(Icons.chevron_right,
-                          size: 18, color: YLColors.zinc400),
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => const ProfilePage()),
-                      ),
-                    ),
-                    if (!isGuest) ...[
-                      Divider(height: 1, thickness: 0.5, color: dividerColor),
-                      YLInfoRow(
-                        label: s.mineRenew,
-                        trailing: const Icon(Icons.chevron_right,
-                            size: 18, color: YLColors.zinc400),
-                        onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute(
-                              builder: (_) => const StorePage()),
-                        ),
-                      ),
-                      Divider(height: 1, thickness: 0.5, color: dividerColor),
-                      YLInfoRow(
-                        label: s.storeOrderHistory,
-                        trailing: const Icon(Icons.chevron_right,
-                            size: 18, color: YLColors.zinc400),
-                        onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute(
-                              builder: (_) => const OrderHistoryPage()),
-                        ),
-                      ),
+                      // ── 流量 ──
+                      const _SectionTitle('流量'),
+                      _MineTrafficSection(isDark: isDark),
                     ],
-                  ],
-                ),
-              ),
 
-              // ══ 模块管理 ══════════════════════════════════════════
-              _SectionTitle(s.sectionModules),
-              _SettingsCard(
-                child: YLInfoRow(
-                  label: s.modulesLabel,
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Consumer(builder: (ctx, ref, _) {
-                        final state = ref.watch(moduleProvider);
-                        final count =
-                            state.modules.where((m) => m.enabled).length;
-                        if (count == 0) return const SizedBox.shrink();
-                        return Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: (isDark
-                                    ? YLColors.primaryDark
-                                    : YLColors.primary)
-                                .withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Text(
-                            '$count',
-                            style: YLText.caption.copyWith(
-                                color: isDark
-                                    ? YLColors.primaryDark
-                                    : YLColors.primary),
-                          ),
-                        );
-                      }),
-                      const SizedBox(width: 4),
-                      const Icon(Icons.chevron_right,
-                          size: 18, color: YLColors.zinc400),
-                    ],
-                  ),
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                        builder: (_) => const ModulesPage()),
-                  ),
-                ),
-              ),
-
-              // ══ 2. 通用 ══════════════════════════════════════════
-              _SectionTitle(s.sectionSettings),
-              _SettingsCard(
-                child: Column(
-                  children: [
-                    YLInfoRow(
-                      label: s.preferencesLabel,
-                      trailing: const Icon(Icons.chevron_right,
-                          size: 18, color: YLColors.zinc400),
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                            builder: (_) => const GeneralSettingsPage()),
-                      ),
-                    ),
-                    Divider(height: 1, thickness: 0.5, color: dividerColor),
-                    YLInfoRow(
-                      label: '连接修复',
-                      trailing: const Icon(Icons.chevron_right,
-                          size: 18, color: YLColors.zinc400),
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                            builder: (_) => const ConnectionRepairPage()),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              // ══ 关于 ═════════════════════════════════════════════
-              _SectionTitle(s.sectionAbout),
-              _SettingsCard(
-                child: Column(
-                  children: [
-                    // "Check for updates" — hidden in store builds to pass
-                    // App Store / Google Play review (self-update is prohibited).
-                    if (EnvConfig.isStandalone) ...[
-                    YLInfoRow(
-                      label: s.checkUpdate,
-                      value: ref.watch(appVersionProvider).valueOrNull ?? '',
-                      trailing: _checkingUpdate
-                          ? const SizedBox(
-                              width: 14, height: 14,
-                              child:
-                                  CircularProgressIndicator(strokeWidth: 2))
-                          : _pendingUpdate != null
-                              ? YLChip(
-                                  s.updateAvailableV(
-                                      _pendingUpdate!.latestVersion),
-                                  color: isDark ? Colors.white : YLColors.primary)
-                              : const Icon(Icons.chevron_right,
-                                  size: 18, color: YLColors.zinc400),
-                      onTap: _checkingUpdate
-                          ? null
-                          : _pendingUpdate != null
-                              ? () => _showUpdateDialog(context, _pendingUpdate!)
-                              : () async {
-                                  setState(() => _checkingUpdate = true);
-                                  // Manual check ignores skipped versions
-                                  final info =
-                                      await UpdateChecker.instance.check(ignoreSkipped: true);
-                                  if (!mounted) return;
-                                  setState(() {
-                                    _pendingUpdate = info;
-                                    _checkingUpdate = false;
-                                  });
-                                  if (info == null) {
-                                    AppNotifier.info(s.alreadyLatest);
-                                  } else if (mounted) {
-                                    // ignore: use_build_context_synchronously
-                                    _showUpdateDialog(context, info);
-                                  }
-                                },
-                    ),
-                    Divider(height: 1, thickness: 0.5, color: dividerColor),
-
-                    // ── Last checked timestamp ────────────────────────────
-                    YLInfoRow(
-                      label: '上次检查',
-                      value: _formatLastChecked(_lastUpdateCheck),
-                      trailing: const SizedBox.shrink(),
-                    ),
-                    Divider(height: 1, thickness: 0.5, color: dividerColor),
-
-                    // ── Auto-check on startup toggle ──────────────────────
-                    SwitchListTile.adaptive(
-                      contentPadding:
-                          const EdgeInsets.symmetric(horizontal: 16),
-                      title: const Text(
-                        '启动时自动检查更新',
-                        style: TextStyle(fontSize: 14),
-                      ),
-                      value: _autoCheckUpdates,
-                      onChanged: (v) async {
-                        await UpdateChecker.setAutoCheck(v);
-                        setState(() => _autoCheckUpdates = v);
-                      },
-                    ),
-                    Divider(height: 1, thickness: 0.5, color: dividerColor),
-
-                    // ── Update channel: stable / pre ──────────────────────
-                    YLInfoRow(
-                      label: '更新通道',
-                      value: _updateChannel == 'pre' ? '预发布' : '稳定版',
-                      trailing: const Icon(Icons.chevron_right,
-                          size: 18, color: YLColors.zinc400),
-                      onTap: () async {
-                        final picked = await showModalBottomSheet<String>(
-                          context: context,
-                          builder: (ctx) => SafeArea(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                ListTile(
-                                  title: const Text('稳定版 (stable)'),
-                                  subtitle: const Text(
-                                    '只接收正式 v* 版本，更稳定',
-                                    style: TextStyle(fontSize: 12),
-                                  ),
-                                  trailing: _updateChannel == 'stable'
-                                      ? const Icon(Icons.check,
-                                          color: YLColors.primary)
-                                      : null,
-                                  onTap: () => Navigator.pop(ctx, 'stable'),
-                                ),
-                                ListTile(
-                                  title: const Text('预发布 (pre-release)'),
-                                  subtitle: const Text(
-                                    '抢先体验新功能，可能有问题',
-                                    style: TextStyle(fontSize: 12),
-                                  ),
-                                  trailing: _updateChannel == 'pre'
-                                      ? const Icon(Icons.check,
-                                          color: YLColors.primary)
-                                      : null,
-                                  onTap: () => Navigator.pop(ctx, 'pre'),
-                                ),
-                              ],
+                    // ══ 1. Service (订阅相关) ══════════════════════════════
+                    _SectionTitle(s.sectionService),
+                    _SettingsCard(
+                      child: Column(
+                        children: [
+                          YLInfoRow(
+                            label: s.mineSubscriptionManage,
+                            trailing: const Icon(Icons.chevron_right,
+                                size: 18, color: YLColors.zinc400),
+                            onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                  builder: (_) => const ProfilePage()),
                             ),
                           ),
-                        );
-                        if (picked != null && picked != _updateChannel) {
-                          await UpdateChecker.setChannel(picked);
-                          setState(() {
-                            _updateChannel = picked;
-                            _pendingUpdate = null; // re-evaluate against new channel
-                          });
-                          // Trigger fresh check on the new channel
-                          // ignore: use_build_context_synchronously
-                          if (context.mounted) await _checkForUpdate();
-                        }
-                      },
-                    ),
-                    Divider(height: 1, thickness: 0.5, color: dividerColor),
-                    ],
-                    YLInfoRow(
-                      label: s.mineTelegramGroup,
-                      trailing: const Icon(Icons.chevron_right,
-                          size: 18, color: YLColors.zinc400),
-                      onTap: () async {
-                        final tgUri = Uri.parse('tg://resolve?domain=yue_to');
-                        if (await canLaunchUrl(tgUri)) {
-                          await launchUrl(tgUri);
-                        } else {
-                          await launchUrl(
-                            Uri.parse('https://t.me/yue_to'),
-                            mode: LaunchMode.externalApplication,
-                          );
-                        }
-                      },
-                    ),
-                    Divider(height: 1, thickness: 0.5, color: dividerColor),
-                    YLInfoRow(
-                      label: s.minePrivacyPolicy,
-                      trailing: const Icon(Icons.chevron_right,
-                          size: 18, color: YLColors.zinc400),
-                      onTap: () {
-                        const tosUrl = 'https://yue.to/tos.html';
-                        Navigator.of(context).push(MaterialPageRoute(
-                          builder: (_) => InAppWebPage(
-                            title: s.minePrivacyPolicy,
-                            url: tosUrl,
-                          ),
-                        ));
-                      },
-                    ),
-                    Divider(height: 1, thickness: 0.5, color: dividerColor),
-                    YLInfoRow(
-                      label: s.openSourceLicense,
-                      trailing: const Icon(Icons.chevron_right,
-                          size: 18, color: YLColors.zinc400),
-                      onTap: () => showLicensePage(
-                        context: context,
-                        applicationName: AppConstants.appName,
-                        applicationVersion: ref.watch(appVersionProvider).valueOrNull ?? '',
+                          if (!isGuest) ...[
+                            Divider(
+                                height: 1, thickness: 0.5, color: dividerColor),
+                            YLInfoRow(
+                              label: s.mineRenew,
+                              trailing: const Icon(Icons.chevron_right,
+                                  size: 18, color: YLColors.zinc400),
+                              onTap: () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                    builder: (_) => const StorePage()),
+                              ),
+                            ),
+                            Divider(
+                                height: 1, thickness: 0.5, color: dividerColor),
+                            YLInfoRow(
+                              label: s.storeOrderHistory,
+                              trailing: const Icon(Icons.chevron_right,
+                                  size: 18, color: YLColors.zinc400),
+                              onTap: () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                    builder: (_) => const OrderHistoryPage()),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
-                  ],
-                ),
-              ),
-              // 退出登录已移到 Profile 头像卡右上角
-              const SizedBox(height: 32),
+
+                    // ══ 模块管理 ══════════════════════════════════════════
+                    _SectionTitle(s.sectionModules),
+                    _SettingsCard(
+                      child: YLInfoRow(
+                        label: s.modulesLabel,
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Consumer(builder: (ctx, ref, _) {
+                              final state = ref.watch(moduleProvider);
+                              final count =
+                                  state.modules.where((m) => m.enabled).length;
+                              if (count == 0) return const SizedBox.shrink();
+                              return Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: (isDark
+                                          ? YLColors.primaryDark
+                                          : YLColors.primary)
+                                      .withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Text(
+                                  '$count',
+                                  style: YLText.caption.copyWith(
+                                      color: isDark
+                                          ? YLColors.primaryDark
+                                          : YLColors.primary),
+                                ),
+                              );
+                            }),
+                            const SizedBox(width: 4),
+                            const Icon(Icons.chevron_right,
+                                size: 18, color: YLColors.zinc400),
+                          ],
+                        ),
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                              builder: (_) => const ModulesPage()),
+                        ),
+                      ),
+                    ),
+
+                    // ══ 2. 通用 ══════════════════════════════════════════
+                    _SectionTitle(s.sectionSettings),
+                    _SettingsCard(
+                      child: Column(
+                        children: [
+                          YLInfoRow(
+                            label: s.preferencesLabel,
+                            trailing: const Icon(Icons.chevron_right,
+                                size: 18, color: YLColors.zinc400),
+                            onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                  builder: (_) => const GeneralSettingsPage()),
+                            ),
+                          ),
+                          Divider(
+                              height: 1, thickness: 0.5, color: dividerColor),
+                          YLInfoRow(
+                            label: '连接修复',
+                            trailing: const Icon(Icons.chevron_right,
+                                size: 18, color: YLColors.zinc400),
+                            onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                  builder: (_) => const ConnectionRepairPage()),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // ══ 关于 ═════════════════════════════════════════════
+                    _SectionTitle(s.sectionAbout),
+                    _SettingsCard(
+                      child: Column(
+                        children: [
+                          // "Check for updates" — hidden in store builds to pass
+                          // App Store / Google Play review (self-update is prohibited).
+                          if (EnvConfig.isStandalone) ...[
+                            YLInfoRow(
+                              label: s.checkUpdate,
+                              value:
+                                  ref.watch(appVersionProvider).valueOrNull ??
+                                      '',
+                              trailing: _checkingUpdate
+                                  ? const SizedBox(
+                                      width: 14,
+                                      height: 14,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2))
+                                  : _pendingUpdate != null
+                                      ? YLChip(
+                                          s.updateAvailableV(
+                                              _pendingUpdate!.latestVersion),
+                                          color: isDark
+                                              ? Colors.white
+                                              : YLColors.primary)
+                                      : const Icon(Icons.chevron_right,
+                                          size: 18, color: YLColors.zinc400),
+                              onTap: _checkingUpdate
+                                  ? null
+                                  : _pendingUpdate != null
+                                      ? () => _showUpdateDialog(
+                                          context, _pendingUpdate!)
+                                      : () async {
+                                          setState(
+                                              () => _checkingUpdate = true);
+                                          // Manual check ignores skipped versions
+                                          final info = await UpdateChecker
+                                              .instance
+                                              .check(ignoreSkipped: true);
+                                          if (!mounted) return;
+                                          setState(() {
+                                            _pendingUpdate = info;
+                                            _checkingUpdate = false;
+                                          });
+                                          if (info == null) {
+                                            AppNotifier.info(s.alreadyLatest);
+                                          } else if (mounted) {
+                                            // ignore: use_build_context_synchronously
+                                            _showUpdateDialog(context, info);
+                                          }
+                                        },
+                            ),
+                            Divider(
+                                height: 1, thickness: 0.5, color: dividerColor),
+                          ],
+                          YLInfoRow(
+                            label: s.mineTelegramGroup,
+                            trailing: const Icon(Icons.chevron_right,
+                                size: 18, color: YLColors.zinc400),
+                            onTap: () async {
+                              final tgUri =
+                                  Uri.parse('tg://resolve?domain=yue_to');
+                              if (await canLaunchUrl(tgUri)) {
+                                await launchUrl(tgUri);
+                              } else {
+                                await launchUrl(
+                                  Uri.parse('https://t.me/yue_to'),
+                                  mode: LaunchMode.externalApplication,
+                                );
+                              }
+                            },
+                          ),
+                          Divider(
+                              height: 1, thickness: 0.5, color: dividerColor),
+                          YLInfoRow(
+                            label: s.minePrivacyPolicy,
+                            trailing: const Icon(Icons.chevron_right,
+                                size: 18, color: YLColors.zinc400),
+                            onTap: () {
+                              const tosUrl = 'https://yue.to/tos.html';
+                              Navigator.of(context).push(MaterialPageRoute(
+                                builder: (_) => InAppWebPage(
+                                  title: s.minePrivacyPolicy,
+                                  url: tosUrl,
+                                ),
+                              ));
+                            },
+                          ),
+                          Divider(
+                              height: 1, thickness: 0.5, color: dividerColor),
+                          YLInfoRow(
+                            label: s.openSourceLicense,
+                            trailing: const Icon(Icons.chevron_right,
+                                size: 18, color: YLColors.zinc400),
+                            onTap: () => showLicensePage(
+                              context: context,
+                              applicationName: AppConstants.appName,
+                              applicationVersion:
+                                  ref.watch(appVersionProvider).valueOrNull ??
+                                      '',
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // 退出登录已移到 Profile 头像卡右上角
+                    const SizedBox(height: 32),
                   ],
                 ),
               ),
@@ -730,7 +657,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> with WidgetsBinding
       ),
     );
   }
-
 }
 
 // ── Account section (superseded by AccountCard; retained for reference) ────────
@@ -781,7 +707,8 @@ class _AccountSection extends ConsumerWidget {
           if (profile?.transferEnable != null) ...[
             YLInfoRow(
               label: s.authTraffic,
-              value: '${formatBytes(profile!.remaining ?? 0)} / ${formatBytes(profile.transferEnable!)}',
+              value:
+                  '${formatBytes(profile!.remaining ?? 0)} / ${formatBytes(profile.transferEnable!)}',
             ),
             Divider(height: 1, thickness: 0.5, color: dividerColor),
           ],
@@ -800,13 +727,16 @@ class _AccountSection extends ConsumerWidget {
           // Refresh
           YLInfoRow(
             label: s.authRefreshInfo,
-            trailing: const Icon(Icons.refresh, size: 18, color: YLColors.zinc400),
+            trailing:
+                const Icon(Icons.refresh, size: 18, color: YLColors.zinc400),
             onTap: () => ref.read(authProvider.notifier).refreshUserInfo(),
           ),
           Divider(height: 1, thickness: 0.5, color: dividerColor),
           // Sync subscription
           YLInfoRow(
-            label: s.authSyncingSubscription.replaceAll('...', '').replaceAll('正在', ''),
+            label: s.authSyncingSubscription
+                .replaceAll('...', '')
+                .replaceAll('正在', ''),
             trailing: const Icon(Icons.sync, size: 18, color: YLColors.zinc400),
             onTap: () => ref.read(authProvider.notifier).syncSubscription(),
           ),
@@ -870,15 +800,20 @@ class _ProfileRow extends ConsumerWidget {
           Row(
             children: [
               Container(
-                width: 44, height: 44,
+                width: 44,
+                height: 44,
                 decoration: BoxDecoration(
                   color: isDark ? YLColors.zinc700 : YLColors.zinc200,
                   shape: BoxShape.circle,
                 ),
                 child: Center(
                   child: Text(
-                    email.isNotEmpty && email != '加载中...' ? email[0].toUpperCase() : '?',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600,
+                    email.isNotEmpty && email != '加载中...'
+                        ? email[0].toUpperCase()
+                        : '?',
+                    style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
                         color: isDark ? YLColors.zinc300 : YLColors.zinc600),
                   ),
                 ),
@@ -889,26 +824,33 @@ class _ProfileRow extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(email,
-                        style: YLText.titleMedium.copyWith(fontWeight: FontWeight.w600,
+                        style: YLText.titleMedium.copyWith(
+                            fontWeight: FontWeight.w600,
                             color: isDark ? Colors.white : YLColors.zinc900),
-                        maxLines: 1, overflow: TextOverflow.ellipsis),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
                     const SizedBox(height: 3),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 2),
                       decoration: BoxDecoration(
                         color: isDark ? YLColors.zinc700 : YLColors.zinc100,
                         borderRadius: BorderRadius.circular(YLRadius.sm),
                       ),
                       child: Text(plan,
-                          style: YLText.caption.copyWith(fontWeight: FontWeight.w500,
-                              color: isDark ? YLColors.zinc300 : YLColors.zinc600)),
+                          style: YLText.caption.copyWith(
+                              fontWeight: FontWeight.w500,
+                              color: isDark
+                                  ? YLColors.zinc300
+                                  : YLColors.zinc600)),
                     ),
                   ],
                 ),
               ),
               // 改密码 + 退出登录 小图标
               IconButton(
-                icon: Icon(Icons.lock_outline_rounded, size: 18,
+                icon: Icon(Icons.lock_outline_rounded,
+                    size: 18,
                     color: isDark ? YLColors.zinc400 : YLColors.zinc500),
                 tooltip: '修改密码',
                 onPressed: () {
@@ -919,13 +861,24 @@ class _ProfileRow extends ConsumerWidget {
                     context: context,
                     builder: (ctx) => AlertDialog(
                       title: Text(s.mineChangePassword),
-                      content: Column(mainAxisSize: MainAxisSize.min, children: [
-                        TextField(controller: oldPwCtrl, obscureText: true, decoration: InputDecoration(labelText: s.oldPassword)),
+                      content:
+                          Column(mainAxisSize: MainAxisSize.min, children: [
+                        TextField(
+                            controller: oldPwCtrl,
+                            obscureText: true,
+                            decoration:
+                                InputDecoration(labelText: s.oldPassword)),
                         const SizedBox(height: 12),
-                        TextField(controller: newPwCtrl, obscureText: true, decoration: InputDecoration(labelText: s.newPassword)),
+                        TextField(
+                            controller: newPwCtrl,
+                            obscureText: true,
+                            decoration:
+                                InputDecoration(labelText: s.newPassword)),
                       ]),
                       actions: [
-                        TextButton(onPressed: () => Navigator.pop(ctx), child: Text(s.cancel)),
+                        TextButton(
+                            onPressed: () => Navigator.pop(ctx),
+                            child: Text(s.cancel)),
                         FilledButton(
                           onPressed: () async {
                             final oldPw = oldPwCtrl.text.trim();
@@ -935,7 +888,10 @@ class _ProfileRow extends ConsumerWidget {
                             final token = ref.read(authProvider).token;
                             if (token == null) return;
                             try {
-                              await ref.read(xboardApiProvider).changePassword(token: token, oldPassword: oldPw, newPassword: newPw);
+                              await ref.read(xboardApiProvider).changePassword(
+                                  token: token,
+                                  oldPassword: oldPw,
+                                  newPassword: newPw);
                               AppNotifier.success(s.passwordChangedSuccess);
                             } catch (_) {
                               AppNotifier.error(s.passwordChangeFailed);
@@ -945,11 +901,15 @@ class _ProfileRow extends ConsumerWidget {
                         ),
                       ],
                     ),
-                  ).whenComplete(() { oldPwCtrl.dispose(); newPwCtrl.dispose(); });
+                  ).whenComplete(() {
+                    oldPwCtrl.dispose();
+                    newPwCtrl.dispose();
+                  });
                 },
               ),
               IconButton(
-                icon: Icon(Icons.logout_rounded, size: 18, color: YLColors.error.withValues(alpha: 0.7)),
+                icon: Icon(Icons.logout_rounded,
+                    size: 18, color: YLColors.error.withValues(alpha: 0.7)),
                 tooltip: '退出登录',
                 onPressed: () {
                   final s = S.of(context);
@@ -959,10 +919,16 @@ class _ProfileRow extends ConsumerWidget {
                       title: Text(s.authLogout),
                       content: Text(s.authLogoutConfirm),
                       actions: [
-                        TextButton(onPressed: () => Navigator.pop(ctx), child: Text(s.cancel)),
+                        TextButton(
+                            onPressed: () => Navigator.pop(ctx),
+                            child: Text(s.cancel)),
                         FilledButton(
-                          onPressed: () { Navigator.pop(ctx); ref.read(authProvider.notifier).logout(); },
-                          style: FilledButton.styleFrom(backgroundColor: YLColors.error),
+                          onPressed: () {
+                            Navigator.pop(ctx);
+                            ref.read(authProvider.notifier).logout();
+                          },
+                          style: FilledButton.styleFrom(
+                              backgroundColor: YLColors.error),
                           child: Text(s.authLogout),
                         ),
                       ],
@@ -989,68 +955,84 @@ class _MineTrafficSection extends ConsumerWidget {
 
     final usageRatio = overview?.usageRatio ?? 0.0;
     final usedStr = overview != null && overview.transferTotalBytes > 0
-        ? formatBytes(overview.transferUsedBytes) : '--';
+        ? formatBytes(overview.transferUsedBytes)
+        : '--';
     final totalStr = overview != null && overview.transferTotalBytes > 0
-        ? formatBytes(overview.transferTotalBytes) : '--';
+        ? formatBytes(overview.transferTotalBytes)
+        : '--';
     final remainStr = overview != null && overview.transferTotalBytes > 0
-        ? formatBytes(overview.transferRemainingBytes) : '--';
-    final expiryStr = overview == null ? '--'
-        : overview.expireAt == null ? '永久有效'
-        : overview.daysRemaining == null || overview.daysRemaining! < 0 ? '已过期'
-        : overview.daysRemaining == 0 ? '今日到期'
-        : '${overview.daysRemaining} 天后到期';
+        ? formatBytes(overview.transferRemainingBytes)
+        : '--';
+    final expiryStr = overview == null
+        ? '--'
+        : overview.expireAt == null
+            ? '永久有效'
+            : overview.daysRemaining == null || overview.daysRemaining! < 0
+                ? '已过期'
+                : overview.daysRemaining == 0
+                    ? '今日到期'
+                    : '${overview.daysRemaining} 天后到期';
 
     return _SettingsCard(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Column(
-        children: [
-          Row(
-            children: [
-              Text('已用 / 总量', style: YLText.caption.copyWith(color: YLColors.zinc500)),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text('$usedStr / $totalStr',
-                    style: YLText.label.copyWith(fontWeight: FontWeight.w600,
-                        color: isDark ? Colors.white : YLColors.zinc900),
-                    overflow: TextOverflow.ellipsis, textAlign: TextAlign.end),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(3),
-            child: LinearProgressIndicator(
-              value: usageRatio,
-              minHeight: 5,
-              backgroundColor: isDark ? YLColors.zinc700 : YLColors.zinc200,
-              valueColor: AlwaysStoppedAnimation<Color>(
-                usageRatio < 0.6 ? const Color(0xFF22C55E)
-                    : usageRatio < 0.85 ? Colors.orange : Colors.red,
+          children: [
+            Row(
+              children: [
+                Text('已用 / 总量',
+                    style: YLText.caption.copyWith(color: YLColors.zinc500)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text('$usedStr / $totalStr',
+                      style: YLText.label.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? Colors.white : YLColors.zinc900),
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.end),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(3),
+              child: LinearProgressIndicator(
+                value: usageRatio,
+                minHeight: 5,
+                backgroundColor: isDark ? YLColors.zinc700 : YLColors.zinc200,
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  usageRatio < 0.6
+                      ? const Color(0xFF22C55E)
+                      : usageRatio < 0.85
+                          ? Colors.orange
+                          : Colors.red,
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: Text('剩余 $remainStr',
-                    style: YLText.caption.copyWith(color: YLColors.zinc500),
-                    overflow: TextOverflow.ellipsis),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(expiryStr,
-                    style: YLText.caption.copyWith(
-                      color: overview != null && (overview.daysRemaining ?? 999) <= 7
-                          ? Colors.orange : YLColors.zinc500,
-                    ),
-                    overflow: TextOverflow.ellipsis, textAlign: TextAlign.end),
-              ),
-            ],
-          ),
-        ],
-      ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: Text('剩余 $remainStr',
+                      style: YLText.caption.copyWith(color: YLColors.zinc500),
+                      overflow: TextOverflow.ellipsis),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(expiryStr,
+                      style: YLText.caption.copyWith(
+                        color: overview != null &&
+                                (overview.daysRemaining ?? 999) <= 7
+                            ? Colors.orange
+                            : YLColors.zinc500,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.end),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1068,7 +1050,7 @@ class _GuestLoginCard extends ConsumerWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
         child: Column(
           children: [
-            Icon(Icons.account_circle_outlined,
+            const Icon(Icons.account_circle_outlined,
                 size: 48, color: YLColors.zinc400),
             const SizedBox(height: 12),
             Text(
@@ -1097,7 +1079,6 @@ class _GuestLoginCard extends ConsumerWidget {
     );
   }
 }
-
 
 // ── Settings page helper widgets ─────────────────────────────────────────────
 
@@ -1150,7 +1131,6 @@ class _SettingsCard extends StatelessWidget {
 
 // ── Split Tunnel Section (Android) ────────────────────────────────────────────
 
-
 /// A single settings row with a label on the left and a value or trailing widget on the right.
 class YLInfoRow extends StatelessWidget {
   final String label;
@@ -1185,7 +1165,8 @@ class YLInfoRow extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child: Text(label, style: labelStyle ?? YLText.body.copyWith(color: labelColor)),
+            child: Text(label,
+                style: labelStyle ?? YLText.body.copyWith(color: labelColor)),
           ),
           if (value != null)
             Text(value!, style: YLText.body.copyWith(color: valueColor)),
@@ -1250,8 +1231,8 @@ class _HotkeyRowState extends ConsumerState<_HotkeyRow> {
                   onPressed: _editHotkey,
                   style: TextButton.styleFrom(
                       padding: const EdgeInsets.symmetric(horizontal: 8)),
-                  child: Text(s.hotkeyEdit,
-                      style: const TextStyle(fontSize: 12)),
+                  child:
+                      Text(s.hotkeyEdit, style: const TextStyle(fontSize: 12)),
                 ),
             ],
           ),
@@ -1319,8 +1300,7 @@ class _HotkeyRowState extends ConsumerState<_HotkeyRow> {
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx, null),
-              child: Text(s.cancel)),
+              onPressed: () => Navigator.pop(ctx, null), child: Text(s.cancel)),
         ],
       ),
     ).whenComplete(focusNode.dispose);
@@ -1349,7 +1329,12 @@ class _GeoDataRowState extends State<_GeoDataRow> {
 
   Future<void> _loadLastUpdated() async {
     final dt = await GeoDataService.lastUpdated();
-    if (mounted) setState(() { _lastUpdated = dt; _loaded = true; });
+    if (mounted) {
+      setState(() {
+        _lastUpdated = dt;
+        _loaded = true;
+      });
+    }
   }
 
   Future<void> _update() async {
@@ -1378,9 +1363,9 @@ class _GeoDataRowState extends State<_GeoDataRow> {
       subtitle = '...';
     } else if (_lastUpdated != null) {
       final d = _lastUpdated!;
-      subtitle = s.geoLastUpdated(
-          '${d.year}-${d.month.toString().padLeft(2, '0')}-'
-          '${d.day.toString().padLeft(2, '0')}');
+      subtitle =
+          s.geoLastUpdated('${d.year}-${d.month.toString().padLeft(2, '0')}-'
+              '${d.day.toString().padLeft(2, '0')}');
     } else {
       subtitle = s.noData;
     }
@@ -1396,8 +1381,7 @@ class _GeoDataRowState extends State<_GeoDataRow> {
               onPressed: _update,
               style: TextButton.styleFrom(
                   padding: const EdgeInsets.symmetric(horizontal: 8)),
-              child: Text(s.geoUpdateNow,
-                  style: const TextStyle(fontSize: 12)),
+              child: Text(s.geoUpdateNow, style: const TextStyle(fontSize: 12)),
             ),
     );
   }
@@ -1415,9 +1399,8 @@ class _TestUrlRow extends ConsumerWidget {
     const defaultUrl = 'https://www.gstatic.com/generate_204';
 
     // Shorten the URL for display: strip https:// and truncate if long
-    final display = url
-        .replaceFirst('https://', '')
-        .replaceFirst('http://', '');
+    final display =
+        url.replaceFirst('https://', '').replaceFirst('http://', '');
     final truncated =
         display.length > 32 ? '${display.substring(0, 30)}…' : display;
 
@@ -1478,8 +1461,8 @@ class _TestUrlRow extends ConsumerWidget {
                   setModal(() {});
                 },
                 icon: const Icon(Icons.restore, size: 14),
-                label: Text(s.resetDefault,
-                    style: const TextStyle(fontSize: 12)),
+                label:
+                    Text(s.resetDefault, style: const TextStyle(fontSize: 12)),
                 style: TextButton.styleFrom(
                   alignment: Alignment.centerLeft,
                   padding: EdgeInsets.zero,
@@ -1489,8 +1472,7 @@ class _TestUrlRow extends ConsumerWidget {
           ),
           actions: [
             TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: Text(s.cancel)),
+                onPressed: () => Navigator.pop(ctx), child: Text(s.cancel)),
             FilledButton(
               onPressed: () async {
                 final url = ctrl.text.trim();
@@ -1634,7 +1616,8 @@ class _UpstreamProxyRowState extends State<_UpstreamProxyRow> {
       (data) {
         sub.cancel();
         if (!completer.isCompleted) {
-          completer.complete(data.isNotEmpty && data[0] == 0x05 ? 'socks5' : 'http');
+          completer
+              .complete(data.isNotEmpty && data[0] == 0x05 ? 'socks5' : 'http');
         }
       },
       onError: (_) {
@@ -1845,8 +1828,8 @@ class _ExportLogsContentState extends State<_ExportLogsContent>
                     controller: _tab,
                     isScrollable: true,
                     tabAlignment: TabAlignment.start,
-                    labelStyle: YLText.caption
-                        .copyWith(fontWeight: FontWeight.w600),
+                    labelStyle:
+                        YLText.caption.copyWith(fontWeight: FontWeight.w600),
                     unselectedLabelStyle: YLText.caption,
                     indicatorColor: YLColors.connected,
                     labelColor: YLColors.connected,
@@ -1900,8 +1883,7 @@ class _LogPane extends StatelessWidget {
       children: [
         if (hasContent)
           Padding(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             child: Row(
               children: [
                 const Spacer(),

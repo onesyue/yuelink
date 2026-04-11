@@ -2,8 +2,10 @@
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
     <background android:drawable="@color/ic_launcher_background"/>
     <foreground>
+        <!-- Keep Android visually aligned with the full-bleed desktop/iOS icon.
+             The default 16% inset made the glyph look noticeably smaller. -->
         <inset
             android:drawable="@drawable/ic_launcher_foreground"
-            android:inset="16%" />
+            android:inset="0%" />
     </foreground>
 </adaptive-icon>
