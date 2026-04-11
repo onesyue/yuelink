@@ -101,10 +101,11 @@ jobs:
   build-core:
     name: Build core (${{ matrix.platform }})
     if: startsWith(github.ref, 'refs/tags/')
-    # Both unit tests AND the macOS integration smoke test must pass before
-    # we start producing release binaries. Without this, an E2E regression
-    # would still ship a tagged release with an app that fails to launch.
-    needs: [analyze, integration]
+    # build-core only needs analyze (unit tests). The expensive 6-matrix
+    # Go cross-compile happens in parallel with the macOS integration job
+    # so total CI time stays around 15-20min instead of 30-40min.
+    # E2E gates the `release` job below — see needs: there.
+    needs: [analyze]
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -1147,7 +1148,20 @@ jobs:
   release:
     name: Create Release
     if: startsWith(github.ref, 'refs/tags/')
-    needs: [build-android, build-ios, build-macos, build-windows, build-linux]
+    # E2E (integration) is the LAST gate before publishing artifacts to
+    # users. If E2E fails, all the build artifacts still exist (build-*
+    # jobs ran in parallel and likely succeeded) and can be downloaded
+    # for debugging — but no GitHub Release is created and update.json
+    # is not refreshed. This is the cleaner interpretation of the
+    # external review's "release build 被 E2E 阻断" requirement: the
+    # release publish step is gated, not the build matrix itself.
+    needs:
+      - integration
+      - build-android
+      - build-ios
+      - build-macos
+      - build-windows
+      - build-linux
     runs-on: ubuntu-latest
     permissions:
       contents: write
