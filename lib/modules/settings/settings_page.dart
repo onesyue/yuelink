@@ -24,7 +24,7 @@ import '../../core/kernel/geodata_service.dart';
 import '../../core/storage/settings_service.dart';
 import '../../modules/nodes/providers/nodes_providers.dart';
 import '../../core/env_config.dart';
-import '../../services/update_checker.dart';
+import '../updater/update_checker.dart';
 import '../../shared/rich_content.dart';
 import '../../theme.dart';
 import '../mine/providers/account_providers.dart';

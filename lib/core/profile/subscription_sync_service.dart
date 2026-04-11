@@ -3,10 +3,10 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../core/kernel/core_manager.dart';
-import '../infrastructure/repositories/profile_repository.dart';
-import '../modules/profiles/providers/profiles_providers.dart';
-import '../shared/event_log.dart';
+import '../kernel/core_manager.dart';
+import '../../infrastructure/repositories/profile_repository.dart';
+import '../../modules/profiles/providers/profiles_providers.dart';
+import '../../shared/event_log.dart';
 
 /// Silently updates stale subscriptions in the background.
 ///

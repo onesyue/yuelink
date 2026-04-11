@@ -1,5 +1,5 @@
-import '../domain/models/profile.dart';
-import '../infrastructure/repositories/profile_repository.dart';
+import '../../domain/models/profile.dart';
+import '../../infrastructure/repositories/profile_repository.dart';
 
 /// Static proxy shim for backward compatibility.
 ///

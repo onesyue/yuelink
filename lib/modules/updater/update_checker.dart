@@ -8,8 +8,8 @@ import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 
-import '../core/env_config.dart';
-import '../core/storage/settings_service.dart';
+import '../../core/env_config.dart';
+import '../../core/storage/settings_service.dart';
 
 /// Checks for a newer version of YueLink, fetching an `update.json` manifest
 /// from one of several mirror endpoints (CDN → ghproxy → github raw → github
