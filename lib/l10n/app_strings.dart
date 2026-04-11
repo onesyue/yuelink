@@ -1,1000 +1,709 @@
+// GENERATED-DERIVED file: thin adapter over slang's `t` Translations.
+//
+// `S` is preserved as a backwards-compat shim so the ~500 existing
+// `S.of(context).foo` / `S.current.foo` call sites keep working unchanged
+// while the source-of-truth for strings moves to lib/i18n/*.i18n.json.
+//
+// New strings: add them to the JSON files and run `dart run slang`.
+// Do NOT add new methods here — call `t.foo` directly in new code.
+//
+// To regenerate this file from JSON: see scripts/regen_app_strings.py
+// (the original 1000-line ternary version is replaced).
+
 import 'package:flutter/material.dart';
 
-/// Lightweight i18n helper — no code generation required.
+import '../i18n/strings_g.dart';
+
+/// Backwards-compatible i18n helper that delegates to slang's [Translations].
 ///
-/// Usage in widgets: `S.of(context).navHome`
-/// Usage outside widget tree (tray, services): `S.current.navHome`
+/// Prefer `t.foo` (the slang global) in new code. This wrapper exists only
+/// to keep the legacy `S.of(context).foo` call sites compiling without a
+/// 500-file rewrite. Each getter is a one-liner forward to `_t.foo`.
 class S {
-  static S _instance = S._('zh');
-  static final S _zh = S._('zh');
-  static final S _en = S._('en');
+  final Translations _t;
+  const S._(this._t);
 
-  final String _lang;
-  S._(this._lang);
+  /// Locale-aware lookup from a [BuildContext]. Equivalent to slang's
+  /// [Translations.of] but returns the [S] adapter so legacy `.foo` access
+  /// keeps compiling.
+  static S of(BuildContext context) => S._(Translations.of(context));
 
-  bool get _e => _lang == 'en';
+  /// Global singleton — kept in sync with the active locale via
+  /// [LocaleSettings]. Equivalent to slang's `t` global.
+  static S get current => S._(LocaleSettings.instance.currentTranslations);
 
-  /// Public alias — use in external files where `_e` is not accessible.
-  bool get isEn => _e;
+  /// True if the current locale is English.
+  bool get isEn => LocaleSettings.currentLocale == AppLocale.en;
 
-  /// Locale-aware lookup from a BuildContext.
-  static S of(BuildContext context) {
-    final locale = Localizations.maybeLocaleOf(context);
-    return (locale?.languageCode ?? 'zh') == 'en' ? _en : _zh;
-  }
-
-  /// Global singleton — kept in sync with [languageProvider].
-  static S get current => _instance;
-
+  /// Switch active locale. Accepts 'en' / 'zh' / 'zh-CN' / 'zh_CN'.
+  /// Persistence is handled by the caller via SettingsService.
   static void setLanguage(String langCode) {
-    _instance = langCode == 'en' ? _en : _zh;
+    final code = langCode.toLowerCase();
+    if (code == 'en') {
+      LocaleSettings.setLocale(AppLocale.en);
+    } else {
+      LocaleSettings.setLocale(AppLocale.zhCn);
+    }
   }
 
-  // ── Navigation ──────────────────────────────────────────────────
-  String get navHome => _e ? 'Home' : '首页';
-  String get navProxies => _e ? 'Lines' : '线路';
-  String get navProfile => _e ? 'Subscriptions' : '订阅';
-  String get navMine => _e ? 'Me' : '我的';
-  String get navStore => _e ? 'Store' : '商店';
-  String get navEmby => _e ? 'Media' : '悦视频';
-  String get navConnections => _e ? 'Connections' : '连接';
-  String get navLog => _e ? 'Logs' : '日志';
-  String get navSettings => _e ? 'Settings' : '设置';
+  String get navHome => _t.navHome;
+  String get navProxies => _t.navProxies;
+  String get navProfile => _t.navProfile;
+  String get navMine => _t.navMine;
+  String get navStore => _t.navStore;
+  String get navEmby => _t.navEmby;
+  String get navConnections => _t.navConnections;
+  String get navLog => _t.navLog;
+  String get navSettings => _t.navSettings;
+  String get trayConnect => _t.trayConnect;
+  String get trayDisconnect => _t.trayDisconnect;
+  String get trayShowWindow => _t.trayShowWindow;
+  String get trayQuit => _t.trayQuit;
+  String get trayProxies => _t.trayProxies;
+  String get cancel => _t.cancel;
+  String get confirm => _t.confirm;
+  String get save => _t.save;
+  String get delete => _t.delete;
+  String get edit => _t.edit;
+  String get add => _t.add;
+  String get retry => _t.retry;
+  String get saved => _t.saved;
+  String get upload => _t.upload;
+  String get download => _t.download;
+  String get operationFailed => _t.operationFailed;
+  String get noData => _t.noData;
+  String get disconnectedUnexpected => _t.disconnectedUnexpected;
+  String subExpired(String name) => _t.subExpired(name: name);
+  String subExpiringSoon(String name, int days) => _t.subExpiringSoon(name: name, days: days);
+  String get todayUsage => _t.todayUsage;
+  String get statusConnected => _t.statusConnected;
+  String get statusDisconnected => _t.statusDisconnected;
+  String get statusConnecting => _t.statusConnecting;
+  String get statusProcessing => _t.statusProcessing;
+  String get statusDisconnecting => _t.statusDisconnecting;
+  String get btnConnect => _t.btnConnect;
+  String get btnDisconnect => _t.btnDisconnect;
+  String get btnConnecting => _t.btnConnecting;
+  String get btnDisconnecting => _t.btnDisconnecting;
+  String get routeModeRule => _t.routeModeRule;
+  String get routeModeGlobal => _t.routeModeGlobal;
+  String get routeModeDirect => _t.routeModeDirect;
+  String get routingModeSetting => _t.routingModeSetting;
+  String get modeSwitched => _t.modeSwitched;
+  String get directModeDesc => _t.directModeDesc;
+  String get globalModeDesc => _t.globalModeDesc;
+  String get trafficUpload => _t.trafficUpload;
+  String get trafficDownload => _t.trafficDownload;
+  String get trafficMemory => _t.trafficMemory;
+  String get activeConns => _t.activeConns;
+  String get mockModeBanner => _t.mockModeBanner;
+  String get mockModeLabel => _t.mockModeLabel;
+  String get mockHint => _t.mockHint;
+  String get dashboardLabel => _t.dashboardLabel;
+  String get dashboardTitle => _t.dashboardTitle;
+  String get switchNode => _t.switchNode;
+  String get liveConnection => _t.liveConnection;
+  String get dashConnectedDesc => _t.dashConnectedDesc;
+  String get dashDisconnectedTitle => _t.dashDisconnectedTitle;
+  String get dashDisconnectedDesc => _t.dashDisconnectedDesc;
+  String get realtimeTraffic => _t.realtimeTraffic;
+  String get nodeLabel => _t.nodeLabel;
+  String get exitIpLabel => _t.exitIpLabel;
+  String get routingLabel => _t.routingLabel;
+  String get exitIpTapToQuery => _t.exitIpTapToQuery;
+  String get exitIpQuerying => _t.exitIpQuerying;
+  String get exitIpFailed => _t.exitIpFailed;
+  String get systemProxy => _t.systemProxy;
+  String get systemProxyOn => _t.systemProxyOn;
+  String get systemProxyOff => _t.systemProxyOff;
+  String get trafficActivity => _t.trafficActivity;
+  String get last60s => _t.last60s;
+  String get dashReadyHint => _t.dashReadyHint;
+  String get dashNoProfileHint => _t.dashNoProfileHint;
+  String get dashAutoConnectOn => _t.dashAutoConnectOn;
+  String get dashAutoConnectOff => _t.dashAutoConnectOff;
+  String get noProfileHint => _t.noProfileHint;
+  String get snackNoProfile => _t.snackNoProfile;
+  String get snackConfigMissing => _t.snackConfigMissing;
+  String get snackStartFailed => _t.snackStartFailed;
+  String get vpnPermTitle => _t.vpnPermTitle;
+  String get vpnPermBody => _t.vpnPermBody;
+  String get vpnPermContinue => _t.vpnPermContinue;
+  String get notConnectedHintProxy => _t.notConnectedHintProxy;
+  String get connectToViewProxiesDesc => _t.connectToViewProxiesDesc;
+  String nodesCountLabel(int n) => _t.nodesCountLabel(n: n);
+  String switchedTo(String name) => _t.switchedTo(name: name);
+  String get switchFailed => _t.switchFailed;
+  String testingGroup(String name) => _t.testingGroup(name: name);
+  String get directAuto => _t.directAuto;
+  String get searchNodesHint => _t.searchNodesHint;
+  String get sortByDelay => _t.sortByDelay;
+  String get cancelSort => _t.cancelSort;
+  String get testUrlSettings => _t.testUrlSettings;
+  String get resetDefault => _t.resetDefault;
+  String get unsavedChanges => _t.unsavedChanges;
+  String get unsavedChangesBody => _t.unsavedChangesBody;
+  String get discardAndLeave => _t.discardAndLeave;
+  String get stayOnPage => _t.stayOnPage;
+  String get noMatchingNodes => _t.noMatchingNodes;
+  String get testUrlDialogTitle => _t.testUrlDialogTitle;
+  String get customUrlLabel => _t.customUrlLabel;
+  String get typeManual => _t.typeManual;
+  String get typeAuto => _t.typeAuto;
+  String get typeFallback => _t.typeFallback;
+  String get typeLoadBalance => _t.typeLoadBalance;
+  String get testAll => _t.testAll;
+  String testingCount(int n) => _t.testingCount(n: n);
+  String nodesCount(int visible, int total) => _t.nodesCount(visible: visible, total: total);
+  String loadFailed(String error) => _t.loadFailed(error: error);
+  String get noProfiles => _t.noProfiles;
+  String get addSubscriptionHint => _t.addSubscriptionHint;
+  String get pasteFromClipboard => _t.pasteFromClipboard;
+  String get addSubscription => _t.addSubscription;
+  String get downloadingSubscription => _t.downloadingSubscription;
+  String get updatingSubscription => _t.updatingSubscription;
+  String get updateSuccess => _t.updateSuccess;
+  String updateFailed(String error) => _t.updateFailed(error: error);
+  String get confirmDelete => _t.confirmDelete;
+  String confirmDeleteMessage(String name) => _t.confirmDeleteMessage(name: name);
+  String get addSubscriptionDialogTitle => _t.addSubscriptionDialogTitle;
+  String get editSubscriptionDialogTitle => _t.editSubscriptionDialogTitle;
+  String get nameLabel => _t.nameLabel;
+  String get nameHint => _t.nameHint;
+  String get urlLabel => _t.urlLabel;
+  String get updateInterval => _t.updateInterval;
+  String get followGlobal => _t.followGlobal;
+  String get days7 => _t.days7;
+  String get hours6 => _t.hours6;
+  String get hours12 => _t.hours12;
+  String get hours24 => _t.hours24;
+  String get hours48 => _t.hours48;
+  String usageLabel(String used, String total) => _t.usageLabel(used: used, total: total);
+  String get expired => _t.expired;
+  String daysRemaining(int days) => _t.daysRemaining(days: days);
+  String get needsUpdate => _t.needsUpdate;
+  String updatedAt(String time) => _t.updatedAt(time: time);
+  String get noConfig => _t.noConfig;
+  String get copyConfig => _t.copyConfig;
+  String get copiedConfig => _t.copiedConfig;
+  String get copyLink => _t.copyLink;
+  String get copiedLink => _t.copiedLink;
+  String get viewConfig => _t.viewConfig;
+  String get updateSubscription => _t.updateSubscription;
+  String get clipboardNoUrl => _t.clipboardNoUrl;
+  String get addSuccess => _t.addSuccess;
+  String addFailed(String error) => _t.addFailed(error: error);
+  String get importLocalFile => _t.importLocalFile;
+  String get importLocalFileSuccess => _t.importLocalFileSuccess;
+  String get importLocalFileFailed => _t.importLocalFileFailed;
+  String get importLocalNameHint => _t.importLocalNameHint;
+  String get exportProfile => _t.exportProfile;
+  String exportProfileSuccess(String name) => _t.exportProfileSuccess(name: name);
+  String get exportAllProfiles => _t.exportAllProfiles;
+  String get importMultipleFiles => _t.importMultipleFiles;
+  String get exportFailed => _t.exportFailed;
+  String get exportSelectDir => _t.exportSelectDir;
+  String exportAllDone(int count) => _t.exportAllDone(count: count);
+  String get importBundleFailed => _t.importBundleFailed;
+  String get sectionSplitTunnel => _t.sectionSplitTunnel;
+  String get splitTunnelMode => _t.splitTunnelMode;
+  String get splitTunnelModeAll => _t.splitTunnelModeAll;
+  String get splitTunnelModeWhitelist => _t.splitTunnelModeWhitelist;
+  String get splitTunnelModeBlacklist => _t.splitTunnelModeBlacklist;
+  String get splitTunnelApps => _t.splitTunnelApps;
+  String get splitTunnelManage => _t.splitTunnelManage;
+  String get splitTunnelSearchHint => _t.splitTunnelSearchHint;
+  String get splitTunnelEffectHint => _t.splitTunnelEffectHint;
+  String get sectionGeoResources => _t.sectionGeoResources;
+  String get geoResourcesHint => _t.geoResourcesHint;
+  String get geoUpdateAll => _t.geoUpdateAll;
+  String get geoUpdateSuccess => _t.geoUpdateSuccess;
+  String get geoUpdateFailed => _t.geoUpdateFailed;
+  String get geoNotFound => _t.geoNotFound;
+  String get rollbackTitle => _t.rollbackTitle;
+  String get rollbackContent => _t.rollbackContent;
+  String get rollbackConfirm => _t.rollbackConfirm;
+  String get rollbackSuccess => _t.rollbackSuccess;
+  String get rollbackFailed => _t.rollbackFailed;
+  String get checkUpdate => _t.checkUpdate;
+  String get updateAvailable => _t.updateAvailable;
+  String get updateDownload => _t.updateDownload;
+  String get updateDownloading => _t.updateDownloading;
+  String get updateDownloadComplete => _t.updateDownloadComplete;
+  String get updateDownloadFailed => _t.updateDownloadFailed;
+  String get updateInstalling => _t.updateInstalling;
+  String get alreadyLatest => _t.alreadyLatest;
+  String get updateCheckFailed => _t.updateCheckFailed;
+  String get yamlInvalid => _t.yamlInvalid;
+  String get sectionHotkeys => _t.sectionHotkeys;
+  String get hotkeyToggle => _t.hotkeyToggle;
+  String get hotkeyHint => _t.hotkeyHint;
+  String get notConnectedHintConnections => _t.notConnectedHintConnections;
+  String get searchConnHint => _t.searchConnHint;
+  String get closeAll => _t.closeAll;
+  String connectionsCount(int count) => _t.connectionsCount(count: count);
+  String connectionsCountFiltered(int count) => _t.connectionsCountFiltered(count: count);
+  String get noActiveConnections => _t.noActiveConnections;
+  String get noMatchingConnections => _t.noMatchingConnections;
+  String get closeAllDialogTitle => _t.closeAllDialogTitle;
+  String get closeAllDialogMessage => _t.closeAllDialogMessage;
+  String get statConnections => _t.statConnections;
+  String get statTotalDownload => _t.statTotalDownload;
+  String get statTotalUpload => _t.statTotalUpload;
+  String get connectionDetailTitle => _t.connectionDetailTitle;
+  String get detailTarget => _t.detailTarget;
+  String get detailProtocol => _t.detailProtocol;
+  String get detailSource => _t.detailSource;
+  String get detailTargetIp => _t.detailTargetIp;
+  String get detailProxyChain => _t.detailProxyChain;
+  String get detailRule => _t.detailRule;
+  String get detailProcess => _t.detailProcess;
+  String get detailDuration => _t.detailDuration;
+  String get detailDownload => _t.detailDownload;
+  String get detailUpload => _t.detailUpload;
+  String get detailConnectTime => _t.detailConnectTime;
+  String get notConnectedHintLog => _t.notConnectedHintLog;
+  String get tabLogs => _t.tabLogs;
+  String get tabRules => _t.tabRules;
+  String get searchLogsHint => _t.searchLogsHint;
+  String get searchLogsRegexHint => _t.searchLogsRegexHint;
+  String get regexSearch => _t.regexSearch;
+  String get clearLogs => _t.clearLogs;
+  String get noLogs => _t.noLogs;
+  String logsCount(int count) => _t.logsCount(count: count);
+  String logLevelLabel(String level) => _t.logLevelLabel(level: level);
+  String rulesCount(int count) => _t.rulesCount(count: count);
+  String matchedRulesCount(int count) => _t.matchedRulesCount(count: count);
+  String get searchRulesHint => _t.searchRulesHint;
+  String get noMatchingRules => _t.noMatchingRules;
+  String get overwriteTitle => _t.overwriteTitle;
+  String get overwriteRulesTitle => _t.overwriteRulesTitle;
+  String get overwriteRulesDescription => _t.overwriteRulesDescription;
+  String get overwriteHintText => _t.overwriteHintText;
+  String get savedNextConnect => _t.savedNextConnect;
+  String get sectionConnection => _t.sectionConnection;
+  String get sectionCore => _t.sectionCore;
+  String get sectionSubscription => _t.sectionSubscription;
+  String get sectionAppearance => _t.sectionAppearance;
+  String get sectionStatus => _t.sectionStatus;
+  String get sectionTools => _t.sectionTools;
+  String get sectionAbout => _t.sectionAbout;
+  String get sectionSettings => _t.sectionSettings;
+  String get sectionService => _t.sectionService;
+  String get sectionSupport => _t.sectionSupport;
+  String get preferencesLabel => _t.preferencesLabel;
+  String get sectionAccountActions => _t.sectionAccountActions;
+  String get upstreamProxy => _t.upstreamProxy;
+  String get upstreamProxySub => _t.upstreamProxySub;
+  String get upstreamProxyServer => _t.upstreamProxyServer;
+  String get upstreamProxyPort => _t.upstreamProxyPort;
+  String get upstreamProxyType => _t.upstreamProxyType;
+  String get upstreamProxySaved => _t.upstreamProxySaved;
+  String get upstreamProxyNotFound => _t.upstreamProxyNotFound;
+  String get upstreamProxyHint => _t.upstreamProxyHint;
+  String get exportLogs => _t.exportLogs;
+  String get exportLogsCrash => _t.exportLogsCrash;
+  String get exportLogsCore => _t.exportLogsCore;
+  String get exportLogsEmpty => _t.exportLogsEmpty;
+  String get exportLogsCopied => _t.exportLogsCopied;
+  String get sectionDesktop => _t.sectionDesktop;
+  String get sectionNetwork => _t.sectionNetwork;
+  String get closeWindowBehavior => _t.closeWindowBehavior;
+  String get closeBehaviorTray => _t.closeBehaviorTray;
+  String get closeBehaviorExit => _t.closeBehaviorExit;
+  String get toggleConnectionHotkey => _t.toggleConnectionHotkey;
+  String get hotkeyEdit => _t.hotkeyEdit;
+  String get hotkeyListening => _t.hotkeyListening;
+  String get hotkeySaved => _t.hotkeySaved;
+  String get hotkeyFailed => _t.hotkeyFailed;
+  String get geoDatabase => _t.geoDatabase;
+  String get geoUpdateNow => _t.geoUpdateNow;
+  String get geoUpdated => _t.geoUpdated;
+  String geoLastUpdated(String date) => _t.geoLastUpdated(date: date);
+  String get linuxProxyNotice => _t.linuxProxyNotice;
+  String get linuxProxyManual => _t.linuxProxyManual;
+  String get hotkeyLinuxNotice => _t.hotkeyLinuxNotice;
+  String get diagnostics => _t.diagnostics;
+  String get viewStartupReport => _t.viewStartupReport;
+  String get copiedToClipboard => _t.copiedToClipboard;
+  String get sectionLanguage => _t.sectionLanguage;
+  String get connectionMode => _t.connectionMode;
+  String get modeTun => _t.modeTun;
+  String get modeSystemProxy => _t.modeSystemProxy;
+  String get serviceModeLabel => _t.serviceModeLabel;
+  String get serviceModeInstall => _t.serviceModeInstall;
+  String get serviceModeUninstall => _t.serviceModeUninstall;
+  String get serviceModeRefresh => _t.serviceModeRefresh;
+  String get serviceModeNotInstalled => _t.serviceModeNotInstalled;
+  String get serviceModeInstalled => _t.serviceModeInstalled;
+  String get serviceModeUnreachable => _t.serviceModeUnreachable;
+  String serviceModeRunning(int pid) => _t.serviceModeRunning(pid: pid);
+  String get serviceModeIdle => _t.serviceModeIdle;
+  String serviceModeNeedsUpdate(String version) => _t.serviceModeNeedsUpdate(version: version);
+  String get serviceModeUpdate => _t.serviceModeUpdate;
+  String get serviceModeUpdateOk => _t.serviceModeUpdateOk;
+  String serviceModeUpdateFailed(String error) => _t.serviceModeUpdateFailed(error: error);
+  String get serviceModeInstallOk => _t.serviceModeInstallOk;
+  String serviceModeInstallFailed(String error) => _t.serviceModeInstallFailed(error: error);
+  String get serviceModeUninstallOk => _t.serviceModeUninstallOk;
+  String serviceModeUninstallFailed(String error) => _t.serviceModeUninstallFailed(error: error);
+  String get msgSwitchedToTun => _t.msgSwitchedToTun;
+  String get msgSwitchedToSystemProxy => _t.msgSwitchedToSystemProxy;
+  String get errTunSwitchFailed => _t.errTunSwitchFailed;
+  String get tunBypassLabel => _t.tunBypassLabel;
+  String get tunBypassSub => _t.tunBypassSub;
+  String get tunBypassAddrHint => _t.tunBypassAddrHint;
+  String get tunBypassProcHint => _t.tunBypassProcHint;
+  String get tunBypassSaved => _t.tunBypassSaved;
+  String get tunStackLabel => _t.tunStackLabel;
+  String get tunStackMixed => _t.tunStackMixed;
+  String get tunStackSystem => _t.tunStackSystem;
+  String get tunStackGvisor => _t.tunStackGvisor;
+  String get setSystemProxyOnConnect => _t.setSystemProxyOnConnect;
+  String get setSystemProxyOnConnectSub => _t.setSystemProxyOnConnectSub;
+  String get autoConnect => _t.autoConnect;
+  String get launchAtStartupLabel => _t.launchAtStartupLabel;
+  String get launchAtStartupSub => _t.launchAtStartupSub;
+  String get logLevelSetting => _t.logLevelSetting;
+  String get configOverwrite => _t.configOverwrite;
+  String get configOverwriteSub => _t.configOverwriteSub;
+  String get updateAllNow => _t.updateAllNow;
+  String get themeLabel => _t.themeLabel;
+  String get themeSystem => _t.themeSystem;
+  String get themeLight => _t.themeLight;
+  String get themeDark => _t.themeDark;
+  String get languageChinese => _t.languageChinese;
+  String get languageEnglish => _t.languageEnglish;
+  String get coreStatus => _t.coreStatus;
+  String get coreRunning => _t.coreRunning;
+  String get coreStopped => _t.coreStopped;
+  String get runMode => _t.runMode;
+  String get mixedPort => _t.mixedPort;
+  String get apiPort => _t.apiPort;
+  String get dnsQuery => _t.dnsQuery;
+  String get runningConfig => _t.runningConfig;
+  String get versionLabel => _t.versionLabel;
+  String get coreLabel => _t.coreLabel;
+  String get projectHome => _t.projectHome;
+  String get openSourceLicense => _t.openSourceLicense;
+  String get updatingAll => _t.updatingAll;
+  String updateAllResult(int updated, int failed) => _t.updateAllResult(updated: updated, failed: failed);
+  String get dnsCacheCleared => _t.dnsCacheCleared;
+  String get fakeIpCacheCleared => _t.fakeIpCacheCleared;
+  String get errorTimeout => _t.errorTimeout;
+  String get errorNetwork => _t.errorNetwork;
+  String get overwritePortInvalid => _t.overwritePortInvalid;
+  String get proxyTypeAll => _t.proxyTypeAll;
+  String get sectionSubStore => _t.sectionSubStore;
+  String get subStoreUrlLabel => _t.subStoreUrlLabel;
+  String get subStoreUrlHint => _t.subStoreUrlHint;
+  String get subStoreUrlSub => _t.subStoreUrlSub;
+  String get subStoreUrlSaved => _t.subStoreUrlSaved;
+  String get overwriteTabBasic => _t.overwriteTabBasic;
+  String get overwriteTabRules => _t.overwriteTabRules;
+  String get overwriteTabAdvanced => _t.overwriteTabAdvanced;
+  String get overwriteModeLabel => _t.overwriteModeLabel;
+  String get overwriteModeNone => _t.overwriteModeNone;
+  String get overwritePortLabel => _t.overwritePortLabel;
+  String get overwritePortHint => _t.overwritePortHint;
+  String get overwriteCustomRulesLabel => _t.overwriteCustomRulesLabel;
+  String get overwriteAddRule => _t.overwriteAddRule;
+  String get overwriteRuleHint => _t.overwriteRuleHint;
+  String get overwriteExtraYamlLabel => _t.overwriteExtraYamlLabel;
+  String get modeMock => _t.modeMock;
+  String get modeSubprocess => _t.modeSubprocess;
+  String get domainHint => _t.domainHint;
+  String get query => _t.query;
+  String get noRecords => _t.noRecords;
+  String updateAvailableV(String v) => _t.updateAvailableV(v: v);
+  String get proxyProviderTitle => _t.proxyProviderTitle;
+  String get proxyProviderEmpty => _t.proxyProviderEmpty;
+  String providerNodeCount(int count) => _t.providerNodeCount(count: count);
+  String get providerUpdate => _t.providerUpdate;
+  String get providerHealthCheck => _t.providerHealthCheck;
+  String get providerUpdateSuccess => _t.providerUpdateSuccess;
+  String get providerUpdateFailed => _t.providerUpdateFailed;
+  String get providerHealthCheckDone => _t.providerHealthCheckDone;
+  String get connectionModeLabel => _t.connectionModeLabel;
+  String get errVpnPermission => _t.errVpnPermission;
+  String get errCoreStartFailed => _t.errCoreStartFailed;
+  String get errVpnTunnelFailed => _t.errVpnTunnelFailed;
+  String get msgConnected => _t.msgConnected;
+  String errApiError(int code, String body) => _t.errApiError(code: code, body: body);
+  String errStartFailed(String msg) => _t.errStartFailed(msg: msg);
+  String get msgDisconnected => _t.msgDisconnected;
+  String get errStopFailed => _t.errStopFailed;
+  String get errSystemProxyFailed => _t.errSystemProxyFailed;
+  String get errDownloadTimeout => _t.errDownloadTimeout;
+  String errNetworkError(String detail) => _t.errNetworkError(detail: detail);
+  String errDownloadHttpFailed(int code) => _t.errDownloadHttpFailed(code: code);
+  String get chartLock => _t.chartLock;
+  String get chartUnlock => _t.chartUnlock;
+  String get switchModeFailed => _t.switchModeFailed;
+  String get offlinePreview => _t.offlinePreview;
+  String get sortDefault => _t.sortDefault;
+  String get sortLatencyAsc => _t.sortLatencyAsc;
+  String get sortLatencyDesc => _t.sortLatencyDesc;
+  String get sortNameAsc => _t.sortNameAsc;
+  String get nodeViewCard => _t.nodeViewCard;
+  String get nodeViewList => _t.nodeViewList;
+  String get authLogin => _t.authLogin;
+  String get authLogout => _t.authLogout;
+  String get authEmail => _t.authEmail;
+  String get authPassword => _t.authPassword;
+  String get authEmailHint => _t.authEmailHint;
+  String get authPasswordHint => _t.authPasswordHint;
+  String get authLoginSubtitle => _t.authLoginSubtitle;
+  String get authLoggingIn => _t.authLoggingIn;
+  String get authLoginFailed => _t.authLoginFailed;
+  String get authLogoutConfirm => _t.authLogoutConfirm;
+  String get authSyncingSubscription => _t.authSyncingSubscription;
+  String get authSyncSuccess => _t.authSyncSuccess;
+  String get authSyncFailed => _t.authSyncFailed;
+  String get authAccountInfo => _t.authAccountInfo;
+  String get authPlan => _t.authPlan;
+  String get dashMyPlan => _t.dashMyPlan;
+  String get authTraffic => _t.authTraffic;
+  String get authExpiry => _t.authExpiry;
+  String authDaysRemaining(int days) => _t.authDaysRemaining(days: days);
+  String get authExpired => _t.authExpired;
+  String get authExpiryToday => _t.authExpiryToday;
+  String get authRefreshInfo => _t.authRefreshInfo;
+  String get authSessionExpired => _t.authSessionExpired;
+  String get authErrorBadCredentials => _t.authErrorBadCredentials;
+  String get authErrorNetwork => _t.authErrorNetwork;
+  String get authErrorServer => _t.authErrorServer;
+  String get mineTrafficTitle => _t.mineTrafficTitle;
+  String get mineSpeedUp => _t.mineSpeedUp;
+  String get mineSpeedDown => _t.mineSpeedDown;
+  String get mineRemaining => _t.mineRemaining;
+  String get mineDevices => _t.mineDevices;
+  String get mineActions => _t.mineActions;
+  String get mineChangePassword => _t.mineChangePassword;
+  String get mineTelegramGroup => _t.mineTelegramGroup;
+  String get mineRenew => _t.mineRenew;
+  String get mineExpiryWarning => _t.mineExpiryWarning;
+  String get mineExpiredWarning => _t.mineExpiredWarning;
+  String get mineSyncing => _t.mineSyncing;
+  String get mineSyncDone => _t.mineSyncDone;
+  String get mineSyncFailed => _t.mineSyncFailed;
+  String get mineNotConnected => _t.mineNotConnected;
+  String get mineEmby => _t.mineEmby;
+  String get mineEmbyNoAccess => _t.mineEmbyNoAccess;
+  String get mineEmbyOpening => _t.mineEmbyOpening;
+  String get mineEmbyOpenFailed => _t.mineEmbyOpenFailed;
+  String get mineEmbyNeedsVpn => _t.mineEmbyNeedsVpn;
+  String get minePrivacyPolicy => _t.minePrivacyPolicy;
+  String get goToHomeToProtect => _t.goToHomeToProtect;
+  String get syncFirstSuccess => _t.syncFirstSuccess;
+  String get storeCurrentPlan => _t.storeCurrentPlan;
+  String get storeAvailablePlans => _t.storeAvailablePlans;
+  String get storeBuyNow => _t.storeBuyNow;
+  String get storeRenew => _t.storeRenew;
+  String get storeUpgrade => _t.storeUpgrade;
+  String get storeNoPlans => _t.storeNoPlans;
+  String get storeUnlimited => _t.storeUnlimited;
+  String get storeSelectPeriod => _t.storeSelectPeriod;
+  String get storeConfirmPurchase => _t.storeConfirmPurchase;
+  String get storePayNow => _t.storePayNow;
+  String get storeOrderCreating => _t.storeOrderCreating;
+  String get storeOrderSuccess => _t.storeOrderSuccess;
+  String get storeOrderPending => _t.storeOrderPending;
+  String get storeOrderFailed => _t.storeOrderFailed;
+  String get storeOrderCancelled => _t.storeOrderCancelled;
+  String get storeReturnToStore => _t.storeReturnToStore;
+  String get storeRenewalReminder => _t.storeRenewalReminder;
+  String get storeExpiredReminder => _t.storeExpiredReminder;
+  String get storePlanDetail => _t.storePlanDetail;
+  String get storeCheckResult => _t.storeCheckResult;
+  String get storeCancelOrder => _t.storeCancelOrder;
+  String get storeOpenPaymentPage => _t.storeOpenPaymentPage;
+  String get storeCouponExpand => _t.storeCouponExpand;
+  String get storeCouponCode => _t.storeCouponCode;
+  String get storeCouponValidate => _t.storeCouponValidate;
+  String get storeCouponValidating => _t.storeCouponValidating;
+  String get storeCouponValid => _t.storeCouponValid;
+  String get storeCouponInvalid => _t.storeCouponInvalid;
+  String get storeDiscount => _t.storeDiscount;
+  String get storeActualAmount => _t.storeActualAmount;
+  String get storeCouponRemove => _t.storeCouponRemove;
+  String get storePaymentMethod => _t.storePaymentMethod;
+  String get storeHandlingFee => _t.storeHandlingFee;
+  String get storeOrderHistory => _t.storeOrderHistory;
+  String get storeOrderNo => _t.storeOrderNo;
+  String get storeOrderDate => _t.storeOrderDate;
+  String get storeNoOrders => _t.storeNoOrders;
+  String get storeOrderDetail => _t.storeOrderDetail;
+  String get storeOrderStatusPending => _t.storeOrderStatusPending;
+  String get storeOrderStatusProcessing => _t.storeOrderStatusProcessing;
+  String get storeOrderStatusCancelled => _t.storeOrderStatusCancelled;
+  String get storeOrderStatusCompleted => _t.storeOrderStatusCompleted;
+  String get dashSyncLabel => _t.dashSyncLabel;
+  String get dashAnnouncementsLabel => _t.dashAnnouncementsLabel;
+  String get mineSyncLine => _t.mineSyncLine;
+  String get mineSubscriptionManage => _t.mineSubscriptionManage;
+  String get dashAccountLabel => _t.dashAccountLabel;
+  String get dashLatestAnnouncement => _t.dashLatestAnnouncement;
+  String get noNetworkConnection => _t.noNetworkConnection;
+  String get dashGreeting => _t.dashGreeting;
+  String get dashGreetingReturning => _t.dashGreetingReturning;
+  String get dashNoAnnouncements => _t.dashNoAnnouncements;
+  String get dashViewAll => _t.dashViewAll;
+  String get dashNoPlan => _t.dashNoPlan;
+  String get oldPassword => _t.oldPassword;
+  String get newPassword => _t.newPassword;
+  String get passwordChangedSuccess => _t.passwordChangedSuccess;
+  String get passwordChangeFailed => _t.passwordChangeFailed;
+  String get syncing => _t.syncing;
+  String get syncComplete => _t.syncComplete;
+  String get syncFailed => _t.syncFailed;
+  String get notConnected => _t.notConnected;
+  String get switchProfileTitle => _t.switchProfileTitle;
+  String switchProfileMessage(String name) => _t.switchProfileMessage(name: name);
+  String get switchProfileReconnectHint => _t.switchProfileReconnectHint;
+  String get switchProfileConfirm => _t.switchProfileConfirm;
+  String get onboardingWelcome => _t.onboardingWelcome;
+  String get onboardingWelcomeDesc => _t.onboardingWelcomeDesc;
+  String get onboardingConnect => _t.onboardingConnect;
+  String get onboardingConnectDesc => _t.onboardingConnectDesc;
+  String get onboardingNodes => _t.onboardingNodes;
+  String get onboardingNodesDesc => _t.onboardingNodesDesc;
+  String get onboardingStore => _t.onboardingStore;
+  String get onboardingStoreDesc => _t.onboardingStoreDesc;
+  String get onboardingSkip => _t.onboardingSkip;
+  String get onboardingNext => _t.onboardingNext;
+  String get onboardingDone => _t.onboardingDone;
+  String get chainProxy => _t.chainProxy;
+  String get chainEntry => _t.chainEntry;
+  String get chainExit => _t.chainExit;
+  String get chainConnect => _t.chainConnect;
+  String get chainDisconnect => _t.chainDisconnect;
+  String get chainConnected => _t.chainConnected;
+  String get chainDisconnected => _t.chainDisconnected;
+  String get chainConnectFailed => _t.chainConnectFailed;
+  String get chainNeedConnect => _t.chainNeedConnect;
+  String get chainNoGroup => _t.chainNoGroup;
+  String get chainNeedTwoNodes => _t.chainNeedTwoNodes;
+  String get chainNodeDuplicate => _t.chainNodeDuplicate;
+  String get chainClear => _t.chainClear;
+  String get chainEmptyHint => _t.chainEmptyHint;
+  String get chainEmptyDesc => _t.chainEmptyDesc;
+  String get chainAddHint => _t.chainAddHint;
+  String get chainPickerTitle => _t.chainPickerTitle;
+  String get chainPickerSearch => _t.chainPickerSearch;
+  String get chainSectionGroups => _t.chainSectionGroups;
+  String get chainSectionNodes => _t.chainSectionNodes;
+  String get msgSystemProxyConflict => _t.msgSystemProxyConflict;
+  String get checkinTitle => _t.checkinTitle;
+  String get checkinDesc => _t.checkinDesc;
+  String get checkinAction => _t.checkinAction;
+  String get checkinDone => _t.checkinDone;
+  String get checkinAlready => _t.checkinAlready;
+  String get checkinOtherDevice => _t.checkinOtherDevice;
+  String get checkinNeedLogin => _t.checkinNeedLogin;
+  String get checkinFailed => _t.checkinFailed;
+  String get checkinReward => _t.checkinReward;
+  String checkinTrafficReward(String amount) => _t.checkinTrafficReward(amount: amount);
+  String checkinBalanceReward(String amount) => _t.checkinBalanceReward(amount: amount);
+  String get qaSmartSelect => _t.qaSmartSelect;
+  String get qaSceneMode => _t.qaSceneMode;
+  String get qaSpeedTest => _t.qaSpeedTest;
+  String get statusExpiry => _t.statusExpiry;
+  String get statusTraffic => _t.statusTraffic;
+  String get statusHealth => _t.statusHealth;
+  String get statusExpired => _t.statusExpired;
+  String get statusUnlimited => _t.statusUnlimited;
+  String get statusExhausted => _t.statusExhausted;
+  String get gradeExcellent => _t.gradeExcellent;
+  String get gradeFair => _t.gradeFair;
+  String get gradePoor => _t.gradePoor;
+  String get gradeUnknown => _t.gradeUnknown;
+  String get gradeOffline => _t.gradeOffline;
+  String get embyEnter => _t.embyEnter;
+  String get embyNoAccessHint => _t.embyNoAccessHint;
+  String get embyWebHint => _t.embyWebHint;
+  String get embyNoContent => _t.embyNoContent;
+  String get embyNoLibrary => _t.embyNoLibrary;
+  String get embyLoadFailed => _t.embyLoadFailed;
+  String get embyTapRetry => _t.embyTapRetry;
+  String get embyGetFailed => _t.embyGetFailed;
+  String get errNativeLib => _t.errNativeLib;
+  String get errNativeLibHint => _t.errNativeLibHint;
+  String get errCoreInit => _t.errCoreInit;
+  String get errCoreInitHint => _t.errCoreInitHint;
+  String get errVpnDenied => _t.errVpnDenied;
+  String get errVpnDeniedHint => _t.errVpnDeniedHint;
+  String get errTunnel => _t.errTunnel;
+  String get errTunnelHint => _t.errTunnelHint;
+  String get errConfig => _t.errConfig;
+  String get errConfigHint => _t.errConfigHint;
+  String get errCoreStart => _t.errCoreStart;
+  String get errCoreStartHint => _t.errCoreStartHint;
+  String get errApiTimeout => _t.errApiTimeout;
+  String get errApiTimeoutHint => _t.errApiTimeoutHint;
+  String get errCoreCrash => _t.errCoreCrash;
+  String get errCoreCrashHint => _t.errCoreCrashHint;
+  String get errGeo => _t.errGeo;
+  String get errGeoHint => _t.errGeoHint;
+  String get errGeneric => _t.errGeneric;
+  String get errGenericHint => _t.errGenericHint;
+  String get goRepair => _t.goRepair;
+  String get copyReport => _t.copyReport;
+  String get reportCopied => _t.reportCopied;
+  String goCoreLogs(int count) => _t.goCoreLogs(count: count);
+  String get recentlyUsed => _t.recentlyUsed;
+  String get repairTools => _t.repairTools;
+  String get repairRebuildVpn => _t.repairRebuildVpn;
+  String get repairRebuildVpnHint => _t.repairRebuildVpnHint;
+  String get repairClearTunnel => _t.repairClearTunnel;
+  String get repairClearTunnelHint => _t.repairClearTunnelHint;
+  String get repairResync => _t.repairResync;
+  String get repairResyncHint => _t.repairResyncHint;
+  String get repairClearCache => _t.repairClearCache;
+  String get repairClearCacheHint => _t.repairClearCacheHint;
+  String get repairOneClick => _t.repairOneClick;
+  String get repairRunning => _t.repairRunning;
+  String get repairNeedLogin => _t.repairNeedLogin;
+  String get dataMonitor => _t.dataMonitor;
+  String get vpnNotRunning => _t.vpnNotRunning;
+  String get sectionModules => _t.sectionModules;
+  String get modulesLabel => _t.modulesLabel;
+  String get modulesEmpty => _t.modulesEmpty;
+  String get moduleAddUrl => _t.moduleAddUrl;
+  String get moduleAdding => _t.moduleAdding;
+  String get moduleAddSuccess => _t.moduleAddSuccess;
+  String get moduleRefresh => _t.moduleRefresh;
+  String get moduleDelete => _t.moduleDelete;
+  String get moduleDeleteConfirm => _t.moduleDeleteConfirm;
+  String get moduleRuleCount => _t.moduleRuleCount;
+  String get moduleNotActive => _t.moduleNotActive;
+  String get moduleMitmDetected => _t.moduleMitmDetected;
+  String get moduleScriptDetected => _t.moduleScriptDetected;
+  String get moduleRewriteDetected => _t.moduleRewriteDetected;
+  String get moduleFutureVersion => _t.moduleFutureVersion;
+  String get mitmEngine => _t.mitmEngine;
+  String get mitmEngineRunning => _t.mitmEngineRunning;
+  String get mitmEngineStopped => _t.mitmEngineStopped;
+  String get mitmEngineStart => _t.mitmEngineStart;
+  String get mitmEngineStop => _t.mitmEngineStop;
+  String get mitmEnginePort => _t.mitmEnginePort;
+  String get mitmCertTitle => _t.mitmCertTitle;
+  String get mitmCertInstall => _t.mitmCertInstall;
+  String get mitmCertGenerate => _t.mitmCertGenerate;
+  String get mitmCertExport => _t.mitmCertExport;
+  String get mitmCertFingerprint => _t.mitmCertFingerprint;
+  String get mitmCertExpiry => _t.mitmCertExpiry;
+  String get mitmCertNotFound => _t.mitmCertNotFound;
+  String get mitmCertGuideTitle => _t.mitmCertGuideTitle;
+  String get mitmHostnameCount => _t.mitmHostnameCount;
 
-  // ── Tray ─────────────────────────────────────────────────────────
-  String get trayConnect => _e ? 'Connect' : '连接';
-  String get trayDisconnect => _e ? 'Disconnect' : '断开连接';
-  String get trayShowWindow => _e ? 'Show Window' : '显示窗口';
-  String get trayQuit => _e ? 'Quit' : '退出';
-  String get trayProxies => _e ? 'Quick Switch' : '快速切换';
+  // ── Special cases (kept here, not in slang) ─────────────────
 
-  // ── Common ────────────────────────────────────────────────────────
-  String get cancel => _e ? 'Cancel' : '取消';
-  String get confirm => _e ? 'OK' : '确定';
-  String get save => _e ? 'Save' : '保存';
-  String get delete => _e ? 'Delete' : '删除';
-  String get edit => _e ? 'Edit' : '编辑';
-  String get add => _e ? 'Add' : '添加';
-  String get retry => _e ? 'Retry' : '重试';
-  String get saved => _e ? 'Saved' : '已保存';
-  String get upload => _e ? 'Upload' : '上传';
-  String get download => _e ? 'Download' : '下载';
-  String get operationFailed => _e ? 'Operation failed' : '操作失败';
-  String get noData => _e ? 'No data' : '无数据';
-
-  // ── Disconnect notification ───────────────────────────────────────
-  String get disconnectedUnexpected => _e ? 'Connection dropped' : '连接已断开';
-
-  // ── Subscription expiry ───────────────────────────────────────────
-  String subExpired(String name) =>
-      _e ? 'Subscription "$name" has expired' : '订阅「$name」已过期';
-  String subExpiringSoon(String name, int days) => _e
-      ? 'Subscription "$name" expires in $days day(s)'
-      : '订阅「$name」将在 $days 天后到期';
-
-  // ── Daily traffic ─────────────────────────────────────────────────
-  String get todayUsage => _e ? 'Today' : '今日用量';
-
-  // ── Connection status ─────────────────────────────────────────────
-  String get statusConnected => _e ? 'Protected' : '保护中';
-  String get statusDisconnected => _e ? 'Not Protected' : '未开启保护';
-  String get statusConnecting => _e ? 'Connecting...' : '连接中...';
-  String get statusProcessing => _e ? 'Processing...' : '处理中...';
-  String get statusDisconnecting => _e ? 'Disconnecting...' : '断开中...';
-  String get btnConnect => _e ? 'Connect' : '连接';
-  String get btnDisconnect => _e ? 'Disconnect' : '断开连接';
-  String get btnConnecting => _e ? 'Connecting' : '连接中';
-  String get btnDisconnecting => _e ? 'Disconnecting' : '断开中';
-
-  // ── Routing modes ─────────────────────────────────────────────────
-  String get routeModeRule => _e ? 'Rule' : '规则';
-  String get routeModeGlobal => _e ? 'Global' : '全局';
-  String get routeModeDirect => _e ? 'Direct' : '直连';
-  String get routingModeSetting => _e ? 'Routing Mode' : '路由模式';
-  String get modeSwitched => _e ? 'Mode switched' : '模式已切换';
-  String get directModeDesc =>
-      _e ? 'All traffic connects directly without proxy' : '所有流量直接连接，不经过代理节点';
-  String get globalModeDesc => _e
-      ? 'All traffic routes through the selected node below'
-      : '所有流量通过下方选择的节点转发';
-
-  // ── Traffic ───────────────────────────────────────────────────────
-  String get trafficUpload => _e ? 'Upload' : '上传';
-  String get trafficDownload => _e ? 'Download' : '下载';
-  String get trafficMemory => _e ? 'Memory' : '内存';
-  String get activeConns => _e ? 'Connections' : '活跃连接';
-
-  // ── Mock mode ─────────────────────────────────────────────────────
-  String get mockModeBanner => _e ? 'Dev Mode · Mock Data' : '开发模式 · 模拟数据';
-  String get mockModeLabel => _e ? 'Mock Mode' : '模拟模式';
-  String get mockHint => _e ? 'Click Connect to start mock mode' : '点击连接启动模拟模式';
-
-  // ── Home / Dashboard ──────────────────────────────────────────────
-  String get dashboardLabel => _e ? 'DASHBOARD' : '仪表盘';
-  String get dashboardTitle => _e ? 'Calm network control.' : '从容掌控网络。';
-  String get switchNode => _e ? 'Switch node' : '切换节点';
-  String get liveConnection => _e ? 'Live connection' : '实时连接';
-  String get dashConnectedDesc => _e
-      ? 'Your traffic is routed through a healthy node with low latency.'
-      : '流量正通过低延迟节点转发，运行正常。';
-  String get dashDisconnectedTitle => _e ? 'Not connected' : '未连接';
-  String get dashDisconnectedDesc => _e
-      ? 'Click Connect to start routing traffic through a proxy node.'
-      : '点击连接以开始通过代理节点转发流量。';
-  String get realtimeTraffic => _e ? 'Realtime traffic' : '实时流量';
-  String get nodeLabel => _e ? 'Current Node' : '当前节点';
-  String get exitIpLabel => _e ? 'Outbound IP' : '出口 IP';
-  String get routingLabel => _e ? 'Routing Mode' : '路由模式';
-  String get exitIpTapToQuery => _e ? 'Tap to query' : '点击查询';
-  String get exitIpQuerying => _e ? 'Querying...' : '查询中...';
-  String get exitIpFailed => _e ? 'Query failed' : '查询失败';
-  String get systemProxy => _e ? 'System Proxy' : '系统代理';
-  String get systemProxyOn => _e ? 'System proxy enabled' : '系统代理已启用';
-  String get systemProxyOff => _e ? 'System proxy off' : '系统代理未启用';
-  String get trafficActivity => _e ? 'Traffic activity' : '流量活动';
-  String get last60s => _e ? 'Last 60 seconds' : '最近 60 秒';
-  String get dashReadyHint => _e
-      ? 'Ready to connect. Tap the power button to start.'
-      : '已就绪，点击电源按钮开始连接。';
-  String get dashNoProfileHint => _e
-      ? 'No profile selected. Add one in Profiles first.'
-      : '尚未选择配置，请先在「配置」页面添加。';
-  String get dashAutoConnectOn => _e ? 'Auto-connect: On' : '自动连接：开启';
-  String get dashAutoConnectOff => _e ? 'Auto-connect: Off' : '自动连接：关闭';
-  String get noProfileHint =>
-      _e ? 'Add a subscription in the Profiles page first' : '请先在「配置」页面添加订阅';
-  String get snackNoProfile =>
-      _e ? 'No subscription yet — tap Sync to get started' : '暂无订阅配置，请先同步订阅';
-  String get snackConfigMissing =>
-      _e ? 'Config missing, please sync your subscription' : '配置文件不存在，请重新同步订阅';
-  String get snackStartFailed =>
-      _e ? 'Connection failed, please try again' : '连接失败，请稍后重试';
-
-  // Network permission pre-auth dialog (first connection on mobile)
-  String get vpnPermTitle => _e ? 'Network Permission Required' : '需要网络权限';
-  String get vpnPermBody => _e
-      ? 'YueLink needs to set up a secure tunnel to route your traffic. '
-          'No personal data is sent to our servers — all processing happens on your device.\n\n'
-          'Tap "Continue" to grant the permission.'
-      : '悦通需要建立安全隧道来转发你的网络流量。'
-          '不会将任何个人数据发送至服务器——所有处理均在本地完成。\n\n'
-          '点击「继续」授予权限。';
-  String get vpnPermContinue => _e ? 'Continue' : '继续';
-
-  // ── Proxy page ────────────────────────────────────────────────────
-  String get notConnectedHintProxy =>
-      _e ? 'Connect first to view proxy nodes' : '请先连接以查看代理节点';
-  String get connectToViewProxiesDesc => _e
-      ? 'Connect to the core to view and manage proxies.'
-      : '连接内核以查看和管理代理节点。';
-  String nodesCountLabel(int n) => _e ? '$n Nodes' : '$n 个节点';
-  String switchedTo(String name) => _e ? 'Switched to $name' : '已切换至 $name';
-  String get switchFailed => _e ? 'Failed to switch node' : '切换节点失败';
-  String testingGroup(String name) => _e ? 'Testing $name...' : '正在测试 $name...';
-  String get directAuto => _e ? 'Direct / Auto' : '直连 / 自动';
-  String get searchNodesHint => _e ? 'Search nodes...' : '搜索节点...';
-  String get sortByDelay => _e ? 'Sort by delay' : '按延迟排序';
-  String get cancelSort => _e ? 'Cancel sort' : '取消排序';
-  String get testUrlSettings => _e ? 'Speed Test URL' : '测速 URL';
-  String get resetDefault => _e ? 'Reset to Default' : '恢复默认';
-  String get unsavedChanges => _e ? 'Unsaved Changes' : '有未保存的修改';
-  String get unsavedChangesBody =>
-      _e ? 'Leave and discard unsaved changes?' : '有未保存的修改，确定要离开并放弃吗？';
-  String get discardAndLeave => _e ? 'Discard & Leave' : '放弃并离开';
-  String get stayOnPage => _e ? 'Stay' : '留在当前页';
-  String get noMatchingNodes => _e ? 'No matching nodes' : '未找到匹配的节点';
-  String get testUrlDialogTitle => _e ? 'Speed Test URL' : '测速 URL';
-  String get customUrlLabel => _e ? 'Custom URL' : '自定义 URL';
-  String get typeManual => _e ? 'Manual' : '手动选择';
-  String get typeAuto => _e ? 'Auto' : '自动测速';
-  String get typeFallback => _e ? 'Fallback' : '故障转移';
-  String get typeLoadBalance => _e ? 'Load Balance' : '负载均衡';
-  String get testAll => _e ? 'Test All' : '测速全部';
-  String testingCount(int n) => _e ? 'Testing ($n)' : '测速中 ($n)';
-  String nodesCount(int visible, int total) =>
-      _e ? '$visible/$total nodes' : '$visible/$total 节点';
-
-  // ── Profile page ──────────────────────────────────────────────────
-  String loadFailed(String error) =>
-      _e ? 'Load failed: $error' : '加载失败: $error';
-  String get noProfiles => _e ? 'No subscriptions' : '暂无订阅';
-  String get addSubscriptionHint =>
-      _e ? 'Click the button below to add a subscription' : '点击下方按钮添加机场订阅';
-  String get pasteFromClipboard => _e ? 'Paste from clipboard' : '从剪贴板粘贴';
-  String get addSubscription => _e ? 'Add Subscription' : '添加订阅';
-  String get downloadingSubscription =>
-      _e ? 'Downloading subscription...' : '正在下载订阅...';
-  String get updatingSubscription =>
-      _e ? 'Updating subscription...' : '正在更新订阅...';
-  String get updateSuccess => _e ? 'Updated successfully' : '更新成功';
-  String updateFailed(String error) =>
-      _e ? 'Update failed: $error' : '更新失败: $error';
-  String get confirmDelete => _e ? 'Confirm Delete' : '确认删除';
-  String confirmDeleteMessage(String name) =>
-      _e ? 'Are you sure to delete "$name"?' : '确定要删除「$name」吗？';
-  String get addSubscriptionDialogTitle => _e ? 'Add Subscription' : '添加订阅';
-  String get editSubscriptionDialogTitle => _e ? 'Edit Subscription' : '编辑订阅';
-  String get nameLabel => _e ? 'Name' : '名称';
-  String get nameHint => _e ? 'My Subscription' : '我的机场';
-  String get urlLabel => _e ? 'Subscription URL' : '订阅链接';
-  String get updateInterval => _e ? 'Update Interval' : '更新间隔';
-  String get followGlobal => _e ? 'Default (24h)' : '默认 (24h)';
-  String get days7 => _e ? '7 days' : '7 天';
-  String get hours6 => _e ? '6 hours' : '6 小时';
-  String get hours12 => _e ? '12 hours' : '12 小时';
-  String get hours24 => _e ? '24 hours' : '24 小时';
-  String get hours48 => _e ? '48 hours' : '48 小时';
-  String usageLabel(String used, String total) =>
-      _e ? 'Used $used / $total' : '已用 $used / $total';
-  String get expired => _e ? 'Expired' : '已过期';
-  String daysRemaining(int days) => _e ? '$days days left' : '剩余 $days 天';
-  String get needsUpdate => _e ? 'Needs update' : '需要更新';
-  String updatedAt(String time) => _e ? 'Updated at $time' : '更新于 $time';
-  String get noConfig => _e ? 'Config file not found' : '配置文件不存在';
-  String get copyConfig => _e ? 'Copy config' : '复制配置';
-  String get copiedConfig => _e ? 'Config copied' : '已复制配置内容';
-  String get copyLink => _e ? 'Copy link' : '复制链接';
-  String get copiedLink => _e ? 'Subscription link copied' : '已复制订阅链接';
-  String get viewConfig => _e ? 'View config' : '查看配置';
-  String get updateSubscription => _e ? 'Update subscription' : '更新订阅';
-  String get clipboardNoUrl =>
-      _e ? 'No valid subscription URL in clipboard' : '剪贴板中没有有效的订阅链接';
-  String get addSuccess => _e ? 'Added successfully' : '添加成功';
-  String addFailed(String error) =>
-      _e ? 'Failed to add: $error' : '添加失败: $error';
-  String get importLocalFile => _e ? 'Import local file' : '从本地文件导入';
-  String get importLocalFileSuccess => _e ? 'Imported successfully' : '导入成功';
-  String get importLocalFileFailed =>
-      _e ? 'Import failed: no valid YAML file selected' : '导入失败：未选择有效的 YAML 文件';
-  String get importLocalNameHint => _e ? 'My Config' : '我的配置';
-  String get exportProfile => _e ? 'Export config' : '导出配置';
-  String exportProfileSuccess(String name) =>
-      _e ? 'Exported: $name.yaml' : '已导出: $name.yaml';
-  String get exportAllProfiles => _e ? 'Export all configs' : '导出全部订阅配置';
-  String get importMultipleFiles => _e ? 'Import config files' : '导入配置文件';
-  String get exportFailed => _e ? 'Export failed' : '导出失败';
-  String get exportSelectDir => _e ? 'Select export folder' : '选择导出目录';
-  String exportAllDone(int count) =>
-      _e ? 'Exported $count YAML files' : '已导出 $count 个配置文件';
+  /// Two-state pluralization. failed==0 → "imported N" / else → "imported N, failed M".
   String importAllResult(int ok, int failed) => failed == 0
-      ? (_e ? 'Imported $ok subscriptions' : '成功导入 $ok 个订阅')
-      : (_e ? 'Imported $ok, failed $failed' : '成功 $ok 个，失败 $failed 个');
-  String get importBundleFailed =>
-      _e ? 'Import failed: invalid backup file' : '导入失败：无效的备份文件';
+      ? _t.importAllResultAllOk(ok: ok)
+      : _t.importAllResultPartial(ok: ok, failed: failed);
 
-  // ── Split tunneling (Android) ─────────────────────────────────────
-  String get sectionSplitTunnel => _e ? 'Split Tunneling' : '分应用代理';
-  String get splitTunnelMode => _e ? 'Mode' : '代理模式';
-  String get splitTunnelModeAll => _e ? 'All apps' : '全部应用';
-  String get splitTunnelModeWhitelist =>
-      _e ? 'Proxy listed apps only' : '仅代理选定应用';
-  String get splitTunnelModeBlacklist => _e ? 'Bypass listed apps' : '绕过选定应用';
-  String get splitTunnelApps => _e ? 'App List' : '应用列表';
-  String get splitTunnelManage => _e ? 'Manage Apps' : '管理应用';
-  String get splitTunnelSearchHint => _e ? 'Search apps...' : '搜索应用...';
-  String get splitTunnelEffectHint =>
-      _e ? 'Changes take effect on next connect' : '下次连接时生效';
-
-  // ── Geo resources ─────────────────────────────────────────────────
-  String get sectionGeoResources => _e ? 'Geo Resources' : 'GeoIP/GeoSite 资源';
-  String get geoResourcesHint => _e
-      ? 'mihomo uses these files for rule-based routing'
-      : 'mihomo 路由分流所需的地理数据库文件';
-  String get geoUpdateAll => _e ? 'Update All' : '一键更新';
-  String get geoUpdateSuccess => _e ? 'Geo resources updated' : 'Geo 资源更新成功';
-  String get geoUpdateFailed => _e ? 'Update failed' : '更新失败';
-  String get geoNotFound => _e ? 'Not found' : '文件不存在';
+  /// Passthrough — file size already formatted by caller.
   String geoFileSize(String size) => size;
-
-  // ── Config rollback ───────────────────────────────────────────────
-  String get rollbackTitle => _e ? 'Start Failed' : '启动失败';
-  String get rollbackContent => _e
-      ? 'The configuration failed to start. Rollback to the last known-good config?'
-      : '配置启动失败，是否回退到上一次可用的配置？';
-  String get rollbackConfirm => _e ? 'Rollback' : '回退';
-  String get rollbackSuccess => _e ? 'Rolled back successfully' : '已回退到上次可用配置';
-  String get rollbackFailed => _e ? 'Rollback failed' : '回退也失败了，请检查配置';
-
-  // ── Update checker ────────────────────────────────────────────────
-  String get checkUpdate => _e ? 'Check for Updates' : '检查更新';
-  String get updateAvailable => _e ? 'New version available' : '发现新版本';
-  String get updateDownload => _e ? 'Download & Install' : '下载安装';
-  String get updateDownloading => _e ? 'Downloading...' : '正在下载...';
-  String get updateDownloadComplete => _e ? 'Download complete' : '下载完成';
-  String get updateDownloadFailed => _e ? 'Download failed' : '下载失败';
-  String get updateInstalling => _e ? 'Opening installer...' : '正在打开安装包...';
-  String get alreadyLatest => _e ? 'Already up to date' : '已是最新版本';
-  String get updateCheckFailed => _e ? 'Failed to check for updates' : '检查更新失败';
-
-  // ── YAML validation ───────────────────────────────────────────────
-  String get yamlInvalid => _e ? 'Invalid YAML syntax' : 'YAML 语法错误';
-
-  // ── Global hotkey ─────────────────────────────────────────────────
-  String get sectionHotkeys => _e ? 'Global Hotkeys' : '全局热键';
-  String get hotkeyToggle =>
-      _e ? 'Toggle connection (Ctrl+Alt+C)' : '切换连接 (Ctrl+Alt+C)';
-  String get hotkeyHint =>
-      _e ? 'Available on macOS and Windows' : '仅在 macOS / Windows 上生效';
-
-  // ── Connections page ──────────────────────────────────────────────
-  String get notConnectedHintConnections =>
-      _e ? 'Connect first to view active connections' : '请先连接以查看活跃连接';
-  String get searchConnHint =>
-      _e ? 'Search target, process, rule...' : '搜索目标、进程、规则...';
-  String get closeAll => _e ? 'Close All' : '断开全部';
-  String connectionsCount(int count) =>
-      _e ? '$count connections' : '$count 个连接';
-  String connectionsCountFiltered(int count) =>
-      _e ? '$count connections (filtered)' : '$count 个连接（已过滤）';
-  String get noActiveConnections => _e ? 'No active connections' : '暂无活跃连接';
-  String get noMatchingConnections => _e ? 'No matching results' : '无匹配结果';
-  String get closeAllDialogTitle => _e ? 'Close All Connections' : '断开所有连接';
-  String get closeAllDialogMessage =>
-      _e ? 'Are you sure to close all active connections?' : '确定要断开所有活跃连接吗？';
-  String get statConnections => _e ? 'Connections' : '连接数';
-  String get statTotalDownload => _e ? 'Total Download' : '累计下载';
-  String get statTotalUpload => _e ? 'Total Upload' : '累计上传';
-  String get connectionDetailTitle => _e ? 'Connection Details' : '连接详情';
-  String get detailTarget => _e ? 'Target' : '目标';
-  String get detailProtocol => _e ? 'Protocol' : '协议';
-  String get detailSource => _e ? 'Source' : '来源';
-  String get detailTargetIp => _e ? 'Target IP' : '目标 IP';
-  String get detailProxyChain => _e ? 'Proxy Chain' : '代理链';
-  String get detailRule => _e ? 'Rule' : '规则';
-  String get detailProcess => _e ? 'Process' : '进程';
-  String get detailDuration => _e ? 'Duration' : '持续时间';
-  String get detailDownload => _e ? 'Download' : '下载';
-  String get detailUpload => _e ? 'Upload' : '上传';
-  String get detailConnectTime => _e ? 'Connect Time' : '连接时间';
-
-  // ── Log page ──────────────────────────────────────────────────────
-  String get notConnectedHintLog =>
-      _e ? 'Connect first to view logs' : '请先连接以查看日志';
-  String get tabLogs => _e ? 'Logs' : '日志';
-  String get tabRules => _e ? 'Rules' : '规则';
-  String get searchLogsHint => _e ? 'Search logs...' : '搜索日志...';
-  String get searchLogsRegexHint => _e ? 'Regex pattern...' : '正则表达式...';
-  String get regexSearch => _e ? 'Toggle regex search' : '切换正则搜索';
-  String get clearLogs => _e ? 'Clear logs' : '清空日志';
-  String get noLogs => _e ? 'No logs' : '暂无日志';
-  String logsCount(int count) => _e ? '$count logs' : '$count 条日志';
-  String logLevelLabel(String level) => _e ? 'Level: $level' : '级别: $level';
-  String rulesCount(int count) => _e ? '$count rules' : '共 $count 条规则';
-  String matchedRulesCount(int count) => _e ? '$count matched' : '匹配 $count 条';
-  String get searchRulesHint => _e ? 'Search rules...' : '搜索规则...';
-  String get noMatchingRules => _e ? 'No matching rules' : '未找到匹配的规则';
-
-  // ── Overwrite page ────────────────────────────────────────────────
-  String get overwriteTitle => _e ? 'Config Overwrite' : '配置覆写';
-  String get overwriteRulesTitle => _e ? 'Overwrite Rules' : '覆写规则';
-  String get overwriteRulesDescription => _e
-      ? '• Scalar keys (mode, log-level, etc.) replace values in the subscription config\n'
-          '• rules list is prepended before subscription rules\n'
-          '• proxies / proxy-groups lists are appended after the subscription\n'
-          '• dns / tun / sniffer / hosts / listeners blocks are merged into existing sections'
-      : '• 标量键（mode, log-level 等）会替换订阅中的对应值\n'
-          '• rules 列表会插入到订阅规则之前\n'
-          '• proxies / proxy-groups 列表会追加到订阅之后\n'
-          '• dns / tun / sniffer / hosts / listeners 块会合并到已有配置段';
-  String get overwriteHintText => _e
-      ? '# Example:\n# mode: rule\n# rules:\n#   - DOMAIN-SUFFIX,example.com,DIRECT'
-      : '# 示例:\n# mode: rule\n# rules:\n#   - DOMAIN-SUFFIX,example.com,DIRECT';
-  String get savedNextConnect =>
-      _e ? 'Saved, will take effect on next connect' : '已保存，下次连接时生效';
-
-  // ── Settings page ─────────────────────────────────────────────────
-  String get sectionConnection => _e ? 'Connection' : '连接';
-  String get sectionCore => _e ? 'Core' : '内核';
-  String get sectionSubscription => _e ? 'Subscription' : '订阅';
-  String get sectionAppearance => _e ? 'Appearance' : '外观';
-  String get sectionStatus => _e ? 'Status' : '状态';
-  String get sectionTools => _e ? 'Tools' : '工具';
-  String get sectionAbout => _e ? 'About' : '关于';
-  String get sectionSettings => _e ? 'General' : '通用';
-  String get sectionService => _e ? 'My Subscription' : '我的订阅';
-  String get sectionSupport => _e ? 'Support' : '支持';
-  String get preferencesLabel => _e ? 'Preferences' : '偏好设置';
-  String get sectionAccountActions => _e ? 'Account' : '账号';
-  // Upstream proxy
-  String get upstreamProxy => _e ? 'Upstream Proxy' : '上游代理';
-  String get upstreamProxySub => _e
-      ? 'Route through a local gateway (e.g. soft router)'
-      : '通过本地网关出站（如软路由）';
-  String get upstreamProxyServer => _e ? 'Server' : '服务器地址';
-  String get upstreamProxyPort => _e ? 'Port' : '端口';
-  String get upstreamProxyType => _e ? 'Type' : '类型';
-  String get upstreamProxySaved => _e ? 'Upstream proxy saved' : '上游代理已保存';
-  String get upstreamProxyNotFound =>
-      _e ? 'No proxy detected on gateway' : '未检测到网关代理';
-  String get upstreamProxyHint =>
-      _e ? 'Soft router IP, e.g. 192.168.1.1' : '软路由 IP，如 192.168.1.1';
-  // Export logs
-  String get exportLogs => _e ? 'Export Logs' : '导出日志';
-  String get exportLogsCrash => _e ? 'Crash Log' : '崩溃日志';
-  String get exportLogsCore => _e ? 'Core Log' : '内核日志';
-  String get exportLogsEmpty => _e ? 'No log file found' : '暂无日志文件';
-  String get exportLogsCopied => _e ? 'Log copied to clipboard' : '日志已复制到剪贴板';
-  String get sectionDesktop => _e ? 'Desktop' : '桌面端';
-  String get sectionNetwork => _e ? 'Network' : '网络';
-  // Close window
-  String get closeWindowBehavior => _e ? 'Close Window' : '关闭窗口';
-  String get closeBehaviorTray => _e ? 'Minimize to tray' : '最小化到托盘';
-  String get closeBehaviorExit => _e ? 'Exit application' : '退出应用';
-  // Hotkey
-  String get toggleConnectionHotkey =>
-      _e ? 'Toggle Connection Hotkey' : '连接快捷键';
-  String get hotkeyEdit => _e ? 'Edit' : '编辑';
-  String get hotkeyListening => _e ? 'Press a key combination...' : '请按下组合键...';
-  String get hotkeySaved => _e ? 'Hotkey saved' : '快捷键已保存';
-  String get hotkeyFailed => _e ? 'Failed to register hotkey' : '快捷键注册失败';
-  // Geo database
-  String get geoDatabase => _e ? 'Geo Database' : '地理数据库';
-  String get geoUpdateNow => _e ? 'Update Now' : '立即更新';
-  String get geoUpdated => _e ? 'Geo database updated' : '地理数据库已更新';
-  String geoLastUpdated(String date) => _e ? 'Updated: $date' : '更新于 $date';
-  // Linux-specific
-  String get linuxProxyNotice => _e
-      ? 'System proxy not managed automatically on Linux'
-      : 'Linux 不自动管理系统代理';
-  String get linuxProxyManual =>
-      _e ? 'Manual proxy: 127.0.0.1:7890' : '手动代理: 127.0.0.1:7890';
-  String get hotkeyLinuxNotice =>
-      _e ? 'Not supported on all Linux desktops' : '部分 Linux 桌面不支持全局快捷键';
-  // Diagnostics
-  String get diagnostics => _e ? 'Diagnostics' : '诊断';
-  String get viewStartupReport => _e ? 'View startup report' : '查看启动报告';
-  String get copiedToClipboard => _e ? 'Copied to clipboard' : '已复制到剪贴板';
-  String get sectionLanguage => _e ? 'Language' : '语言';
-  String get connectionMode => _e ? 'Connection Mode' : '接入方式';
-  String get modeTun => _e ? 'TUN Mode' : 'TUN 模式';
-  String get modeSystemProxy => _e ? 'System Proxy' : '系统代理';
-  String get serviceModeLabel => _e ? 'Service Mode' : '服务模式';
-  String get serviceModeInstall => _e ? 'Install Service' : '安装服务';
-  String get serviceModeUninstall => _e ? 'Uninstall' : '卸载服务';
-  String get serviceModeRefresh => _e ? 'Refresh' : '刷新状态';
-  String get serviceModeNotInstalled =>
-      _e ? 'Privileged helper not installed' : '特权服务未安装';
-  String get serviceModeInstalled =>
-      _e ? 'Privileged helper installed' : '特权服务已安装';
-  String get serviceModeUnreachable =>
-      _e ? 'Installed, but helper is not reachable' : '已安装，但 helper 不可达';
-  String serviceModeRunning(int pid) => _e
-      ? 'Helper reachable · Mihomo running (PID $pid)'
-      : 'helper 可用 · Mihomo 运行中 (PID $pid)';
-  String get serviceModeIdle =>
-      _e ? 'Helper reachable · Mihomo is stopped' : 'helper 可用 · Mihomo 未运行';
-  String serviceModeNeedsUpdate(String version) => _e
-      ? 'Version mismatch ($version) — please reinstall'
-      : '版本不匹配 ($version) — 请重新安装';
-  String get serviceModeUpdate => _e ? 'Update' : '更新';
-  String get serviceModeUpdateOk =>
-      _e ? 'Service updated successfully' : '服务更新成功';
-  String serviceModeUpdateFailed(String error) =>
-      _e ? 'Service update failed: $error' : '服务更新失败: $error';
-  String get serviceModeInstallOk =>
-      _e ? 'Desktop service installed' : '桌面服务已安装';
-  String serviceModeInstallFailed(String error) =>
-      _e ? 'Install service failed: $error' : '安装服务失败: $error';
-  String get serviceModeUninstallOk =>
-      _e ? 'Desktop service removed' : '桌面服务已卸载';
-  String serviceModeUninstallFailed(String error) =>
-      _e ? 'Uninstall service failed: $error' : '卸载服务失败: $error';
-  String get msgSwitchedToTun =>
-      _e ? 'Switched to TUN mode' : '已切换到 TUN 模式';
-  String get msgSwitchedToSystemProxy =>
-      _e ? 'Switched to system proxy' : '已切换到系统代理';
-  String get errTunSwitchFailed =>
-      _e ? 'Failed to switch mode' : '模式切换失败';
-  String get tunBypassLabel => _e ? 'TUN Bypass' : 'TUN 绕过';
-  String get tunBypassSub =>
-      _e ? 'Exclude addresses or processes from TUN' : '排除指定地址或进程不走 TUN';
-  String get tunBypassAddrHint =>
-      _e ? 'Bypass addresses (one per line, CIDR)' : '绕过地址（每行一个，CIDR 格式）';
-  String get tunBypassProcHint =>
-      _e ? 'Bypass processes (one per line)' : '绕过进程（每行一个）';
-  String get tunBypassSaved =>
-      _e ? 'TUN bypass settings saved' : 'TUN 绕过设置已保存';
-  String get tunStackLabel => _e ? 'TUN Stack' : 'TUN 栈';
-  String get tunStackMixed => _e ? 'Mixed' : 'Mixed';
-  String get tunStackSystem => _e ? 'System' : 'System';
-  String get tunStackGvisor => _e ? 'gVisor' : 'gVisor';
-  String get setSystemProxyOnConnect =>
-      _e ? 'Set system proxy on connect' : '连接时设置系统代理';
-  String get setSystemProxyOnConnectSub =>
-      _e ? 'Auto-configure HTTP/SOCKS system proxy' : '连接后自动配置 HTTP/SOCKS 系统代理';
-  String get autoConnect => _e ? 'Auto connect on startup' : '启动时自动连接';
-  String get launchAtStartupLabel => _e ? 'Launch at startup' : '开机自启动';
-  String get launchAtStartupSub =>
-      _e ? 'Auto start YueLink at login' : '登录时自动启动 YueLink';
-  String get logLevelSetting => _e ? 'Log Level' : '日志级别';
-  String get configOverwrite => _e ? 'Config Overwrite' : '配置覆写';
-  String get configOverwriteSub =>
-      _e ? 'Add custom rules on top of subscription config' : '在订阅配置之上叠加自定义规则';
-  String get updateAllNow => _e ? 'Update all subscriptions now' : '立即更新所有订阅';
-  String get themeLabel => _e ? 'Theme' : '主题';
-  String get themeSystem => _e ? 'System' : '跟随系统';
-  String get themeLight => _e ? 'Light' : '浅色';
-  String get themeDark => _e ? 'Dark' : '深色';
-  String get languageChinese => '中文';
-  String get languageEnglish => 'English';
-  String get coreStatus => _e ? 'Core Status' : '内核状态';
-  String get coreRunning => _e ? 'Running' : '运行中';
-  String get coreStopped => _e ? 'Stopped' : '已停止';
-  String get runMode => _e ? 'Run Mode' : '运行模式';
-  String get mixedPort => _e ? 'Mixed Port' : 'Mixed 端口';
-  String get apiPort => _e ? 'API Port' : 'API 端口';
-  String get dnsQuery => _e ? 'DNS Query' : 'DNS 查询';
-  String get runningConfig => _e ? 'Running Config' : '运行配置';
-  String get versionLabel => _e ? 'Version' : '版本';
-  String get coreLabel => _e ? 'Core' : '内核';
-  String get projectHome => _e ? 'Project Home' : '项目主页';
-  String get openSourceLicense => _e ? 'Open Source License' : '开源许可';
-  String get updatingAll => _e ? 'Updating subscriptions...' : '正在更新订阅...';
-  String updateAllResult(int updated, int failed) => _e
-      ? 'Update done: $updated succeeded, $failed failed'
-      : '更新完成：成功 $updated 个，失败 $failed 个';
-  String get dnsCacheCleared => _e ? 'DNS cache cleared' : 'DNS 缓存已清除';
-  String get fakeIpCacheCleared =>
-      _e ? 'Fake-IP cache cleared' : 'Fake-IP 缓存已清除';
-  // ── Error helpers ─────────────────────────────────────────────────
-  String get errorTimeout =>
-      _e ? 'Request timed out, check your network' : '请求超时，请检查网络连接';
-  String get errorNetwork =>
-      _e ? 'Network error, check your connection' : '网络错误，请检查网络连接';
-  String get overwritePortInvalid =>
-      _e ? 'Port must be between 1 and 65535' : '端口号必须在 1 到 65535 之间';
-  String get proxyTypeAll => _e ? 'All' : '全部';
-
-  // ── Sub-Store ─────────────────────────────────────────────────────
-  String get sectionSubStore => _e ? 'Sub-Store Conversion' : 'Sub-Store 订阅转换';
-  String get subStoreUrlLabel => _e ? 'Sub-Store Server URL' : 'Sub-Store 服务地址';
-  String get subStoreUrlHint =>
-      _e ? 'http://127.0.0.1:25500' : 'http://127.0.0.1:25500';
-  String get subStoreUrlSub => _e
-      ? 'Convert V2Ray/SS links to Clash format automatically'
-      : '自动将 V2Ray/SS 订阅转换为 Clash 格式';
-  String get subStoreUrlSaved => _e ? 'Sub-Store URL saved' : 'Sub-Store 地址已保存';
-
-  // ── Overwrite tabs ────────────────────────────────────────────────
-  String get overwriteTabBasic => _e ? 'Basic' : '基础';
-  String get overwriteTabRules => _e ? 'Rules' : '规则';
-  String get overwriteTabAdvanced => _e ? 'Advanced' : '高级';
-  String get overwriteModeLabel => _e ? 'Override Mode' : '覆写模式';
-  String get overwriteModeNone => _e ? 'No override' : '不覆写';
-  String get overwritePortLabel => _e ? 'Mixed Port' : 'Mixed 端口';
-  String get overwritePortHint =>
-      _e ? 'e.g. 7890 (leave blank to skip)' : '如 7890，留空则不覆写';
-  String get overwriteCustomRulesLabel =>
-      _e ? 'Custom Rules (prepended)' : '自定义规则（插入到订阅规则前）';
-  String get overwriteAddRule => _e ? 'Add Rule' : '添加规则';
-  String get overwriteRuleHint => _e
-      ? 'e.g. DOMAIN-SUFFIX,example.com,DIRECT'
-      : '如 DOMAIN-SUFFIX,example.com,DIRECT';
-  String get overwriteExtraYamlLabel =>
-      _e ? 'Extra YAML (appended)' : '额外 YAML（追加到覆写末尾）';
-
-  // ── Mode chips ────────────────────────────────────────────────────
-  String get modeMock => _e ? 'Mock' : '模拟';
-  String get modeSubprocess => _e ? 'Subprocess' : '子进程';
-
-  // ── DNS query page ────────────────────────────────────────────────
-  String get domainHint =>
-      _e ? 'Enter domain, e.g. google.com' : '输入域名，如 google.com';
-  String get query => _e ? 'Query' : '查询';
-  String get noRecords => _e ? 'No records' : '无记录';
-
-  String updateAvailableV(String v) => _e ? 'v$v available' : '发现新版本 v$v';
-
-  // ── Proxy Provider ──────────────────────────────────────────────
-  String get proxyProviderTitle => _e ? 'Proxy Providers' : '代理提供者';
-  String get proxyProviderEmpty => _e ? 'No proxy providers' : '无代理提供者';
-  String providerNodeCount(int count) => _e ? '$count nodes' : '$count 个节点';
-  String get providerUpdate => _e ? 'Update' : '更新';
-  String get providerHealthCheck => _e ? 'Health Check' : '健康检查';
-  String get providerUpdateSuccess => _e ? 'Provider updated' : '提供者已更新';
-  String get providerUpdateFailed => _e ? 'Provider update failed' : '提供者更新失败';
-  String get providerHealthCheckDone => _e ? 'Health check complete' : '健康检查完成';
-
-  // ── Connection mode display ─────────────────────────────────────
-  String get connectionModeLabel => _e ? 'Mode' : '模式';
-
-  // ── Core error messages ───────────────────────────────────────
-  String get errVpnPermission => _e
-      ? 'Network permission denied, cannot enable TUN mode'
-      : '缺少网络权限，无法开启 TUN 模式';
-  String get errCoreStartFailed => _e
-      ? 'Core failed to start, check config or port conflicts'
-      : '内核启动失败，请检查配置格式或端口占用';
-  String get errVpnTunnelFailed => _e ? 'Tunnel setup failed' : '隧道建立失败';
-  String get msgConnected => _e ? 'Connected' : '已成功连接';
-  String errApiError(int code, String body) =>
-      _e ? 'API error: $code - $body' : 'API 错误: $code - $body';
-  String errStartFailed(String msg) => _e ? 'Start failed: $msg' : '启动失败: $msg';
-  String get msgDisconnected => _e ? 'Disconnected' : '已断开连接';
-  String get errStopFailed => _e ? 'Error while disconnecting' : '断开连接时发生错误';
-  String get errSystemProxyFailed => _e
-      ? 'System proxy setup failed. Configure proxy manually at 127.0.0.1'
-      : '系统代理设置失败，请手动设置代理 127.0.0.1';
-
-  // ── Download error messages ───────────────────────────────────
-  String get errDownloadTimeout =>
-      _e ? 'Download timed out, check your network' : '下载超时，请检查网络连接';
-  String errNetworkError(String detail) =>
-      _e ? 'Network error: $detail' : '网络错误: $detail';
-  String errDownloadHttpFailed(int code) =>
-      _e ? 'Download failed: HTTP $code' : '下载失败: HTTP $code';
-
-  // ── Traffic chart ────────────────────────────────────────────────
-  String get chartLock => _e ? 'Lock chart' : '锁定图表';
-  String get chartUnlock => _e ? 'Unlock chart' : '解锁图表';
-
-  // ── Routing mode ─────────────────────────────────────────────────
-  String get switchModeFailed => _e ? 'Mode switch failed' : '切换模式失败';
-
-  // ── Offline preview ──────────────────────────────────────────────
-  String get offlinePreview =>
-      _e ? 'Offline preview — connect to switch nodes' : '离线预览 — 连接后可切换节点';
-
-  // ── Node sort / view ─────────────────────────────────────────────
-  String get sortDefault => _e ? 'Default' : '默认顺序';
-  String get sortLatencyAsc => _e ? 'Latency ↑' : '延迟升序';
-  String get sortLatencyDesc => _e ? 'Latency ↓' : '延迟降序';
-  String get sortNameAsc => _e ? 'Name A-Z' : '名称 A-Z';
-  String get nodeViewCard => _e ? 'Card view' : '卡片视图';
-  String get nodeViewList => _e ? 'List view' : '列表视图';
-
-  // ── Auth (悦通账号) ──────────────────────────────────────────────
-  String get authLogin => _e ? 'Sign In' : '登录';
-  String get authLogout => _e ? 'Sign Out' : '退出登录';
-  String get authEmail => _e ? 'Email' : '邮箱';
-  String get authPassword => _e ? 'Password' : '密码';
-  String get authEmailHint => _e ? 'your@email.com' : '请输入邮箱';
-  String get authPasswordHint => _e ? 'Enter password' : '请输入密码';
-  String get authLoginSubtitle =>
-      _e ? 'Sign in to your Yue.to account' : '登录悦通账号';
-  String get authLoggingIn => _e ? 'Signing in...' : '登录中...';
-  String get authLoginFailed => _e ? 'Login failed' : '登录失败';
-  String get authLogoutConfirm =>
-      _e ? 'Sign out and clear local data?' : '确定退出登录并清除本地数据？';
-  String get authSyncingSubscription =>
-      _e ? 'Syncing subscription...' : '正在同步订阅...';
-  String get authSyncSuccess => _e ? 'Subscription synced' : '订阅同步成功';
-  String get authSyncFailed => _e ? 'Subscription sync failed' : '订阅同步失败';
-  String get authAccountInfo => _e ? 'Account' : '账号信息';
-  String get authPlan => _e ? 'Plan' : '套餐';
-  String get dashMyPlan => _e ? 'My Plan' : '我的套餐';
-  String get authTraffic => _e ? 'Traffic' : '流量';
-  String get authExpiry => _e ? 'Expiry' : '到期时间';
-  String authDaysRemaining(int days) =>
-      _e ? '$days days remaining' : '剩余 $days 天';
-  String get authExpired => _e ? 'Expired' : '已过期';
-  String get authExpiryToday => _e ? 'Expires today' : '今天到期';
-  String get authRefreshInfo => _e ? 'Refresh' : '刷新';
-  // Error messages — user-facing, non-technical
-  String get authSessionExpired =>
-      _e ? 'Session expired, please sign in again' : '登录已失效，请重新登录';
-  String get authErrorBadCredentials =>
-      _e ? 'Incorrect email or password' : '账号或密码错误，请重试';
-  String get authErrorNetwork =>
-      _e ? 'Network error, please check your connection' : '网络连接失败，请检查网络后重试';
-  String get authErrorServer => _e
-      ? 'Service temporarily unavailable, please try again later'
-      : '服务暂时不可用，请稍后重试';
-
-  // ── Mine / Account center ────────────────────────────────────────
-  String get mineTrafficTitle => _e ? 'Traffic Usage' : '流量使用';
-  String get mineSpeedUp => _e ? 'Upload' : '上传';
-  String get mineSpeedDown => _e ? 'Download' : '下载';
-  String get mineRemaining => _e ? 'Remaining' : '剩余';
-  String get mineDevices => _e ? 'Devices' : '设备在线';
-  String get mineActions => _e ? 'Quick Actions' : '快捷操作';
-  String get mineChangePassword => _e ? 'Change Password' : '修改密码';
-  String get mineTelegramGroup => _e ? 'Join Telegram Group' : '加入 Telegram 群';
-  String get mineRenew => _e ? 'Plans' : '订阅套餐';
-  String get mineExpiryWarning =>
-      _e ? 'Plan expiring soon — renew now' : '套餐即将到期，请及时续费';
-  String get mineExpiredWarning =>
-      _e ? 'Plan has expired — renew now' : '套餐已到期，请续费';
-  String get mineSyncing => _e ? 'Syncing…' : '同步中…';
-  String get mineSyncDone => _e ? 'Synced' : '同步成功';
-  String get mineSyncFailed => _e ? 'Sync failed' : '同步失败';
-  String get mineNotConnected => _e ? 'Not connected' : '未连接';
-  String get mineEmby => _e ? '悦视频' : '悦视频';
-  String get mineEmbyNoAccess =>
-      _e ? 'No 悦视频 access for this account' : '当前账户暂无悦视频服务';
-  String get mineEmbyOpening => _e ? 'Opening 悦视频…' : '正在打开悦视频…';
-  String get mineEmbyOpenFailed => _e ? 'Unable to open 悦视频' : '无法打开悦视频，请稍后重试';
-  String get mineEmbyNeedsVpn =>
-      _e ? 'Please connect first to access Media' : '请先连接悦通，再访问悦视频';
-  String get minePrivacyPolicy => _e ? 'Terms of Service' : '服务条款';
-  String get goToHomeToProtect => _e ? 'Go to Dashboard' : '去首页开启保护';
-  // First-time use
-  String get syncFirstSuccess =>
-      _e ? 'Subscription synced — you\'re ready to connect' : '订阅已同步，现在可以连接了';
-
-  // ── Store / 套餐中心 ─────────────────────────────────────────────
-  String get storeCurrentPlan => _e ? 'Current Plan' : '当前套餐';
-  String get storeAvailablePlans => _e ? 'Available Plans' : '可购套餐';
-  String get storeBuyNow => _e ? 'Buy Now' : '立即购买';
-  String get storeRenew => _e ? 'Renew' : '续费';
-  String get storeUpgrade => _e ? 'Upgrade' : '升级套餐';
-  String get storeNoPlans => _e ? 'No plans available' : '暂无可购套餐';
-  String get storeUnlimited => _e ? 'Unlimited' : '不限';
-  String get storeSelectPeriod => _e ? 'Billing Period' : '计费周期';
-  String get storeConfirmPurchase => _e ? 'Confirm Order' : '确认订单';
-  String get storePayNow => _e ? 'Pay Now' : '前往支付';
-  String get storeOrderCreating => _e ? 'Creating order...' : '创建订单中...';
-  String get storeOrderSuccess => _e ? 'Payment Successful' : '购买成功';
-  String get storeOrderPending => _e ? 'Awaiting Payment' : '等待支付';
-  String get storeOrderFailed => _e ? 'Order Failed' : '订单失败';
-  String get storeOrderCancelled => _e ? 'Order Cancelled' : '订单已取消';
-  String get storeReturnToStore => _e ? 'Back to Store' : '返回套餐中心';
-  String get storeRenewalReminder =>
-      _e ? 'Plan expiring soon — renew now' : '套餐即将到期，点击续费';
-  String get storeExpiredReminder =>
-      _e ? 'Plan expired — buy now' : '套餐已过期，点击购买';
-  String get storePlanDetail => _e ? 'Plan Details' : '套餐详情';
-  String get storeCheckResult => _e ? 'Check Result' : '查询支付结果';
-  String get storeCancelOrder => _e ? 'Cancel Order' : '取消订单';
-  String get storeOpenPaymentPage => _e ? 'Open Payment Page' : '重新打开支付页';
-
-  // ── Store – Coupon ────────────────────────────────────────────────
-  String get storeCouponExpand => _e ? 'Have a coupon?' : '有优惠码？';
-  String get storeCouponCode => _e ? 'Coupon Code' : '优惠码';
-  String get storeCouponValidate => _e ? 'Apply' : '验证';
-  String get storeCouponValidating => _e ? 'Validating...' : '验证中...';
-  String get storeCouponValid => _e ? 'Coupon applied' : '优惠券已应用';
-  String get storeCouponInvalid => _e ? 'Invalid coupon' : '优惠码无效';
-  String get storeDiscount => _e ? 'Discount' : '优惠';
-  String get storeActualAmount => _e ? 'You Pay' : '实付';
-  String get storeCouponRemove => _e ? 'Remove' : '移除';
-
-  // ── Store – Payment method ────────────────────────────────────────
-  String get storePaymentMethod => _e ? 'Payment Method' : '支付方式';
-  String get storeHandlingFee => _e ? 'Handling fee' : '手续费';
-
-  // ── Store – Order history ─────────────────────────────────────────
-  String get storeOrderHistory => _e ? 'Order History' : '订单记录';
-  String get storeOrderNo => _e ? 'Order No.' : '订单号';
-  String get storeOrderDate => _e ? 'Date' : '下单时间';
-  String get storeNoOrders => _e ? 'No orders yet' : '暂无订单记录';
-  String get storeOrderDetail => _e ? 'Order Detail' : '订单详情';
-  String get storeOrderStatusPending => _e ? 'Pending' : '待支付';
-  String get storeOrderStatusProcessing => _e ? 'Processing' : '处理中';
-  String get storeOrderStatusCancelled => _e ? 'Cancelled' : '已取消';
-  String get storeOrderStatusCompleted => _e ? 'Completed' : '已完成';
-
-  // ── Dashboard – 悦通专属区 ────────────────────────────────────────
-  String get dashSyncLabel => _e ? 'Update Lines' : '更新线路';
-  String get dashAnnouncementsLabel => _e ? 'Announcements' : '最新公告';
-  String get mineSyncLine => _e ? 'Sync Lines' : '同步线路';
-  String get mineSubscriptionManage => _e ? 'Subscription Management' : '订阅管理';
-  String get dashAccountLabel => _e ? 'Account' : '账户';
-  String get dashLatestAnnouncement => _e ? 'Latest Announcements' : '最新公告';
-  String get noNetworkConnection => _e ? 'No network connection' : '网络连接不可用';
-  String get dashGreeting => _e ? 'Hello' : '你好';
-  String get dashGreetingReturning => _e ? 'Welcome back' : '欢迎回来';
-  String get dashNoAnnouncements => _e ? 'No announcements' : '暂无公告';
-  String get dashViewAll => _e ? 'View all' : '查看全部';
-  String get dashNoPlan => _e ? 'No plan info' : '暂无套餐信息';
-
-  // ── Change password dialog ──────────────────────────────────────
-  String get oldPassword => _e ? 'Old Password' : '旧密码';
-  String get newPassword => _e ? 'New Password' : '新密码';
-  String get passwordChangedSuccess =>
-      _e ? 'Password changed successfully' : '密码修改成功';
-  String get passwordChangeFailed => _e ? 'Password change failed' : '密码修改失败';
-
-  // ── Sync subscription (nodes page) ─────────────────────────────
-  String get syncing => _e ? 'Syncing...' : '同步中...';
-  String get syncComplete => _e ? 'Sync complete' : '同步完成';
-  String get syncFailed => _e ? 'Sync failed' : '同步失败';
-  String get notConnected => _e ? 'Not connected' : '未连接';
-
-  // ── Profile switch confirmation ──────────────────────────────
-  String get switchProfileTitle => _e ? 'Switch Subscription' : '切换订阅';
-  String switchProfileMessage(String name) => _e
-      ? 'Switch to "$name"? This will use its nodes and rules.'
-      : '切换到「$name」？将使用该订阅的节点和规则。';
-  String get switchProfileReconnectHint => _e
-      ? 'Connection is active. You need to reconnect after switching.'
-      : '当前已连接，切换后需要重新连接才能生效。';
-  String get switchProfileConfirm => _e ? 'Switch' : '确认切换';
-
-  // ── Onboarding ──────────────────────────────────────────────
-  String get onboardingWelcome => _e ? 'Welcome to YueLink' : '欢迎使用悦通';
-  String get onboardingWelcomeDesc => _e
-      ? 'A modern proxy client for secure and fast internet access.'
-      : '一款现代化的代理客户端，安全高速地访问互联网。';
-  String get onboardingConnect => _e ? 'One-Tap Connect' : '一键连接';
-  String get onboardingConnectDesc => _e
-      ? 'Tap the power button on the home page to connect instantly.'
-      : '在首页点击电源按钮即可快速连接。';
-  String get onboardingNodes => _e ? 'Choose Your Line' : '选择线路';
-  String get onboardingNodesDesc => _e
-      ? 'Switch between nodes on the Lines page for the best speed.'
-      : '在线路页面切换节点，选择最快的线路。';
-  String get onboardingStore => _e ? 'Get a Plan' : '购买套餐';
-  String get onboardingStoreDesc => _e
-      ? 'Visit the Store to subscribe and start using the service.'
-      : '前往商店页面订阅套餐，开始使用服务。';
-  String get onboardingSkip => _e ? 'Skip' : '跳过';
-  String get onboardingNext => _e ? 'Next' : '下一步';
-  String get onboardingDone => _e ? 'Get Started' : '开始使用';
-
-  // ── Chain proxy ──────────────────────────────────────────────
-  String get chainProxy => _e ? 'Proxy Chain' : '链式代理';
-  String get chainEntry => _e ? 'Entry' : '入口';
-  String get chainExit => _e ? 'Exit' : '出口';
-  String get chainConnect => _e ? 'Connect Chain' : '连接链路';
-  String get chainDisconnect => _e ? 'Disconnect' : '断开链路';
-  String get chainConnected => _e ? 'Proxy chain connected' : '链式代理已连接';
-  String get chainDisconnected => _e ? 'Proxy chain disconnected' : '链式代理已断开';
-  String get chainConnectFailed => _e ? 'Chain connect failed' : '链路连接失败';
-  String get chainNeedConnect => _e ? 'Connect first' : '请先连接';
-  String get chainNoGroup => _e ? 'No proxy group available' : '未找到可用策略组';
-  String get chainNeedTwoNodes => _e ? 'Need 2+ nodes' : '至少需要 2 个节点';
-  String get chainNodeDuplicate => _e ? 'Node already in chain' : '节点已在链路中';
-  String get chainClear => _e ? 'Clear' : '清空';
-  String get chainEmptyHint => _e ? 'No nodes in chain' : '暂无链路节点';
-  String get chainEmptyDesc => _e
-      ? 'Long-press any node or group on the Lines page to add it'
-      : '在线路页面长按节点或策略组即可加入链路';
-  String get chainAddHint => _e ? 'Added to proxy chain' : '已添加到链式代理';
-  String get chainPickerTitle => _e ? 'Add to Chain' : '添加到链路';
-  String get chainPickerSearch =>
-      _e ? 'Search nodes / groups...' : '搜索节点 / 策略组…';
-  String get chainSectionGroups => _e ? 'Proxy Groups' : '策略组';
-  String get chainSectionNodes => _e ? 'Nodes' : '节点';
-  String get msgSystemProxyConflict => _e
-      ? 'Another proxy client took over — stopping YueLink proxy'
-      : '检测到其他代理客户端已接管系统代理，已停止 YueLink 代理';
-
-  // ── Checkin ──────────────────────────────────────────────────
-  String get checkinTitle => _e ? 'Daily Check-in' : '每日签到';
-  String get checkinDesc =>
-      _e ? 'Check in to get traffic or balance rewards' : '签到领取流量或余额奖励';
-  String get checkinAction => _e ? 'Check in' : '签到';
-  String get checkinDone => _e ? 'Checked in' : '已签到';
-  String get checkinAlready => _e ? 'Already checked in today' : '今日已签到';
-  String get checkinOtherDevice =>
-      _e ? 'Checked in on another device' : '已在其他设备签到';
-  String get checkinNeedLogin => _e ? 'Please login first' : '请先登录';
-  String get checkinFailed => _e ? 'Check-in failed' : '签到失败';
-  String get checkinReward => _e ? 'Reward' : '奖励';
-  String checkinTrafficReward(String amount) =>
-      _e ? 'Got $amount traffic!' : '获得 $amount 流量！';
-  String checkinBalanceReward(String amount) =>
-      _e ? 'Got ¥$amount balance!' : '获得 ¥$amount 余额！';
-
-  // ── Quick Actions ─────────────────────────────────────────
-  String get qaSmartSelect => _e ? 'Smart Select' : '智能选线';
-  String get qaSceneMode => _e ? 'Scene Mode' : '场景模式';
-  String get qaSpeedTest => _e ? 'Speed Test' : '测速';
-
-  // ── Service Status Bar ────────────────────────────────────
-  String get statusExpiry => _e ? 'Expiry' : '到期时间';
-  String get statusTraffic => _e ? 'Traffic' : '剩余流量';
-  String get statusHealth => _e ? 'Health' : '线路健康';
-  String get statusExpired => _e ? 'Expired' : '已到期';
-  String get statusUnlimited => _e ? 'Unlimited' : '不限';
-  String get statusExhausted => _e ? 'Exhausted' : '已用尽';
-  String get gradeExcellent => _e ? 'Good' : '优';
-  String get gradeFair => _e ? 'Fair' : '中';
-  String get gradePoor => _e ? 'Poor' : '差';
-  String get gradeUnknown => _e ? 'N/A' : '未测';
-  String get gradeOffline => _e ? 'Offline' : '离线';
-
-  // ── Emby Preview Row ──────────────────────────────────────
-  String get embyEnter => _e ? 'Enter' : '进入';
-  String get embyNoAccessHint => _e
-      ? 'Subscribe to YueVideo to watch movies, TV shows and anime'
-      : '开通悦视频套餐即可观看电影、电视剧和动漫';
-  String get embyWebHint => _e ? 'Tap to enter YueVideo' : '点击进入悦视频';
-  String get embyNoContent => _e ? 'No content' : '暂无内容';
-  String get embyNoLibrary => _e ? 'No library' : '暂无媒体库';
-  String get embyLoadFailed => _e ? 'Load failed' : '加载失败';
-  String get embyTapRetry => _e ? 'Tap to retry' : '点击重试';
-  String get embyGetFailed => _e ? 'Failed to load libraries' : '获取媒体库失败';
-
-  // ── Overview / Startup Error ──────────────────────────────
-  String get errNativeLib => _e ? 'Native library load failed' : '原生库加载失败';
-  String get errNativeLibHint =>
-      _e ? 'Package may be corrupted, please reinstall' : '安装包可能损坏，请重新安装应用';
-  String get errCoreInit => _e ? 'Core init failed' : '核心初始化失败';
-  String get errCoreInitHint =>
-      _e ? 'Try restarting or clearing local cache' : '可尝试重启应用，或清除本地缓存后重试';
-  String get errVpnDenied => _e ? 'Network permission denied' : '网络权限被拒绝';
-  String get errVpnDeniedHint =>
-      _e ? 'Authorize in system settings' : '请在系统设置中授权悦通';
-  String get errTunnel => _e ? 'Tunnel creation failed' : '隧道创建失败';
-  String get errTunnelHint =>
-      _e ? 'Try rebuilding network config' : '可尝试重建网络配置，重新授权系统权限';
-  String get errConfig => _e ? 'Config parse failed' : '配置解析失败';
-  String get errConfigHint =>
-      _e ? 'Try re-syncing subscription' : '订阅配置可能有误，可尝试重新同步订阅';
-  String get errCoreStart => _e ? 'Core start failed' : '核心启动失败';
-  String get errCoreStartHint =>
-      _e ? 'Check diagnostics report' : '配置内容可能存在冲突，建议查看诊断报告';
-  String get errApiTimeout =>
-      _e ? 'API timeout, core may have crashed' : 'API 超时，核心进程可能已崩溃';
-  String get errApiTimeoutHint =>
-      _e ? 'Check diagnostics for details' : '可查看诊断报告了解详情，或尝试重建网络配置';
-  String get errCoreCrash => _e ? 'Core crashed after start' : '核心启动后崩溃';
-  String get errCoreCrashHint =>
-      _e ? 'Check Go Core log in diagnostics' : '请查看诊断报告中的 Go Core 日志';
-  String get errGeo => _e ? 'Geo data file error' : '地理规则文件异常';
-  String get errGeoHint => _e ? 'Try clearing local cache' : '可尝试清除本地缓存后重新连接';
-  String get errGeneric => _e ? 'Connection failed' : '连接失败';
-  String get errGenericHint =>
-      _e ? 'Go to repair page for details' : '请前往修复页查看详情';
-  String get goRepair => _e ? 'Go to Repair' : '前往修复';
-  String get copyReport => _e ? 'Copy Report' : '复制报告';
-  String get reportCopied => _e ? 'Startup report copied' : '已复制启动报告';
-  String goCoreLogs(int count) =>
-      _e ? 'Go Core log (last $count lines):' : 'Go Core 日志 (最后$count行):';
-
-  // ── Nodes Page ────────────────────────────────────────────
-  String get recentlyUsed => _e ? 'Recently Used' : '最近使用';
-
-  // ── Repair Page ───────────────────────────────────────────
-  String get repairTools => _e ? 'Repair Tools' : '修复工具';
-  String get repairRebuildVpn => _e ? 'Rebuild Network Config' : '重建网络配置';
-  String get repairRebuildVpnHint => _e
-      ? 'Remove old tunnel, re-create on next connect'
-      : '删除旧隧道，下次连接时重新创建并弹出系统授权';
-  String get repairClearTunnel => _e ? 'Clear Tunnel Config' : '清除隧道配置';
-  String get repairClearTunnelHint => _e
-      ? 'Delete App Group config and GEO data'
-      : '删除 App Group 中的 config.yaml 和 GEO 数据，强制重新生成';
-  String get repairResync => _e ? 'Re-sync Subscription' : '重新同步订阅';
-  String get repairResyncHint =>
-      _e ? 'Re-fetch subscription config from server' : '重新从服务端拉取订阅配置并解析';
-  String get repairClearCache => _e ? 'Clear Local Cache' : '清除本地缓存';
-  String get repairClearCacheHint => _e
-      ? 'Delete local config files, logs, startup report'
-      : '删除本地配置文件、日志、启动报告';
-  String get repairOneClick => _e ? 'One-Click Repair All' : '一键修复全部';
-  String get repairRunning => _e ? 'Repairing...' : '修复中...';
-  String get repairNeedLogin => _e ? 'Please login first' : '请先登录';
-  String get dataMonitor => _e ? 'Data Monitor' : '数据监控';
-  String get vpnNotRunning => _e ? 'Not connected' : '未连接';
-
-  // ── Surge Rule Modules ────────────────────────────────────
-  String get sectionModules => _e ? 'Modules' : '模块';
-  String get modulesLabel => _e ? 'Rule Modules' : '规则模块';
-  String get modulesEmpty => _e ? 'No modules installed' : '暂无模块';
-  String get moduleAddUrl => _e ? 'Module URL' : '模块地址';
-  String get moduleAdding => _e ? 'Adding module…' : '正在添加…';
-  String get moduleAddSuccess => _e ? 'Module added' : '模块已添加';
-  String get moduleRefresh => _e ? 'Refresh' : '刷新';
-  String get moduleDelete => _e ? 'Delete module' : '删除模块';
-  String get moduleDeleteConfirm => _e ? 'Delete this module?' : '确认删除此模块？';
-  String get moduleRuleCount => _e ? 'Rules' : '规则';
-  String get moduleNotActive =>
-      _e ? 'Not active in current version' : '当前版本未启用';
-  String get moduleMitmDetected =>
-      _e ? 'MITM hostnames detected' : '检测到 MITM 域名';
-  String get moduleScriptDetected => _e ? 'Scripts detected' : '检测到脚本';
-  String get moduleRewriteDetected =>
-      _e ? 'URL Rewrites detected' : '检测到 URL 改写';
-  String get moduleFutureVersion =>
-      _e ? '— will be enabled in a future version' : '将在后续版本开放';
-
-  // ── MITM Engine ───────────────────────────────────────────────
-  String get mitmEngine => _e ? 'MITM Engine' : 'MITM 引擎';
-  String get mitmEngineRunning => _e ? 'Running' : '运行中';
-  String get mitmEngineStopped => _e ? 'Stopped' : '已停止';
-  String get mitmEngineStart => _e ? 'Start' : '启动';
-  String get mitmEngineStop => _e ? 'Stop' : '停止';
-  String get mitmEnginePort => _e ? 'Port' : '端口';
-  String get mitmCertTitle => _e ? 'Root CA Certificate' : '根证书';
-  String get mitmCertInstall => _e ? 'Install Certificate' : '安装证书';
-  String get mitmCertGenerate => _e ? 'Generate' : '生成证书';
-  String get mitmCertExport => _e ? 'Export PEM' : '导出 PEM';
-  String get mitmCertFingerprint => _e ? 'SHA-256 Fingerprint' : 'SHA-256 指纹';
-  String get mitmCertExpiry => _e ? 'Expires' : '有效期至';
-  String get mitmCertNotFound => _e ? 'No certificate yet' : '暂无证书';
-  String get mitmCertGuideTitle => _e ? 'Certificate Installation' : '证书安装向导';
-  String get mitmHostnameCount => _e ? 'MITM Hostnames' : 'MITM 域名';
 }

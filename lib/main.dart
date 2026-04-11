@@ -13,6 +13,7 @@ import 'package:window_manager/window_manager.dart';
 
 import 'constants.dart';
 import 'l10n/app_strings.dart';
+import 'i18n/strings_g.dart';
 import 'pages/dashboard_page.dart';
 import 'pages/nodes_page.dart';
 import 'pages/settings_page.dart';
@@ -227,7 +228,11 @@ void main() async {
             : const AuthState(status: AuthStatus.loggedOut),
       ),
     ],
-    child: const YueLinkApp(),
+    // TranslationProvider feeds slang's `Translations.of(context)` —
+    // required for the new `S.of(context)` adapter (which forwards to
+    // slang's `t`). Sits inside ProviderScope so Riverpod's languageProvider
+    // can still drive the locale change via S.setLanguage().
+    child: TranslationProvider(child: const YueLinkApp()),
   ));
 }
 

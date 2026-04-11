@@ -11,3 +11,7 @@ lazy: false
 translate_var: t
 enum_name: AppLocale
 class_name: Translations
+# Use {placeholder} syntax (not Dart $var) so the JSON files don't have to
+# escape Dart-specific characters and the codegen produces parameterized
+# methods automatically.
+string_interpolation: braces
