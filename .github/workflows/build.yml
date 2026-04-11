@@ -1,11 +1,23 @@
 name: Build YueLink
 
+# Release builds. One matrix job covers every platform; release downloads
+# all artifacts in one shot. Modeled after FlClash's build.yaml — same
+# 3-job shape (build → release → post-publish), one matrix row per target.
+#
+# Triggers:
+#   • v*  tag → stable release
+#   • pre tag → pre-release (overwrites previous)
+#   • workflow_dispatch
+#
+# Analyze + integration tests live in ci.yml (runs on dev/master pushes)
+# and intentionally do NOT gate this workflow. By the time a commit gets
+# tagged it has already been through ci.yml on dev.
+
 on:
   push:
     tags: ['v*', 'pre']
   workflow_dispatch:
 
-# Cancel any in-progress run for the same ref (branch or tag) automatically.
 concurrency:
   group: ${{ github.workflow }}
   cancel-in-progress: true
@@ -14,172 +26,64 @@ env:
   FLUTTER_VERSION: '3.41.5'
   GO_VERSION: '1.23'
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Job 1: Dart analyze + unit tests (runs on every push)
-# ─────────────────────────────────────────────────────────────────────────────
 jobs:
-  analyze:
-    name: Analyze & Test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          channel: stable
-          cache: true
-
-      - name: Download geodata files
-        run: |
-          mkdir -p assets/geodata
-          curl -fSL -o assets/geodata/GeoIP.dat    "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.dat"
-          curl -fSL -o assets/geodata/GeoSite.dat  "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geosite.dat"
-          curl -fSL -o assets/geodata/country.mmdb  "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/country.mmdb"
-          curl -fSL -o assets/geodata/ASN.mmdb      "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/GeoLite2-ASN.mmdb"
-          ls -lh assets/geodata/
-
-      - run: flutter pub get
-      - run: flutter analyze --no-fatal-infos --no-fatal-warnings
-      - run: flutter test --coverage
-
-      - name: Upload coverage to Codecov
-        if: always()
-        uses: codecov/codecov-action@v4
-        with:
-          files: coverage/lcov.info
-          flags: flutter
-          fail_ci_if_error: false
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Job 1b: Integration tests (E2E smoke on macOS host)
-# ─────────────────────────────────────────────────────────────────────────────
-# Integration tests need a real device target — `flutter test integration_test/`
-# without `-d` silently reports "No tests were found". We run them on
-# macos-latest with `-d macos` so the actual app launch path is exercised.
-# Failures BLOCK the build (continue-on-error removed) since the test
-# is now stable: a single testWidgets case that pumps fixed durations
-# instead of pumpAndSettle (which would hang on yuelink's persistent
-# heartbeat / traffic / sync timers).
-  integration:
-    name: Integration tests (macOS)
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          channel: stable
-          cache: true
-
-      # Geodata files are declared as assets in pubspec.yaml but checked
-      # into .gitignore — flutter build fails with "No file or variants
-      # found for asset" without them. Every build job downloads them at
-      # CI time; the integration job needs the same step or `flutter test`
-      # can't even build the test binary.
-      - name: Download geodata files
-        run: |
-          mkdir -p assets/geodata
-          curl -fSL -o assets/geodata/GeoIP.dat    "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.dat"
-          curl -fSL -o assets/geodata/GeoSite.dat  "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geosite.dat"
-          curl -fSL -o assets/geodata/country.mmdb  "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/country.mmdb"
-          curl -fSL -o assets/geodata/ASN.mmdb      "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/GeoLite2-ASN.mmdb"
-          ls -lh assets/geodata/
-
-      - run: flutter config --enable-macos-desktop
-      - run: flutter pub get
-
-      - name: Run integration tests on macOS host
-        run: flutter test integration_test/ -d macos --reporter expanded
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Job 2: Build Go core libraries per platform (tag push only)
-# ─────────────────────────────────────────────────────────────────────────────
-  build-core:
-    name: Build core (${{ matrix.platform }})
-    if: startsWith(github.ref, 'refs/tags/')
-    # build-core only needs analyze (unit tests). The expensive 6-matrix
-    # Go cross-compile happens in parallel with the macOS integration job
-    # so total CI time stays around 15-20min instead of 30-40min.
-    # E2E gates the `release` job below — see needs: there.
-    needs: [analyze]
+  # ───────────────────────────────────────────────────────────────────────────
+  # Single matrix build — one row per target platform.
+  # Every row: setup go+flutter → build core → install core → flutter build
+  #            → package → upload artifact named yuelink-<platform>.
+  # ───────────────────────────────────────────────────────────────────────────
+  build:
+    name: Build (${{ matrix.platform }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
-            platform: android
-          - os: macos-latest
-            platform: ios
-          - os: macos-latest
-            platform: macos
-          - os: windows-latest
-            platform: windows
-            arch: amd64
-          - os: ubuntu-latest
-            platform: linux
-            arch: amd64
-            artifact_suffix: -amd64
-          - os: ubuntu-24.04-arm
-            platform: linux
-            arch: arm64
-            artifact_suffix: -arm64
-
+          - platform: android
+            os: ubuntu-latest
+          - platform: ios
+            os: macos-latest
+          - platform: macos
+            os: macos-latest
+          - platform: windows
+            os: windows-latest
+          - platform: linux
+            os: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
 
+      # ── Toolchains (Go for core, Flutter for app, Java for android) ───────
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: core/go.sum
 
-      # build-core only needs Dart (to run setup.dart, a pure dart:io script)
-      # — not Flutter. Using setup-dart avoids the
-      # `Unable to determine Flutter version ... architecture: arm64` failure
-      # on the ubuntu-24.04-arm runner, since not every Flutter version
-      # publishes a Linux arm64 SDK. The flutter-action calls remain in the
-      # downstream `build-*` jobs that actually run `flutter build`.
-      - uses: dart-lang/setup-dart@v1
+      - uses: subosito/flutter-action@v2
         with:
-          sdk: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
 
-      # ── Apply patches to mihomo submodule ──────────────────────────────────
-      - name: Apply mihomo patches
-        shell: bash
-        run: |
-          if [ -d core/patches ] && ls core/patches/*.patch 1>/dev/null 2>&1; then
-            echo "Applying patches to core/mihomo..."
-            cd core/mihomo
-            for p in ../patches/*.patch; do
-              echo "  Applying $p"
-              git apply "$p"
-            done
-            cd ../..
-          fi
+      - name: Setup Java (Android only)
+        if: matrix.platform == 'android'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
 
-      # ── Android: NDK ──────────────────────────────────────────────────────
       - name: Setup Android NDK
         if: matrix.platform == 'android'
         uses: android-actions/setup-android@v3
 
-      - name: Install Android NDK
+      - name: Install Android NDK r27
         if: matrix.platform == 'android'
+        shell: bash
         run: |
           sdkmanager "ndk;27.2.12479018"
           echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/27.2.12479018" >> $GITHUB_ENV
           echo "ANDROID_NDK=$ANDROID_SDK_ROOT/ndk/27.2.12479018" >> $GITHUB_ENV
-
-      # NOTE: `flutter config --enable-{macos,linux}-desktop` was removed
-      # from build-core because (a) Flutter is no longer installed here and
-      # (b) the desktop-config flag is only consumed by `flutter build`,
-      # which happens in the downstream `build-macos` / `build-linux` jobs.
-      # The Go core build (`dart setup.dart build`) does not depend on it.
 
       - name: Install Linux build dependencies
         if: matrix.platform == 'linux'
@@ -189,110 +93,35 @@ jobs:
             libgtk-3-dev libblkid-dev liblzma-dev ninja-build \
             libglib2.0-dev libpango1.0-dev libcairo2-dev \
             libsecret-1-dev libstdc++-12-dev \
-            libkeybinder-3.0-dev \
-            libayatana-appindicator3-dev \
+            libkeybinder-3.0-dev libayatana-appindicator3-dev \
             libasound2-dev libmpv-dev \
             pkg-config cmake clang
 
-      # ── Go tests ──────────────────────────────────────────────────────────
-      - name: Run Go tests
+      # ── Apply mihomo patches before any Go build ──────────────────────────
+      - name: Apply mihomo patches
         shell: bash
         run: |
-          cd core
-          go test ./... -count=1 -timeout 120s
-          cd ..
-
-      # ── Build ─────────────────────────────────────────────────────────────
-      - name: Build core (${{ matrix.platform }})
-        shell: bash
-        run: |
-          if [ -n "${{ matrix.arch }}" ]; then
-            dart setup.dart build -p ${{ matrix.platform }} -a ${{ matrix.arch }}
-          else
-            dart setup.dart build -p ${{ matrix.platform }}
+          if [ -d core/patches ] && ls core/patches/*.patch 1>/dev/null 2>&1; then
+            cd core/mihomo
+            for p in ../patches/*.patch; do
+              echo "Applying $p"
+              git apply "$p"
+            done
           fi
 
-      - name: Install core to Flutter dirs
-        shell: bash
-        run: dart setup.dart install -p ${{ matrix.platform }}
-
-      # ── Upload artifacts ──────────────────────────────────────────────────
-      # Linux ships per-arch (amd64 + arm64) so we suffix the artifact name;
-      # other platforms keep the simple `core-<platform>` name.
-      #
-      # Includes BOTH core/build/ (libclash.so/.dll/.dylib) AND service/build/
-      # (yuelink-service-helper + yuelink-mihomo) for desktop platforms.
-      # Without service/build/, the desktop install step can't find the
-      # service mode binaries and Service Mode TUN fails at runtime.
-      # if-no-files-found: ignore allows android/ios to upload without
-      # service binaries (they don't have any).
-      - uses: actions/upload-artifact@v4
-        with:
-          name: core-${{ matrix.platform }}${{ matrix.artifact_suffix || '' }}
-          path: |
-            core/build/
-            service/build/
-          if-no-files-found: warn
-          retention-days: 7
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Job 3: Flutter builds (tag push only, depend on analyze + build-core)
-# ─────────────────────────────────────────────────────────────────────────────
-
-  # ── Android ──────────────────────────────────────────────────────────────
-  build-android:
-    name: Build Android APK
-    if: startsWith(github.ref, 'refs/tags/')
-    needs: [build-core]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          channel: stable
-          cache: true
-
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: core-android
-          # Extract to project root so both core/build/ and service/build/
-          # (uploaded together) restore to their original paths.
-          path: .
-
-      - name: Install Android NDK (for install step)
-        uses: android-actions/setup-android@v3
-
-      - run: sdkmanager "ndk;27.2.12479018"
-
-      - run: |
-          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/27.2.12479018" >> $GITHUB_ENV
-          dart setup.dart install -p android
-
+      # ── Geodata: declared as Flutter assets, .gitignored — fetch at CI ────
       - name: Download geodata files
+        shell: bash
         run: |
           mkdir -p assets/geodata
           curl -fSL -o assets/geodata/GeoIP.dat    "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.dat"
           curl -fSL -o assets/geodata/GeoSite.dat  "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geosite.dat"
-          curl -fSL -o assets/geodata/country.mmdb  "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/country.mmdb"
-          curl -fSL -o assets/geodata/ASN.mmdb      "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/GeoLite2-ASN.mmdb"
-          ls -lh assets/geodata/
+          curl -fSL -o assets/geodata/country.mmdb "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/country.mmdb"
+          curl -fSL -o assets/geodata/ASN.mmdb     "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/GeoLite2-ASN.mmdb"
 
-      - name: Decode keystore
-        run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | openssl base64 -d -A > android/app/yuelink.jks
-          echo "KEYSTORE_PATH=${{ github.workspace }}/android/app/yuelink.jks" >> $GITHUB_ENV
-          echo "KEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}" >> $GITHUB_ENV
-          echo "KEY_ALIAS=${{ secrets.KEY_ALIAS }}" >> $GITHUB_ENV
-          echo "KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}" >> $GITHUB_ENV
-
+      # ── Resolve version: pubspec for stable, append -pre for pre tag ──────
       - name: Extract version from pubspec
+        shell: bash
         run: |
           VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f1)
           BUILD_NUM=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f2)
@@ -306,9 +135,28 @@ jobs:
 
       - run: flutter pub get
 
-      # Build per-ABI APKs (smaller per-arch downloads) AND a fat universal
-      # APK (for users who don't know their arch). Mirrors FlClash strategy.
+      # ── Compile Go core (platform-aware) and copy into Flutter dirs ───────
+      - name: Build & install Go core
+        shell: bash
+        run: |
+          dart setup.dart build -p ${{ matrix.platform }}
+          dart setup.dart install -p ${{ matrix.platform }}
+
+      # ─────────────────────────────────────────────────────────────────────
+      # ANDROID
+      # ─────────────────────────────────────────────────────────────────────
+      - name: Decode Android keystore
+        if: matrix.platform == 'android'
+        shell: bash
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | openssl base64 -d -A > android/app/yuelink.jks
+          echo "KEYSTORE_PATH=${{ github.workspace }}/android/app/yuelink.jks" >> $GITHUB_ENV
+          echo "KEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}" >> $GITHUB_ENV
+          echo "KEY_ALIAS=${{ secrets.KEY_ALIAS }}" >> $GITHUB_ENV
+          echo "KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}" >> $GITHUB_ENV
+
       - name: Build APKs (split-per-abi + universal)
+        if: matrix.platform == 'android'
         run: |
           flutter build apk --release --split-per-abi \
             --build-name=${{ env.APP_VERSION }} \
@@ -317,56 +165,24 @@ jobs:
             --build-name=${{ env.APP_VERSION }} \
             --build-number=${{ env.BUILD_NUM }}
 
-      - name: Rename APKs to YueLink-<version>-android-<arch>.apk
+      - name: Rename APKs
+        if: matrix.platform == 'android'
+        shell: bash
         run: |
           OUT=build/app/outputs/flutter-apk
           V=${{ env.APP_VERSION }}
-          mkdir -p artifacts
-          cp "$OUT/app-arm64-v8a-release.apk"   "artifacts/YueLink-${V}-android-arm64-v8a.apk"
-          cp "$OUT/app-armeabi-v7a-release.apk" "artifacts/YueLink-${V}-android-armeabi-v7a.apk"
-          cp "$OUT/app-x86_64-release.apk"      "artifacts/YueLink-${V}-android-x86_64.apk"
-          cp "$OUT/app-release.apk"             "artifacts/YueLink-${V}-android-universal.apk"
-          ls -lh artifacts/
+          mkdir -p dist
+          cp "$OUT/app-arm64-v8a-release.apk"   "dist/YueLink-${V}-android-arm64-v8a.apk"
+          cp "$OUT/app-armeabi-v7a-release.apk" "dist/YueLink-${V}-android-armeabi-v7a.apk"
+          cp "$OUT/app-x86_64-release.apk"      "dist/YueLink-${V}-android-x86_64.apk"
+          cp "$OUT/app-release.apk"             "dist/YueLink-${V}-android-universal.apk"
+          ls -lh dist/
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: yuelink-android
-          path: artifacts/YueLink-*.apk
-
-  # ── iOS ──────────────────────────────────────────────────────────────────
-  build-ios:
-    name: Build iOS (no-codesign)
-    if: startsWith(github.ref, 'refs/tags/')
-    needs: [build-core]
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          channel: stable
-          cache: true
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: core-ios
-          # Extract to project root so both core/build/ and service/build/
-          # (uploaded together) restore to their original paths.
-          path: .
-
-      - run: dart setup.dart install -p ios
-
-      - name: Download geodata files
-        run: |
-          mkdir -p assets/geodata
-          curl -fSL -o assets/geodata/GeoIP.dat    "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.dat"
-          curl -fSL -o assets/geodata/GeoSite.dat  "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geosite.dat"
-          curl -fSL -o assets/geodata/country.mmdb  "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/country.mmdb"
-          curl -fSL -o assets/geodata/ASN.mmdb      "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/GeoLite2-ASN.mmdb"
-          ls -lh assets/geodata/
-
-      - name: Cache CocoaPods
+      # ─────────────────────────────────────────────────────────────────────
+      # iOS — TrollStore / sideload (no codesign, signed with ad-hoc cert)
+      # ─────────────────────────────────────────────────────────────────────
+      - name: Cache CocoaPods (iOS)
+        if: matrix.platform == 'ios'
         uses: actions/cache@v4
         with:
           path: |
@@ -375,96 +191,48 @@ jobs:
           key: pods-ios-${{ hashFiles('ios/Podfile.lock') }}
           restore-keys: pods-ios-
 
-      - name: Extract version from pubspec
-        run: |
-          VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f1)
-          BUILD_NUM=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f2)
-          if [ "$GITHUB_REF_NAME" = "pre" ]; then
-            APP_VERSION="${VERSION}-pre"
-          else
-            APP_VERSION="${VERSION}"
-          fi
-          echo "APP_VERSION=${APP_VERSION}" >> $GITHUB_ENV
-          echo "BUILD_NUM=${BUILD_NUM}" >> $GITHUB_ENV
-
-      - run: flutter pub get
-
       - name: Build iOS
+        if: matrix.platform == 'ios'
         run: |
           flutter build ios --release --no-codesign \
             --build-name=${{ env.APP_VERSION }} \
             --build-number=${{ env.BUILD_NUM }}
 
-      - name: Sign with entitlements for TrollStore
+      - name: Sign iOS bundle for TrollStore
+        if: matrix.platform == 'ios'
         run: |
-          # Sign inner binaries first, then the main app (order matters for TrollStore)
-
-          # 1. Sign PacketTunnel extension with its entitlements
+          # Inner binaries first, then the .app — order matters for TrollStore.
           codesign --force --sign - \
             --entitlements ios/PacketTunnel/PacketTunnel.entitlements \
             build/ios/iphoneos/Runner.app/PlugIns/PacketTunnel.appex
-
-          # 2. Sign all embedded frameworks (no special entitlements)
           for fw in build/ios/iphoneos/Runner.app/Frameworks/*.framework; do
             codesign --force --sign - "$fw"
           done
           for dylib in build/ios/iphoneos/Runner.app/Frameworks/*.dylib; do
             [ -e "$dylib" ] && codesign --force --sign - "$dylib"
           done
-
-          # 3. Sign the main app with its entitlements
           codesign --force --sign - \
             --entitlements ios/Runner/Runner.entitlements \
             build/ios/iphoneos/Runner.app
 
-      - name: Package iOS app
+      - name: Package iOS .ipa
+        if: matrix.platform == 'ios'
+        shell: bash
         run: |
+          mkdir -p dist
           cd build/ios/iphoneos
           mkdir -p Payload
           cp -r Runner.app Payload/
           IPA="YueLink-${{ env.APP_VERSION }}-ios.ipa"
           zip -r --symlinks "$IPA" Payload
-          ls -lh "$IPA"
+          mv "$IPA" "${{ github.workspace }}/dist/"
+          ls -lh "${{ github.workspace }}/dist/$IPA"
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: yuelink-ios
-          path: build/ios/iphoneos/YueLink-*.ipa
-
-  # ── macOS ─────────────────────────────────────────────────────────────────
-  build-macos:
-    name: Build macOS app
-    if: startsWith(github.ref, 'refs/tags/')
-    needs: [build-core]
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          channel: stable
-          cache: true
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: core-macos
-          # Extract to project root so both core/build/ and service/build/
-          # (uploaded together) restore to their original paths.
-          path: .
-
-      - run: dart setup.dart install -p macos
-
-      - name: Download geodata files
-        run: |
-          mkdir -p assets/geodata
-          curl -fSL -o assets/geodata/GeoIP.dat    "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.dat"
-          curl -fSL -o assets/geodata/GeoSite.dat  "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geosite.dat"
-          curl -fSL -o assets/geodata/country.mmdb  "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/country.mmdb"
-          curl -fSL -o assets/geodata/ASN.mmdb      "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/GeoLite2-ASN.mmdb"
-          ls -lh assets/geodata/
-
-      - name: Cache CocoaPods
+      # ─────────────────────────────────────────────────────────────────────
+      # macOS — universal .dmg with squircle icon and optional notarization
+      # ─────────────────────────────────────────────────────────────────────
+      - name: Cache CocoaPods (macOS)
+        if: matrix.platform == 'macos'
         uses: actions/cache@v4
         with:
           path: |
@@ -473,80 +241,51 @@ jobs:
           key: pods-macos-${{ hashFiles('macos/Podfile.lock') }}
           restore-keys: pods-macos-
 
-      - name: Extract version from pubspec
-        run: |
-          VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f1)
-          BUILD_NUM=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f2)
-          if [ "$GITHUB_REF_NAME" = "pre" ]; then
-            APP_VERSION="${VERSION}-pre"
-          else
-            APP_VERSION="${VERSION}"
-          fi
-          echo "APP_VERSION=${APP_VERSION}" >> $GITHUB_ENV
-          echo "BUILD_NUM=${BUILD_NUM}" >> $GITHUB_ENV
-
-      - run: flutter config --enable-macos-desktop
-      - run: flutter pub get
-
-      # Refresh icon assets (squircle mask + DMG background composited from
-      # the real squircle YueLink icon, NOT a hand-drawn approximation).
-      # round_appicon.py applies the mask in place + regenerates wizard
-      # banners + DMG background using the brand color sampled from the
-      # real icon.
       - name: Refresh icons + DMG background
+        if: matrix.platform == 'macos'
         run: |
-          # Pillow is preinstalled on most GHA images; install only if missing.
-          # --break-system-packages handles Python 3.12+ PEP 668 lockdown.
           python3 -c "import PIL" 2>/dev/null || \
             python3 -m pip install --quiet --break-system-packages Pillow
           python3 scripts/round_appicon.py
-          ls -lh macos/Runner/Assets.xcassets/AppIcon.appiconset/
+
+      - name: Enable macOS desktop
+        if: matrix.platform == 'macos'
+        run: flutter config --enable-macos-desktop
 
       - name: Build macOS
+        if: matrix.platform == 'macos'
         run: |
           flutter build macos --release \
             --build-name=${{ env.APP_VERSION }} \
             --build-number=${{ env.BUILD_NUM }}
 
-      # ── Code signing (gated on secrets being present) ─────────────────────
-      # If the repo has APPLE_CERTIFICATE_BASE64 + APPLE_CERTIFICATE_PASSWORD
-      # set, decode the .p12 into a temporary keychain and sign every binary
-      # in the .app bundle with hardened runtime + the proper entitlements.
-      # Without those secrets the step is a no-op (the resulting DMG will
-      # work but trigger Gatekeeper on first launch — same as today).
-      - name: Import signing certificate
-        if: env.APPLE_CERTIFICATE_BASE64 != ''
+      - name: Import signing certificate (macOS)
+        if: matrix.platform == 'macos' && env.APPLE_CERTIFICATE_BASE64 != ''
         env:
           APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
         run: |
-          # Create a fresh keychain so we can clean up afterwards.
           KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
           security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
           security set-keychain-settings -lut 21600 build.keychain
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
           security list-keychains -d user -s build.keychain login.keychain
-          # Decode + import the .p12
           echo "$APPLE_CERTIFICATE_BASE64" | base64 --decode > /tmp/cert.p12
           security import /tmp/cert.p12 \
             -k build.keychain \
             -P "$APPLE_CERTIFICATE_PASSWORD" \
-            -T /usr/bin/codesign \
-            -T /usr/bin/security
+            -T /usr/bin/codesign -T /usr/bin/security
           rm -f /tmp/cert.p12
-          # Allow codesign to use the key without an interactive prompt
           security set-key-partition-list \
             -S apple-tool:,apple:,codesign: \
             -s -k "$KEYCHAIN_PASSWORD" build.keychain
-          security find-identity -v -p codesigning build.keychain
 
       - name: Sign YueLink.app with hardened runtime
-        if: env.APPLE_SIGNING_IDENTITY != ''
+        if: matrix.platform == 'macos' && env.APPLE_SIGNING_IDENTITY != ''
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
         run: |
           APP="build/macos/Build/Products/Release/YueLink.app"
-          # Sign in dependency order: dylibs/frameworks first, then the app.
           find "$APP/Contents/Frameworks" -type f -name '*.dylib' \
             -exec codesign --force --options runtime --timestamp \
                   --sign "$APPLE_SIGNING_IDENTITY" {} \; 2>/dev/null || true
@@ -555,26 +294,21 @@ jobs:
                   --sign "$APPLE_SIGNING_IDENTITY" {} \; 2>/dev/null || true
           codesign --force --options runtime --timestamp \
             --entitlements macos/Runner/Release.entitlements \
-            --sign "$APPLE_SIGNING_IDENTITY" \
-            "$APP"
+            --sign "$APPLE_SIGNING_IDENTITY" "$APP"
           codesign --verify --deep --strict --verbose=2 "$APP"
 
-      - name: Install create-dmg
-        run: brew install create-dmg
-
       - name: Package macOS .dmg
+        if: matrix.platform == 'macos'
+        shell: bash
         run: |
-          # Prepare DMG source directory with app + fix script
+          brew install create-dmg
           DMG_SRC=dmg_source
-          mkdir -p "$DMG_SRC"
+          mkdir -p "$DMG_SRC" dist
           cp -R build/macos/Build/Products/Release/YueLink.app "$DMG_SRC/"
           cp assets/fix-gatekeeper.command "$DMG_SRC/修复无法打开.command"
           chmod +x "$DMG_SRC/修复无法打开.command"
 
-          # ── Build a YueLink .icns for the DMG volume icon ──────────────
-          # When the user mounts the DMG, the volume in Finder's sidebar
-          # and on the Desktop will show the YueLink logo instead of the
-          # generic disk icon. clash-verge-rev / FlClash both do this.
+          # Compose .icns for the DMG volume icon (Finder sidebar + Desktop)
           ICONSET=/tmp/yuelink_volicon.iconset
           rm -rf "$ICONSET" && mkdir -p "$ICONSET"
           ICONS=macos/Runner/Assets.xcassets/AppIcon.appiconset
@@ -589,7 +323,6 @@ jobs:
           cp "$ICONS/app_icon_512.png"  "$ICONSET/icon_512x512.png"
           cp "$ICONS/app_icon_1024.png" "$ICONSET/icon_512x512@2x.png"
           iconutil -c icns -o /tmp/yuelink_volicon.icns "$ICONSET"
-          ls -lh /tmp/yuelink_volicon.icns
 
           DMG_NAME="YueLink-${{ env.APP_VERSION }}-macos-universal.dmg"
           set +e
@@ -597,166 +330,84 @@ jobs:
             --volname "YueLink" \
             --volicon "/tmp/yuelink_volicon.icns" \
             --background "assets/dmg_background.png" \
-            --window-pos 200 120 \
-            --window-size 660 400 \
-            --icon-size 80 \
+            --window-pos 200 120 --window-size 660 400 --icon-size 80 \
             --icon "YueLink.app" 180 170 \
             --app-drop-link 480 170 \
             --icon "修复无法打开.command" 330 340 \
             --hide-extension "YueLink.app" \
-            "$DMG_NAME" \
-            "$DMG_SRC"
+            "dist/$DMG_NAME" "$DMG_SRC"
           DMG_EXIT=$?
           set -e
-          # create-dmg exits 2 when DMG is created but no code signing identity
-          # is found (expected in CI). Any other non-zero exit is a real failure.
+          # exit 2 = DMG created but no signing identity (expected in CI)
           if [ $DMG_EXIT -ne 0 ] && [ $DMG_EXIT -ne 2 ]; then
-            echo "ERROR: create-dmg failed with exit code $DMG_EXIT"
-            exit 1
+            echo "ERROR: create-dmg failed ($DMG_EXIT)"; exit 1
           fi
-          if [ ! -f "$DMG_NAME" ]; then
-            echo "ERROR: DMG was not created despite exit code $DMG_EXIT!"
-            exit 1
-          fi
-          ls -lh "$DMG_NAME"
+          [ -f "dist/$DMG_NAME" ] || { echo "ERROR: DMG missing"; exit 1; }
+          ls -lh "dist/$DMG_NAME"
 
-      # ── Notarize the DMG (gated on Apple ID secrets) ──────────────────────
-      # When APPLE_ID + APPLE_PASSWORD (app-specific) + APPLE_TEAM_ID are set,
-      # submit the DMG to Apple's notary service and staple the ticket so the
-      # download works without Gatekeeper warnings — even on a Mac that has
-      # never run YueLink before. Without these secrets the step is skipped
-      # and the DMG ships unnotarized (current behavior).
       - name: Notarize DMG
-        if: env.APPLE_ID != ''
+        if: matrix.platform == 'macos' && env.APPLE_ID != ''
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           DMG_NAME="YueLink-${{ env.APP_VERSION }}-macos-universal.dmg"
-          xcrun notarytool submit "$DMG_NAME" \
-            --apple-id "$APPLE_ID" \
-            --password "$APPLE_PASSWORD" \
-            --team-id "$APPLE_TEAM_ID" \
-            --wait \
-            --timeout 30m
-          # Staple the notarization ticket so it works offline
-          xcrun stapler staple "$DMG_NAME"
-          xcrun stapler validate "$DMG_NAME"
+          xcrun notarytool submit "dist/$DMG_NAME" \
+            --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" --wait --timeout 30m
+          xcrun stapler staple "dist/$DMG_NAME"
+          xcrun stapler validate "dist/$DMG_NAME"
 
       - name: Clean up signing keychain
-        if: always() && env.APPLE_CERTIFICATE_BASE64 != ''
+        if: matrix.platform == 'macos' && always() && env.APPLE_CERTIFICATE_BASE64 != ''
         env:
           APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
-        run: |
-          security delete-keychain build.keychain 2>/dev/null || true
+        run: security delete-keychain build.keychain 2>/dev/null || true
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: yuelink-macos
-          path: YueLink-*.dmg
-
-  # ── Windows ───────────────────────────────────────────────────────────────
-  build-windows:
-    name: Build Windows exe
-    if: startsWith(github.ref, 'refs/tags/')
-    needs: [build-core]
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          channel: stable
-          cache: true
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: core-windows
-          # Extract to project root so both core/build/ and service/build/
-          # (uploaded together) restore to their original paths.
-          path: .
-
-      - run: dart setup.dart install -p windows
-
-      - name: Download geodata files
-        shell: bash
-        run: |
-          mkdir -p assets/geodata
-          curl -fSL -o assets/geodata/GeoIP.dat    "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.dat"
-          curl -fSL -o assets/geodata/GeoSite.dat  "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geosite.dat"
-          curl -fSL -o assets/geodata/country.mmdb  "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/country.mmdb"
-          curl -fSL -o assets/geodata/ASN.mmdb      "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/GeoLite2-ASN.mmdb"
-          ls -lh assets/geodata/
-
-      - name: Extract version from pubspec
-        shell: bash
-        run: |
-          VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f1)
-          BUILD_NUM=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f2)
-          if [ "$GITHUB_REF_NAME" = "pre" ]; then
-            APP_VERSION="${VERSION}-pre"
-          else
-            APP_VERSION="${VERSION}"
-          fi
-          echo "APP_VERSION=${APP_VERSION}" >> $GITHUB_ENV
-          echo "BUILD_NUM=${BUILD_NUM}" >> $GITHUB_ENV
-
-      - run: flutter config --enable-windows-desktop
-      - run: flutter pub get
-
+      # ─────────────────────────────────────────────────────────────────────
+      # WINDOWS — Inno Setup installer + portable zip
+      # ─────────────────────────────────────────────────────────────────────
       - name: Build Windows
+        if: matrix.platform == 'windows'
         shell: bash
         run: |
+          flutter config --enable-windows-desktop
           flutter build windows --release \
             --build-name=${{ env.APP_VERSION }} \
             --build-number=${{ env.BUILD_NUM }}
 
-      - name: Ensure libclash.dll in Release dir
+      - name: Bundle libclash + service binaries (Windows)
+        if: matrix.platform == 'windows'
         shell: pwsh
         run: |
           $releaseDir = "build\windows\x64\runner\Release"
           $dllSrc = "windows\libs\amd64\libclash.dll"
-          $dllDst = "$releaseDir\libclash.dll"
-          if ((Test-Path $dllSrc) -and -not (Test-Path $dllDst)) {
-            Write-Host "Copying libclash.dll to Release directory"
-            Copy-Item $dllSrc $dllDst
+          if ((Test-Path $dllSrc) -and -not (Test-Path "$releaseDir\libclash.dll")) {
+            Copy-Item $dllSrc "$releaseDir\libclash.dll"
           }
-          if (Test-Path $dllDst) {
-            Write-Host "libclash.dll present in Release: $(Get-Item $dllDst | Select-Object -ExpandProperty Length) bytes"
-          } else {
-            Write-Error "libclash.dll NOT found in Release directory!"
-            exit 1
+          if (-not (Test-Path "$releaseDir\libclash.dll")) {
+            Write-Error "libclash.dll missing from Release dir"; exit 1
+          }
+          $svcSrc = "service\build\windows-amd64"
+          foreach ($bin in @("yuelink-service-helper.exe", "yuelink-mihomo.exe")) {
+            if (Test-Path "$svcSrc\$bin") {
+              Copy-Item "$svcSrc\$bin" "$releaseDir\$bin"
+            } else {
+              Write-Error "$bin missing from $svcSrc"; exit 1
+            }
           }
 
-      # ── Bundle service mode binaries ───────────────────────────────────────
-      # Copy yuelink-service-helper.exe + yuelink-mihomo.exe next to the
-      # main yuelink.exe so the [Files] section in installer.iss picks them
-      # up via `Source: ..\build\windows\x64\runner\Release\*`. The Dart
-      # service_manager looks for them at `$execDir\yuelink-service-helper.exe`
-      # at runtime — i.e. literally next to yuelink.exe.
-      - name: Copy service binaries to Release dir
-        shell: pwsh
+      - name: Generate Inno Setup wizard images
+        if: matrix.platform == 'windows'
+        shell: bash
         run: |
-          $releaseDir = "build\windows\x64\runner\Release"
-          $svcSrc = "service\build\windows-amd64"
-          if (Test-Path "$svcSrc\yuelink-service-helper.exe") {
-            Copy-Item "$svcSrc\yuelink-service-helper.exe" "$releaseDir\yuelink-service-helper.exe"
-            Write-Host "Copied yuelink-service-helper.exe ($(Get-Item "$releaseDir\yuelink-service-helper.exe" | Select-Object -ExpandProperty Length) bytes)"
-          } else {
-            Write-Error "yuelink-service-helper.exe NOT in service/build/windows-amd64/ — check build-core uploaded service/build/"
-            exit 1
-          }
-          if (Test-Path "$svcSrc\yuelink-mihomo.exe") {
-            Copy-Item "$svcSrc\yuelink-mihomo.exe" "$releaseDir\yuelink-mihomo.exe"
-            Write-Host "Copied yuelink-mihomo.exe ($(Get-Item "$releaseDir\yuelink-mihomo.exe" | Select-Object -ExpandProperty Length) bytes)"
-          } else {
-            Write-Error "yuelink-mihomo.exe NOT in service/build/windows-amd64/"
-            exit 1
-          }
+          python3 -c "import PIL" 2>/dev/null || \
+            python3 -m pip install --quiet --break-system-packages Pillow
+          python3 scripts/round_appicon.py
 
       - name: Install Inno Setup Chinese language pack
+        if: matrix.platform == 'windows'
         shell: pwsh
         run: |
           $isl = "C:\Program Files (x86)\Inno Setup 6\Languages\ChineseSimplified.isl"
@@ -764,190 +415,73 @@ jobs:
             Invoke-WebRequest -Uri "https://raw.githubusercontent.com/jrsoftware/issrc/main/Files/Languages/Unofficial/ChineseSimplified.isl" -OutFile $isl
           }
 
-      # Wizard banners (164×314 left + 55×58 small) are composited from the
-      # real squircle YueLink icon (assets/icon_desktop.png) by round_appicon.py.
-      # The brand color is sampled from the actual icon — not a hand-drawn
-      # approximation — so the installer banner stays in sync with the dock
-      # icon automatically.
-      - name: Generate Inno Setup wizard images
-        shell: bash
+      - name: Build Windows installer + portable zip
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          $version = "${{ env.APP_VERSION }}"
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          iscc "/DMyAppVersion=$version" "/DMyAppArch=amd64" windows\installer.iss
+          Get-ChildItem windows\YueLink-*.exe | Copy-Item -Destination dist\
+          $releaseDir = "build\windows\x64\runner\Release"
+          $zipName = "dist\YueLink-$version-windows-amd64-portable.zip"
+          Compress-Archive -Path "$releaseDir\*" -DestinationPath $zipName -Force
+          Get-ChildItem dist\
+
+      # ─────────────────────────────────────────────────────────────────────
+      # LINUX — AppImage only (drops .deb / .rpm — was sprawling for no win)
+      # ─────────────────────────────────────────────────────────────────────
+      - name: Refresh Linux squircle icon
+        if: matrix.platform == 'linux'
         run: |
           python3 -c "import PIL" 2>/dev/null || \
             python3 -m pip install --quiet --break-system-packages Pillow
           python3 scripts/round_appicon.py
-          ls -lh windows/wizard_image.bmp windows/wizard_small.bmp
-
-      - name: Build installer with Inno Setup
-        shell: pwsh
-        run: |
-          $version = "${{ env.APP_VERSION }}"
-          iscc "/DMyAppVersion=$version" "/DMyAppArch=amd64" windows\installer.iss
-          Get-ChildItem windows\YueLink-*.exe
-
-      - name: Build Windows portable zip
-        shell: pwsh
-        run: |
-          $version = "${{ env.APP_VERSION }}"
-          $releaseDir = "build\windows\x64\runner\Release"
-          $zipName = "windows\YueLink-$version-windows-amd64-portable.zip"
-          Compress-Archive -Path "$releaseDir\*" -DestinationPath $zipName -Force
-          Get-Item $zipName | Format-List Name, Length
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: yuelink-windows
-          path: |
-            windows/YueLink-*-windows-amd64-setup.exe
-            windows/YueLink-*-windows-amd64-portable.zip
-
-  # ── Linux (matrix: amd64 + arm64) ─────────────────────────────────────────
-  # Each entry produces three packages: AppImage, .deb, .rpm — matching the
-  # FlClash + clash-verge-rev distribution matrix.
-  build-linux:
-    name: Build Linux ${{ matrix.arch }}
-    if: startsWith(github.ref, 'refs/tags/')
-    needs: [build-core]
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            arch: amd64
-            appimage_arch: x86_64
-            rpm_arch: x86_64
-          - os: ubuntu-24.04-arm
-            arch: arm64
-            appimage_arch: aarch64
-            rpm_arch: aarch64
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          channel: stable
-          cache: true
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: core-linux-${{ matrix.arch }}
-          # Extract to project root so both core/build/ and service/build/
-          # (uploaded together) restore to their original paths.
-          path: .
-
-      - name: Install Linux build dependencies
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y --no-install-recommends \
-            libgtk-3-dev libblkid-dev liblzma-dev ninja-build \
-            libglib2.0-dev libpango1.0-dev libcairo2-dev \
-            libsecret-1-dev libstdc++-12-dev \
-            libkeybinder-3.0-dev \
-            libayatana-appindicator3-dev \
-            libasound2-dev libmpv-dev \
-            pkg-config cmake clang \
-            rpm ruby ruby-dev build-essential
-          sudo gem install --no-document fpm
-
-      - run: dart setup.dart install -p linux
-
-      - name: Download geodata files
-        run: |
-          mkdir -p assets/geodata
-          curl -fSL -o assets/geodata/GeoIP.dat    "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.dat"
-          curl -fSL -o assets/geodata/GeoSite.dat  "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geosite.dat"
-          curl -fSL -o assets/geodata/country.mmdb  "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/country.mmdb"
-          curl -fSL -o assets/geodata/ASN.mmdb      "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/GeoLite2-ASN.mmdb"
-
-      - name: Extract version from pubspec
-        run: |
-          VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f1)
-          BUILD_NUM=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f2)
-          if [ "$GITHUB_REF_NAME" = "pre" ]; then
-            APP_VERSION="${VERSION}-pre"
-          else
-            APP_VERSION="${VERSION}"
-          fi
-          echo "APP_VERSION=${APP_VERSION}" >> $GITHUB_ENV
-          echo "BUILD_NUM=${BUILD_NUM}" >> $GITHUB_ENV
-
-      - run: flutter config --enable-linux-desktop
-      - run: flutter pub get
-
-      # Refresh squircle-masked icon for the Linux launcher (.deb / AppImage)
-      - name: Refresh Linux icon
-        run: |
-          python3 -c "import PIL" 2>/dev/null || python3 -m pip install --quiet --break-system-packages Pillow
-          python3 scripts/round_appicon.py
-          ls -lh assets/icon_desktop.png
 
       - name: Build Linux
+        if: matrix.platform == 'linux'
         run: |
+          flutter config --enable-linux-desktop
           flutter build linux --release \
             --build-name=${{ env.APP_VERSION }} \
             --build-number=${{ env.BUILD_NUM }}
 
-      - name: Resolve Flutter bundle path
+      - name: Bundle service binaries + create AppImage
+        if: matrix.platform == 'linux'
+        shell: bash
         run: |
-          # Flutter writes to build/linux/<arch>/release/bundle where <arch>
-          # is "x64" on amd64 and "arm64" on aarch64. Resolve dynamically.
           BUNDLE_DIR=$(find build/linux -maxdepth 4 -type d -name bundle | head -1)
           if [ -z "$BUNDLE_DIR" ]; then
-            echo "ERROR: bundle dir not found"
-            find build/linux -type d | head -20
-            exit 1
-          fi
-          echo "BUNDLE_DIR=${BUNDLE_DIR}" >> $GITHUB_ENV
-          echo "Bundle: ${BUNDLE_DIR}"
-
-      # ── Bundle service mode binaries ───────────────────────────────────────
-      # Copy yuelink-service-helper + yuelink-mihomo next to the main yuelink
-      # binary in the Flutter bundle. Both .deb / .rpm / AppImage packaging
-      # below copy the entire bundle dir, so anything we put here gets shipped.
-      # The Dart service_manager looks for them at $execDir at runtime.
-      - name: Copy service binaries to bundle
-        run: |
-          ARCH="${{ matrix.arch }}"
-          SVC_SRC="service/build/linux-${ARCH}"
-          if [ -f "${SVC_SRC}/yuelink-service-helper" ]; then
-            cp "${SVC_SRC}/yuelink-service-helper" "${BUNDLE_DIR}/yuelink-service-helper"
-            chmod +x "${BUNDLE_DIR}/yuelink-service-helper"
-            echo "Copied yuelink-service-helper ($(stat -c%s "${BUNDLE_DIR}/yuelink-service-helper") bytes)"
-          else
-            echo "ERROR: yuelink-service-helper not in ${SVC_SRC}/ — check build-core uploaded service/build/"
-            exit 1
-          fi
-          if [ -f "${SVC_SRC}/yuelink-mihomo" ]; then
-            cp "${SVC_SRC}/yuelink-mihomo" "${BUNDLE_DIR}/yuelink-mihomo"
-            chmod +x "${BUNDLE_DIR}/yuelink-mihomo"
-            echo "Copied yuelink-mihomo ($(stat -c%s "${BUNDLE_DIR}/yuelink-mihomo") bytes)"
-          else
-            echo "ERROR: yuelink-mihomo not in ${SVC_SRC}/"
-            exit 1
+            echo "ERROR: bundle dir not found"; find build/linux -type d | head -20; exit 1
           fi
 
-      - name: Download appimagetool
-        run: |
+          # Copy service mode binaries next to the main yuelink binary
+          SVC_SRC="service/build/linux-amd64"
+          for bin in yuelink-service-helper yuelink-mihomo; do
+            if [ -f "$SVC_SRC/$bin" ]; then
+              cp "$SVC_SRC/$bin" "$BUNDLE_DIR/$bin"
+              chmod +x "$BUNDLE_DIR/$bin"
+            else
+              echo "ERROR: $bin missing from $SVC_SRC"; exit 1
+            fi
+          done
+
+          # Fetch appimagetool and assemble the AppDir
           curl -fSL -o /usr/local/bin/appimagetool \
-            "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-${{ matrix.appimage_arch }}.AppImage"
+            "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage"
           chmod +x /usr/local/bin/appimagetool
 
-      - name: Package AppImage
-        run: |
           VERSION="${{ env.APP_VERSION }}"
-          ARCH="${{ matrix.arch }}"
           APPDIR="build/AppDir"
-          OUTPUT="YueLink-${VERSION}-linux-${ARCH}.AppImage"
+          mkdir -p dist
+          OUTPUT="dist/YueLink-${VERSION}-linux-amd64.AppImage"
 
-          rm -rf "${APPDIR}"
-          mkdir -p "${APPDIR}/usr/bin" "${APPDIR}/usr/lib"
-          mkdir -p "${APPDIR}/usr/share/applications"
-          mkdir -p "${APPDIR}/usr/share/icons/hicolor/256x256/apps"
+          rm -rf "$APPDIR"
+          mkdir -p "$APPDIR/usr/bin" "$APPDIR/usr/share/applications" \
+                   "$APPDIR/usr/share/icons/hicolor/256x256/apps"
+          cp -r "$BUNDLE_DIR/." "$APPDIR/usr/bin/"
 
-          cp -r "${BUNDLE_DIR}/." "${APPDIR}/usr/bin/"
-
-          cat > "${APPDIR}/usr/share/applications/yuelink.desktop" << 'DESKTOP'
+          cat > "$APPDIR/usr/share/applications/yuelink.desktop" << 'DESKTOP'
           [Desktop Entry]
           Name=YueLink
           Comment=Cross-platform proxy client
@@ -958,243 +492,64 @@ jobs:
           StartupNotify=true
           DESKTOP
 
-          # Use the squircle-masked icon (assets/icon_desktop.png) as the
-          # launcher icon — assets/icon.png is the Android full-bleed source
-          # which would render as a hard square in GNOME/KDE.
           if [ -f "assets/icon_desktop.png" ]; then
-            cp "assets/icon_desktop.png" "${APPDIR}/usr/share/icons/hicolor/256x256/apps/yuelink.png"
-            cp "assets/icon_desktop.png" "${APPDIR}/yuelink.png"
+            cp "assets/icon_desktop.png" "$APPDIR/usr/share/icons/hicolor/256x256/apps/yuelink.png"
+            cp "assets/icon_desktop.png" "$APPDIR/yuelink.png"
           fi
 
-          cat > "${APPDIR}/AppRun" << 'APPRUN'
+          cat > "$APPDIR/AppRun" << 'APPRUN'
           #!/usr/bin/env bash
           HERE="$(dirname "$(readlink -f "${0}")")"
           export LD_LIBRARY_PATH="${HERE}/usr/bin/lib:${LD_LIBRARY_PATH:-}"
           exec "${HERE}/usr/bin/yuelink" "$@"
           APPRUN
-          chmod +x "${APPDIR}/AppRun"
+          chmod +x "$APPDIR/AppRun"
+          ln -sf "usr/share/applications/yuelink.desktop" "$APPDIR/yuelink.desktop"
 
-          ln -sf "usr/share/applications/yuelink.desktop" "${APPDIR}/yuelink.desktop"
+          APPIMAGE_EXTRACT_AND_RUN=1 ARCH=x86_64 \
+            appimagetool "$APPDIR" "$OUTPUT"
+          ls -lh "$OUTPUT"
 
-          APPIMAGE_EXTRACT_AND_RUN=1 ARCH="${{ matrix.appimage_arch }}" \
-            appimagetool "${APPDIR}" "${OUTPUT}"
-          echo "Created: ${OUTPUT} ($(du -sh "${OUTPUT}" | cut -f1))"
-
-      # ── Debian package (.deb) ──────────────────────────────────────────────
-      # Hand-rolled with dpkg-deb. Bundle installed under /opt/yuelink/, with
-      # /usr/bin symlink, desktop entry, icon, and runtime Depends matching
-      # the libs Flutter Linux links against.
-      - name: Package .deb
-        run: |
-          VERSION="${{ env.APP_VERSION }}"
-          ARCH="${{ matrix.arch }}"
-          PKG_DIR="build/debpkg"
-          DEB_NAME="YueLink-${VERSION}-linux-${ARCH}.deb"
-
-          rm -rf "${PKG_DIR}"
-          mkdir -p "${PKG_DIR}/DEBIAN"
-          mkdir -p "${PKG_DIR}/opt/yuelink"
-          mkdir -p "${PKG_DIR}/usr/bin"
-          mkdir -p "${PKG_DIR}/usr/share/applications"
-          mkdir -p "${PKG_DIR}/usr/share/icons/hicolor/256x256/apps"
-          mkdir -p "${PKG_DIR}/usr/share/doc/yuelink"
-
-          cp -r "${BUNDLE_DIR}/." "${PKG_DIR}/opt/yuelink/"
-          ln -s /opt/yuelink/yuelink "${PKG_DIR}/usr/bin/yuelink"
-
-          cat > "${PKG_DIR}/usr/share/applications/yuelink.desktop" << 'DESKTOP'
-          [Desktop Entry]
-          Name=YueLink
-          Comment=Cross-platform proxy client
-          Exec=yuelink
-          Icon=yuelink
-          Type=Application
-          Categories=Network;
-          StartupNotify=true
-          DESKTOP
-
-          # Squircle-masked icon, not the Android full-bleed source.
-          if [ -f "assets/icon_desktop.png" ]; then
-            cp "assets/icon_desktop.png" "${PKG_DIR}/usr/share/icons/hicolor/256x256/apps/yuelink.png"
-          fi
-
-          cat > "${PKG_DIR}/usr/share/doc/yuelink/copyright" << 'COPYRIGHT'
-          Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
-          Upstream-Name: YueLink
-          Source: https://github.com/onesyue/yuelink
-          COPYRIGHT
-
-          INSTALLED_KB=$(du -sk "${PKG_DIR}/opt" "${PKG_DIR}/usr" | awk '{s+=$1} END {print s}')
-
-          cat > "${PKG_DIR}/DEBIAN/control" << CONTROL
-          Package: yuelink
-          Version: ${VERSION}
-          Section: net
-          Priority: optional
-          Architecture: ${ARCH}
-          Maintainer: Yue.to <noreply@yue.to>
-          Installed-Size: ${INSTALLED_KB}
-          Depends: libgtk-3-0, libayatana-appindicator3-1, libsecret-1-0, libkeybinder-3.0-0, libnotify4
-          Homepage: https://yue.to
-          Description: Cross-platform proxy client based on mihomo
-           YueLink is a cross-platform proxy client built with Flutter and the
-           mihomo (Clash.Meta) Go core. Supports system proxy and TUN modes.
-          CONTROL
-
-          cat > "${PKG_DIR}/DEBIAN/postinst" << 'POSTINST'
-          #!/bin/sh
-          set -e
-          chmod +x /opt/yuelink/yuelink || true
-          # GTK / GNOME / Cinnamon / XFCE icon cache
-          if [ -d /usr/share/icons/hicolor ] && command -v gtk-update-icon-cache >/dev/null 2>&1; then
-            gtk-update-icon-cache -q /usr/share/icons/hicolor || true
-          fi
-          # XDG desktop database
-          if command -v update-desktop-database >/dev/null 2>&1; then
-            update-desktop-database -q || true
-          fi
-          # KDE Plasma 5 / 6 sycoca cache — rebuild silently per logged-in user
-          for kbuild in kbuildsycoca6 kbuildsycoca5; do
-            if command -v "$kbuild" >/dev/null 2>&1; then
-              for u in $(who | awk '{print $1}' | sort -u); do
-                sudo -u "$u" "$kbuild" --noincremental >/dev/null 2>&1 || true
-              done
-              break
-            fi
-          done
-          POSTINST
-          chmod 0755 "${PKG_DIR}/DEBIAN/postinst"
-
-          dpkg-deb --build --root-owner-group "${PKG_DIR}" "${DEB_NAME}"
-          ls -lh "${DEB_NAME}"
-
-      # ── RPM package (.rpm) — built with fpm from the same staging dir ─────
-      # fpm reuses the deb staging dir directly: bundle at /opt/yuelink, the
-      # symlink at /usr/bin/yuelink, desktop file, icon. We declare runtime
-      # depends in Fedora package names (gtk3 instead of libgtk-3-0 etc.).
-      - name: Package .rpm
-        run: |
-          VERSION="${{ env.APP_VERSION }}"
-          ARCH="${{ matrix.arch }}"
-          PKG_DIR="build/debpkg"   # reuse the deb staging tree
-          RPM_NAME="YueLink-${VERSION}-linux-${ARCH}.rpm"
-
-          # fpm rejects "+pre" or "-pre" version suffixes for rpm; sanitize.
-          # Convert "1.0.13-pre" → "1.0.13" with --iteration "pre" so the
-          # rpm version stays SemVer-clean.
-          if [[ "${VERSION}" == *"-pre"* ]]; then
-            CLEAN_VER="${VERSION%-pre}"
-            ITERATION="pre"
-          else
-            CLEAN_VER="${VERSION}"
-            ITERATION="1"
-          fi
-
-          fpm \
-            --input-type dir \
-            --output-type rpm \
-            --name yuelink \
-            --version "${CLEAN_VER}" \
-            --iteration "${ITERATION}" \
-            --architecture "${{ matrix.rpm_arch }}" \
-            --maintainer "Yue.to <noreply@yue.to>" \
-            --vendor "Yue.to" \
-            --url "https://yue.to" \
-            --license "MIT" \
-            --description "Cross-platform proxy client based on mihomo (Clash.Meta) Go core. Supports system proxy and TUN modes." \
-            --category "Network" \
-            --depends "gtk3" \
-            --depends "libayatana-appindicator-gtk3" \
-            --depends "libsecret" \
-            --depends "keybinder3" \
-            --depends "libnotify" \
-            --after-install <(cat <<'POSTINST'
-          #!/bin/sh
-          chmod +x /opt/yuelink/yuelink || true
-          # GTK / GNOME / Cinnamon / XFCE icon cache
-          if [ -d /usr/share/icons/hicolor ] && command -v gtk-update-icon-cache >/dev/null 2>&1; then
-            gtk-update-icon-cache -q /usr/share/icons/hicolor || true
-          fi
-          # XDG desktop database
-          if command -v update-desktop-database >/dev/null 2>&1; then
-            update-desktop-database -q || true
-          fi
-          # KDE Plasma 5 / 6 sycoca cache — rebuild silently per logged-in user
-          for kbuild in kbuildsycoca6 kbuildsycoca5; do
-            if command -v "$kbuild" >/dev/null 2>&1; then
-              for u in $(who | awk '{print $1}' | sort -u); do
-                sudo -u "$u" "$kbuild" --noincremental >/dev/null 2>&1 || true
-              done
-              break
-            fi
-          done
-          POSTINST
-            ) \
-            --package "${RPM_NAME}" \
-            -C "${PKG_DIR}" \
-            opt usr
-          ls -lh "${RPM_NAME}"
-
+      # ── Upload everything in dist/ as a single artifact per platform ──────
       - uses: actions/upload-artifact@v4
         with:
-          name: yuelink-linux-${{ matrix.arch }}
-          path: |
-            YueLink-*-linux-${{ matrix.arch }}.AppImage
-            YueLink-*-linux-${{ matrix.arch }}.deb
-            YueLink-*-linux-${{ matrix.arch }}.rpm
+          name: yuelink-${{ matrix.platform }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Job 4: Release (all tags — alpha.* as pre-release, v* as stable)
-# ─────────────────────────────────────────────────────────────────────────────
+  # ───────────────────────────────────────────────────────────────────────────
+  # Release: download all yuelink-* artifacts, hash, publish, refresh manifest
+  # ───────────────────────────────────────────────────────────────────────────
   release:
     name: Create Release
-    if: startsWith(github.ref, 'refs/tags/')
-    # E2E (integration) is the LAST gate before publishing artifacts to
-    # users. If E2E fails, all the build artifacts still exist (build-*
-    # jobs ran in parallel and likely succeeded) and can be downloaded
-    # for debugging — but no GitHub Release is created and update.json
-    # is not refreshed. This is the cleaner interpretation of the
-    # external review's "release build 被 E2E 阻断" requirement: the
-    # release publish step is gated, not the build matrix itself.
-    needs:
-      - integration
-      - build-android
-      - build-ios
-      - build-macos
-      - build-windows
-      - build-linux
+    needs: [build]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/download-artifact@v4
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
         with:
-          path: artifacts/
+          path: dist/
+          pattern: yuelink-*
+          merge-multiple: true
 
-      - name: Flatten release assets
-        run: |
-          mkdir -p release
-          # Each upload-artifact step uploaded a directory; cp every file in it
-          # so we don't have to enumerate exact filenames here.
-          for dir in artifacts/yuelink-*/; do
-            cp -v "$dir"/* release/
-          done
-          ls -lh release/
+      - name: List release assets
+        run: ls -lh dist/
 
-      # FlClash-style per-asset SHA256 sidecars for download integrity check.
       - name: Generate .sha256 sidecars
         run: |
-          cd release
+          cd dist
           for f in *; do
             [ -f "$f" ] || continue
             case "$f" in
-              *.sha256) ;;  # don't hash sidecars
+              *.sha256) ;;
               *) sha256sum "$f" | awk '{print $1}' > "$f.sha256" ;;
             esac
           done
-          ls -lh
 
       - name: Delete previous pre-release (if updating)
         if: github.ref == 'refs/tags/pre'
@@ -1206,23 +561,18 @@ jobs:
         run: |
           VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f1)
           TAG="${GITHUB_REF_NAME}"
-          IS_PRE=${{ github.ref == 'refs/tags/pre' }}
-
-          if [ "$IS_PRE" = "true" ]; then
+          if [ "$TAG" = "pre" ]; then
             VERSION="${VERSION}-pre"
             TITLE="YueLink v${VERSION} Pre-release"
           else
             TITLE="YueLink v${VERSION}"
           fi
-
-          # Collect commits since last stable tag
           PREV_TAG=$(git tag --sort=-creatordate | grep -E '^v[0-9]' | head -1)
           if [ -n "$PREV_TAG" ]; then
             CHANGES=$(git log --pretty=format:"- %s" "${PREV_TAG}..HEAD" -- | head -50)
           else
             CHANGES=$(git log --pretty=format:"- %s" -20)
           fi
-
           cat > release_notes.md << NOTES
           ## ${TITLE}
 
@@ -1232,61 +582,34 @@ jobs:
           ---
           *Build: ${TAG} | Version: ${VERSION}*
           NOTES
-
           echo "RELEASE_TITLE=${TITLE}" >> $GITHUB_ENV
+          echo "APP_VERSION=${VERSION}" >> $GITHUB_ENV
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           name: ${{ env.RELEASE_TITLE }}
           body_path: release_notes.md
-          files: release/*
+          files: dist/*
           prerelease: ${{ github.ref == 'refs/tags/pre' }}
 
-      # ── Updater manifest (v* tags + pre tag) ───────────────────────────────
-      # Build a manifest mapping every platform key to its release asset URL
-      # and SHA-256, then publish it to the fixed `updater` tag. The Dart-side
-      # UpdateChecker fetches this manifest from a CDN-fronted endpoint so
-      # users behind GFW can still receive update notifications when GitHub
-      # API is unreachable.
-      #
-      # Output filename:
-      #   • v* tag  → update.json     (stable channel)
-      #   • pre tag → update-pre.json (pre-release channel)
-      # Both files coexist on the same `updater` tag (replaced individually
-      # via `gh release upload --clobber`), so users on different channels
-      # always get the right file.
+      # ── Updater manifest published to fixed `updater` tag ────────────────
       - name: Generate updater manifest
-        if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/tags/pre'
         run: |
-          VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f1)
+          VERSION="${{ env.APP_VERSION }}"
           TAG="${GITHUB_REF_NAME}"
-          if [ "$TAG" = "pre" ]; then
-            VERSION="${VERSION}-pre"
-            MANIFEST_NAME="update-pre.json"
-          else
-            MANIFEST_NAME="update.json"
-          fi
-          RELEASE_URL="https://github.com/${{ github.repository }}/releases/tag/${TAG}"
+          MANIFEST_NAME=$([ "$TAG" = "pre" ] && echo "update-pre.json" || echo "update.json")
           BASE="https://github.com/${{ github.repository }}/releases/download/${TAG}"
+          RELEASE_URL="https://github.com/${{ github.repository }}/releases/tag/${TAG}"
           NOTES=$(cat release_notes.md | head -100 | jq -Rs .)
 
-          # Helper: read sha256 sidecar already generated by the release job
           sha() {
-            local f="$1"
-            if [ -f "release/$f.sha256" ]; then
-              cat "release/$f.sha256" | tr -d '[:space:]'
-            else
-              echo ""
-            fi
+            [ -f "dist/$1.sha256" ] && cat "dist/$1.sha256" | tr -d '[:space:]' || echo ""
           }
-
           asset() {
             local key="$1"; local fname="$2"
             local hash; hash=$(sha "$fname")
-            if [ -z "$hash" ] || [ ! -f "release/$fname" ]; then
-              return
-            fi
+            [ -z "$hash" ] || [ ! -f "dist/$fname" ] && return
             jq -n --arg k "$key" --arg u "$BASE/$fname" --arg h "$hash" \
               '{($k): {url: $u, sha256: $h}}'
           }
@@ -1301,70 +624,51 @@ jobs:
             "macos-universal:YueLink-${VERSION}-macos-universal.dmg" \
             "windows-amd64-setup:YueLink-${VERSION}-windows-amd64-setup.exe" \
             "windows-amd64-portable:YueLink-${VERSION}-windows-amd64-portable.zip" \
-            "linux-amd64-deb:YueLink-${VERSION}-linux-amd64.deb" \
-            "linux-amd64-rpm:YueLink-${VERSION}-linux-amd64.rpm" \
             "linux-amd64-appimage:YueLink-${VERSION}-linux-amd64.AppImage" \
-            "linux-arm64-deb:YueLink-${VERSION}-linux-arm64.deb" \
-            "linux-arm64-rpm:YueLink-${VERSION}-linux-arm64.rpm" \
-            "linux-arm64-appimage:YueLink-${VERSION}-linux-arm64.AppImage" \
           ; do
-            key="${entry%%:*}"
-            file="${entry#*:}"
+            key="${entry%%:*}"; file="${entry#*:}"
             new=$(asset "$key" "$file")
-            if [ -n "$new" ]; then
-              PLATFORMS=$(echo "$PLATFORMS" | jq ". + $new")
-            fi
+            [ -n "$new" ] && PLATFORMS=$(echo "$PLATFORMS" | jq ". + $new")
           done
 
           jq -n \
             --arg version "$VERSION" \
-            --arg channel "${TAG}" \
+            --arg channel "$TAG" \
             --arg publishedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             --arg releaseUrl "$RELEASE_URL" \
             --argjson notes "$NOTES" \
             --argjson platforms "$PLATFORMS" \
             '{version: $version, channel: (if $channel == "pre" then "pre" else "stable" end), publishedAt: $publishedAt, releaseUrl: $releaseUrl, notes: $notes, platforms: $platforms}' \
             > "$MANIFEST_NAME"
-          echo "MANIFEST_NAME=${MANIFEST_NAME}" >> $GITHUB_ENV
-          echo "Generated ${MANIFEST_NAME}:"
+          echo "MANIFEST_NAME=$MANIFEST_NAME" >> $GITHUB_ENV
           cat "$MANIFEST_NAME" | jq .
 
       - name: Publish manifest to fixed updater tag
-        if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/tags/pre'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Ensure the `updater` tag + release exist. Create them on first
-          # run; subsequent runs use --clobber to replace just the one file
-          # we're publishing this round, leaving the other channel's manifest
-          # untouched.
           if ! gh release view updater >/dev/null 2>&1; then
             git tag -f updater
             git push origin updater --force
             gh release create updater \
               --title "Update Manifest" \
-              --notes "Auto-generated. update.json = stable channel; update-pre.json = pre-release channel. Do not edit manually." \
+              --notes "Auto-generated. update.json = stable channel; update-pre.json = pre-release channel." \
               --latest=false \
-              "${MANIFEST_NAME}"
+              "$MANIFEST_NAME"
           else
-            gh release upload updater "${MANIFEST_NAME}" --clobber
+            gh release upload updater "$MANIFEST_NAME" --clobber
           fi
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Job 5: winget auto-submission (stable v* tags only — never pre-releases)
-# ─────────────────────────────────────────────────────────────────────────────
-# Mirrors clash-verge-rev's submit-to-winget step. Opens a PR against
-# microsoft/winget-pkgs each time a new stable version is released so users
-# can do `winget install Yueto.YueLink` (and `winget upgrade`) directly.
-#
-# Setup: requires a Personal Access Token (classic, scopes: public_repo) on
-# the maintainer's GitHub account, stored as repo secret WINGET_TOKEN.
-# Without the secret the job becomes a no-op (the action exits cleanly).
+  # ───────────────────────────────────────────────────────────────────────────
+  # Post-publish: store submissions (stable v* only). Failures here do NOT
+  # invalidate the release — package managers can be retried out-of-band.
+  # ───────────────────────────────────────────────────────────────────────────
   submit-to-winget:
     name: Submit to winget
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [release]
     runs-on: ubuntu-latest
+    continue-on-error: true
     steps:
       - name: Submit to winget-pkgs
         if: env.WINGET_TOKEN != ''
@@ -1376,34 +680,16 @@ jobs:
           installers-regex: '_(amd64|arm64|x64)-setup\.exe$'
           token: ${{ secrets.WINGET_TOKEN }}
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Job 6: Homebrew cask auto-bump (stable v* tags only)
-# ─────────────────────────────────────────────────────────────────────────────
-# Updates the YueLink cask in a personal homebrew tap (e.g.
-# `onesyue/homebrew-tap`) so macOS users can do
-#   brew tap onesyue/tap
-#   brew install --cask yuelink
-#   brew upgrade --cask yuelink
-#
-# Setup:
-#   1. Create a public repo `onesyue/homebrew-tap` with a `Casks/yuelink.rb`
-#      file (template at https://docs.brew.sh/Cask-Cookbook).
-#   2. Generate a Personal Access Token (classic, scopes: public_repo) and
-#      store as repo secret HOMEBREW_TAP_TOKEN.
-#
-# Without the secret the job becomes a no-op (the bump step is skipped).
   submit-to-homebrew:
     name: Submit to Homebrew
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [release]
     runs-on: macos-latest
+    continue-on-error: true
     steps:
       - name: Compute version
         id: ver
-        run: |
-          # github.ref_name is "v1.0.13"; the cask wants "1.0.13"
-          VERSION="${GITHUB_REF_NAME#v}"
-          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+        run: echo "version=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
 
       - name: Bump homebrew cask
         if: env.HOMEBREW_TAP_TOKEN != ''
