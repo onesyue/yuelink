@@ -1,0 +1,49 @@
+YueLink 软件许可协议 / Software License Agreement
+================================================
+
+YueLink 是基于 mihomo (Clash.Meta) 内核的跨平台代理客户端，
+按以下 MIT 许可条款发布。
+
+YueLink is a cross-platform proxy client built on the mihomo (Clash.Meta)
+kernel, released under the MIT License.
+
+------------------------------------------------------------
+
+MIT License
+
+Copyright (c) 2024 Yue.to
+
+Permission is hereby granted, free of charge, to any person obtaining a
+copy of this software and associated documentation files (the "Software"),
+to deal in the Software without restriction, including without limitation
+the rights to use, copy, modify, merge, publish, distribute, sublicense,
+and/or sell copies of the Software, and to permit persons to whom the
+Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included
+in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+------------------------------------------------------------
+
+第三方组件 / Third-party Components
+
+本软件使用了下列开源项目，各自的许可条款请见对应仓库：
+This software uses the following open-source projects under their
+respective licenses:
+
+  - mihomo (Clash.Meta)        https://github.com/MetaCubeX/mihomo
+  - Flutter                    https://github.com/flutter/flutter
+  - Riverpod, http, image,     pub.dev (各自 LICENSE 文件)
+    crypto, path_provider,
+    window_manager, ...
+
+完整依赖清单见仓库 pubspec.yaml 与 core/go.mod。
+Full dependency list: see pubspec.yaml and core/go.mod in the repository.

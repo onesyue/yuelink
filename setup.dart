@@ -71,6 +71,10 @@ const Map<String, Map<String, String>> serviceHelperOutputNames = {
     'amd64': 'windows-amd64/yuelink-service-helper.exe',
     'arm64': 'windows-arm64/yuelink-service-helper.exe',
   },
+  'linux': {
+    'amd64': 'linux-amd64/yuelink-service-helper',
+    'arm64': 'linux-arm64/yuelink-service-helper',
+  },
 };
 
 const Map<String, Map<String, String>> serviceMihomoOutputNames = {
@@ -81,6 +85,10 @@ const Map<String, Map<String, String>> serviceMihomoOutputNames = {
   'windows': {
     'amd64': 'windows-amd64/yuelink-mihomo.exe',
     'arm64': 'windows-arm64/yuelink-mihomo.exe',
+  },
+  'linux': {
+    'amd64': 'linux-amd64/yuelink-mihomo',
+    'arm64': 'linux-arm64/yuelink-mihomo',
   },
 };
 
@@ -692,6 +700,31 @@ Future<void> installLibraries(String platform) async {
           File(dst).parent.createSync(recursive: true);
           File(src).copySync(dst);
           print('Installed: $dst');
+          break; // one arch per build
+        }
+      }
+      // Install the host-arch service helper + mihomo binary to linux/libs/
+      // so the post-build step in CI (or developer install) can pick them up
+      // and copy them next to the yuelink executable in the bundle.
+      for (final arch in ['amd64', 'arm64']) {
+        final helperSrc = '$serviceOutputDir/linux-$arch/yuelink-service-helper';
+        final mihomoSrc = '$serviceOutputDir/linux-$arch/yuelink-mihomo';
+        if (File(helperSrc).existsSync()) {
+          const dst = 'linux/libs/yuelink-service-helper';
+          File(dst).parent.createSync(recursive: true);
+          File(helperSrc).copySync(dst);
+          // Preserve executable bit
+          Process.runSync('chmod', ['+x', dst]);
+          print('Installed: $dst');
+        }
+        if (File(mihomoSrc).existsSync()) {
+          const dst = 'linux/libs/yuelink-mihomo';
+          File(dst).parent.createSync(recursive: true);
+          File(mihomoSrc).copySync(dst);
+          Process.runSync('chmod', ['+x', dst]);
+          print('Installed: $dst');
+        }
+        if (File(helperSrc).existsSync() || File(mihomoSrc).existsSync()) {
           break; // one arch per build
         }
       }
