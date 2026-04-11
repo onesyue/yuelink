@@ -139,11 +139,15 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: core/go.sum
 
-      - uses: subosito/flutter-action@v2
+      # build-core only needs Dart (to run setup.dart, a pure dart:io script)
+      # — not Flutter. Using setup-dart avoids the
+      # `Unable to determine Flutter version ... architecture: arm64` failure
+      # on the ubuntu-24.04-arm runner, since not every Flutter version
+      # publishes a Linux arm64 SDK. The flutter-action calls remain in the
+      # downstream `build-*` jobs that actually run `flutter build`.
+      - uses: dart-lang/setup-dart@v1
         with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          channel: stable
-          cache: true
+          sdk: stable
 
       # ── Apply patches to mihomo submodule ──────────────────────────────────
       - name: Apply mihomo patches
@@ -171,14 +175,11 @@ jobs:
           echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/27.2.12479018" >> $GITHUB_ENV
           echo "ANDROID_NDK=$ANDROID_SDK_ROOT/ndk/27.2.12479018" >> $GITHUB_ENV
 
-      # ── macOS/iOS: enable desktop/mobile targets ──────────────────────────
-      - name: Enable macOS desktop
-        if: matrix.platform == 'macos'
-        run: flutter config --enable-macos-desktop
-
-      - name: Enable Linux desktop
-        if: matrix.platform == 'linux'
-        run: flutter config --enable-linux-desktop
+      # NOTE: `flutter config --enable-{macos,linux}-desktop` was removed
+      # from build-core because (a) Flutter is no longer installed here and
+      # (b) the desktop-config flag is only consumed by `flutter build`,
+      # which happens in the downstream `build-macos` / `build-linux` jobs.
+      # The Go core build (`dart setup.dart build`) does not depend on it.
 
       - name: Install Linux build dependencies
         if: matrix.platform == 'linux'
