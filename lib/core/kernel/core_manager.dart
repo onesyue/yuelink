@@ -93,8 +93,10 @@ class CoreManager {
   Future<void> markRunning() async {
     _running = true;
     final savedConnectionMode = await SettingsService.getConnectionMode();
+    // Mirror _shouldUseDesktopServiceMode platform list — Linux is now
+    // a first-class service mode platform, not silently excluded.
     _serviceModeActive = ServiceManager.isSupported &&
-        (Platform.isMacOS || Platform.isWindows) &&
+        (Platform.isMacOS || Platform.isLinux || Platform.isWindows) &&
         savedConnectionMode == 'tun' &&
         await ServiceManager.isInstalled();
     // Restore ports from persisted settings (engine restart loses Dart state)
@@ -779,7 +781,14 @@ class CoreManager {
 
   Future<bool> _shouldUseDesktopServiceMode(String connectionMode) async {
     if (!ServiceManager.isSupported || isMockMode) return false;
-    if (!(Platform.isMacOS || Platform.isWindows)) return false;
+    // ServiceManager.isSupported already gates by platform (mac/linux/win).
+    // The previous extra `Platform.isMacOS || isWindows` clause silently
+    // excluded Linux even though the install UI showed it as supported,
+    // leaving Linux users with a "Service Mode installed" badge that did
+    // nothing. Linux + Unix-socket helper is now first-class.
+    if (!(Platform.isMacOS || Platform.isLinux || Platform.isWindows)) {
+      return false;
+    }
     if (connectionMode != 'tun') return false;
     return ServiceManager.isInstalled();
   }
@@ -802,7 +811,10 @@ class CoreManager {
       );
     }
 
-    if ((Platform.isMacOS || Platform.isWindows) && !isMockMode) {
+    // Port-conflict check applies to all desktop platforms — Linux is now
+    // a first-class desktop target via .deb / .rpm / AppImage releases.
+    if ((Platform.isMacOS || Platform.isLinux || Platform.isWindows) &&
+        !isMockMode) {
       final preferredMixed = ConfigTemplate.getMixedPort(withOverwrite);
       final ports = await Future.wait([
         _findAvailablePort(preferredMixed),

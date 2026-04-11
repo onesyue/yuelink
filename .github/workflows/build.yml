@@ -87,7 +87,10 @@ jobs:
   build-core:
     name: Build core (${{ matrix.platform }})
     if: startsWith(github.ref, 'refs/tags/')
-    needs: [analyze]
+    # Both unit tests AND the macOS integration smoke test must pass before
+    # we start producing release binaries. Without this, an E2E regression
+    # would still ship a tagged release with an app that fails to launch.
+    needs: [analyze, integration]
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
