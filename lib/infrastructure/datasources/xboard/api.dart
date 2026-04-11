@@ -1,6 +1,3 @@
-import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
-
 import '../../../constants.dart';
 import '../../../domain/announcements/announcement_entity.dart';
 import '../../../domain/emby/emby_info_entity.dart';
@@ -38,16 +35,8 @@ class XBoardApi {
 
   final XBoardHttpClient _http;
 
-  /// Override in tests to inject a mock [http.Client].
-  /// Forwards to [XBoardHttpClient.testClientFactory] so existing test
-  /// suites that called `XBoardApi.testClientFactory = ...` keep working.
-  @visibleForTesting
-  static set testClientFactory(http.Client Function()? factory) =>
-      XBoardHttpClient.testClientFactory = factory;
-
-  @visibleForTesting
-  static http.Client Function()? get testClientFactory =>
-      XBoardHttpClient.testClientFactory;
+  // Tests inject a mock http.Client via [XBoardHttpClient.testClientFactory]
+  // directly — see test/services/xboard_api_test.dart.
 
   // ── Auth ────────────────────────────────────────────────────────────────
 

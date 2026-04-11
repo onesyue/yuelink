@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
+import 'package:yuelink/infrastructure/datasources/xboard/client.dart';
 import 'package:yuelink/infrastructure/datasources/xboard/index.dart';
 
 void main() {
@@ -16,14 +17,14 @@ void main() {
   });
 
   tearDown(() {
-    XBoardApi.testClientFactory = null;
+    XBoardHttpClient.testClientFactory = null;
   });
 
   // ── Helpers ──────────────────────────────────────────────────────────
 
   /// Install a [MockClient] that returns [body] with [statusCode] for all requests.
   void mockResponse(String body, {int statusCode = 200}) {
-    XBoardApi.testClientFactory = () => MockClient((_) async =>
+    XBoardHttpClient.testClientFactory = () => MockClient((_) async =>
         http.Response(body, statusCode,
             headers: {'content-type': 'application/json; charset=utf-8'}));
   }
@@ -78,7 +79,7 @@ void main() {
 
     test('failure — HTTP 500 retries and throws', () async {
       var attempts = 0;
-      XBoardApi.testClientFactory = () => MockClient((_) async {
+      XBoardHttpClient.testClientFactory = () => MockClient((_) async {
             attempts++;
             return http.Response('Internal Server Error', 500);
           });
@@ -306,7 +307,7 @@ void main() {
   group('retry logic', () {
     test('retries on SocketException (transient)', () async {
       var attempts = 0;
-      XBoardApi.testClientFactory = () => MockClient((_) async {
+      XBoardHttpClient.testClientFactory = () => MockClient((_) async {
             attempts++;
             if (attempts < 3) throw const SocketException('Connection refused');
             return http.Response(
@@ -328,7 +329,7 @@ void main() {
 
     test('does NOT retry on XBoardApiException with status < 500', () async {
       var attempts = 0;
-      XBoardApi.testClientFactory = () => MockClient((_) async {
+      XBoardHttpClient.testClientFactory = () => MockClient((_) async {
             attempts++;
             return http.Response('{"status":"fail","message":"Bad"}', 200,
                 headers: {'content-type': 'application/json; charset=utf-8'});
@@ -345,7 +346,7 @@ void main() {
 
     test('retries on HTTP 500 (transient)', () async {
       var attempts = 0;
-      XBoardApi.testClientFactory = () => MockClient((_) async {
+      XBoardHttpClient.testClientFactory = () => MockClient((_) async {
             attempts++;
             if (attempts < 3) return http.Response('Server Error', 500);
             return http.Response(
@@ -367,7 +368,7 @@ void main() {
 
     test('exhausts all retries and rethrows last error', () async {
       var attempts = 0;
-      XBoardApi.testClientFactory = () => MockClient((_) async {
+      XBoardHttpClient.testClientFactory = () => MockClient((_) async {
             attempts++;
             throw const SocketException('Always fails');
           });

@@ -3,6 +3,9 @@ include: package:flutter_lints/flutter.yaml
 analyzer:
   exclude:
     - scripts/**
+    # slang codegen — `dart run slang` regenerates this file from
+    # lib/i18n/*.i18n.json so any local edits would be overwritten.
+    - lib/i18n/strings_g.dart
     # integration_test/ is intentionally INCLUDED so the analyzer catches
     # bitrot in E2E tests. To run them: flutter test integration_test/ -d macos
     # (or another connected device).

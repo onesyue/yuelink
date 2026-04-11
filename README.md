@@ -178,13 +178,13 @@ XBoard Panel API (CloudFront + 直连 fallback)
 
 | 层 | 职责 |
 |----|------|
-| `lib/modules/` | 功能模块（auth、dashboard、nodes、store、emby、checkin、profiles 等 16 个模块） |
-| `lib/infrastructure/` | API 客户端（XBoard、mihomo REST/WebSocket）、Repository |
-| `lib/core/` | FFI 绑定、CoreManager 启动序列、VPN 服务、安全存储、配置模板引擎 |
+| `lib/modules/` | 功能模块（auth、dashboard、nodes、store、emby、checkin、profiles 等 17 个模块） |
+| `lib/infrastructure/` | API 客户端（XBoard 5 文件子模块、mihomo REST/WebSocket）、Repository |
+| `lib/core/` | FFI 绑定 + ClashCore 接口 + managers（lifecycle/heartbeat/system_proxy）+ kernel 启动序列 + 安全存储 + 配置模板引擎 + Service Mode helper |
 | `lib/domain/` | 数据模型（proxy、traffic、connection、store、account 等） |
-| `lib/providers/` | Riverpod 全局状态管理（core、proxy、profile、connectivity） |
-| `lib/shared/` | 通用工具（i18n、格式化、通知、主题） |
-| `core/` | Go mihomo 包装（CGO //export，8 个导出符号） |
+| `lib/shared/` | 通用工具（app_notifier、error_logger、formatters、rich_content） |
+| `lib/i18n/` | slang JSON + 自动生成代码 + S 适配器 |
+| `core/` | Go mihomo 包装（CGO //export） |
 
 ### 核心启动序列
 

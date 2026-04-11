@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../theme.dart';
+import '../theme.dart';
 
 /// Renders server-provided content (HTML / Markdown / plain text) safely.
 ///

@@ -33,17 +33,19 @@ Flutter UI (Dart, Riverpod) → CoreController (dart:ffi) → hub.go (CGO //expo
                                                               Platform VPN service (TUN/system proxy)
 ```
 
-**Critical split**: FFI is for lifecycle only (init/start/stop). All data operations (proxies, traffic, connections, rules) go through the REST API (`MihomoApi`), never FFI. This matches FlClash/Clash Verge Rev architecture.
+**Unified `ClashCore` interface** (`lib/core/clash_core.dart`): every clash operation — lifecycle AND data — lives on one abstract class. `RealClashCore` dispatches lifecycle to FFI bindings (`CoreController`) and data to REST (`MihomoApi`); `MockClashCore` routes everything to `CoreMock`. Callers do `CoreManager.instance.core.X()` and don't care which side they're on. See CLAUDE.md for the canonical layout and call patterns.
 
-### Key layers
+> NOTE: This file is older than CLAUDE.md. CLAUDE.md is the authoritative architecture reference; refer to it first when in doubt.
 
-- **`core/`** — Go wrapper around mihomo. Exports C functions via `//export` (CGO). Compiled to `.so`/`.dylib`/`.dll` (dynamic) or `.a` (static, iOS only) via `setup.dart`. Android builds use `-tags with_gvisor` (required for TUN fd/file-descriptor mode — without it mihomo fails with "gVisor is not included in this build").
-- **`lib/ffi/`** — Dart FFI bindings. `CoreBindings` has raw FFI (8 lifecycle symbols: InitCore, StartCore, StopCore, Shutdown, IsRunning, ValidateConfig, UpdateConfig, FreeCString). `CoreController` is the high-level wrapper; data methods (getProxies, changeProxy, testDelay, getTraffic) always delegate to `CoreMock` — they exist only for mock mode UI development.
-- **`lib/providers/`** — Riverpod state management. `core_provider.dart` (lifecycle, traffic, heartbeat), `proxy_provider.dart` (nodes, groups, delay tests), `profile_provider.dart` (subscriptions), `proxy_provider_provider.dart` (remote proxy providers).
-- **`lib/pages/`** — 4-tab layout: Dashboard (connect/traffic/status), Nodes (proxy groups + routing mode), Subscriptions (profiles), Settings. Settings sub-pages: connections, logs, overwrite, proxy providers.
-- **`lib/services/`** — `VpnService` (MethodChannel), `MihomoApi` (REST on port 9090), `MihomoStream` (WebSocket for traffic/logs), `CoreManager` (lifecycle singleton — handles VPN internally per platform), `ProfileService` (static methods for profile CRUD + config loading), `OverwriteService` (config merging), `ConfigTemplate` (config processing with ensure-pattern injection), `SettingsService` (SharedPreferences wrapper), `GeoDataService` (pre-downloads GeoIP/GeoSite files before core start), `AppNotifier` (global toast/snackbar), `AutoUpdateService`/`UpdateChecker` (app updates), `WebdavService` (backup/sync).
-- **`lib/theme.dart`** — Design system: `YLColors` (zinc palette + semantic colors), `YLText` (typography), `YLSpacing`/`YLRadius`, `YLShadow` (context-aware for dark mode), reusable widgets (`YLSurface`, `YLStatusDot`, `YLChip`, `YLDelayBadge`, `YLPillSegmentedControl`, etc.).
-- **`lib/l10n/app_strings.dart`** — Hand-written `S` class for i18n. Both Chinese and English via `_e ? 'en' : 'zh'` ternaries. No code generation. Use `S.of(context)` in widgets, `S.current` in providers/services without BuildContext.
+### Key layers (post dual-layer cleanup)
+
+- **`core/`** (Go) — Go wrapper around mihomo. Exports C functions via `//export` (CGO). Compiled to `.so`/`.dylib`/`.dll`/`.a` via `setup.dart`. Android builds use `-tags with_gvisor`.
+- **`lib/core/`** — All kernel + FFI + managers + ClashCore + central providers + storage + service-mode helper.
+- **`lib/infrastructure/`** — Datasources (mihomo REST, websocket, XBoard 5-file submodule) + repositories.
+- **`lib/modules/`** — 17 feature modules (dashboard, nodes, store, emby, …). Each has page + providers/ + widgets/.
+- **`lib/shared/`** — `app_notifier`, `error_logger`, `event_log`, `formatters/`, `rich_content`, `traffic_formatter`.
+- **`lib/i18n/`** — slang JSON sources + codegen (`strings_g.dart`) + `S` adapter (`app_strings.dart`).
+- **`lib/theme.dart`** — Design system: `YLColors`, `YLText`, `YLSpacing`/`YLRadius`, `YLShadow`, reusable widgets.
 
 ### Platform VPN implementations
 
@@ -51,8 +53,9 @@ Flutter UI (Dart, Riverpod) → CoreController (dart:ffi) → hub.go (CGO //expo
 |----------|-----------|----------|
 | Android | `VpnService` + TUN fd → Go core (always, regardless of connectionMode) | `android/.../YueLinkVpnService.kt` |
 | iOS | `NEPacketTunnelProvider` (separate process, static lib) | `ios/PacketTunnel/` |
-| macOS | System proxy via `networksetup` | `lib/providers/core_provider.dart` |
-| Windows | System proxy via registry | `lib/providers/core_provider.dart` |
+| macOS | System proxy via `networksetup` (or Service Mode TUN via Unix socket helper) | `lib/core/managers/system_proxy_manager.dart` |
+| Windows | System proxy via registry (or Service Mode TUN via HTTP+token helper) | `lib/core/managers/system_proxy_manager.dart` |
+| Linux | System proxy via gsettings/kwriteconfig (or Service Mode TUN) | `lib/core/managers/system_proxy_manager.dart` |
 
 ### Native library install paths
 
