@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../../l10n/app_strings.dart';
+import '../../../i18n/app_strings.dart';
 import '../../../modules/announcements/presentation/announcements_page.dart';
 import '../../../modules/emby/emby_media_page.dart';
 import '../../../modules/emby/emby_providers.dart';

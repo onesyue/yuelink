@@ -2,7 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../l10n/app_strings.dart';
+import '../../../i18n/app_strings.dart';
 import '../../../domain/emby/emby_info_entity.dart';
 import '../../../modules/emby/emby_client.dart';
 import '../../../modules/emby/emby_detail_page.dart';

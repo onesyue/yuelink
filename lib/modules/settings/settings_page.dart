@@ -11,7 +11,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../constants.dart';
 import 'web_page.dart';
-import '../../l10n/app_strings.dart';
+import '../../i18n/app_strings.dart';
 import '../../modules/profiles/profiles_page.dart';
 import 'sub/general_settings_page.dart';
 import '../../modules/store/store_page.dart';

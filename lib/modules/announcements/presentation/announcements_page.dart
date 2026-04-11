@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../domain/announcements/announcement_entity.dart';
-import '../../../l10n/app_strings.dart';
+import '../../../i18n/app_strings.dart';
 import '../../../shared/rich_content.dart';
 import '../../../theme.dart';
 import '../providers/announcements_providers.dart';

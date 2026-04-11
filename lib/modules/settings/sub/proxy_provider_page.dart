@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../l10n/app_strings.dart';
+import '../../../i18n/app_strings.dart';
 import '../../../domain/models/proxy_provider.dart';
 import '../providers/proxy_providers_provider.dart';
 import '../../../shared/app_notifier.dart';

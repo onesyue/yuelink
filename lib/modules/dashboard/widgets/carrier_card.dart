@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../l10n/app_strings.dart';
+import '../../../i18n/app_strings.dart';
 import '../../../theme.dart';
 import '../../carrier/carrier_provider.dart';
 

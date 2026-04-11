@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../l10n/app_strings.dart';
+import '../../../i18n/app_strings.dart';
 import '../../yue_auth/providers/yue_auth_providers.dart';
 import '../../../shared/app_notifier.dart';
 import '../../../shared/formatters/subscription_parser.dart' show formatBytes;

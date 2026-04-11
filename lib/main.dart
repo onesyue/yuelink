@@ -12,7 +12,7 @@ import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'constants.dart';
-import 'l10n/app_strings.dart';
+import 'i18n/app_strings.dart';
 import 'i18n/strings_g.dart';
 import 'modules/dashboard/dashboard_page.dart';
 import 'modules/nodes/nodes_page.dart';

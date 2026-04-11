@@ -12,7 +12,7 @@ import '../../../core/service/service_manager.dart';
 import '../../../core/service/service_models.dart';
 import '../../../core/service/service_mode_provider.dart';
 import '../../../core/storage/settings_service.dart';
-import '../../../l10n/app_strings.dart';
+import '../../../i18n/app_strings.dart';
 import '../../../core/providers/core_provider.dart';
 import '../providers/split_tunnel_provider.dart';
 import '../../../shared/app_notifier.dart';

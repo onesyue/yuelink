@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../l10n/app_strings.dart';
+import '../../i18n/app_strings.dart';
 import 'emby_client.dart';
 import 'emby_detail_page.dart';
 import 'emby_theme.dart';

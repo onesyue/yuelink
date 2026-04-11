@@ -6,7 +6,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../../core/kernel/core_manager.dart';
 import '../../core/platform/vpn_service.dart';
-import '../../l10n/app_strings.dart';
+import '../../i18n/app_strings.dart';
 import '../../shared/app_notifier.dart';
 import '../../theme.dart';
 import '../yue_auth/providers/yue_auth_providers.dart';

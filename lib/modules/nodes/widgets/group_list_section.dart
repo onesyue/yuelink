@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../domain/models/proxy.dart';
-import '../../../l10n/app_strings.dart';
+import '../../../i18n/app_strings.dart';
 import '../group_type_label.dart';
 import '../../../shared/app_notifier.dart';
 import '../../../theme.dart';

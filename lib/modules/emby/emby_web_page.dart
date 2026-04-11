@@ -6,7 +6,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
 import 'package:webview_windows/webview_windows.dart';
 
-import '../../l10n/app_strings.dart';
+import '../../i18n/app_strings.dart';
 import '../../theme.dart';
 
 /// In-app Emby browser — no external app required on any platform.

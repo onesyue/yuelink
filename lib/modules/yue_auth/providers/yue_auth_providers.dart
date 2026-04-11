@@ -8,7 +8,7 @@ import '../../../infrastructure/datasources/xboard_api.dart';
 // Re-export shared types so other modules import from auth, not datasources.
 export '../../../infrastructure/datasources/xboard_api.dart'
     show XBoardApi, XBoardApiException, UserProfile, SubscribeData;
-import '../../../l10n/app_strings.dart';
+import '../../../i18n/app_strings.dart';
 import '../../../modules/profiles/providers/profiles_providers.dart';
 import '../../../domain/models/profile.dart' show ProfileSource;
 import '../../../core/kernel/core_manager.dart';

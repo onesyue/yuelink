@@ -12,7 +12,7 @@ import '../../constants.dart';
 import '../../core/kernel/config_template.dart';
 import '../../core/util/ulid.dart';
 import '../../domain/models/profile.dart';
-import '../../l10n/app_strings.dart';
+import '../../i18n/app_strings.dart';
 import '../../shared/formatters/subscription_parser.dart';
 
 /// Manages subscription profiles: download, store, update, delete.

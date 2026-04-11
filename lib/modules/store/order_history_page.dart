@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../infrastructure/store/store_repository.dart';
-import '../../l10n/app_strings.dart';
+import '../../i18n/app_strings.dart';
 import '../../shared/app_notifier.dart';
 import '../../theme.dart';
 import '../../domain/store/store_order.dart';

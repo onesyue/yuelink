@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../l10n/app_strings.dart';
+import '../../i18n/app_strings.dart';
 import '../../main.dart' show deepLinkUrlProvider;
 import '../../domain/models/profile.dart';
 import '../../core/providers/core_provider.dart';

@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/models/proxy.dart';
-import '../../l10n/app_strings.dart';
+import '../../i18n/app_strings.dart';
 import '../../main.dart';
 import '../../core/providers/core_provider.dart';
 import '../../core/kernel/core_manager.dart';

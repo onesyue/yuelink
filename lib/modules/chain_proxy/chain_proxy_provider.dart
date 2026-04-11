@@ -10,7 +10,7 @@ import '../../core/kernel/config_template.dart';
 import '../../core/kernel/core_manager.dart';
 import '../../core/storage/settings_service.dart';
 import '../../shared/app_notifier.dart';
-import '../../l10n/app_strings.dart';
+import '../../i18n/app_strings.dart';
 import '../nodes/providers/node_providers.dart';
 import '../nodes/providers/nodes_providers.dart';
 

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../l10n/app_strings.dart';
+import '../../i18n/app_strings.dart';
 import '../../modules/yue_auth/providers/yue_auth_providers.dart';
 import '../../theme.dart';
 import 'order_history_page.dart';

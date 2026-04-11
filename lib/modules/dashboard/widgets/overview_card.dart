@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../domain/models/startup_report.dart';
-import '../../../l10n/app_strings.dart';
+import '../../../i18n/app_strings.dart';
 import '../../../core/providers/core_provider.dart';
 import '../../profiles/providers/profiles_providers.dart';
 import '../../../theme.dart';

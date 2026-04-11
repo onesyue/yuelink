@@ -7,7 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/ffi/core_controller.dart';
 import '../../core/kernel/core_manager.dart';
 import '../../core/kernel/recovery_manager.dart';
-import '../../l10n/app_strings.dart';
+import '../../i18n/app_strings.dart';
 import '../providers/core_provider.dart';
 import '../../modules/nodes/providers/nodes_providers.dart';
 import '../../shared/app_notifier.dart';

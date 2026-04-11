@@ -12,7 +12,7 @@
 
 import 'package:flutter/material.dart';
 
-import '../i18n/strings_g.dart';
+import 'strings_g.dart';
 
 /// Backwards-compatible i18n helper that delegates to slang's [Translations].
 ///

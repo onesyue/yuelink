@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../infrastructure/store/store_repository.dart';
-import '../../../l10n/app_strings.dart';
+import '../../../i18n/app_strings.dart';
 import '../../../theme.dart';
 
 /// Top card on the store page showing user's current plan + traffic.

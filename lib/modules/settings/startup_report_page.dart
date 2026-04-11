@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../core/kernel/core_manager.dart';
 import '../../domain/models/startup_report.dart';
-import '../../l10n/app_strings.dart';
+import '../../i18n/app_strings.dart';
 import '../../shared/app_notifier.dart';
 import '../../theme.dart';
 
