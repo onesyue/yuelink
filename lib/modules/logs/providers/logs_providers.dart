@@ -5,10 +5,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/kernel/core_manager.dart';
 import '../../../domain/logs/log_entry.dart';
 import '../../../infrastructure/repositories/log_repository.dart';
-import '../../../providers/core_provider.dart';
+import '../../../core/providers/core_provider.dart';
 
 // Re-export logLevelProvider so it can be accessed via this module too
-export '../../../providers/core_provider.dart' show logLevelProvider;
+export '../../../core/providers/core_provider.dart' show logLevelProvider;
 
 /// Live log entries from mihomo.
 final logEntriesProvider =

@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../l10n/app_strings.dart';
-import '../../../providers/core_provider.dart';
+import '../../../core/providers/core_provider.dart';
 import '../../../shared/traffic_formatter.dart';
 import '../../../theme.dart';
 import '../providers/dashboard_providers.dart';

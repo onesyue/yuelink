@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/kernel/core_manager.dart';
-import '../../../providers/core_provider.dart';
+import '../../../core/providers/core_provider.dart';
 import '../../nodes/providers/nodes_providers.dart';
 
 class ExitIpInfo {

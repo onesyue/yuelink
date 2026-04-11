@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../core/storage/settings_service.dart';
+import '../../../core/storage/settings_service.dart';
 
 /// Split tunneling mode for Android VPN.
 enum SplitTunnelMode {

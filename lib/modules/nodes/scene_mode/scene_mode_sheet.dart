@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../providers/core_provider.dart';
+import '../../../core/providers/core_provider.dart';
 import '../../../shared/app_notifier.dart';
 import '../../../theme.dart';
 import '../smart_select/smart_select_provider.dart';

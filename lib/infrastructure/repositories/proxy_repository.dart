@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../datasources/mihomo_api.dart';
-import '../../providers/core_provider.dart';
+import '../../core/providers/core_provider.dart';
 
 /// Batches delay-test results that arrive within 300 ms into a single map
 /// and flushes them via [onFlush]. This reduces the number of provider state

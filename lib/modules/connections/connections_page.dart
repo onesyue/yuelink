@@ -7,7 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../l10n/app_strings.dart';
 import '../../domain/models/connection.dart';
 import 'providers/connections_providers.dart';
-import '../../providers/core_provider.dart';
+import '../../core/providers/core_provider.dart';
 import '../../theme.dart';
 
 class ConnectionsPage extends ConsumerStatefulWidget {

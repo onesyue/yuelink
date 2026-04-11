@@ -6,9 +6,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/app_strings.dart';
 import '../../domain/models/rule.dart';
-import '../../providers/core_provider.dart';
+import '../../core/providers/core_provider.dart';
 import 'providers/logs_providers.dart';
-import '../../providers/rule_provider.dart';
+import 'providers/rule_provider.dart';
 import '../../domain/logs/log_entry.dart';
 
 class LogPage extends ConsumerStatefulWidget {

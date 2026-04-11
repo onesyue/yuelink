@@ -1,16 +1,16 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../core/kernel/core_manager.dart';
-import '../core/managers/core_heartbeat_manager.dart';
-import '../core/managers/core_lifecycle_manager.dart';
-import '../core/managers/system_proxy_manager.dart';
-import '../domain/models/traffic.dart';
-import '../domain/models/traffic_history.dart';
-import '../infrastructure/datasources/mihomo_api.dart';
+import '../kernel/core_manager.dart';
+import '../managers/core_heartbeat_manager.dart';
+import '../managers/core_lifecycle_manager.dart';
+import '../managers/system_proxy_manager.dart';
+import '../../domain/models/traffic.dart';
+import '../../domain/models/traffic_history.dart';
+import '../../infrastructure/datasources/mihomo_api.dart';
 
 // Re-export traffic stream providers and chart UI state
 // (defined in modules/dashboard to avoid circular imports)
-export '../modules/dashboard/providers/traffic_providers.dart';
+export '../../modules/dashboard/providers/traffic_providers.dart';
 
 // ──────────────────────────────────────────────────────────────────────────
 // App background state (battery optimization)

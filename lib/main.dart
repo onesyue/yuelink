@@ -24,7 +24,7 @@ import 'modules/yue_auth/presentation/yue_auth_page.dart';
 import 'modules/yue_auth/providers/yue_auth_providers.dart';
 import 'modules/connections/providers/connections_providers.dart';
 import 'modules/dashboard/providers/dashboard_providers.dart';
-import 'providers/core_provider.dart';
+import 'core/providers/core_provider.dart';
 import 'modules/profiles/providers/profiles_providers.dart';
 import 'shared/app_notifier.dart';
 import 'core/kernel/core_manager.dart';

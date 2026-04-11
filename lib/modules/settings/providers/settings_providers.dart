@@ -10,7 +10,7 @@
 
 // Re-export core settings state providers (defined in core_provider.dart to
 // avoid circular imports with CoreActions).
-export '../../../providers/core_provider.dart'
+export '../../../core/providers/core_provider.dart'
     show
         routingModeProvider,
         connectionModeProvider,
@@ -19,7 +19,7 @@ export '../../../providers/core_provider.dart'
         autoConnectProvider;
 
 // Re-export split tunnel providers.
-export '../../../providers/split_tunnel_provider.dart';
+export 'split_tunnel_provider.dart';
 
 // Proxy providers (remote provider management).
 export 'proxy_providers_provider.dart';

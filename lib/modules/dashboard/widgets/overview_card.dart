@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../domain/models/startup_report.dart';
 import '../../../l10n/app_strings.dart';
-import '../../../providers/core_provider.dart';
+import '../../../core/providers/core_provider.dart';
 import '../../profiles/providers/profiles_providers.dart';
 import '../../../theme.dart';
 import '../../../core/kernel/core_manager.dart';

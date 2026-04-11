@@ -9,7 +9,7 @@ import '../../../modules/emby/emby_detail_page.dart';
 import '../../../modules/emby/emby_media_page.dart';
 import '../../../modules/emby/emby_providers.dart';
 import '../../../modules/emby/emby_web_page.dart';
-import '../../../providers/core_provider.dart';
+import '../../../core/providers/core_provider.dart';
 import '../../../shared/app_notifier.dart';
 import '../../../theme.dart';
 import '../providers/emby_preview_provider.dart';

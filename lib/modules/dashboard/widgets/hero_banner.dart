@@ -11,7 +11,7 @@ import '../../../modules/emby/emby_providers.dart';
 import '../../../modules/emby/emby_web_page.dart';
 import '../../../modules/mine/views/feedback_page.dart';
 import '../../../modules/store/store_page.dart';
-import '../../../providers/core_provider.dart';
+import '../../../core/providers/core_provider.dart';
 import '../../../shared/app_notifier.dart';
 import '../../../theme.dart';
 import 'hero_banner_model.dart';

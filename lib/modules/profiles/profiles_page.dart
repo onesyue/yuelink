@@ -9,7 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../l10n/app_strings.dart';
 import '../../main.dart' show deepLinkUrlProvider;
 import '../../domain/models/profile.dart';
-import '../../providers/core_provider.dart';
+import '../../core/providers/core_provider.dart';
 import 'providers/profiles_providers.dart';
 import '../../shared/app_notifier.dart';
 import '../../infrastructure/repositories/profile_repository.dart';

@@ -6,7 +6,7 @@ import '../../../core/kernel/core_manager.dart';
 import '../../../core/storage/settings_service.dart';
 import '../../../domain/models/traffic.dart';
 import '../../../infrastructure/repositories/traffic_repository.dart';
-import '../../../providers/core_provider.dart';
+import '../../../core/providers/core_provider.dart';
 
 // ------------------------------------------------------------------
 // Daily traffic accumulation

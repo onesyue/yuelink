@@ -6,7 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/kernel/core_manager.dart';
 import '../../../domain/models/connection.dart';
 import '../../../infrastructure/repositories/connection_repository.dart';
-import '../../../providers/core_provider.dart';
+import '../../../core/providers/core_provider.dart';
 
 // ------------------------------------------------------------------
 // Connections snapshot (polled every second via WebSocket stream)

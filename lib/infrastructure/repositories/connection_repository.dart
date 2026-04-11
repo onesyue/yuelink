@@ -7,7 +7,7 @@ import '../datasources/mihomo_api.dart';
 import '../datasources/mihomo_stream.dart';
 import '../../domain/models/connection.dart';
 import '../../core/kernel/core_manager.dart';
-import '../../providers/core_provider.dart';
+import '../../core/providers/core_provider.dart';
 
 /// Repository that wraps connection-related data operations.
 ///

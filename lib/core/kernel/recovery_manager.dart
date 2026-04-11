@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/models/traffic.dart';
 import '../../domain/models/traffic_history.dart';
-import '../../providers/core_provider.dart';
+import '../providers/core_provider.dart';
 import '../storage/settings_service.dart';
 import 'core_manager.dart';
 
