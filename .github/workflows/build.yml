@@ -592,19 +592,18 @@ jobs:
             else
               CHANGES=$(git log --pretty=format:"- %s" -20)
             fi
-            cat > release_notes.md << NOTES
-            ### Changes
-            ${CHANGES}
-
-            ### Artifacts
-            - \`YueLink-${VERSION}-android-universal.apk\`: Android 通用安装包；另附 3 个分 ABI APK。
-            - \`YueLink-${VERSION}-ios.ipa\`: iOS 侧载包（TrollStore / AltStore / SideStore）。
-            - \`YueLink-${VERSION}-macos-universal.dmg\`: macOS Intel + Apple Silicon 通用 DMG。
-            - \`YueLink-${VERSION}-windows-amd64-setup.exe\`: Windows 安装包。
-            - \`YueLink-${VERSION}-windows-amd64-portable.zip\`: Windows 免安装便携包。
-            - \`YueLink-${VERSION}-linux-amd64.AppImage\`: Linux x86_64 AppImage。
-            - 每个产物都附带同名 \`.sha256\` 校验文件。
-            NOTES
+            {
+              printf '### Changes\n'
+              printf '%s\n\n' "$CHANGES"
+              printf '### Artifacts\n'
+              printf -- '- `YueLink-%s-android-universal.apk`: Android 通用安装包；另附 3 个分 ABI APK。\n' "$VERSION"
+              printf -- '- `YueLink-%s-ios.ipa`: iOS 侧载包（TrollStore / AltStore / SideStore）。\n' "$VERSION"
+              printf -- '- `YueLink-%s-macos-universal.dmg`: macOS Intel + Apple Silicon 通用 DMG。\n' "$VERSION"
+              printf -- '- `YueLink-%s-windows-amd64-setup.exe`: Windows 安装包。\n' "$VERSION"
+              printf -- '- `YueLink-%s-windows-amd64-portable.zip`: Windows 免安装便携包。\n' "$VERSION"
+              printf -- '- `YueLink-%s-linux-amd64.AppImage`: Linux x86_64 AppImage。\n' "$VERSION"
+              printf -- '- 每个产物都附带同名 `.sha256` 校验文件。\n'
+            } > release_notes.md
           fi
           printf '\n\n---\n*Build: %s | Version: %s*\n' "$TAG" "$VERSION" >> release_notes.md
           echo "RELEASE_TITLE=${TITLE}" >> $GITHUB_ENV
