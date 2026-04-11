@@ -29,12 +29,20 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         options: [String: NSObject]?,
         completionHandler: @escaping (Error?) -> Void
     ) {
-        // TUN address: 172.19.0.1/30 (matches mihomo tun.inet4-address).
+        // TUN address: 172.19.0.1/30 (matches mihomo tun.inet4-address below
+        // in injectTunConfig). The /30 prefix gives us 4 addresses
+        // (172.19.0.0 network, .1 us, .2 peer, .3 broadcast) which is the
+        // smallest valid IPv4 subnet — all the dns-hijack traffic goes
+        // through this TUN regardless of subnet size.
         // DNS: real servers, but mihomo's dns-hijack intercepts all queries
         // on port 53 through the TUN for fake-ip resolution.
         let settings = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: "254.1.1.1")
 
-        let ipv4 = NEIPv4Settings(addresses: ["172.19.0.1"], subnetMasks: ["255.255.252.0"])
+        // 255.255.255.252 == /30. Previously this was 255.255.252.0 (/22),
+        // a typo that gave the TUN a 1024-host subnet and disagreed with
+        // the mihomo inet4-address line below — causing inconsistent
+        // routing decisions in iOS networkd vs mihomo.
+        let ipv4 = NEIPv4Settings(addresses: ["172.19.0.1"], subnetMasks: ["255.255.255.252"])
         ipv4.includedRoutes = [NEIPv4Route.default()]
         settings.ipv4Settings = ipv4
 
