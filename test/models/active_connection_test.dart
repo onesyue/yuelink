@@ -111,16 +111,49 @@ void main() {
         processPath: '',
         rule: 'MATCH',
         rulePayload: '',
-        chains: [],
+        chains: const [],
         upload: 0,
         download: 0,
         curUploadSpeed: 0,
         curDownloadSpeed: 0,
         start: now.subtract(const Duration(hours: 2, minutes: 30)),
+        processName: '',
+        target: 'test.com',
       );
 
       expect(conn.durationText, contains('h'));
       expect(conn.durationText, contains('m'));
+    });
+
+    test('copyWithCounters reuses string fields', () {
+      final orig = ActiveConnection.fromJson({
+        'id': 'x',
+        'metadata': {
+          'host': 'foo.com',
+          'destinationPort': '443',
+          'network': 'tcp',
+          'type': 'TLS',
+          'processPath': '/usr/bin/curl',
+        },
+        'rule': 'MATCH',
+        'chains': ['Proxy'],
+        'upload': 100,
+        'download': 200,
+        'start': '2026-01-01T00:00:00Z',
+      });
+      final next = orig.copyWithCounters(
+        upload: 500,
+        download: 800,
+        curUploadSpeed: 10,
+        curDownloadSpeed: 20,
+      );
+      expect(next.upload, 500);
+      expect(next.download, 800);
+      // Reference equality on shared immutable fields
+      expect(identical(next.host, orig.host), isTrue);
+      expect(identical(next.processName, orig.processName), isTrue);
+      expect(identical(next.target, orig.target), isTrue);
+      expect(identical(next.chains, orig.chains), isTrue);
     });
   });
 

@@ -24,11 +24,18 @@ class ConnectionRepository {
   /// Throttling prevents UI overload when hundreds of connections change per
   /// second (e.g. BitTorrent downloads).
   ///
-  /// Performance: raw JSON is stored and only parsed when the throttle timer
-  /// fires — intermediate frames are discarded without parsing.
+  /// Performance:
+  ///  - raw JSON is stored and only parsed when the throttle timer fires —
+  ///    intermediate frames are discarded without parsing.
+  ///  - an instance cache (`prevById`) is rebuilt each tick from the previous
+  ///    snapshot and passed into [ConnectionsSnapshot.fromJson]. Connections
+  ///    whose byte counters are unchanged keep the exact same instance
+  ///    (reference equality), so downstream `Provider.select` checks
+  ///    short-circuit and `_ConnectionRow` doesn't rebuild.
   Stream<ConnectionsSnapshot> connectionsStream() {
     Map<String, dynamic>? pendingRaw;
     Timer? throttle;
+    Map<String, ActiveConnection> prevById = const {};
 
     late StreamController<ConnectionsSnapshot> controller;
     StreamSubscription<Map<String, dynamic>>? sub;
@@ -42,7 +49,16 @@ class ConnectionRepository {
             final raw = pendingRaw;
             if (raw != null && !controller.isClosed) {
               try {
-                controller.add(ConnectionsSnapshot.fromJson(raw));
+                final snap =
+                    ConnectionsSnapshot.fromJson(raw, cache: prevById);
+                // Rebuild the id-keyed cache from the freshly parsed list.
+                // Dropped connections fall out automatically — no leaks.
+                final next = <String, ActiveConnection>{};
+                for (final c in snap.connections) {
+                  next[c.id] = c;
+                }
+                prevById = next;
+                controller.add(snap);
               } catch (e) {
                 debugPrint('[ConnectionRepo] parse snapshot failed: $e');
               }
@@ -58,6 +74,7 @@ class ConnectionRepository {
         sub = null;
         throttle = null;
         pendingRaw = null;
+        prevById = const {};
         controller.close();
       },
     );
