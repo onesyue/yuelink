@@ -847,10 +847,11 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
   }
 
   /// Auto-check for app updates on launch (standalone distribution only).
-  /// Skipped versions and store builds are filtered by UpdateChecker.check().
+  /// Skipped versions, store builds, and the user's "auto-check off" setting
+  /// are all filtered by UpdateChecker.check(auto: true).
   void _checkForUpdateOnLaunch() {
     if (!EnvConfig.isStandalone) return;
-    UpdateChecker.instance.check().then((info) {
+    UpdateChecker.instance.check(auto: true).then((info) {
       if (info != null && mounted) {
         AppNotifier.info(
           S.current.isEn

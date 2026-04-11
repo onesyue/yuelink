@@ -146,11 +146,15 @@ class SettingsPage extends ConsumerStatefulWidget {
 class _SettingsPageState extends ConsumerState<SettingsPage> with WidgetsBindingObserver {
   UpdateInfo? _pendingUpdate;
   bool _checkingUpdate = false;
+  String _updateChannel = 'stable';
+  bool _autoCheckUpdates = true;
+  DateTime? _lastUpdateCheck;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _loadUpdatePrefs();
     _checkForUpdate();
   }
 
@@ -172,11 +176,39 @@ class _SettingsPageState extends ConsumerState<SettingsPage> with WidgetsBinding
     }
   }
 
-  Future<void> _checkForUpdate() async {
-    final info = await UpdateChecker.instance.check();
-    if (mounted && info != null) {
-      setState(() => _pendingUpdate = info);
+  Future<void> _loadUpdatePrefs() async {
+    final ch = await UpdateChecker.getChannel();
+    final auto = await UpdateChecker.getAutoCheck();
+    final last = await UpdateChecker.getLastCheck();
+    if (mounted) {
+      setState(() {
+        _updateChannel = ch;
+        _autoCheckUpdates = auto;
+        _lastUpdateCheck = last;
+      });
     }
+  }
+
+  Future<void> _checkForUpdate() async {
+    // auto: true → respects the user's auto-check toggle (skip if disabled).
+    final info = await UpdateChecker.instance.check(auto: true);
+    if (!mounted) return;
+    final last = await UpdateChecker.getLastCheck();
+    setState(() {
+      if (info != null) _pendingUpdate = info;
+      _lastUpdateCheck = last;
+    });
+  }
+
+  /// Render "刚刚 / N 分钟前 / N 小时前 / yyyy-MM-dd" relative time
+  String _formatLastChecked(DateTime? dt) {
+    if (dt == null) return '从未检查';
+    final diff = DateTime.now().difference(dt);
+    if (diff.inSeconds < 60) return '刚刚';
+    if (diff.inMinutes < 60) return '${diff.inMinutes} 分钟前';
+    if (diff.inHours < 24) return '${diff.inHours} 小时前';
+    if (diff.inDays < 30) return '${diff.inDays} 天前';
+    return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
   }
 
   void _showUpdateDialog(BuildContext context, UpdateInfo info) {
@@ -243,8 +275,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage> with WidgetsBinding
                             progress = 0;
                           });
                           try {
+                            // Pass the manifest's sha256 so the downloaded
+                            // file is verified against tampering. If the
+                            // hash mismatches, download() throws and the
+                            // partial file is deleted.
                             final path = await UpdateChecker.download(
                               info.downloadUrl!,
+                              expectedSha256: info.sha256,
                               onProgress: (received, total) {
                                 if (total > 0) {
                                   setDialog(() =>
@@ -292,21 +329,51 @@ class _SettingsPageState extends ConsumerState<SettingsPage> with WidgetsBinding
         // Use platform channel to install APK
         const channel = MethodChannel('com.yueto.yuelink/vpn');
         await channel.invokeMethod('installApk', {'path': path});
-      } else if (Platform.isMacOS || Platform.isWindows) {
+        AppNotifier.success(s.updateInstalling);
+        return;
+      }
+      if (Platform.isMacOS || Platform.isWindows) {
         // Open DMG/EXE via system default handler
         final uri = Uri.file(path);
         if (await canLaunchUrl(uri)) {
           await launchUrl(uri);
+        } else if (Platform.isMacOS) {
+          await Process.run('open', [path]);
         } else {
-          // Fallback: use Process to open
-          if (Platform.isMacOS) {
-            await Process.run('open', [path]);
-          } else {
-            await Process.run('cmd', ['/c', 'start', '', path]);
-          }
+          await Process.run('cmd', ['/c', 'start', '', path]);
         }
+        AppNotifier.success(s.updateInstalling);
+        return;
       }
-      AppNotifier.success(s.updateInstalling);
+      if (Platform.isLinux) {
+        // .deb / .rpm / .AppImage — let the desktop environment pick the
+        // right tool (gdebi / gnome-software / dnfdragora / file manager).
+        // xdg-open is the universal entry point on Linux desktops.
+        final result = await Process.run('xdg-open', [path]);
+        if (result.exitCode != 0) {
+          throw ProcessException('xdg-open', [path],
+              result.stderr.toString().trim(), result.exitCode);
+        }
+        AppNotifier.success(s.updateInstalling);
+        return;
+      }
+      if (Platform.isIOS) {
+        // iOS can't sideload .ipa files from inside another app — App Store
+        // and TrollStore are the only install paths. Open the GitHub release
+        // page in the user's browser so they can do it manually.
+        final pending = _pendingUpdate;
+        if (pending != null && pending.releaseUrl.isNotEmpty) {
+          await launchUrl(
+            Uri.parse(pending.releaseUrl),
+            mode: LaunchMode.externalApplication,
+          );
+          AppNotifier.info('请在打开的页面中下载 IPA 并使用 TrollStore 安装');
+          return;
+        }
+        AppNotifier.error('iOS 暂不支持自动安装，请前往 GitHub Releases 手动下载');
+        return;
+      }
+      AppNotifier.error('当前平台不支持自动安装');
     } catch (e) {
       AppNotifier.error('${s.updateDownloadFailed}: $e');
     }
@@ -525,6 +592,85 @@ class _SettingsPageState extends ConsumerState<SettingsPage> with WidgetsBinding
                                     _showUpdateDialog(context, info);
                                   }
                                 },
+                    ),
+                    Divider(height: 1, thickness: 0.5, color: dividerColor),
+
+                    // ── Last checked timestamp ────────────────────────────
+                    YLInfoRow(
+                      label: '上次检查',
+                      value: _formatLastChecked(_lastUpdateCheck),
+                      trailing: const SizedBox.shrink(),
+                    ),
+                    Divider(height: 1, thickness: 0.5, color: dividerColor),
+
+                    // ── Auto-check on startup toggle ──────────────────────
+                    SwitchListTile.adaptive(
+                      contentPadding:
+                          const EdgeInsets.symmetric(horizontal: 16),
+                      title: const Text(
+                        '启动时自动检查更新',
+                        style: TextStyle(fontSize: 14),
+                      ),
+                      value: _autoCheckUpdates,
+                      onChanged: (v) async {
+                        await UpdateChecker.setAutoCheck(v);
+                        setState(() => _autoCheckUpdates = v);
+                      },
+                    ),
+                    Divider(height: 1, thickness: 0.5, color: dividerColor),
+
+                    // ── Update channel: stable / pre ──────────────────────
+                    YLInfoRow(
+                      label: '更新通道',
+                      value: _updateChannel == 'pre' ? '预发布' : '稳定版',
+                      trailing: const Icon(Icons.chevron_right,
+                          size: 18, color: YLColors.zinc400),
+                      onTap: () async {
+                        final picked = await showModalBottomSheet<String>(
+                          context: context,
+                          builder: (ctx) => SafeArea(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                ListTile(
+                                  title: const Text('稳定版 (stable)'),
+                                  subtitle: const Text(
+                                    '只接收正式 v* 版本，更稳定',
+                                    style: TextStyle(fontSize: 12),
+                                  ),
+                                  trailing: _updateChannel == 'stable'
+                                      ? const Icon(Icons.check,
+                                          color: YLColors.primary)
+                                      : null,
+                                  onTap: () => Navigator.pop(ctx, 'stable'),
+                                ),
+                                ListTile(
+                                  title: const Text('预发布 (pre-release)'),
+                                  subtitle: const Text(
+                                    '抢先体验新功能，可能有问题',
+                                    style: TextStyle(fontSize: 12),
+                                  ),
+                                  trailing: _updateChannel == 'pre'
+                                      ? const Icon(Icons.check,
+                                          color: YLColors.primary)
+                                      : null,
+                                  onTap: () => Navigator.pop(ctx, 'pre'),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                        if (picked != null && picked != _updateChannel) {
+                          await UpdateChecker.setChannel(picked);
+                          setState(() {
+                            _updateChannel = picked;
+                            _pendingUpdate = null; // re-evaluate against new channel
+                          });
+                          // Trigger fresh check on the new channel
+                          // ignore: use_build_context_synchronously
+                          if (context.mounted) await _checkForUpdate();
+                        }
+                      },
                     ),
                     Divider(height: 1, thickness: 0.5, color: dividerColor),
                     ],
