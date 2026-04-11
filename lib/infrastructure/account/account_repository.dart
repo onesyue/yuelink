@@ -3,7 +3,7 @@ import 'dart:io';
 
 import '../../domain/account/account_overview.dart';
 import '../../domain/account/notice.dart';
-import '../datasources/xboard_api.dart';
+import '../datasources/xboard/index.dart';
 
 /// Repository for account overview and quick-action link data.
 ///

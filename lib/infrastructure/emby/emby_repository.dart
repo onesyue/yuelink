@@ -1,5 +1,5 @@
 import '../../domain/emby/emby_info_entity.dart';
-import '../datasources/xboard_api.dart';
+import '../datasources/xboard/index.dart';
 
 /// Fetches Emby service info from XBoard API.
 ///

@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../../domain/checkin/checkin_result_entity.dart';
-import '../datasources/xboard_api.dart';
+import '../datasources/xboard/index.dart';
 
 /// Repository for check-in operations via YueLink Checkin API.
 ///

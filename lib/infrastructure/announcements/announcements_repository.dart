@@ -1,5 +1,5 @@
 import '../../domain/announcements/announcement_entity.dart';
-import '../datasources/xboard_api.dart';
+import '../datasources/xboard/index.dart';
 
 /// Fetches announcements from XBoard API.
 ///

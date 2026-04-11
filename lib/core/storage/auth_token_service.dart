@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 
 import 'secure_storage_service.dart';
-import '../../infrastructure/datasources/xboard_api.dart';
+import '../../infrastructure/datasources/xboard/index.dart';
 
 /// Stores authentication credentials in OS-native secure storage.
 ///

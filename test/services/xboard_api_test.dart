@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
-import 'package:yuelink/infrastructure/datasources/xboard_api.dart';
+import 'package:yuelink/infrastructure/datasources/xboard/index.dart';
 
 void main() {
   const baseUrl = 'https://example.com';
