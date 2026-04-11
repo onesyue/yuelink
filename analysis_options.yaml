@@ -3,7 +3,9 @@ include: package:flutter_lints/flutter.yaml
 analyzer:
   exclude:
     - scripts/**
-    - integration_test/**
+    # integration_test/ is intentionally INCLUDED so the analyzer catches
+    # bitrot in E2E tests. To run them: flutter test integration_test/ -d macos
+    # (or another connected device).
 
   # ── Import restrictions (architecture guard) ──────────────────────
   # Enforce: modules → infrastructure/domain (never datasources directly)

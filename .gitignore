@@ -46,6 +46,14 @@ app.*.map.json
 
 # Go core build artifacts
 core/build/
+
+# Go service helper build artifacts
+service/build/
+service/service
+service/service.exe
+
+# Claude Code local state
+.claude/
 core/core
 core/mihomo/
 
