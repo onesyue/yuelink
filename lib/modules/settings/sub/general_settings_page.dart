@@ -1185,7 +1185,7 @@ class _AccentColorRow extends StatelessWidget {
     required this.isEn,
   });
 
-  // Preset colors with labels — Material 3 tonal palette seeds.
+  // Preset seed colors — Material 3 generates full tonal palette from each.
   static const _presets = <(String, String, String)>[
     ('3B82F6', 'Blue', '蓝色'),
     ('6366F1', 'Indigo', '靛蓝'),
@@ -1193,10 +1193,10 @@ class _AccentColorRow extends StatelessWidget {
     ('EC4899', 'Pink', '粉色'),
     ('EF4444', 'Red', '红色'),
     ('F97316', 'Orange', '橙色'),
+    ('F59E0B', 'Amber', '琥珀'),
     ('10B981', 'Green', '绿色'),
     ('14B8A6', 'Teal', '青色'),
     ('06B6D4', 'Cyan', '天蓝'),
-    ('000000', 'Default', '默认'),
   ];
 
   @override
@@ -1215,73 +1215,95 @@ class _AccentColorRow extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: _presets.map((preset) {
-              final hex = preset.$1;
-              final label = isEn ? preset.$2 : preset.$3;
-              final color = Color(int.parse('FF$hex', radix: 16));
-              final isSelected = currentHex.toUpperCase() == hex.toUpperCase();
-              return GestureDetector(
-                onTap: () => onChanged(hex),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  width: 56,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    color: hex == '000000'
-                        ? (isDark ? YLColors.zinc700 : YLColors.zinc200)
-                        : color,
-                    borderRadius: BorderRadius.circular(14),
-                    border: isSelected
-                        ? Border.all(
-                            color: isDark ? Colors.white : color,
-                            width: 2.5,
-                          )
-                        : Border.all(
-                            color: isDark
-                                ? Colors.white.withValues(alpha: 0.08)
-                                : Colors.black.withValues(alpha: 0.06),
-                            width: 1,
-                          ),
-                    boxShadow: isSelected
-                        ? [
-                            BoxShadow(
-                              color: color.withValues(alpha: 0.3),
-                              blurRadius: 8,
-                              offset: const Offset(0, 2),
+          // FlClash-style: responsive grid, each card shows the Material 3
+          // tonal palette preview (primary + secondary + tertiary).
+          LayoutBuilder(builder: (context, constraints) {
+            final cols = (constraints.maxWidth / 80).floor().clamp(3, 5);
+            final spacing = 10.0;
+            final itemWidth =
+                (constraints.maxWidth - spacing * (cols - 1)) / cols;
+            return Wrap(
+              spacing: spacing,
+              runSpacing: spacing,
+              children: _presets.map((preset) {
+                final hex = preset.$1;
+                final seed = Color(int.parse('FF$hex', radix: 16));
+                final isSelected =
+                    currentHex.toUpperCase() == hex.toUpperCase();
+                // Generate Material 3 tonal palette from seed
+                final scheme = ColorScheme.fromSeed(
+                  seedColor: seed,
+                  brightness: isDark ? Brightness.dark : Brightness.light,
+                );
+                return GestureDetector(
+                  onTap: () => onChanged(hex),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    width: itemWidth,
+                    height: itemWidth * 0.72,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(14),
+                      border: isSelected
+                          ? Border.all(color: scheme.primary, width: 2.5)
+                          : Border.all(
+                              color: isDark
+                                  ? Colors.white.withValues(alpha: 0.1)
+                                  : Colors.black.withValues(alpha: 0.08),
+                              width: 1,
                             ),
-                          ]
-                        : null,
-                  ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      if (isSelected)
-                        Icon(Icons.check_rounded,
-                            size: 18,
-                            color: hex == '000000'
-                                ? (isDark ? Colors.white : Colors.black)
-                                : Colors.white),
-                      const SizedBox(height: 2),
-                      Text(
-                        label,
-                        style: TextStyle(
-                          fontSize: 9,
-                          fontWeight:
-                              isSelected ? FontWeight.w600 : FontWeight.w400,
-                          color: hex == '000000'
-                              ? (isDark ? YLColors.zinc300 : YLColors.zinc600)
-                              : Colors.white.withValues(
-                                  alpha: isSelected ? 1.0 : 0.85),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: Column(
+                      children: [
+                        // Top: primary color (60%)
+                        Expanded(
+                          flex: 6,
+                          child: Container(
+                            width: double.infinity,
+                            color: scheme.primary,
+                            alignment: Alignment.center,
+                            child: isSelected
+                                ? Icon(Icons.check_rounded,
+                                    size: 18, color: scheme.onPrimary)
+                                : null,
+                          ),
                         ),
-                      ),
-                    ],
+                        // Bottom row: secondary + tertiary (40%)
+                        Expanded(
+                          flex: 4,
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child:
+                                    Container(color: scheme.secondaryContainer),
+                              ),
+                              Expanded(
+                                child:
+                                    Container(color: scheme.tertiaryContainer),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              );
-            }).toList(),
+                );
+              }).toList(),
+            );
+          }),
+          // Color name label below the grid
+          const SizedBox(height: 8),
+          Text(
+            _presets
+                    .where((p) =>
+                        p.$1.toUpperCase() == currentHex.toUpperCase())
+                    .map((p) => isEn ? p.$2 : p.$3)
+                    .firstOrNull ??
+                (isEn ? 'Custom' : '自定义'),
+            style: YLText.caption.copyWith(
+              color: YLColors.zinc400,
+              fontWeight: FontWeight.w500,
+            ),
           ),
         ],
       ),
