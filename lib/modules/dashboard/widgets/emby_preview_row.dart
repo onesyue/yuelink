@@ -87,6 +87,8 @@ class EmbyPreviewRow extends ConsumerWidget {
           _NoPermissionBanner(onTap: () => _openLibrary(context, ref, s), isDark: isDark)
         else if (emby?.hasNativeAccess != true)
           _WebOnlyBanner(onTap: () => _openLibrary(context, ref, s), isDark: isDark)
+        else if (ref.watch(coreStatusProvider) != CoreStatus.running)
+          _VpnOffBanner(isDark: isDark)
         else
           _PosterRow(emby: emby!, isDark: isDark, onTapLibrary: () => _openLibrary(context, ref, s), source: source),
       ],
@@ -186,6 +188,45 @@ class _NoPermissionBanner extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// State 2.5: Has Emby native access but VPN is not connected.
+/// The Emby server (emby.yue.to) is SNI-blocked from China without VPN,
+/// so showing "no content" would be misleading. Prompt user to connect.
+class _VpnOffBanner extends StatelessWidget {
+  final bool isDark;
+  const _VpnOffBanner({required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+      decoration: BoxDecoration(
+        color: isDark ? YLColors.zinc800 : Colors.white,
+        borderRadius: BorderRadius.circular(YLRadius.lg),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.black.withValues(alpha: 0.08),
+          width: 0.5,
+        ),
+        boxShadow: YLShadow.card(context),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.vpn_lock_rounded,
+              size: 20, color: YLColors.currentAccent.withValues(alpha: 0.7)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              S.of(context).mineEmbyNeedsVpn,
+              style: YLText.caption.copyWith(color: YLColors.zinc500),
+            ),
+          ),
+        ],
       ),
     );
   }
