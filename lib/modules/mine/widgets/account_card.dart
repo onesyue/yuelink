@@ -24,7 +24,7 @@ class AccountCard extends ConsumerWidget {
         // ── Main card ─────────────────────────────────────────────
         Container(
           width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+          padding: const EdgeInsets.fromLTRB(24, 40, 24, 36),
           decoration: BoxDecoration(
             color: isDark ? YLColors.zinc800 : Colors.white,
             borderRadius: BorderRadius.circular(YLRadius.xl),
@@ -153,7 +153,7 @@ class _ProfileContent extends ConsumerWidget {
         ),
 
         if (total != null) ...[
-          const SizedBox(height: 20),
+          const SizedBox(height: 28),
 
           // ── Traffic progress bar ───────────────────────────────
           Row(
@@ -184,7 +184,7 @@ class _ProfileContent extends ConsumerWidget {
               ),
             ),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 18),
 
           // ── Remaining + devices + expiry row ─────────────────
           Row(
