@@ -1185,56 +1185,100 @@ class _AccentColorRow extends StatelessWidget {
     required this.isEn,
   });
 
-  static const _presets = <String, String>{
-    '3B82F6': 'Blue',
-    '10B981': 'Green',
-    '8B5CF6': 'Purple',
-    'F97316': 'Orange',
-    'EF4444': 'Red',
-    'EC4899': 'Pink',
-    '14B8A6': 'Teal',
-    '6366F1': 'Indigo',
-  };
+  // Preset colors with labels — Material 3 tonal palette seeds.
+  static const _presets = <(String, String, String)>[
+    ('3B82F6', 'Blue', '蓝色'),
+    ('6366F1', 'Indigo', '靛蓝'),
+    ('8B5CF6', 'Purple', '紫色'),
+    ('EC4899', 'Pink', '粉色'),
+    ('EF4444', 'Red', '红色'),
+    ('F97316', 'Orange', '橙色'),
+    ('10B981', 'Green', '绿色'),
+    ('14B8A6', 'Teal', '青色'),
+    ('06B6D4', 'Cyan', '天蓝'),
+    ('000000', 'Default', '默认'),
+  ];
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      child: Row(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: Text(
-              isEn ? 'Accent color' : '强调色',
-              style: YLText.body.copyWith(
-                color: isDark ? YLColors.zinc200 : YLColors.zinc700,
-              ),
+          Text(
+            isEn ? 'Theme color' : '主题色',
+            style: YLText.body.copyWith(
+              color: isDark ? YLColors.zinc200 : YLColors.zinc700,
+              fontWeight: FontWeight.w500,
             ),
           ),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: _presets.entries.map((e) {
-              final color = Color(int.parse('FF${e.key}', radix: 16));
-              final isSelected = currentHex.toUpperCase() == e.key;
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: _presets.map((preset) {
+              final hex = preset.$1;
+              final label = isEn ? preset.$2 : preset.$3;
+              final color = Color(int.parse('FF$hex', radix: 16));
+              final isSelected = currentHex.toUpperCase() == hex.toUpperCase();
               return GestureDetector(
-                onTap: () => onChanged(e.key),
-                child: Container(
-                  width: 24,
-                  height: 24,
-                  margin: const EdgeInsets.symmetric(horizontal: 3),
+                onTap: () => onChanged(hex),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  width: 56,
+                  height: 56,
                   decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: color,
+                    color: hex == '000000'
+                        ? (isDark ? YLColors.zinc700 : YLColors.zinc200)
+                        : color,
+                    borderRadius: BorderRadius.circular(14),
                     border: isSelected
                         ? Border.all(
-                            color: isDark ? Colors.white : Colors.black,
-                            width: 2,
+                            color: isDark ? Colors.white : color,
+                            width: 2.5,
                           )
+                        : Border.all(
+                            color: isDark
+                                ? Colors.white.withValues(alpha: 0.08)
+                                : Colors.black.withValues(alpha: 0.06),
+                            width: 1,
+                          ),
+                    boxShadow: isSelected
+                        ? [
+                            BoxShadow(
+                              color: color.withValues(alpha: 0.3),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            ),
+                          ]
                         : null,
                   ),
-                  child: isSelected
-                      ? const Icon(Icons.check, size: 14, color: Colors.white)
-                      : null,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      if (isSelected)
+                        Icon(Icons.check_rounded,
+                            size: 18,
+                            color: hex == '000000'
+                                ? (isDark ? Colors.white : Colors.black)
+                                : Colors.white),
+                      const SizedBox(height: 2),
+                      Text(
+                        label,
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight:
+                              isSelected ? FontWeight.w600 : FontWeight.w400,
+                          color: hex == '000000'
+                              ? (isDark ? YLColors.zinc300 : YLColors.zinc600)
+                              : Colors.white.withValues(
+                                  alpha: isSelected ? 1.0 : 0.85),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               );
             }).toList(),

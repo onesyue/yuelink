@@ -148,18 +148,23 @@ ThemeData buildTheme(Brightness brightness, {Color? accentColor}) {
   // Store the accent color in a static so widgets can read it without context.
   YLColors._currentAccent = accentColor ?? YLColors.accent;
 
+  // Material 3: generate the full tonal palette from the accent color.
+  // This ensures Switch, FAB, ProgressIndicator, Slider, Checkbox, etc.
+  // all respect the user's chosen color — not just a static secondary slot.
   final accent = accentColor ?? YLColors.accent;
-  final colorScheme = ColorScheme.fromSeed(
+  final seedScheme = ColorScheme.fromSeed(
     seedColor: accent,
     brightness: brightness,
+  );
+  // Keep our custom zinc surfaces but take primary/secondary/tertiary
+  // from the seed-generated scheme so Material components are tinted.
+  final colorScheme = seedScheme.copyWith(
     surface: surface,
     surfaceContainerLowest: bg,
-  ).copyWith(
-    primary: primary,
-    onPrimary: isDark ? Colors.black : Colors.white,
-    secondary: accent,
-    onSecondary: Colors.white,
-    tertiary: isDark ? YLColors.zinc500 : YLColors.zinc400,
+    onSurface: isDark ? YLColors.zinc100 : YLColors.zinc900,
+    onSurfaceVariant: isDark ? YLColors.zinc400 : YLColors.zinc500,
+    outline: border,
+    outlineVariant: isDark ? YLColors.zinc800 : YLColors.zinc200,
   );
 
   return ThemeData(
