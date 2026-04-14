@@ -158,8 +158,8 @@ void main() async {
     }
   }
 
-  // Configure launch at startup (macOS / Windows only)
-  if (Platform.isMacOS || Platform.isWindows) {
+  // Configure launch at startup (desktop only)
+  if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
     try {
       launchAtStartup.setup(
         appName: AppConstants.appName,

@@ -3,8 +3,10 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../../i18n/app_strings.dart';
+import '../../shared/app_notifier.dart';
 import '../../domain/models/rule.dart';
 import '../../core/providers/core_provider.dart';
 import 'providers/logs_providers.dart';
@@ -38,6 +40,44 @@ class _LogPageState extends ConsumerState<LogPage>
     super.dispose();
   }
 
+  Future<void> _exportLogs(BuildContext context, WidgetRef ref) async {
+    final logs = ref.read(logEntriesProvider);
+    if (logs.isEmpty) {
+      AppNotifier.warning('没有可导出的日志');
+      return;
+    }
+
+    try {
+      final buffer = StringBuffer();
+      for (final entry in logs.reversed) {
+        final ts = entry.timestamp;
+        final time =
+            '${ts.year}-${ts.month.toString().padLeft(2, '0')}-'
+            '${ts.day.toString().padLeft(2, '0')} '
+            '${ts.hour.toString().padLeft(2, '0')}:'
+            '${ts.minute.toString().padLeft(2, '0')}:'
+            '${ts.second.toString().padLeft(2, '0')}';
+        buffer.writeln('[$time] [${entry.type.toUpperCase()}] ${entry.payload}');
+      }
+
+      final now = DateTime.now();
+      final datePart =
+          '${now.year}${now.month.toString().padLeft(2, '0')}'
+          '${now.day.toString().padLeft(2, '0')}_'
+          '${now.hour.toString().padLeft(2, '0')}'
+          '${now.minute.toString().padLeft(2, '0')}';
+      final fileName = 'yuelink-logs-$datePart.txt';
+
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/$fileName');
+      await file.writeAsString(buffer.toString());
+
+      AppNotifier.success('日志已导出: $fileName');
+    } catch (e) {
+      AppNotifier.error('导出失败: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
@@ -69,7 +109,17 @@ class _LogPageState extends ConsumerState<LogPage>
 
     return Scaffold(
       appBar: _isSubPage
-            ? AppBar(leading: const BackButton(), title: Text(s.tabLogs))
+            ? AppBar(
+                leading: const BackButton(),
+                title: Text(s.tabLogs),
+                actions: [
+                  IconButton(
+                    icon: const Icon(Icons.file_download_outlined, size: 20),
+                    tooltip: '导出日志',
+                    onPressed: () => _exportLogs(context, ref),
+                  ),
+                ],
+              )
             : null,
       body: Column(
         children: [

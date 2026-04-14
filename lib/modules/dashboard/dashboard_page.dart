@@ -24,6 +24,7 @@ import 'widgets/hero_card.dart';
 import 'widgets/quick_actions.dart';
 import '../mine/widgets/notices_card.dart';
 import 'widgets/emby_preview_row.dart';
+import 'widgets/stale_subscription_banner.dart';
 
 class DashboardPage extends ConsumerStatefulWidget {
   const DashboardPage({super.key});
@@ -84,6 +85,12 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                             onToggle: () => _toggle(context, ref),
                           ),
                         ),
+
+                        const SizedBox(height: 12),
+
+                        // ── 1.5 订阅过期提示 ─────────────────────────
+                        const RepaintBoundary(
+                            child: StaleSubscriptionBanner()),
 
                         const SizedBox(height: 12),
 
