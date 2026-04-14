@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -11,11 +10,12 @@ final scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
 
 enum _SnackType { success, error, warning, info }
 
-/// Utility for showing styled floating snackbars.
+/// Utility for showing styled floating toast notifications.
 ///
-/// On iOS / macOS, shows an Apple-style top capsule toast that slides down
-/// from under the status bar with blurred background. On other platforms,
-/// uses Material [SnackBar].
+/// Shows an Apple-style top capsule that slides down from under the status
+/// bar with blurred background — on all platforms, for cross-platform
+/// visual consistency (Telegram-style unified design). Falls back to
+/// Material [SnackBar] only when no Overlay is available yet.
 ///
 /// ```dart
 /// AppNotifier.success('Upload successful');
@@ -28,11 +28,7 @@ class AppNotifier {
   static Timer? _currentTopTimer;
 
   static void _show(String message, _SnackType type) {
-    if (Platform.isIOS || Platform.isMacOS) {
-      _showTopCapsule(message, type);
-      return;
-    }
-    _showSnackBar(message, type);
+    _showTopCapsule(message, type);
   }
 
   static (IconData, Color) _styleFor(_SnackType type) {

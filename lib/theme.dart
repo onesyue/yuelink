@@ -182,19 +182,15 @@ ThemeData buildTheme(Brightness brightness, {Color? accentColor}) {
   final baseTextTheme = isDark
       ? ThemeData.dark().textTheme
       : ThemeData.light().textTheme;
-  // iOS uses system SF Pro (no fontFamily = system default).
-  // Other platforms use Inter via Google Fonts.
-  final textTheme = Platform.isIOS
-      ? baseTextTheme.apply(
-          fontFamilyFallback: const ['PingFang SC', 'Noto Sans SC'],
-        )
-      : GoogleFonts.interTextTheme(baseTextTheme).apply(
-          fontFamilyFallback: const [
-            'PingFang SC',
-            'Noto Sans SC',
-            'Microsoft YaHei',
-          ],
-        );
+  // Unified font across all platforms: Inter (open-source SF Pro equivalent)
+  // with CJK fallback. Matches Telegram's cross-platform consistency approach.
+  final textTheme = GoogleFonts.interTextTheme(baseTextTheme).apply(
+    fontFamilyFallback: const [
+      'PingFang SC',
+      'Noto Sans SC',
+      'Microsoft YaHei',
+    ],
+  );
 
   return ThemeData(
     colorScheme: colorScheme,

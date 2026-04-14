@@ -1,10 +1,12 @@
-import 'dart:io';
-
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
-/// Platform-native loading indicator: Cupertino spinner on iOS/macOS,
-/// Material progress on Android/Windows/Linux.
+/// Unified loading indicator across all platforms.
+///
+/// Uses Cupertino "spokes" spinner everywhere for visual consistency.
+/// Telegram and many cross-platform apps adopt this pattern because it
+/// feels less intrusive than the Material rotating arc — it conveys
+/// "working" without demanding attention.
 class YLLoading extends StatelessWidget {
   final double? size;
   final Color? color;
@@ -13,19 +15,9 @@ class YLLoading extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (Platform.isIOS || Platform.isMacOS) {
-      return CupertinoActivityIndicator(
-        radius: (size ?? 20) / 2,
-        color: color,
-      );
-    }
-    return SizedBox(
-      width: size ?? 24,
-      height: size ?? 24,
-      child: CircularProgressIndicator(
-        strokeWidth: 2.5,
-        color: color,
-      ),
+    return CupertinoActivityIndicator(
+      radius: (size ?? 20) / 2,
+      color: color,
     );
   }
 }

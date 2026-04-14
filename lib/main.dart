@@ -1349,45 +1349,36 @@ class _MainShellState extends ConsumerState<MainShell> {
           ],
         ),
       ),
-      bottomNavigationBar: (Platform.isIOS || Platform.isMacOS)
-          ? CupertinoTabBar(
-              currentIndex: _currentIndex,
-              onTap: (i) => switchTab(i),
-              backgroundColor: Theme.of(context)
-                  .colorScheme
-                  .surface
-                  .withValues(alpha: 0.85),
-              border: Border(
-                top: BorderSide(
-                  color: Theme.of(context).brightness == Brightness.dark
-                      ? Colors.white.withValues(alpha: 0.08)
-                      : Colors.black.withValues(alpha: 0.08),
-                  width: 0.33,
-                ),
-              ),
-              items: [
-                for (int i = 0; i < mobileItems.length; i++)
-                  BottomNavigationBarItem(
-                    icon: mobileItems[i].$1,
-                    activeIcon: mobileItems[i].$2,
-                    label: mobileItems[i].$3,
-                  ),
-              ],
-            )
-          : NavigationBar(
-              selectedIndex: _currentIndex,
-              onDestinationSelected: (i) => switchTab(i),
-              destinations: mobileItems
-                  .map((item) => NavigationDestination(
-                        icon: item.$1,
-                        selectedIcon: item.$2,
-                        label: item.$3,
-                      ))
-                  .toList(),
-              height: 60,
-              labelBehavior:
-                  NavigationDestinationLabelBehavior.onlyShowSelected,
+      // Unified tab bar across all platforms — iOS-style blurred background
+      // with hairline top border, matching Telegram's cross-platform design.
+      bottomNavigationBar: CupertinoTabBar(
+        currentIndex: _currentIndex,
+        onTap: (i) => switchTab(i),
+        backgroundColor: Theme.of(context)
+            .colorScheme
+            .surface
+            .withValues(alpha: 0.85),
+        border: Border(
+          top: BorderSide(
+            color: Theme.of(context).brightness == Brightness.dark
+                ? Colors.white.withValues(alpha: 0.08)
+                : Colors.black.withValues(alpha: 0.08),
+            width: 0.33,
+          ),
+        ),
+        activeColor: Theme.of(context).colorScheme.primary,
+        inactiveColor: Theme.of(context).brightness == Brightness.dark
+            ? YLColors.zinc400
+            : YLColors.zinc500,
+        items: [
+          for (int i = 0; i < mobileItems.length; i++)
+            BottomNavigationBarItem(
+              icon: mobileItems[i].$1,
+              activeIcon: mobileItems[i].$2,
+              label: mobileItems[i].$3,
             ),
+        ],
+      ),
     );
   }
 }
