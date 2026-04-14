@@ -1,5 +1,5 @@
-# Minimum iOS 15.0 required by mobile_scanner and PacketTunnel extension.
-platform :ios, '15.0'
+# Minimum iOS 15.5 required by mobile_scanner.
+platform :ios, '15.5'
 
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
