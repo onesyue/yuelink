@@ -698,7 +698,10 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
     try {
       await trayManager.setIcon(
         Platform.isWindows
-            ? 'assets/app_icon.ico'
+            // White logo on transparent — matches native tray icon style.
+            // Uses dedicated tray .ico (16/32/48/64px) instead of the
+            // colored app launcher icon.
+            ? 'assets/app_icon_tray.ico'
             : 'assets/tray_icon_macos.png',
       );
       _trayInitialized = true;
