@@ -2,6 +2,7 @@ package com.yueto.yuelink
 
 import android.content.Intent
 import android.content.SharedPreferences
+import android.graphics.drawable.Icon
 import android.os.Build
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
@@ -65,6 +66,7 @@ class ProxyTileService : TileService() {
         val isActive = prefs.getBoolean(KEY_VPN_ACTIVE, false)
 
         tile.state = if (isActive) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
+        tile.icon = Icon.createWithResource(this, R.drawable.ic_tile_vpn)
         tile.label = "YueLink"
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             tile.subtitle = getString(
