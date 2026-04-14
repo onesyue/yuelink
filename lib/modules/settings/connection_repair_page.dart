@@ -148,7 +148,7 @@ class _ConnectionRepairPageState extends ConsumerState<ConnectionRepairPage> {
           ]),
           const SizedBox(height: 20),
 
-          // ── Diagnostics ──
+          // ── Diagnostics (merged: network probes + startup report) ──
           Padding(
             padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
             child: Text(S.current.diagnosticsLabel,
@@ -157,6 +157,8 @@ class _ConnectionRepairPageState extends ConsumerState<ConnectionRepairPage> {
                     fontWeight: FontWeight.w600,
                     color: YLColors.zinc400)),
           ),
+          _NetworkDiagnostics(isDark: isDark),
+          const SizedBox(height: 10),
           _Card(isDark: isDark, children: [
             _ActionRow(
               icon: Icons.bug_report_outlined,
@@ -170,18 +172,6 @@ class _ConnectionRepairPageState extends ConsumerState<ConnectionRepairPage> {
                   MaterialPageRoute(builder: (_) => const StartupReportPage())),
             ),
           ]),
-          const SizedBox(height: 20),
-
-          // ── Network diagnostics ──
-          Padding(
-            padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
-            child: Text(S.current.networkDiagnostics,
-                style: YLText.caption.copyWith(
-                    letterSpacing: 1.2,
-                    fontWeight: FontWeight.w600,
-                    color: YLColors.zinc400)),
-          ),
-          _NetworkDiagnostics(isDark: isDark),
           const SizedBox(height: 32),
 
           // ── One-click full repair ──
@@ -372,11 +362,14 @@ class _DiagEndpoint {
   const _DiagEndpoint(this.label, this.url);
 }
 
+// User-facing labels abstract away internal endpoint URLs.
+// Each test probes a different layer: our servers, international reachability,
+// China-accessible connectivity, and DNS resolution.
 const _kDiagEndpoints = [
-  _DiagEndpoint('面板 API', 'https://yuetong.app/api/v1/guest/comm/config'),
-  _DiagEndpoint('CDN 备用', 'https://d7ccm19ki90mg.cloudfront.net/api/v1/guest/comm/config'),
-  _DiagEndpoint('YueOps API', 'https://yue.yuebao.website/api/client/home'),
-  _DiagEndpoint('Google 连通性', 'https://www.gstatic.com/generate_204'),
+  _DiagEndpoint('悦通服务器', 'https://yuetong.app/api/v1/guest/comm/config'),
+  _DiagEndpoint('国际网络', 'https://www.gstatic.com/generate_204'),
+  _DiagEndpoint('Cloudflare', 'https://cp.cloudflare.com/generate_204'),
+  _DiagEndpoint('国内网络', 'https://www.baidu.com'),
 ];
 
 enum _DiagStatus { idle, testing, success, failed }
@@ -507,7 +500,7 @@ class _NetworkDiagnosticsState extends State<_NetworkDiagnostics> {
                             fontWeight: FontWeight.w500,
                             color: isDark ? YLColors.zinc200 : YLColors.zinc700)),
                     Text(
-                      _diagSubtitle(_results[i], _kDiagEndpoints[i].url),
+                      _diagSubtitle(_results[i]),
                       style: YLText.caption.copyWith(
                           color: YLColors.zinc400, fontSize: 11),
                       maxLines: 1,
@@ -547,10 +540,10 @@ class _NetworkDiagnosticsState extends State<_NetworkDiagnostics> {
     }
   }
 
-  String _diagSubtitle(_DiagResult result, String url) {
-    if (result.status == _DiagStatus.idle) return Uri.parse(url).host;
+  String _diagSubtitle(_DiagResult result) {
+    if (result.status == _DiagStatus.idle) return '等待检测';
     if (result.status == _DiagStatus.testing) return '正在检测...';
-    if (result.status == _DiagStatus.success) return Uri.parse(url).host;
+    if (result.status == _DiagStatus.success) return '连接正常';
     return result.error ?? '未知错误';
   }
 }
