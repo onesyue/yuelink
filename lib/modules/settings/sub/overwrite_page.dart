@@ -300,6 +300,7 @@ class _OverwritePageState extends State<OverwritePage>
 
   Future<void> _addRule(S s) async {
     final rule = await _showRuleDialog(s, '');
+    if (!mounted) return;
     if (rule != null && rule.trim().isNotEmpty) {
       setState(() => _data.rules.add(rule.trim()));
     }
@@ -307,6 +308,7 @@ class _OverwritePageState extends State<OverwritePage>
 
   Future<void> _editRule(S s, int index) async {
     final rule = await _showRuleDialog(s, _data.rules[index]);
+    if (!mounted) return;
     if (rule != null) {
       setState(() => _data.rules[index] = rule.trim());
     }

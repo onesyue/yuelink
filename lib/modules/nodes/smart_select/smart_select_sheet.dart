@@ -412,8 +412,8 @@ class _SmartSelectSheetState extends ConsumerState<_SmartSelectSheet> {
               ),
           const SizedBox(height: 4),
 
-          // One-click apply best — hidden while partial
-          if (!isPartial)
+          // One-click apply best — hidden while partial or empty
+          if (!isPartial && result.top.isNotEmpty)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
               child: SizedBox(

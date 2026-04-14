@@ -375,7 +375,7 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
                           activeTrackColor: YLColors.connected,
                           onChanged: (v) async {
                             await UpdateChecker.setAutoCheck(v);
-                            setState(() => _autoCheckUpdates = v);
+                            if (mounted) setState(() => _autoCheckUpdates = v);
                           },
                         ),
                       ),
@@ -434,7 +434,7 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
                           );
                           if (picked != null && picked != _updateChannel) {
                             await UpdateChecker.setChannel(picked);
-                            setState(() => _updateChannel = picked);
+                            if (mounted) setState(() => _updateChannel = picked);
                           }
                         },
                       ),

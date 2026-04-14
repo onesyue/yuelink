@@ -124,9 +124,9 @@ class OverwriteService {
   /// Append entries to an existing YAML list block, or create it if absent.
   static String _appendToListBlock(String config, String key, String entries) {
     final keyPattern = RegExp('^$key:\\s*\\n', multiLine: true);
-    if (keyPattern.hasMatch(config)) {
+    final keyMatch = keyPattern.firstMatch(config);
+    if (keyMatch != null) {
       // Find the end of the block (next top-level key or EOF) and insert before it
-      final keyMatch = keyPattern.firstMatch(config)!;
       final afterKey = config.substring(keyMatch.end);
       final nextTopLevel = RegExp(r'^\S', multiLine: true);
       final endMatch = nextTopLevel.firstMatch(afterKey);
@@ -145,9 +145,9 @@ class OverwriteService {
   static String _mergeBlockSection(
       String config, String key, String childLines) {
     final keyPattern = RegExp('^$key:\\s*\\n', multiLine: true);
-    if (keyPattern.hasMatch(config)) {
+    final keyMatch = keyPattern.firstMatch(config);
+    if (keyMatch != null) {
       // Insert overwrite children at the end of the existing block
-      final keyMatch = keyPattern.firstMatch(config)!;
       final afterKey = config.substring(keyMatch.end);
       final nextTopLevel = RegExp(r'^\S', multiLine: true);
       final endMatch = nextTopLevel.firstMatch(afterKey);

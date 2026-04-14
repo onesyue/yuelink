@@ -1789,6 +1789,7 @@ class _ExportLogsContentState extends State<_ExportLogsContent>
   Future<void> _loadLogs() async {
     try {
       final dir = await getApplicationSupportDirectory();
+      if (!mounted) return;
       final crashFile = File('${dir.path}/crash.log');
       final coreFile = File('${dir.path}/core.log');
       setState(() {
