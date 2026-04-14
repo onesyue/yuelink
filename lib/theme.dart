@@ -148,14 +148,17 @@ ThemeData buildTheme(Brightness brightness, {Color? accentColor}) {
   // Store the accent color in a static so widgets can read it without context.
   YLColors._currentAccent = accentColor ?? YLColors.accent;
 
+  final accent = accentColor ?? YLColors.accent;
   final colorScheme = ColorScheme.fromSeed(
-    seedColor: primary,
+    seedColor: accent,
     brightness: brightness,
     surface: surface,
     surfaceContainerLowest: bg,
   ).copyWith(
     primary: primary,
     onPrimary: isDark ? Colors.black : Colors.white,
+    secondary: accent,
+    onSecondary: Colors.white,
     tertiary: isDark ? YLColors.zinc500 : YLColors.zinc400,
   );
 

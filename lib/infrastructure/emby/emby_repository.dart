@@ -1,43 +1,16 @@
-import 'dart:convert';
-import 'dart:io';
-
 import '../../domain/emby/emby_info_entity.dart';
+import '../datasources/xboard/index.dart';
 
-/// Fetches Emby service info from the YueOps client API (yue.yuebao.website).
+/// Fetches Emby service info from XBoard API (via Emby plugin).
 ///
-/// Emby user management is on a separate server from XBoard,
-/// so this repository calls the checkin-api backend directly.
+/// Receives [XBoardApi] via constructor — never constructs its own client.
 class EmbyRepository {
-  static const _baseUrl = 'https://yue.yuebao.website';
+  final XBoardApi _api;
 
-  /// Returns Emby info for the current user, or null if no access.
-  Future<EmbyInfo?> getEmby(String token) async {
-    final client = HttpClient();
-    client.connectionTimeout = const Duration(seconds: 10);
-    try {
-      final request = await client.getUrl(
-        Uri.parse('$_baseUrl/api/client/emby'),
-      );
-      request.headers.set('Authorization', token);
-      request.headers.set('Accept', 'application/json');
-      final response = await request.close().timeout(
-        const Duration(seconds: 10),
-      );
-      final body = await response.transform(utf8.decoder).join();
-      if (response.statusCode == 401) return null;
-      if (response.statusCode != 200) return null;
+  EmbyRepository({required XBoardApi api}) : _api = api;
 
-      final json = jsonDecode(body) as Map<String, dynamic>;
-      if (json['status'] != 'success') return null;
-
-      final data = json['data'] as Map<String, dynamic>?;
-      if (data == null) return null;
-
-      return EmbyInfo.fromJson(data);
-    } catch (_) {
-      return null;
-    } finally {
-      client.close();
-    }
+  /// Returns Emby info, or rethrows [XBoardApiException].
+  Future<EmbyInfo?> getEmby(String token) {
+    return _api.getEmby(token);
   }
 }
