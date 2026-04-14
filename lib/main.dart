@@ -24,6 +24,7 @@ import 'modules/yue_auth/presentation/yue_auth_page.dart';
 import 'modules/yue_auth/providers/yue_auth_providers.dart';
 import 'modules/connections/providers/connections_providers.dart';
 import 'modules/dashboard/providers/dashboard_providers.dart';
+import 'modules/nodes/favorites/node_favorites_providers.dart';
 import 'core/providers/core_provider.dart';
 import 'modules/profiles/providers/profiles_providers.dart';
 import 'shared/app_notifier.dart';
@@ -332,7 +333,7 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
     _langSub = ref.listenManual(languageProvider, (_, lang) {
       S.setLanguage(lang);
       _updateTrayMenu(
-        isRunning: ref.read(coreStatusProvider) == CoreStatus.running,
+        status: ref.read(coreStatusProvider),
         groups: ref.read(proxyGroupsProvider),
       );
     });
@@ -340,7 +341,7 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
     // Sync tray menu with connection state; notify on unexpected disconnect
     _statusSub = ref.listenManual(coreStatusProvider, (prev, next) {
       _updateTrayMenu(
-        isRunning: next == CoreStatus.running,
+        status: next,
         groups: ref.read(proxyGroupsProvider),
       );
       // Update Android Quick Settings tile state
@@ -348,27 +349,17 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
         TileService.updateState(active: next == CoreStatus.running);
       }
       if (prev == CoreStatus.running && next == CoreStatus.stopped) {
-        // Only show "unexpected disconnect" if the user did NOT initiate stop
-        // AND we're not in the middle of recovery (which temporarily resets state).
-        // userStoppedProvider is set true in CoreActions.stop() before status changes.
         if (!ref.read(userStoppedProvider) &&
             !ref.read(recoveryInProgressProvider)) {
           AppNotifier.warning(S.current.disconnectedUnexpected);
         }
-        if (_trayInitialized) {
-          trayManager
-              .setToolTip('YueLink · ${S.current.statusDisconnected}')
-              .ignore();
-        }
-      } else if (next == CoreStatus.running && _trayInitialized) {
-        trayManager.setToolTip('YueLink').ignore();
       }
     });
 
     // Sync tray proxy submenu when proxy groups change
     _groupsSub = ref.listenManual(proxyGroupsProvider, (_, groups) {
       _updateTrayMenu(
-        isRunning: ref.read(coreStatusProvider) == CoreStatus.running,
+        status: ref.read(coreStatusProvider),
         groups: groups,
       );
     });
@@ -694,21 +685,27 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
     }
   }
 
-  // ── Tray ─────────────────────────────────────────────────────────
+  // ── Tray (Desktop Quick Control) ─────────────────────────────────
+  //
+  // Provides a unified menu bar (macOS) / system tray (Windows) control
+  // center with: status display, connect/disconnect, best node, recent
+  // nodes quick switch, basic stats, subscription update, and quit.
+  //
+  // All actions route through existing CoreManager / CoreActions /
+  // ProxyGroupsNotifier — no independent connection logic here.
 
   Future<void> _initTray() async {
     try {
       await trayManager.setIcon(
         Platform.isWindows
-            // Use .ico for Windows — contains 16/32/48px sizes which the
-            // Windows tray API requires. A plain .png falls back to a white
-            // placeholder at the 16×16 tray size.
             ? 'assets/app_icon.ico'
             : 'assets/tray_icon_macos.png',
       );
-      // Set _trayInitialized BEFORE _updateTrayMenu so the guard passes.
       _trayInitialized = true;
-      await _updateTrayMenu(isRunning: false);
+      await _updateTrayMenu(
+        status: CoreStatus.stopped,
+        groups: const [],
+      );
       trayManager.addListener(this);
     } catch (e) {
       debugPrint('[Tray] init failed: $e');
@@ -716,15 +713,73 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
   }
 
   Future<void> _updateTrayMenu({
-    required bool isRunning,
+    required CoreStatus status,
     List<ProxyGroup>? groups,
   }) async {
     if (!_trayInitialized) return;
     final s = S.current;
+    final isRunning = status == CoreStatus.running;
+    final isConnecting = status == CoreStatus.starting;
+    final auth = ref.read(authProvider);
+    final isLoggedIn = auth.isLoggedIn;
 
-    // Build proxy quick-switch submenu (Selector groups only, max 3 groups × 10 nodes)
-    final proxySubMenus = <MenuItem>[];
-    if (isRunning && groups != null) {
+    // ── Status line ──
+    String statusLine;
+    if (!isLoggedIn) {
+      statusLine = 'YueLink · 未登录';
+    } else if (isConnecting) {
+      statusLine = 'YueLink · 连接中...';
+    } else if (isRunning) {
+      final currentNode = _getCurrentNodeName(groups);
+      statusLine = currentNode != null
+          ? 'YueLink · 已连接 · ${_truncate(currentNode, 16)}'
+          : 'YueLink · 已连接';
+    } else {
+      statusLine = 'YueLink · 未连接';
+    }
+
+    // Update tooltip
+    trayManager.setToolTip(statusLine).ignore();
+
+    // ── Build menu items ──
+    final items = <MenuItem>[];
+
+    // 1. Status header (disabled label)
+    items.add(MenuItem(key: '_status', label: statusLine));
+    items.add(MenuItem.separator());
+
+    // 2. Connect / Disconnect
+    if (isConnecting) {
+      items.add(MenuItem(key: '_connecting', label: '连接中，请稍候...'));
+    } else if (isRunning) {
+      items.add(MenuItem(key: 'disconnect', label: s.trayDisconnect));
+      items.add(MenuItem(key: 'best_node', label: '连接最佳节点'));
+    } else {
+      items.add(MenuItem(key: 'connect', label: s.trayConnect));
+      items.add(MenuItem(key: 'best_node', label: '连接最佳节点'));
+    }
+    items.add(MenuItem.separator());
+
+    // 3. Recent nodes (max 5)
+    final recentNodes = ref.read(recentNodesProvider);
+    if (recentNodes.isNotEmpty) {
+      final recentItems = <MenuItem>[];
+      for (var i = 0; i < recentNodes.length; i++) {
+        final node = recentNodes[i];
+        recentItems.add(MenuItem(
+          key: 'recent_$i',
+          label: _truncate(node.name, 20),
+        ));
+      }
+      items.add(MenuItem.submenu(
+        label: '最近节点',
+        submenu: Menu(items: recentItems),
+      ));
+    }
+
+    // 4. Proxy groups quick switch (when running)
+    if (isRunning && groups != null && groups.isNotEmpty) {
+      final proxySubMenus = <MenuItem>[];
       final selectors = groups
           .where((g) => g.type.toLowerCase() == 'selector')
           .take(3)
@@ -747,27 +802,66 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
           ));
         }
       }
+      if (proxySubMenus.isNotEmpty) {
+        items.add(MenuItem.submenu(
+          label: s.trayProxies,
+          submenu: Menu(items: proxySubMenus),
+        ));
+      }
     }
 
+    // 5. Basic status info (when running)
+    if (isRunning) {
+      items.add(MenuItem.separator());
+      final mode = ref.read(connectionModeProvider);
+      final modeName = mode == 'tun' ? 'TUN' : '系统代理';
+      final profile = auth.userProfile;
+      final statusItems = <MenuItem>[
+        MenuItem(key: '_mode', label: '模式：$modeName'),
+      ];
+      if (profile != null && profile.transferEnable != null) {
+        final used = (profile.uploadUsed ?? 0) + (profile.downloadUsed ?? 0);
+        final total = profile.transferEnable!;
+        final usedGb = (used / 1073741824).toStringAsFixed(1);
+        final totalGb = (total / 1073741824).toStringAsFixed(0);
+        statusItems.add(MenuItem(
+          key: '_traffic',
+          label: '流量：$usedGb GB / $totalGb GB',
+        ));
+      }
+      items.add(MenuItem.submenu(
+        label: '基础状态',
+        submenu: Menu(items: statusItems),
+      ));
+    }
+
+    items.add(MenuItem.separator());
+
+    // 6. Actions
+    items.add(MenuItem(key: 'show', label: s.trayShowWindow));
+    items.add(MenuItem(key: 'sync', label: '更新订阅'));
+    items.add(MenuItem.separator());
+    items.add(MenuItem(key: 'quit', label: s.trayQuit));
+
     try {
-      await trayManager.setContextMenu(Menu(items: [
-        MenuItem(
-            key: 'toggle', label: isRunning ? s.trayDisconnect : s.trayConnect),
-        MenuItem(key: 'show', label: s.trayShowWindow),
-        if (proxySubMenus.isNotEmpty) ...[
-          MenuItem.separator(),
-          MenuItem.submenu(
-            label: s.trayProxies,
-            submenu: Menu(items: proxySubMenus),
-          ),
-        ],
-        MenuItem.separator(),
-        MenuItem(key: 'quit', label: s.trayQuit),
-      ]));
+      await trayManager.setContextMenu(Menu(items: items));
     } catch (e) {
-      debugPrint('[App] tray menu update: $e');
+      debugPrint('[Tray] menu update: $e');
     }
   }
+
+  /// Get the currently selected node name from the first selector group.
+  String? _getCurrentNodeName(List<ProxyGroup>? groups) {
+    if (groups == null || groups.isEmpty) return null;
+    final selector = groups
+        .where((g) => g.type.toLowerCase() == 'selector')
+        .firstOrNull;
+    return selector?.now;
+  }
+
+  /// Truncate a string for tray display.
+  static String _truncate(String s, int max) =>
+      s.length <= max ? s : '${s.substring(0, max)}…';
 
   // Resolves a proxy_gi_ni key to (groupName, nodeName) using current groups.
   (String, String)? _resolveProxyKey(String key) {
@@ -790,8 +884,13 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
 
   @override
   void onTrayIconMouseDown() {
-    // All platforms: left-click toggles window visibility
-    _toggleWindowVisibility();
+    if (Platform.isMacOS) {
+      // macOS: left-click shows menu (standard menu bar behavior)
+      trayManager.popUpContextMenu();
+    } else {
+      // Windows: left-click toggles window
+      _showMainWindow();
+    }
   }
 
   @override
@@ -802,6 +901,11 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
   @override
   void onTrayMenuItemClick(MenuItem menuItem) async {
     final key = menuItem.key ?? '';
+
+    // Ignore disabled status labels
+    if (key.startsWith('_')) return;
+
+    // Proxy group node switch
     if (key.startsWith('proxy_')) {
       final resolved = _resolveProxyKey(key);
       if (resolved != null) {
@@ -811,47 +915,113 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
       }
       return;
     }
+
+    // Recent node switch
+    if (key.startsWith('recent_')) {
+      final idx = int.tryParse(key.substring(7));
+      if (idx != null) {
+        await _handleRecentNodeSwitch(idx);
+      }
+      return;
+    }
+
     switch (key) {
-      case 'toggle':
-        await _handleTrayToggle();
+      case 'connect':
+        await _handleTrayConnect();
+      case 'disconnect':
+        await _handleTrayDisconnect();
+      case 'best_node':
+        await _handleBestNode();
       case 'show':
-        await _toggleWindowVisibility();
+        await _showMainWindow();
+      case 'sync':
+        await _handleSyncSubscription();
       case 'quit':
         await _handleQuit();
     }
   }
 
-  Future<void> _toggleWindowVisibility() async {
+  Future<void> _showMainWindow() async {
     try {
-      final isVisible = await windowManager.isVisible();
-      if (isVisible) {
-        await windowManager.hide();
-      } else {
-        await windowManager.show();
-        await windowManager.focus();
-      }
+      await windowManager.show();
+      await windowManager.focus();
     } catch (e) {
-      debugPrint('[App] window visibility toggle: $e');
+      debugPrint('[Tray] show window: $e');
     }
+  }
+
+  Future<void> _handleTrayConnect() async {
+    final status = ref.read(coreStatusProvider);
+    if (status != CoreStatus.stopped) return; // debounce
+    final actions = ref.read(coreActionsProvider);
+    final isMock = ref.read(isMockModeProvider);
+
+    if (isMock) {
+      await actions.start('');
+    } else {
+      final activeId = ref.read(activeProfileIdProvider);
+      if (activeId == null) {
+        await _showMainWindow();
+        return;
+      }
+      final config = await ProfileService.loadConfig(activeId);
+      if (config == null) return;
+      await actions.start(config);
+    }
+  }
+
+  Future<void> _handleTrayDisconnect() async {
+    final status = ref.read(coreStatusProvider);
+    if (status != CoreStatus.running) return; // debounce
+    await ref.read(coreActionsProvider).stop();
   }
 
   Future<void> _handleTrayToggle() async {
     final status = ref.read(coreStatusProvider);
-    final actions = ref.read(coreActionsProvider);
-    final isMock = ref.read(isMockModeProvider);
-
     if (status == CoreStatus.running) {
-      await actions.stop();
+      await _handleTrayDisconnect();
     } else if (status == CoreStatus.stopped) {
-      if (isMock) {
-        await actions.start('');
-      } else {
-        final activeId = ref.read(activeProfileIdProvider);
-        if (activeId == null) return;
-        final config = await ProfileService.loadConfig(activeId);
-        if (config == null) return;
-        await actions.start(config);
+      await _handleTrayConnect();
+    }
+  }
+
+  Future<void> _handleBestNode() async {
+    // Open main window so the user can see the result; smart select
+    // requires the full UI context and running core.
+    await _showMainWindow();
+  }
+
+  Future<void> _handleRecentNodeSwitch(int index) async {
+    final recentNodes = ref.read(recentNodesProvider);
+    if (index >= recentNodes.length) return;
+    final node = recentNodes[index];
+
+    // If running, switch node in the group
+    if (ref.read(coreStatusProvider) == CoreStatus.running) {
+      try {
+        await CoreManager.instance.api.changeProxy(node.group, node.name);
+        ref.read(proxyGroupsProvider.notifier).refresh();
+        AppNotifier.success('已切换到 ${node.name}');
+      } catch (e) {
+        debugPrint('[Tray] switch recent node: $e');
       }
+    } else {
+      // Not running — start with current profile then the node will be used
+      await _handleTrayConnect();
+    }
+  }
+
+  Future<void> _handleSyncSubscription() async {
+    final auth = ref.read(authProvider);
+    if (!auth.isLoggedIn) {
+      await _showMainWindow();
+      return;
+    }
+    try {
+      await ref.read(authProvider.notifier).syncSubscription();
+      AppNotifier.success('订阅更新成功');
+    } catch (e) {
+      AppNotifier.error('订阅更新失败');
     }
   }
 
@@ -862,22 +1032,17 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
       if (status == CoreStatus.running) {
         await ref.read(coreActionsProvider).stop();
       }
-      // Always clear system proxy on exit regardless of settings/state,
-      // so quitting the app never leaves a dead proxy configured.
       if (Platform.isMacOS || Platform.isWindows) {
         try {
           await _singleInstanceServer?.close();
         } catch (_) {}
         await CoreActions.clearSystemProxyStatic().catchError((_) {});
         await windowManager.setPreventClose(false);
-        // Use destroy() instead of close() — close() triggers onWindowClose
-        // callback which can interfere (e.g., hide the window instead of closing).
         await windowManager.destroy();
       } else {
         exit(0);
       }
     } catch (_) {
-      // If anything fails during quit, force exit
       exit(0);
     }
   }
