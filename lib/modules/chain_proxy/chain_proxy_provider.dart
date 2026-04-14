@@ -11,6 +11,7 @@ import '../../core/kernel/core_manager.dart';
 import '../../core/storage/settings_service.dart';
 import '../../shared/app_notifier.dart';
 import '../../i18n/app_strings.dart';
+import '../../infrastructure/repositories/profile_repository.dart';
 import '../nodes/providers/node_providers.dart';
 import '../nodes/providers/nodes_providers.dart';
 
@@ -24,6 +25,8 @@ class ChainProxyState {
   final bool loading;
   final String? activeGroup; // which proxy group the chain applies to
   final String? previousNode; // selected node in activeGroup before connect
+  /// Maps external node names to their source profile ID.
+  final Map<String, String> externalNodes; // nodeName → profileId
 
   const ChainProxyState({
     this.nodes = const [],
@@ -31,6 +34,7 @@ class ChainProxyState {
     this.loading = false,
     this.activeGroup,
     this.previousNode,
+    this.externalNodes = const {},
   });
 
   static const _clear = Object();
@@ -41,6 +45,7 @@ class ChainProxyState {
     bool? loading,
     String? activeGroup,
     Object? previousNode = _clear,
+    Map<String, String>? externalNodes,
   }) =>
       ChainProxyState(
         nodes: nodes ?? this.nodes,
@@ -49,6 +54,7 @@ class ChainProxyState {
         activeGroup: activeGroup ?? this.activeGroup,
         previousNode:
             identical(previousNode, _clear) ? this.previousNode : previousNode as String?,
+        externalNodes: externalNodes ?? this.externalNodes,
       );
 
   bool get canConnect => nodes.length >= 2 && !loading;
@@ -72,20 +78,33 @@ class ChainProxyNotifier extends Notifier<ChainProxyState> {
   }
 
   /// Add a proxy node to the chain. Rejects duplicates.
-  void addNode(String name) {
+  /// If [profileId] is provided, the node is tracked as an external node
+  /// from another subscription profile.
+  void addNode(String name, {String? profileId}) {
     if (state.nodes.contains(name)) {
       AppNotifier.warning(S.current.chainNodeDuplicate);
       return;
     }
-    state = state.copyWith(nodes: [...state.nodes, name]);
+    final updatedExternal = Map<String, String>.from(state.externalNodes);
+    if (profileId != null) {
+      updatedExternal[name] = profileId;
+    }
+    state = state.copyWith(
+      nodes: [...state.nodes, name],
+      externalNodes: updatedExternal,
+    );
     _persist();
   }
 
   /// Remove a node at [index].
   void removeNode(int index) {
     if (index < 0 || index >= state.nodes.length) return;
+    final removedName = state.nodes[index];
     final updated = [...state.nodes]..removeAt(index);
-    state = state.copyWith(nodes: updated, connected: false);
+    final updatedExternal = Map<String, String>.from(state.externalNodes)
+      ..remove(removedName);
+    state = state.copyWith(
+        nodes: updated, connected: false, externalNodes: updatedExternal);
     _persist();
   }
 
@@ -156,8 +175,35 @@ class ChainProxyNotifier extends Notifier<ChainProxyState> {
       }
       var config = await configFile.readAsString();
 
-      // 2. Inject chain (relay group scoped to resolvedGroup)
-      config = ConfigTemplate.injectProxyChain(config, state.nodes, resolvedGroup);
+      // 2a. Collect external proxy definitions from other subscription profiles.
+      List<Map<String, dynamic>>? externalProxies;
+      if (state.externalNodes.isNotEmpty) {
+        final profileRepo = ref.read(profileRepositoryProvider);
+        final profileIds = state.externalNodes.values.toSet();
+        final allExtProxies = <Map<String, dynamic>>[];
+        final neededNames = state.externalNodes.keys.toSet();
+        for (final pid in profileIds) {
+          try {
+            final yaml = await profileRepo.loadConfig(pid);
+            if (yaml == null) continue;
+            final proxies = ConfigTemplate.extractProxies(yaml);
+            allExtProxies.addAll(
+              proxies.where((p) => neededNames.contains(p['name'])),
+            );
+          } catch (e) {
+            debugPrint('[ChainProxy] failed to load external profile $pid: $e');
+          }
+        }
+        if (allExtProxies.isNotEmpty) {
+          externalProxies = allExtProxies;
+        }
+      }
+
+      // 2b. Inject chain (relay group scoped to resolvedGroup)
+      config = ConfigTemplate.injectProxyChain(
+        config, state.nodes, resolvedGroup,
+        externalProxies: externalProxies,
+      );
 
       // 3. Push YAML content directly to mihomo (avoids disk write + path reload
       //    which can fail due to YAML round-trip corruption or path issues).
@@ -251,6 +297,7 @@ class ChainProxyNotifier extends Notifier<ChainProxyState> {
     await SettingsService.set('chainProxy', jsonEncode({
       'nodes': state.nodes,
       'group': state.activeGroup,
+      'externalNodes': state.externalNodes,
     }));
   }
 
@@ -261,8 +308,15 @@ class ChainProxyNotifier extends Notifier<ChainProxyState> {
       final json = jsonDecode(raw) as Map<String, dynamic>;
       final nodes = (json['nodes'] as List?)?.cast<String>() ?? [];
       final group = json['group'] as String?;
+      final externalNodes = (json['externalNodes'] as Map<String, dynamic>?)
+              ?.map((k, v) => MapEntry(k, v as String)) ??
+          const {};
       if (nodes.isNotEmpty) {
-        state = ChainProxyState(nodes: nodes, activeGroup: group);
+        state = ChainProxyState(
+          nodes: nodes,
+          activeGroup: group,
+          externalNodes: externalNodes,
+        );
       }
     } catch (e) {
       debugPrint('[ChainProxy] restore error: $e');

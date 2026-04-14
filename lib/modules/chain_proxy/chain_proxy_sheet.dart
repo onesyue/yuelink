@@ -7,6 +7,7 @@ import '../../shared/app_notifier.dart';
 import '../../theme.dart';
 import '../nodes/providers/nodes_providers.dart';
 import 'chain_proxy_provider.dart';
+import 'cross_profile_nodes_provider.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // ChainProxySheet — main bottom sheet
@@ -476,10 +477,60 @@ class _ChainPickerSheetState extends ConsumerState<_ChainPickerSheet> {
                           ),
                       ],
                     ],
+
+                    // ── Other subscriptions ──────────────────────
+                    ..._buildCrossProfileSection(
+                        ref, chainNodes, isDark, q),
                   ],
                 ),
         ),
       ],
+    );
+  }
+
+  /// Build the "其他订阅" section showing nodes from non-active profiles.
+  List<Widget> _buildCrossProfileSection(
+      WidgetRef ref, Set<String> chainNodes, bool isDark, String q) {
+    final crossAsync = ref.watch(crossProfileNodesProvider);
+    return crossAsync.when(
+      loading: () => const [],
+      error: (_, __) => const [],
+      data: (entries) {
+        if (entries.isEmpty) return [];
+        final widgets = <Widget>[
+          const SizedBox(height: 8),
+          _SectionHeader(label: '其他订阅'),
+        ];
+        for (final entry in entries) {
+          final filtered = q.isEmpty
+              ? entry.nodeNames
+              : entry.nodeNames
+                  .where((n) => n.toLowerCase().contains(q))
+                  .toList();
+          if (filtered.isEmpty) continue;
+          widgets.add(Padding(
+            padding: const EdgeInsets.only(left: 4, top: 6, bottom: 2),
+            child: Text(
+              entry.profileName,
+              style: YLText.caption.copyWith(
+                  color: Colors.orange.shade400,
+                  fontWeight: FontWeight.w600),
+            ),
+          ));
+          for (final nodeName in filtered) {
+            widgets.add(_PickerItem(
+              icon: Icons.language_rounded,
+              iconColor: Colors.orange.shade300,
+              name: nodeName,
+              subtitle: entry.profileName,
+              inChain: chainNodes.contains(nodeName),
+              isDark: isDark,
+              onTap: () => _toggleExternal(nodeName, entry.profileId),
+            ));
+          }
+        }
+        return widgets;
+      },
     );
   }
 
@@ -490,6 +541,17 @@ class _ChainPickerSheetState extends ConsumerState<_ChainPickerSheet> {
       notifier.removeNode(nodes.indexOf(name));
     } else {
       notifier.addNode(name);
+      AppNotifier.info(S.current.chainAddHint);
+    }
+  }
+
+  void _toggleExternal(String name, String profileId) {
+    final notifier = ref.read(chainProxyProvider.notifier);
+    final nodes = ref.read(chainProxyProvider).nodes;
+    if (nodes.contains(name)) {
+      notifier.removeNode(nodes.indexOf(name));
+    } else {
+      notifier.addNode(name, profileId: profileId);
       AppNotifier.info(S.current.chainAddHint);
     }
   }

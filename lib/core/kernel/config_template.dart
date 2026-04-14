@@ -199,7 +199,8 @@ class ConfigTemplate {
   /// After calling this, the caller should select the exit node (chainNames.last)
   /// in the active proxy group via the REST API.
   static String injectProxyChain(
-      String config, List<String> chainNames, String activeGroup) {
+      String config, List<String> chainNames, String activeGroup,
+      {List<Map<String, dynamic>>? externalProxies}) {
     if (chainNames.length < 2) return config;
     try {
       final yaml = loadYaml(config);
@@ -231,6 +232,18 @@ class ConfigTemplate {
             final before = gp.length;
             gp.removeWhere((p) => _isChainGroup(p as String? ?? ''));
             if (gp.length != before) g['proxies'] = gp;
+          }
+        }
+      }
+
+      // Merge external proxies (from other subscriptions) into the proxies list.
+      if (externalProxies != null && externalProxies.isNotEmpty) {
+        final existingNames =
+            proxies.whereType<Map<String, dynamic>>().map((p) => p['name']).toSet();
+        for (final ep in externalProxies) {
+          if (ep['name'] != null && !existingNames.contains(ep['name'])) {
+            proxies.add(Map<String, dynamic>.from(ep));
+            existingNames.add(ep['name']);
           }
         }
       }
@@ -302,6 +315,49 @@ class ConfigTemplate {
     } catch (e) {
       debugPrint('[ConfigTemplate] removeProxyChain error: $e');
       return config;
+    }
+  }
+
+  /// Extract proxy definitions from a config YAML string.
+  /// Returns a list of proxy maps (each containing at least 'name').
+  /// Returns an empty list if the YAML is malformed or has no proxies.
+  static List<Map<String, dynamic>> extractProxies(String configYaml) {
+    try {
+      final yaml = loadYaml(configYaml);
+      if (yaml is! YamlMap) return [];
+      final rawProxies = yaml['proxies'];
+      if (rawProxies is! YamlList) return [];
+      final result = <Map<String, dynamic>>[];
+      for (final p in rawProxies) {
+        if (p is YamlMap) {
+          result.add(_toMutable(p) as Map<String, dynamic>);
+        }
+      }
+      return result;
+    } catch (e) {
+      debugPrint('[ConfigTemplate] extractProxies error: $e');
+      return [];
+    }
+  }
+
+  /// Extract proxy names from a config YAML string.
+  /// Lighter than [extractProxies] — only returns the name strings.
+  static List<String> extractProxyNames(String configYaml) {
+    try {
+      final yaml = loadYaml(configYaml);
+      if (yaml is! YamlMap) return [];
+      final rawProxies = yaml['proxies'];
+      if (rawProxies is! YamlList) return [];
+      final result = <String>[];
+      for (final p in rawProxies) {
+        if (p is YamlMap && p['name'] is String) {
+          result.add(p['name'] as String);
+        }
+      }
+      return result;
+    } catch (e) {
+      debugPrint('[ConfigTemplate] extractProxyNames error: $e');
+      return [];
     }
   }
 
