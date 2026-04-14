@@ -1210,22 +1210,6 @@ class _AccentColorRow extends StatelessWidget {
   final ValueChanged<String> onChanged;
   final bool isEn;
 
-  // Cache: ColorScheme.fromSeed is expensive — precompute for all presets.
-  static final _lightSchemes = {
-    for (final p in _presets)
-      p.$1: ColorScheme.fromSeed(
-        seedColor: Color(int.parse('FF${p.$1}', radix: 16)),
-        brightness: Brightness.light,
-      ),
-  };
-  static final _darkSchemes = {
-    for (final p in _presets)
-      p.$1: ColorScheme.fromSeed(
-        seedColor: Color(int.parse('FF${p.$1}', radix: 16)),
-        brightness: Brightness.dark,
-      ),
-  };
-
   const _AccentColorRow({
     required this.currentHex,
     required this.onChanged,
@@ -1249,107 +1233,121 @@ class _AccentColorRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final currentPreset = _presets.firstWhere(
+      (p) => p.$1.toUpperCase() == currentHex.toUpperCase(),
+      orElse: () => _presets.first,
+    );
+    final currentName = isEn ? currentPreset.$2 : currentPreset.$3;
+
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            isEn ? 'Theme color' : '主题色',
-            style: YLText.body.copyWith(
-              color: isDark ? YLColors.zinc200 : YLColors.zinc700,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(height: 12),
-          // FlClash-style: responsive grid, each card shows the Material 3
-          // tonal palette preview (primary + secondary + tertiary).
-          LayoutBuilder(builder: (context, constraints) {
-            final cols = (constraints.maxWidth / 80).floor().clamp(3, 5);
-            final spacing = 10.0;
-            final itemWidth =
-                (constraints.maxWidth - spacing * (cols - 1)) / cols;
-            return Wrap(
-              spacing: spacing,
-              runSpacing: spacing,
-              children: _presets.map((preset) {
-                final hex = preset.$1;
-                final isSelected =
-                    currentHex.toUpperCase() == hex.toUpperCase();
-                // Use precomputed scheme — avoids 10x fromSeed per build.
-                final scheme = (isDark ? _darkSchemes : _lightSchemes)[hex]!;
-                return GestureDetector(
-                  onTap: () => onChanged(hex),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    width: itemWidth,
-                    height: itemWidth * 0.72,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(14),
-                      border: isSelected
-                          ? Border.all(color: scheme.primary, width: 2.5)
-                          : Border.all(
-                              color: isDark
-                                  ? Colors.white.withValues(alpha: 0.1)
-                                  : Colors.black.withValues(alpha: 0.08),
-                              width: 1,
-                            ),
-                    ),
-                    clipBehavior: Clip.antiAlias,
-                    child: Column(
-                      children: [
-                        // Top: primary color (60%)
-                        Expanded(
-                          flex: 6,
-                          child: Container(
-                            width: double.infinity,
-                            color: scheme.primary,
-                            alignment: Alignment.center,
-                            child: isSelected
-                                ? Icon(Icons.check_rounded,
-                                    size: 18, color: scheme.onPrimary)
-                                : null,
-                          ),
-                        ),
-                        // Bottom row: secondary + tertiary (40%)
-                        Expanded(
-                          flex: 4,
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child:
-                                    Container(color: scheme.secondaryContainer),
-                              ),
-                              Expanded(
-                                child:
-                                    Container(color: scheme.tertiaryContainer),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
+          // Label row: "主题色" + current color name on the right
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  isEn ? 'Theme color' : '主题色',
+                  style: YLText.body.copyWith(
+                    color: isDark ? YLColors.zinc200 : YLColors.zinc700,
+                    fontWeight: FontWeight.w500,
                   ),
-                );
-              }).toList(),
-            );
-          }),
-          // Color name label below the grid
-          const SizedBox(height: 8),
-          Text(
-            _presets
-                    .where((p) =>
-                        p.$1.toUpperCase() == currentHex.toUpperCase())
-                    .map((p) => isEn ? p.$2 : p.$3)
-                    .firstOrNull ??
-                (isEn ? 'Custom' : '自定义'),
-            style: YLText.caption.copyWith(
-              color: YLColors.zinc400,
-              fontWeight: FontWeight.w500,
-            ),
+                ),
+              ),
+              Text(
+                currentName,
+                style: YLText.caption.copyWith(
+                  color: YLColors.zinc400,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          // iOS-style: row of colored dots with outline ring on selected.
+          // Apple Settings / Apple Music / Telegram use this exact pattern.
+          Wrap(
+            spacing: 14,
+            runSpacing: 14,
+            children: _presets.map((preset) {
+              final hex = preset.$1;
+              final color = Color(int.parse('FF$hex', radix: 16));
+              final isSelected =
+                  currentHex.toUpperCase() == hex.toUpperCase();
+              return _ColorDot(
+                color: color,
+                selected: isSelected,
+                isDark: isDark,
+                onTap: () => onChanged(hex),
+              );
+            }).toList(),
           ),
         ],
       ),
     );
   }
 }
+
+/// iOS-style colored dot with outline ring when selected.
+/// Size: 36px core + 8px gap + 2px ring = 48px total when selected.
+class _ColorDot extends StatelessWidget {
+  final Color color;
+  final bool selected;
+  final bool isDark;
+  final VoidCallback onTap;
+
+  const _ColorDot({
+    required this.color,
+    required this.selected,
+    required this.isDark,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        width: 48,
+        height: 48,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: selected
+              ? Border.all(color: color, width: 2)
+              : Border.all(color: Colors.transparent, width: 2),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(4),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: color,
+              boxShadow: selected
+                  ? [
+                      BoxShadow(
+                        color: color.withValues(alpha: 0.35),
+                        blurRadius: 6,
+                        offset: const Offset(0, 2),
+                      ),
+                    ]
+                  : null,
+            ),
+            child: selected
+                ? const Center(
+                    child: Icon(
+                      Icons.check_rounded,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  )
+                : null,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
