@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../datasources/mihomo_api.dart';
 import '../../core/providers/core_provider.dart';
+import '../../shared/node_telemetry.dart';
 
 /// Batches delay-test results that arrive within 300 ms into a single map
 /// and flushes them via [onFlush]. This reduces the number of provider state
@@ -57,8 +58,16 @@ class ProxyRepository {
 
   Future<Map<String, dynamic>> getProxies() => _api.getProxies();
 
-  Future<bool> changeProxy(String groupName, String proxyName) =>
-      _api.changeProxy(groupName, proxyName);
+  Future<bool> changeProxy(String groupName, String proxyName) {
+    // Opt-in telemetry: record manual selections so the server can build a
+    // "what users actually pick" view alongside the URL-test scoring.
+    final fp = NodeTelemetry.fpForName(proxyName);
+    final type = NodeTelemetry.typeForName(proxyName);
+    if (fp != null && type != null) {
+      NodeTelemetry.recordSelect(fp: fp, type: type, group: groupName);
+    }
+    return _api.changeProxy(groupName, proxyName);
+  }
 
   Future<int> testDelay(
     String proxyName, {

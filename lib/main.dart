@@ -146,7 +146,18 @@ void main() async {
   ErrorLogger.init();
 
   // ── Anonymous telemetry (opt-in, default OFF) ──
-  unawaited(Telemetry.init());
+  unawaited(Telemetry.init().then((_) async {
+    // Daily heartbeat — emit at most once per calendar day (UTC) so retention
+    // curves count users who launched the app even when no feature event
+    // happened. Persisted as a YYYY-MM-DD string; cheap string compare.
+    final today =
+        DateTime.now().toUtc().toIso8601String().substring(0, 10);
+    final last = await SettingsService.get<String>('telemetryDailyPingDay');
+    if (last != today) {
+      Telemetry.event('daily_ping');
+      await SettingsService.set('telemetryDailyPingDay', today);
+    }
+  }));
 
   // ── Remote feature flags — fire-and-forget, safe defaults apply on offline ──
   unawaited(FeatureFlags.I.init());
