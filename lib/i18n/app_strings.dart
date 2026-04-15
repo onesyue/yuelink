@@ -766,4 +766,9 @@ class S {
   String get privacy => _t.privacy;
   String get telemetryTitle => _t.telemetryTitle;
   String get telemetrySubtitle => _t.telemetrySubtitle;
+  String get telemetryViewEvents => _t.telemetryViewEvents;
+  String get telemetryClientId => _t.telemetryClientId;
+  String get telemetrySessionId => _t.telemetrySessionId;
+  String telemetryEventCount(int n) => _t.telemetryEventCount(n: n);
+  String get telemetryEmpty => _t.telemetryEmpty;
 }

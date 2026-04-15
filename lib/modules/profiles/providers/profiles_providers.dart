@@ -4,6 +4,7 @@ import '../../../domain/models/profile.dart';
 import '../../../core/kernel/core_manager.dart';
 import '../../../infrastructure/repositories/profile_repository.dart';
 import '../../../core/storage/settings_service.dart';
+import '../../../shared/telemetry.dart';
 
 // ------------------------------------------------------------------
 // Current active profile (persisted)
@@ -22,8 +23,10 @@ class ActiveProfileNotifier extends Notifier<String?> {
   String? build() => ref.read(preloadedProfileIdProvider);
 
   void select(String? id) {
+    if (state == id) return;
     state = id;
     SettingsService.setActiveProfileId(id);
+    if (id != null) Telemetry.event(TelemetryEvents.profileSwitch);
   }
 }
 

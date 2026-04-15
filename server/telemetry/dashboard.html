@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>YueLink Telemetry</title>
+<style>
+  :root {
+    --bg: #0b0b0d;
+    --panel: #17171b;
+    --border: #27272f;
+    --text: #e4e4e7;
+    --muted: #a1a1aa;
+    --accent: #4f46e5;
+    --ok: #22c55e;
+    --warn: #f59e0b;
+    --err: #ef4444;
+  }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 13px/1.5 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+    margin: 0;
+    padding: 24px;
+  }
+  h1 {
+    margin: 0 0 4px;
+    font-size: 20px;
+    font-weight: 600;
+  }
+  .sub {
+    color: var(--muted);
+    margin-bottom: 24px;
+  }
+  .controls {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+  }
+  .controls button {
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+  }
+  .controls button.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+    gap: 16px;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+  .card h2 {
+    margin: 0 0 12px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .big {
+    font-size: 32px;
+    font-weight: 600;
+    margin-bottom: 2px;
+  }
+  .big-sub {
+    color: var(--muted);
+    font-size: 12px;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  th, td {
+    text-align: left;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+    font-variant-numeric: tabular-nums;
+  }
+  th {
+    font-weight: 500;
+    color: var(--muted);
+  }
+  .num { text-align: right; }
+  .bar {
+    height: 4px;
+    background: var(--accent);
+    border-radius: 2px;
+    margin-top: 2px;
+  }
+  .ok { color: var(--ok); }
+  .warn { color: var(--warn); }
+  .err { color: var(--err); }
+  .chart {
+    height: 120px;
+    display: flex;
+    align-items: flex-end;
+    gap: 2px;
+  }
+  .chart .col {
+    flex: 1;
+    background: var(--accent);
+    border-radius: 2px 2px 0 0;
+    min-height: 2px;
+    position: relative;
+  }
+  .chart .col:hover::after {
+    content: attr(data-label);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--border);
+    padding: 2px 6px;
+    border-radius: 4px;
+    white-space: nowrap;
+    font-size: 11px;
+  }
+  code {
+    font-family: "SF Mono", "Menlo", monospace;
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .error { color: var(--err); margin-top: 10px; }
+</style>
+</head>
+<body>
+  <h1>YueLink Telemetry</h1>
+  <div class="sub" id="refreshTime">Loading…</div>
+
+  <div class="controls">
+    <button data-days="1" onclick="setWindow(1)">1d</button>
+    <button data-days="7" onclick="setWindow(7)" class="active">7d</button>
+    <button data-days="30" onclick="setWindow(30)">30d</button>
+    <button data-days="90" onclick="setWindow(90)">90d</button>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Overview</h2>
+      <div class="big" id="totalEvents">—</div>
+      <div class="big-sub">events</div>
+      <div style="margin-top:14px" class="big" id="uniqueClients">—</div>
+      <div class="big-sub">unique clients</div>
+    </div>
+
+    <div class="card">
+      <h2>DAU (last 30d)</h2>
+      <div class="chart" id="dauChart"></div>
+      <div style="margin-top:6px; color:var(--muted); font-size:11px;"
+           id="dauRange"></div>
+    </div>
+
+    <div class="card">
+      <h2>Startup funnel</h2>
+      <div class="big" id="startupOkRate">—</div>
+      <div class="big-sub">ok rate</div>
+      <table style="margin-top:12px">
+        <thead><tr><th>Step</th><th>Code</th><th class="num">Fails</th></tr></thead>
+        <tbody id="startupFails"></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>Top events</h2>
+      <table>
+        <thead><tr><th>Event</th><th class="num">Count</th></tr></thead>
+        <tbody id="topEvents"></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>Errors</h2>
+      <table>
+        <thead><tr><th>Type</th><th>Source</th><th class="num">Count</th></tr></thead>
+        <tbody id="errorList"></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>Versions</h2>
+      <table>
+        <thead><tr><th>Platform</th><th>Version</th><th class="num">Clients</th></tr></thead>
+        <tbody id="versionList"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="error" id="err"></div>
+
+<script>
+const API = '/api/client/telemetry';
+let currentDays = 7;
+
+async function jget(path) {
+  const r = await fetch(path, { credentials: 'include' });
+  if (!r.ok) throw new Error(`${path}: HTTP ${r.status}`);
+  return r.json();
+}
+
+async function refresh() {
+  document.getElementById('err').textContent = '';
+  document.getElementById('refreshTime').textContent =
+    'Loaded ' + new Date().toLocaleString() + ' · window: ' + currentDays + 'd';
+  try {
+    const [summary, dau, funnel, errors, versions] = await Promise.all([
+      jget(`${API}/stats/summary?days=${currentDays}`),
+      jget(`${API}/stats/dau?days=30`),
+      jget(`${API}/stats/startup_funnel?days=${currentDays}`),
+      jget(`${API}/stats/errors?days=${currentDays}`),
+      jget(`${API}/stats/versions?days=${currentDays}`),
+    ]);
+
+    document.getElementById('totalEvents').textContent =
+      summary.total_events.toLocaleString();
+    document.getElementById('uniqueClients').textContent =
+      summary.unique_clients.toLocaleString();
+
+    const ok = funnel.ok_rate;
+    document.getElementById('startupOkRate').textContent =
+      ok === null ? '—' : (ok * 100).toFixed(1) + '%';
+    const cls = ok === null ? '' : ok > 0.95 ? 'ok' : ok > 0.8 ? 'warn' : 'err';
+    document.getElementById('startupOkRate').className = 'big ' + cls;
+    document.getElementById('startupFails').innerHTML =
+      funnel.failures.map(f =>
+        `<tr><td><code>${f.step || '?'}</code></td>` +
+        `<td><code>${f.code || '?'}</code></td>` +
+        `<td class="num">${f.n}</td></tr>`
+      ).join('') || '<tr><td colspan="3" style="color:var(--muted)">no failures</td></tr>';
+
+    const maxN = Math.max(...summary.top_events.map(e => e.n), 1);
+    document.getElementById('topEvents').innerHTML = summary.top_events.map(e =>
+      `<tr><td><code>${e.event}</code><div class="bar" style="width:${e.n / maxN * 100}%"></div></td>` +
+      `<td class="num">${e.n}</td></tr>`
+    ).join('') || '<tr><td colspan="2" style="color:var(--muted)">no data</td></tr>';
+
+    const series = dau.series;
+    const maxDau = Math.max(...series.map(s => s.dau), 1);
+    document.getElementById('dauChart').innerHTML = series.map(s =>
+      `<div class="col" data-label="${s.day}: ${s.dau}" ` +
+      `style="height:${s.dau / maxDau * 100}%"></div>`
+    ).join('');
+    if (series.length) {
+      document.getElementById('dauRange').textContent =
+        `${series[0].day} → ${series[series.length - 1].day}`;
+    }
+
+    document.getElementById('errorList').innerHTML = errors.top_errors.map(e =>
+      `<tr><td><code>${e.type || '?'}</code></td>` +
+      `<td><code>${e.src || '?'}</code></td>` +
+      `<td class="num">${e.n}</td></tr>`
+    ).join('') || '<tr><td colspan="3" style="color:var(--muted)">no errors</td></tr>';
+
+    document.getElementById('versionList').innerHTML = versions.distribution.map(v =>
+      `<tr><td>${v.platform || '?'}</td>` +
+      `<td><code>${v.version || '?'}</code></td>` +
+      `<td class="num">${v.clients}</td></tr>`
+    ).join('') || '<tr><td colspan="3" style="color:var(--muted)">no data</td></tr>';
+
+  } catch (e) {
+    document.getElementById('err').textContent = e.message;
+  }
+}
+
+function setWindow(d) {
+  currentDays = d;
+  document.querySelectorAll('.controls button').forEach(b => {
+    b.classList.toggle('active', +b.dataset.days === d);
+  });
+  refresh();
+}
+
+refresh();
+setInterval(refresh, 60_000);
+</script>
+</body>
+</html>

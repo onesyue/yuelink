@@ -7,6 +7,7 @@ import '../../../infrastructure/checkin/checkin_repository.dart';
 import '../../../i18n/app_strings.dart';
 import '../../yue_auth/providers/yue_auth_providers.dart';
 import '../../../shared/app_notifier.dart';
+import '../../../shared/telemetry.dart';
 import '../state/checkin_state.dart';
 
 // ── DI: Infrastructure instances ────────────────────────────────────────────
@@ -140,6 +141,10 @@ class CheckinNotifier extends Notifier<CheckinState> {
       final rewardText = result.type == 'traffic'
           ? S.current.checkinTrafficReward(result.amountText)
           : S.current.checkinBalanceReward(result.amountText);
+      Telemetry.event(
+        TelemetryEvents.checkinOk,
+        props: {'reward': result.type},
+      );
       AppNotifier.success(rewardText);
 
       // Refresh user profile to reflect new traffic/balance.
@@ -160,10 +165,20 @@ class CheckinNotifier extends Notifier<CheckinState> {
         return;
       }
       state = state.copyWith(loading: false, error: e.message);
+      Telemetry.event(
+        TelemetryEvents.checkinFail,
+        priority: true,
+        props: {'status': e.statusCode},
+      );
       AppNotifier.error(S.current.checkinFailed);
     } catch (e) {
       debugPrint('[Checkin] error: $e');
       state = state.copyWith(loading: false, error: e.toString());
+      Telemetry.event(
+        TelemetryEvents.checkinFail,
+        priority: true,
+        props: {'error': e.runtimeType.toString()},
+      );
       AppNotifier.error(S.current.checkinFailed);
     }
   }

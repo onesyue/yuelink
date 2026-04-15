@@ -706,5 +706,10 @@
   "trafficRemaining": "Remaining",
   "privacy": "Privacy",
   "telemetryTitle": "Anonymous usage stats",
-  "telemetrySubtitle": "Help improve YueLink, no PII"
+  "telemetrySubtitle": "Help improve YueLink, no PII",
+  "telemetryViewEvents": "View sent events",
+  "telemetryClientId": "Client ID",
+  "telemetrySessionId": "Session ID",
+  "telemetryEventCount": "Last {n} events",
+  "telemetryEmpty": "No events recorded"
 }

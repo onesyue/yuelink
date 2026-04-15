@@ -21,6 +21,7 @@ import 'process_manager.dart';
 import '../storage/settings_service.dart';
 import '../platform/vpn_service.dart' as vpn;
 import '../../modules/surge_modules/infrastructure/module_rule_injector.dart';
+import '../../shared/telemetry.dart';
 
 /// How mihomo is managed.
 enum CoreMode { ffi, subprocess, mock }
@@ -952,7 +953,50 @@ class CoreManager {
     lastReport = report;
     debugPrint(report.toDebugString());
 
+    // Telemetry — record aggregate outcome + which step failed.
+    if (success) {
+      final totalMs = steps.fold<int>(0, (a, s) => a + s.durationMs);
+      Telemetry.event(
+        TelemetryEvents.startupOk,
+        props: {'total_ms': totalMs, 'steps': steps.length},
+      );
+    } else {
+      Telemetry.event(
+        TelemetryEvents.startupFail,
+        priority: true,
+        props: {
+          'step': failedStep ?? 'unknown',
+          'code': _errorCodeFor(failedStep),
+        },
+      );
+    }
+
     // Save to disk (fire-and-forget)
     StartupReport.save(report);
+  }
+
+  /// Stable error codes for dashboard grouping. Mirrors the E002–E009
+  /// constants rendered in StartupErrorBanner.
+  static String _errorCodeFor(String? step) {
+    switch (step) {
+      case 'initCore':
+        return 'E002';
+      case 'vpnPermission':
+        return 'E003';
+      case 'startVpn':
+        return 'E004';
+      case 'buildConfig':
+        return 'E005';
+      case 'startCore':
+        return 'E006';
+      case 'waitApi':
+        return 'E007';
+      case 'verify':
+        return 'E008';
+      case 'ensureGeo':
+        return 'E009';
+      default:
+        return 'Exx';
+    }
   }
 }

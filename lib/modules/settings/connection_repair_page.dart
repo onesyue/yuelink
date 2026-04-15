@@ -9,6 +9,7 @@ import '../../core/platform/vpn_service.dart';
 import '../../i18n/app_strings.dart';
 import '../../shared/app_notifier.dart';
 import '../../shared/log_export_service.dart';
+import '../../shared/telemetry.dart';
 import '../../theme.dart';
 import '../yue_auth/providers/yue_auth_providers.dart';
 import 'startup_report_page.dart';
@@ -79,6 +80,7 @@ class _ConnectionRepairPageState extends ConsumerState<ConnectionRepairPage> {
       if (!mounted) return;
       if (result.cancelled) return;
       if (result.saved) {
+        Telemetry.event(TelemetryEvents.diagnosticExport);
         AppNotifier.success(
           '${S.current.exportLogsSuccess}: ${result.path ?? fileName}',
         );

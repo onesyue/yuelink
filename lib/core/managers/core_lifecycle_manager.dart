@@ -32,7 +32,7 @@ class CoreLifecycleManager {
   Future<bool> start(String configYaml) async {
     debugPrint(
         '[CoreLifecycle] start() called, config length: ${configYaml.length}');
-    Telemetry.event('connect_start');
+    Telemetry.event(TelemetryEvents.connectStart);
     ref.read(userStoppedProvider.notifier).state = false;
     ref.read(coreStatusProvider.notifier).state = CoreStatus.starting;
     ref.read(coreStartupErrorProvider.notifier).state = null;
@@ -57,15 +57,18 @@ class CoreLifecycleManager {
         ref.read(coreStartupErrorProvider.notifier).state = detail;
         EventLog.write(
             '[Core] connect_fail detail=${detail.split('\n').first}');
-        Telemetry.event('connect_failed', {
-          'step': report?.failedStep ?? 'unknown',
-        });
+        Telemetry.event(
+          TelemetryEvents.connectFailed,
+          priority: true,
+          props: {'step': report?.failedStep ?? 'unknown'},
+        );
         AppNotifier.error(detail);
         return false;
       }
 
       ref.read(coreStatusProvider.notifier).state = CoreStatus.running;
       EventLog.write('[Core] connect_ok');
+      Telemetry.event(TelemetryEvents.connectOk);
       AppNotifier.success(S.current.msgConnected);
 
       // Apply routing mode (non-blocking — errors logged, not thrown)

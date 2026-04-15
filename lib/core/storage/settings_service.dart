@@ -536,4 +536,12 @@ class SettingsService {
 
   static Future<void> setTelemetryEnabled(bool v) =>
       set('telemetryEnabled', v);
+
+  /// Anonymous per-install client id (UUID v4). Generated lazily on first
+  /// telemetry event; survives upgrades, resets on reinstall / storage wipe.
+  static Future<String?> getTelemetryClientId() async =>
+      get<String>('telemetryClientId');
+
+  static Future<void> setTelemetryClientId(String v) =>
+      set('telemetryClientId', v);
 }

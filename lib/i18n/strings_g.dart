@@ -4,9 +4,9 @@
 /// To regenerate, run: `dart run slang`
 ///
 /// Locales: 2
-/// Strings: 1410 (705 per locale)
+/// Strings: 1426 (713 per locale)
 ///
-/// Built on 2026-04-14 at 11:36 UTC
+/// Built on 2026-04-15 at 05:52 UTC
 
 // coverage:ignore-file
 // ignore_for_file: type=lint
@@ -856,6 +856,11 @@ class Translations implements BaseTranslations<AppLocale, Translations> {
 	String get privacy => 'Privacy';
 	String get telemetryTitle => 'Anonymous usage stats';
 	String get telemetrySubtitle => 'Help improve YueLink, no PII';
+	String get telemetryViewEvents => 'View sent events';
+	String get telemetryClientId => 'Client ID';
+	String get telemetrySessionId => 'Session ID';
+	String telemetryEventCount({required Object n}) => 'Last ${n} events';
+	String get telemetryEmpty => 'No events recorded';
 }
 
 // Path: <root>
@@ -1592,6 +1597,11 @@ class _StringsGZhCn extends Translations {
 	@override String get privacy => '隐私';
 	@override String get telemetryTitle => '匿名使用统计';
 	@override String get telemetrySubtitle => '帮助我们改进 YueLink，不包含个人信息';
+	@override String get telemetryViewEvents => '查看已发送事件';
+	@override String get telemetryClientId => '匿名 ID';
+	@override String get telemetrySessionId => '本次会话 ID';
+	@override String telemetryEventCount({required Object n}) => '最近 ${n} 条';
+	@override String get telemetryEmpty => '暂无事件';
 }
 
 /// Flat map(s) containing all translations.
@@ -2308,6 +2318,11 @@ extension on Translations {
 			case 'privacy': return 'Privacy';
 			case 'telemetryTitle': return 'Anonymous usage stats';
 			case 'telemetrySubtitle': return 'Help improve YueLink, no PII';
+			case 'telemetryViewEvents': return 'View sent events';
+			case 'telemetryClientId': return 'Client ID';
+			case 'telemetrySessionId': return 'Session ID';
+			case 'telemetryEventCount': return ({required Object n}) => 'Last ${n} events';
+			case 'telemetryEmpty': return 'No events recorded';
 			default: return null;
 		}
 	}
@@ -3024,6 +3039,11 @@ extension on _StringsGZhCn {
 			case 'privacy': return '隐私';
 			case 'telemetryTitle': return '匿名使用统计';
 			case 'telemetrySubtitle': return '帮助我们改进 YueLink，不包含个人信息';
+			case 'telemetryViewEvents': return '查看已发送事件';
+			case 'telemetryClientId': return '匿名 ID';
+			case 'telemetrySessionId': return '本次会话 ID';
+			case 'telemetryEventCount': return ({required Object n}) => '最近 ${n} 条';
+			case 'telemetryEmpty': return '暂无事件';
 			default: return null;
 		}
 	}

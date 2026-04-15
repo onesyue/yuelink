@@ -706,5 +706,10 @@
   "trafficRemaining": "剩余",
   "privacy": "隐私",
   "telemetryTitle": "匿名使用统计",
-  "telemetrySubtitle": "帮助我们改进 YueLink，不包含个人信息"
+  "telemetrySubtitle": "帮助我们改进 YueLink，不包含个人信息",
+  "telemetryViewEvents": "查看已发送事件",
+  "telemetryClientId": "匿名 ID",
+  "telemetrySessionId": "本次会话 ID",
+  "telemetryEventCount": "最近 {n} 条",
+  "telemetryEmpty": "暂无事件"
 }

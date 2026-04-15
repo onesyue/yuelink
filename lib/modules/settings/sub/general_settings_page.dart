@@ -18,6 +18,7 @@ import '../../../core/providers/core_provider.dart';
 import '../../../main.dart' show tileShowNodeInfoProvider;
 import '../../updater/update_checker.dart';
 import '../providers/split_tunnel_provider.dart';
+import 'telemetry_preview_page.dart';
 import '../../../shared/app_notifier.dart';
 import '../../../shared/telemetry.dart';
 import '../../../theme.dart';
@@ -320,6 +321,10 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
                           onSelectionChanged: (v) {
                             ref.read(themeProvider.notifier).state = v.first;
                             SettingsService.setThemeMode(v.first);
+                            Telemetry.event(
+                              TelemetryEvents.themeChange,
+                              props: {'mode': v.first.name},
+                            );
                           },
                         ),
                       ),
@@ -530,8 +535,13 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
                           selected: {routingMode},
                           onSelectionChanged: (v) async {
                             final mode = v.first;
+                            if (mode == routingMode) return;
                             ref.read(routingModeProvider.notifier).state = mode;
                             await SettingsService.setRoutingMode(mode);
+                            Telemetry.event(
+                              TelemetryEvents.routingModeChange,
+                              props: {'mode': mode},
+                            );
                             if (status == CoreStatus.running) {
                               try {
                                 await CoreManager.instance.api
@@ -568,6 +578,10 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
                             if (v == null || v == connectionMode) return;
                             ref.read(connectionModeProvider.notifier).state = v;
                             await SettingsService.setConnectionMode(v);
+                            Telemetry.event(
+                              TelemetryEvents.connectionModeChange,
+                              props: {'mode': v},
+                            );
 
                             // Hot-switch: if core is running, apply mode
                             // change without stop+start
@@ -773,17 +787,37 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
                 ),
               ),
               _Card(
-                child: YLSettingsRow(
-                  title: s.telemetryTitle,
-                  description: s.telemetrySubtitle,
-                  trailing: CupertinoSwitch(
-                    value: _telemetryEnabled,
-                    activeTrackColor: YLColors.connected,
-                    onChanged: (v) {
-                      setState(() => _telemetryEnabled = v);
-                      Telemetry.setEnabled(v);
-                    },
-                  ),
+                child: Column(
+                  children: [
+                    YLSettingsRow(
+                      title: s.telemetryTitle,
+                      description: s.telemetrySubtitle,
+                      trailing: CupertinoSwitch(
+                        value: _telemetryEnabled,
+                        activeTrackColor: YLColors.connected,
+                        onChanged: (v) {
+                          setState(() => _telemetryEnabled = v);
+                          Telemetry.setEnabled(v);
+                        },
+                      ),
+                    ),
+                    const Divider(height: 1, thickness: 0.5),
+                    YLInfoRow(
+                      label: s.telemetryViewEvents,
+                      trailing: const Icon(
+                        Icons.chevron_right,
+                        color: YLColors.zinc400,
+                      ),
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const TelemetryPreviewPage(),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
                 ),
               ),
             ],

@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../i18n/app_strings.dart';
 import '../../shared/app_notifier.dart';
 import '../../shared/log_export_service.dart';
+import '../../shared/telemetry.dart';
 import '../../shared/widgets/empty_state.dart';
 import '../../domain/models/rule.dart';
 import '../../core/providers/core_provider.dart';
@@ -76,6 +77,7 @@ class _LogPageState extends ConsumerState<LogPage>
       );
       if (result.cancelled) return;
       if (result.saved) {
+        Telemetry.event(TelemetryEvents.logExport);
         AppNotifier.success(
           '${S.current.exportLogsSuccess}: ${result.path ?? fileName}',
         );

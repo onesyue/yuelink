@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'event_log.dart';
+import 'telemetry.dart';
 
 /// Unified error reporting — logs locally AND to remote monitoring.
 ///
@@ -64,6 +65,19 @@ class ErrorLogger {
     final tag = source != null ? '[$source]' : '[Error]';
     EventLog.write('$tag ${error.split('\n').first}');
 
+    // 2b. Forward exception type (not the message) to opt-in telemetry so we
+    // can see error shape distribution without leaking payload content.
+    final firstLine = error.split('\n').first;
+    final typeHint = firstLine.length > 80 ? firstLine.substring(0, 80) : firstLine;
+    Telemetry.event(
+      TelemetryEvents.crash,
+      priority: true,
+      props: {
+        'src': source ?? 'unknown',
+        'type': _typeFromError(typeHint),
+      },
+    );
+
     // 3. Forward to remote reporter (release only)
     if (!kReleaseMode || _reporter == null) return;
     try {
@@ -71,6 +85,15 @@ class ErrorLogger {
     } catch (e) {
       debugPrint('[ErrorLogger] remote report failed: $e');
     }
+  }
+
+  /// Pull the exception class name out of a stringified error, e.g.
+  /// `FormatException: bad char` → `FormatException`. Falls back to the
+  /// first 40 chars if no colon delimiter is found.
+  static String _typeFromError(String s) {
+    final idx = s.indexOf(':');
+    if (idx > 0 && idx < 40) return s.substring(0, idx);
+    return s.length > 40 ? s.substring(0, 40) : s;
   }
 
   static Future<void> _writeCrashLog(String error, String stack) async {

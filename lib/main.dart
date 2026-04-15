@@ -593,11 +593,13 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
     if (state == AppLifecycleState.inactive ||
         state == AppLifecycleState.paused ||
         state == AppLifecycleState.detached) {
+      Telemetry.event(TelemetryEvents.appBackgrounded);
       unawaited(SettingsService.flush());
       unawaited(Telemetry.flush());
     }
 
     if (state == AppLifecycleState.resumed) {
+      Telemetry.event(TelemetryEvents.appResumed);
       // On Android, the first resume after engine recreate is already handled
       // by addPostFrameCallback. Without this guard, _onAppResumed() runs
       // TWICE on the same cycle: once from post-frame, once from here.

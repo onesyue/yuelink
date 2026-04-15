@@ -33,7 +33,7 @@ class _QrScanPageState extends State<QrScanPage> {
       if (value == null) continue;
       if (value.startsWith('http://') || value.startsWith('https://')) {
         _hasResult = true;
-        Telemetry.event('qr_scan_success');
+        Telemetry.event(TelemetryEvents.qrScanSuccess);
         Navigator.pop(context, value);
         return;
       }

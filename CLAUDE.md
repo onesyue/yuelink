@@ -191,6 +191,7 @@ Fully data-driven from server — no hardcoded library names/order. Reads `/emby
 - `SubscriptionSyncService` 30min background timer for stale profiles. Activated via `ref.watch(subscriptionSyncProvider)` in root.
 - `ErrorLogger.init()` in `main()` — writes `crash.log` + `EventLog` + `RemoteReporter`.
 - `LogExportService` collects core.log + crash.log + event.log + startup_report.json with PII redaction (11 regex patterns).
+- **Telemetry** (`lib/shared/telemetry.dart`): opt-in (default OFF), anonymous UUID `client_id` persisted in SettingsService. Event names are constants in `TelemetryEvents` — never pass raw strings. Errors/startup_fail use `priority: true` to survive buffer overflow. Settings → `TelemetryPreviewPage` shows the last 50 events so users can see exactly what's been recorded. Server side lives in `server/telemetry/` (FastAPI module + HTML dashboard), deployed alongside `checkin-api` on 23.80.91.14.
 - `RecoveryManager.resetCoreToStopped(ref)` is the canonical "reset to stopped" — use it instead of writing 4 provider states manually.
 
 ## Testing & enforcement

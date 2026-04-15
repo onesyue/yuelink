@@ -11,6 +11,7 @@ import '../../../modules/emby/emby_providers.dart';
 import '../../../modules/emby/emby_web_page.dart';
 import '../../../core/providers/core_provider.dart';
 import '../../../shared/app_notifier.dart';
+import '../../../shared/telemetry.dart';
 import '../../../theme.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../providers/emby_preview_provider.dart';
@@ -115,6 +116,10 @@ class EmbyPreviewRow extends ConsumerWidget {
       }
     }
     if (!context.mounted) return;
+    Telemetry.event(
+      TelemetryEvents.embyOpen,
+      props: {'mode': emby.hasNativeAccess ? 'native' : 'web'},
+    );
     if (emby.hasNativeAccess) {
       Navigator.push(
         context,
