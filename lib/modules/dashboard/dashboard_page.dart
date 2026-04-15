@@ -25,7 +25,6 @@ import 'widgets/quick_actions.dart';
 import '../mine/widgets/notices_card.dart';
 import 'widgets/emby_preview_row.dart';
 import 'widgets/stale_subscription_banner.dart';
-import 'widgets/health_card.dart';
 import 'widgets/scene_preset_bar.dart';
 import '../../shared/nps_service.dart';
 import '../../shared/widgets/nps_sheet.dart';
@@ -100,15 +99,6 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                         vertical: 24,
                       ),
                       children: [
-                        // ── 0. 主动健康提示（隐藏在 core 未运行时）─────
-                        if (status == CoreStatus.running) ...[
-                          const _StaggeredIn(
-                            index: 0,
-                            child: RepaintBoundary(child: HealthCard()),
-                          ),
-                          const SizedBox(height: 8),
-                        ],
-
                         // ── 1. VPN 连接卡 ─────────────────────────────
                         _StaggeredIn(
                           index: 0,

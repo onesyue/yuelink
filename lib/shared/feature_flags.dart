@@ -29,7 +29,6 @@ class FeatureFlags {
   static const Map<String, dynamic> _defaults = {
     'smart_node_recommend': false,
     'scene_presets': false,
-    'health_card': true,
     'onboarding_split': false,
     'auto_fallback': false,
     'nps_enabled': true,
