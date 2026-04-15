@@ -1,0 +1,9 @@
+{
+    "code": "yue_online_count",
+    "name": "YueLink — expose online_count in getSubscribe",
+    "version": "1.0.0",
+    "description": "Patches XBoard's getSubscribe response to include online_count and last_online_at, since the core controller hard-selects an incomplete column list.",
+    "author": "YueLink",
+    "require": { "xboard": ">=1.0.0" },
+    "config": {}
+}
