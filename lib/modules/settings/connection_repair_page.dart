@@ -10,9 +10,11 @@ import '../../i18n/app_strings.dart';
 import '../../shared/app_notifier.dart';
 import '../../shared/log_export_service.dart';
 import '../../shared/telemetry.dart';
+import '../../core/storage/settings_service.dart';
 import '../../theme.dart';
 import '../yue_auth/providers/yue_auth_providers.dart';
 import 'startup_report_page.dart';
+import 'sub/telemetry_preview_page.dart';
 
 /// Connection repair tools: rebuild VPN, clear config, re-sync subscription,
 /// view diagnostics.
@@ -26,6 +28,18 @@ class ConnectionRepairPage extends ConsumerStatefulWidget {
 
 class _ConnectionRepairPageState extends ConsumerState<ConnectionRepairPage> {
   bool _busy = false;
+  bool _telemetryEnabled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTelemetryState();
+  }
+
+  Future<void> _loadTelemetryState() async {
+    final on = await SettingsService.getTelemetryEnabled();
+    if (mounted) setState(() => _telemetryEnabled = on);
+  }
 
   Future<void> _exportDiagnosticLogs() async {
     if (_busy) return;
@@ -303,6 +317,91 @@ class _ConnectionRepairPageState extends ConsumerState<ConnectionRepairPage> {
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 24),
+
+          // ── Privacy ────────────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+            child: Text(
+              s.privacy.toUpperCase(),
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w400,
+                color: YLColors.zinc500,
+                letterSpacing: -0.08,
+              ),
+            ),
+          ),
+          _Card(isDark: isDark, children: [
+            _TelemetryToggleRow(
+              enabled: _telemetryEnabled,
+              onChanged: (v) {
+                setState(() => _telemetryEnabled = v);
+                Telemetry.setEnabled(v);
+              },
+              isDark: isDark,
+            ),
+            Divider(height: 1, color: divColor),
+            _ActionRow(
+              icon: Icons.list_alt_outlined,
+              label: s.telemetryViewEvents,
+              subtitle: '',
+              isDark: isDark,
+              busy: false,
+              trailing: const Icon(Icons.chevron_right,
+                  size: 18, color: YLColors.zinc400),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const TelemetryPreviewPage(),
+                ),
+              ),
+            ),
+          ]),
+          const SizedBox(height: 24),
+        ],
+      ),
+    );
+  }
+}
+
+class _TelemetryToggleRow extends StatelessWidget {
+  final bool enabled;
+  final ValueChanged<bool> onChanged;
+  final bool isDark;
+  const _TelemetryToggleRow({
+    required this.enabled,
+    required this.onChanged,
+    required this.isDark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final s = S.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(s.telemetryTitle,
+                    style: YLText.body.copyWith(
+                        color:
+                            isDark ? YLColors.zinc200 : YLColors.zinc700)),
+                const SizedBox(height: 2),
+                Text(s.telemetrySubtitle,
+                    style: YLText.caption.copyWith(
+                        color:
+                            isDark ? YLColors.zinc500 : YLColors.zinc400)),
+              ],
+            ),
+          ),
+          Switch(
+            value: enabled,
+            activeTrackColor: YLColors.connected,
+            onChanged: onChanged,
+          ),
         ],
       ),
     );
@@ -452,9 +551,8 @@ class _DiagEndpoint {
 // Each test probes a standard reachability target — no internal server
 // URLs exposed to the user.
 const _kDiagEndpoints = [
-  _DiagEndpoint('国际网络', 'https://www.gstatic.com/generate_204'),
+  _DiagEndpoint('Google', 'https://www.gstatic.com/generate_204'),
   _DiagEndpoint('Cloudflare', 'https://cp.cloudflare.com/generate_204'),
-  _DiagEndpoint('国内网络', 'https://www.baidu.com'),
 ];
 
 enum _DiagStatus { idle, testing, success, failed }

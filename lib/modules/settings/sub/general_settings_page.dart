@@ -18,7 +18,6 @@ import '../../../core/providers/core_provider.dart';
 import '../../../main.dart' show tileShowNodeInfoProvider;
 import '../../updater/update_checker.dart';
 import '../providers/split_tunnel_provider.dart';
-import 'telemetry_preview_page.dart';
 import '../../../shared/app_notifier.dart';
 import '../../../shared/telemetry.dart';
 import '../../../theme.dart';
@@ -41,7 +40,6 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
   String _updateChannel = 'stable';
   bool _autoCheckUpdates = true;
   DateTime? _lastUpdateCheck;
-  bool _telemetryEnabled = false;
 
   @override
   void initState() {
@@ -54,14 +52,12 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
     final channel = await UpdateChecker.getChannel();
     final autoCheck = await UpdateChecker.getAutoCheck();
     final lastCheck = await UpdateChecker.getLastCheck();
-    final telemetry = await SettingsService.getTelemetryEnabled();
     if (mounted) {
       setState(() {
         _launchAtStartup = startup;
         _updateChannel = channel;
         _autoCheckUpdates = autoCheck;
         _lastUpdateCheck = lastCheck;
-        _telemetryEnabled = telemetry;
       });
     }
   }
@@ -772,54 +768,6 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
                 const SizedBox(height: 16),
                 const _SplitTunnelSection(),
               ],
-              // ── Privacy ───────────────────────────────────────────
-              const SizedBox(height: 8),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
-                child: Text(
-                  s.privacy.toUpperCase(),
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w400,
-                    color: YLColors.zinc500,
-                    letterSpacing: -0.08,
-                  ),
-                ),
-              ),
-              _Card(
-                child: Column(
-                  children: [
-                    YLSettingsRow(
-                      title: s.telemetryTitle,
-                      description: s.telemetrySubtitle,
-                      trailing: CupertinoSwitch(
-                        value: _telemetryEnabled,
-                        activeTrackColor: YLColors.connected,
-                        onChanged: (v) {
-                          setState(() => _telemetryEnabled = v);
-                          Telemetry.setEnabled(v);
-                        },
-                      ),
-                    ),
-                    const Divider(height: 1, thickness: 0.5),
-                    YLInfoRow(
-                      label: s.telemetryViewEvents,
-                      trailing: const Icon(
-                        Icons.chevron_right,
-                        color: YLColors.zinc400,
-                      ),
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const TelemetryPreviewPage(),
-                          ),
-                        );
-                      },
-                    ),
-                  ],
-                ),
-              ),
             ],
           ),
         ),
