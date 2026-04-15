@@ -49,7 +49,7 @@ class _StaleSubscriptionBannerState
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
         color: bgColor,
-        borderRadius: BorderRadius.circular(YLRadius.lg),
+        borderRadius: BorderRadius.circular(YLRadius.xl),
         border: Border.all(color: borderColor, width: 0.5),
       ),
       child: Row(

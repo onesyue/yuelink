@@ -47,7 +47,7 @@ class OverviewCard extends ConsumerWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: isDark ? YLColors.zinc800 : Colors.white,
-        borderRadius: BorderRadius.circular(YLRadius.lg),
+        borderRadius: BorderRadius.circular(YLRadius.xl),
         border: Border.all(
           color: isDark
               ? Colors.white.withValues(alpha: 0.08)

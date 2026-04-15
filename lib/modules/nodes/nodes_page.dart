@@ -705,7 +705,7 @@ class _OfflinePreviewBanner extends StatelessWidget {
         color: isDark
             ? Colors.amber.withValues(alpha: 0.10)
             : Colors.amber.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(YLRadius.lg),
+        borderRadius: BorderRadius.circular(YLRadius.xl),
         border: Border.all(
           color: Colors.amber.withValues(alpha: 0.25),
           width: 0.5,
@@ -805,12 +805,12 @@ class _ReadOnlyGroupCard extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       decoration: BoxDecoration(
-        color: isDark ? YLColors.zinc900 : Colors.white,
+        color: isDark ? YLColors.zinc800 : Colors.white,
         borderRadius: BorderRadius.circular(YLRadius.xl),
         border: Border.all(
           color: isDark
               ? Colors.white.withValues(alpha: 0.08)
-              : Colors.black.withValues(alpha: 0.04),
+              : Colors.black.withValues(alpha: 0.08),
           width: 0.5,
         ),
         boxShadow: YLShadow.card(context),

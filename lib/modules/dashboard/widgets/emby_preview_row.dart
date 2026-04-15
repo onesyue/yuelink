@@ -160,7 +160,7 @@ class _NoPermissionBanner extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: isDark ? YLColors.zinc800 : Colors.white,
-          borderRadius: BorderRadius.circular(YLRadius.lg),
+          borderRadius: BorderRadius.circular(YLRadius.xl),
           border: Border.all(
             color: isDark
                 ? Colors.white.withValues(alpha: 0.08)
@@ -211,7 +211,7 @@ class _VpnOffBanner extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
       decoration: BoxDecoration(
         color: isDark ? YLColors.zinc800 : Colors.white,
-        borderRadius: BorderRadius.circular(YLRadius.lg),
+        borderRadius: BorderRadius.circular(YLRadius.xl),
         border: Border.all(
           color: isDark
               ? Colors.white.withValues(alpha: 0.08)
@@ -252,7 +252,7 @@ class _WebOnlyBanner extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
         decoration: BoxDecoration(
           color: isDark ? YLColors.zinc800 : Colors.white,
-          borderRadius: BorderRadius.circular(YLRadius.lg),
+          borderRadius: BorderRadius.circular(YLRadius.xl),
           border: Border.all(
             color: isDark
                 ? Colors.white.withValues(alpha: 0.08)

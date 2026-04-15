@@ -305,7 +305,7 @@ class _TrafficSectionState extends ConsumerState<_TrafficSection> {
     return Container(
       decoration: BoxDecoration(
         color: isDark ? YLColors.zinc800 : Colors.white,
-        borderRadius: BorderRadius.circular(YLRadius.lg),
+        borderRadius: BorderRadius.circular(YLRadius.xl),
         border: Border.all(color: borderColor, width: 0.5),
         boxShadow: YLShadow.card(context),
       ),
