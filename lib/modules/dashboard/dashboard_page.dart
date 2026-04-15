@@ -25,6 +25,10 @@ import 'widgets/quick_actions.dart';
 import '../mine/widgets/notices_card.dart';
 import 'widgets/emby_preview_row.dart';
 import 'widgets/stale_subscription_banner.dart';
+import 'widgets/health_card.dart';
+import 'widgets/scene_preset_bar.dart';
+import '../../shared/nps_service.dart';
+import '../../shared/widgets/nps_sheet.dart';
 
 class DashboardPage extends ConsumerStatefulWidget {
   const DashboardPage({super.key});
@@ -35,6 +39,24 @@ class DashboardPage extends ConsumerStatefulWidget {
 
 class _DashboardPageState extends ConsumerState<DashboardPage> {
   bool _busy = false;
+  bool _npsChecked = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // NPS trigger — delayed so we don't block first-frame paint, and
+    // only after the user is idle on the dashboard. Guarded so we ask
+    // at most once per launch.
+    Future<void>.delayed(const Duration(seconds: 5), () async {
+      if (!mounted || _npsChecked) return;
+      _npsChecked = true;
+      if (await NpsService.shouldShow()) {
+        if (!mounted) return;
+        // ignore: unawaited_futures
+        showNpsSheet(context);
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -78,6 +100,15 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                         vertical: 24,
                       ),
                       children: [
+                        // ── 0. 主动健康提示（隐藏在 core 未运行时）─────
+                        if (status == CoreStatus.running) ...[
+                          const _StaggeredIn(
+                            index: 0,
+                            child: RepaintBoundary(child: HealthCard()),
+                          ),
+                          const SizedBox(height: 8),
+                        ],
+
                         // ── 1. VPN 连接卡 ─────────────────────────────
                         _StaggeredIn(
                           index: 0,
@@ -87,6 +118,14 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                               onToggle: () => _toggle(context, ref),
                             ),
                           ),
+                        ),
+
+                        const SizedBox(height: 12),
+
+                        // ── 1.2 场景预设（feature-flag 保护）──────────
+                        const _StaggeredIn(
+                          index: 1,
+                          child: RepaintBoundary(child: ScenePresetBar()),
                         ),
 
                         const SizedBox(height: 12),

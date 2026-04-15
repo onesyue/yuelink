@@ -10,6 +10,7 @@ import '../../profiles/providers/profiles_providers.dart';
 import '../../../core/kernel/core_manager.dart';
 import '../../../infrastructure/repositories/profile_repository.dart';
 import '../../../infrastructure/repositories/proxy_repository.dart';
+import '../../../shared/node_telemetry.dart';
 
 // ------------------------------------------------------------------
 // Node sort / view mode
@@ -356,6 +357,9 @@ class DelayTestActions {
     ref.read(delayResultsProvider.notifier).state = results;
     SettingsService.setDelayResults(results);
 
+    // Opt-in telemetry — anonymous fingerprint + latency only.
+    NodeTelemetry.recordUrlTestByName(name: proxyName, delayMs: delay);
+
     // Unmark testing
     final doneSet = Set<String>.from(ref.read(delayTestingProvider));
     doneSet.remove(proxyName);
@@ -392,6 +396,16 @@ class DelayTestActions {
         }
         ref.read(delayResultsProvider.notifier).state = current;
         SettingsService.setDelayResults(current);
+
+        // Opt-in telemetry — one event per tested node.
+        for (final entry in current.entries) {
+          if (proxyNames.contains(entry.key)) {
+            NodeTelemetry.recordUrlTestByName(
+              name: entry.key,
+              delayMs: entry.value,
+            );
+          }
+        }
       } catch (_) {
         // API error, mark all as failed
         final current = Map<String, int>.from(ref.read(delayResultsProvider));

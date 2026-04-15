@@ -13,6 +13,7 @@ import '../providers/core_provider.dart';
 import '../../modules/nodes/providers/nodes_providers.dart';
 import '../../shared/app_notifier.dart';
 import '../../shared/event_log.dart';
+import '../../shared/nps_service.dart';
 import '../../shared/telemetry.dart';
 import 'system_proxy_manager.dart';
 
@@ -69,6 +70,8 @@ class CoreLifecycleManager {
       ref.read(coreStatusProvider.notifier).state = CoreStatus.running;
       EventLog.write('[Core] connect_ok');
       Telemetry.event(TelemetryEvents.connectOk);
+      // First-ever successful connect becomes the NPS anchor (24h later).
+      unawaited(NpsService.markFirstConnect());
       AppNotifier.success(S.current.msgConnected);
 
       // Apply routing mode (non-blocking — errors logged, not thrown)

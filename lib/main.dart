@@ -40,6 +40,7 @@ import 'core/env_config.dart';
 import 'shared/error_logger.dart';
 import 'shared/event_log.dart';
 import 'shared/telemetry.dart';
+import 'shared/feature_flags.dart';
 import 'core/profile/profile_service.dart';
 import 'core/profile/subscription_sync_service.dart';
 import 'modules/updater/update_checker.dart';
@@ -139,6 +140,9 @@ void main() async {
 
   // ── Anonymous telemetry (opt-in, default OFF) ──
   unawaited(Telemetry.init());
+
+  // ── Remote feature flags — fire-and-forget, safe defaults apply on offline ──
+  unawaited(FeatureFlags.I.init());
 
   // Restore persisted settings + auth state. Two slow disk reads run in
   // parallel:

@@ -25,6 +25,21 @@ class NodeTelemetry {
 
   static const _fpAlgorithmVersion = 1;
 
+  /// In-memory `name → fp` map, populated on [recordInventory] so later
+  /// URL-test / connect events can look up fingerprints by the string
+  /// identifier mihomo uses. Lives only for the current process lifetime —
+  /// the next subscription sync overwrites the entire map.
+  static final Map<String, String> _nameToFp = {};
+  static final Map<String, String> _nameToType = {};
+
+  /// Lookup a fingerprint by mihomo node name. Returns null when the node
+  /// wasn't part of the most-recent inventory (e.g. edge case during a
+  /// live profile swap). Callers should guard on null and skip telemetry.
+  static String? fpForName(String name) => _nameToFp[name];
+
+  /// Lookup the protocol type for a node name (hy2 / vless / trojan / …).
+  static String? typeForName(String name) => _nameToType[name];
+
   /// Compute the 16-hex fingerprint for a mihomo proxy entry.
   static String fingerprint(Map<String, dynamic> proxy) {
     String s(String key) {
@@ -91,7 +106,20 @@ class NodeTelemetry {
   }
 
   /// Record the post-sync node catalog. Sent once per subscription update.
+  /// Also rebuilds the in-process `name → fp` / `name → type` maps so
+  /// [recordUrlTest] / [recordConnect] callers can pass just the node name.
   static void recordInventory(List<Map<String, dynamic>> proxies) {
+    // Update in-memory maps even when telemetry is off — the UI layer
+    // (smart-node sort, auto-fallback) may want to know fp/type for
+    // reasons unrelated to uploading events.
+    _nameToFp.clear();
+    _nameToType.clear();
+    for (final p in proxies) {
+      final name = (p['name'] ?? '').toString();
+      if (name.isEmpty) continue;
+      _nameToFp[name] = fingerprint(p);
+      _nameToType[name] = (p['type'] ?? '').toString().toLowerCase();
+    }
     if (!Telemetry.isEnabled || proxies.isEmpty) return;
     final rows = proxies.map(inventoryRow).toList();
     final byType = <String, int>{};
@@ -129,6 +157,26 @@ class NodeTelemetry {
         'delay_ms': delayMs.clamp(0, 60000),
         'ok': ok,
       },
+    );
+  }
+
+  /// Convenience overload that looks up fp + type by mihomo node name.
+  /// Silently no-ops if the node isn't in the current inventory (which
+  /// means the subscription was never synced in this process — rare but
+  /// possible after a hot-reload in debug).
+  static void recordUrlTestByName({
+    required String name,
+    required int delayMs,
+  }) {
+    final fp = _nameToFp[name];
+    final type = _nameToType[name];
+    if (fp == null || type == null) return;
+    recordUrlTest(
+      fp: fp,
+      type: type,
+      delayMs: delayMs,
+      // mihomo returns 0 for unreachable; clamp to ok=false there.
+      ok: delayMs > 0 && delayMs < 10000,
     );
   }
 

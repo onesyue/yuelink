@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
+import 'package:yaml/yaml.dart';
 
 import '../../constants.dart';
 import '../../core/kernel/config_template.dart';
@@ -14,6 +15,7 @@ import '../../core/util/ulid.dart';
 import '../../domain/models/profile.dart';
 import '../../i18n/app_strings.dart';
 import '../../shared/formatters/subscription_parser.dart';
+import '../../shared/node_telemetry.dart';
 
 /// Manages subscription profiles: download, store, update, delete.
 ///
@@ -166,6 +168,7 @@ class ProfileRepository {
       await saveProfiles(profiles);
     });
 
+    _recordInventoryFromConfig(finalContent);
     return profile;
   }
 
@@ -202,6 +205,7 @@ class ProfileRepository {
       await saveProfiles(profiles);
     });
 
+    _recordInventoryFromConfig(finalContent);
     return profile;
   }
 
@@ -397,6 +401,33 @@ class ProfileRepository {
       debugPrint('[ProfileRepository] _nameFromUrl parse failed: $e');
     }
     return 'Subscription';
+  }
+
+  /// Extract the `proxies:` list from a config YAML and record a
+  /// `node_inventory` telemetry event (no raw server/port leaves the
+  /// device — [NodeTelemetry] reduces each proxy to `{fp, type, region}`).
+  /// Silently no-ops on parse failure so we never break sync.
+  void _recordInventoryFromConfig(String yaml) {
+    try {
+      final doc = loadYaml(yaml);
+      if (doc is! Map) return;
+      final rawProxies = doc['proxies'];
+      if (rawProxies is! List) return;
+      final proxies = <Map<String, dynamic>>[];
+      for (final p in rawProxies) {
+        if (p is Map) {
+          proxies.add(
+            Map<String, dynamic>.from(
+              p.map((k, v) => MapEntry(k.toString(), v)),
+            ),
+          );
+        }
+      }
+      if (proxies.isEmpty) return;
+      NodeTelemetry.recordInventory(proxies);
+    } catch (e) {
+      debugPrint('[ProfileRepository] inventory scan failed: $e');
+    }
   }
 }
 
