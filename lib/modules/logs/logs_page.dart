@@ -3,10 +3,10 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:path_provider/path_provider.dart';
 
 import '../../i18n/app_strings.dart';
 import '../../shared/app_notifier.dart';
+import '../../shared/log_export_service.dart';
 import '../../shared/widgets/empty_state.dart';
 import '../../domain/models/rule.dart';
 import '../../core/providers/core_provider.dart';
@@ -69,11 +69,21 @@ class _LogPageState extends ConsumerState<LogPage>
           '${now.minute.toString().padLeft(2, '0')}';
       final fileName = 'yuelink-logs-$datePart.txt';
 
-      final dir = await getTemporaryDirectory();
-      final file = File('${dir.path}/$fileName');
-      await file.writeAsString(buffer.toString());
-
-      AppNotifier.success('${S.current.exportLogsSuccess}: $fileName');
+      final result = await LogExportService.saveText(
+        fileName: fileName,
+        content: buffer.toString(),
+        dialogTitle: S.current.exportLogs,
+      );
+      if (result.cancelled) return;
+      if (result.saved) {
+        AppNotifier.success(
+          '${S.current.exportLogsSuccess}: ${result.path ?? fileName}',
+        );
+      } else {
+        AppNotifier.error(
+          '${S.current.exportLogsFailed}: ${result.error ?? ''}',
+        );
+      }
     } catch (e) {
       AppNotifier.error('${S.current.exportLogsFailed}: $e');
     }

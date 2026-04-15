@@ -8,6 +8,7 @@ import '../../core/kernel/core_manager.dart';
 import '../../core/platform/vpn_service.dart';
 import '../../i18n/app_strings.dart';
 import '../../shared/app_notifier.dart';
+import '../../shared/log_export_service.dart';
 import '../../theme.dart';
 import '../yue_auth/providers/yue_auth_providers.dart';
 import 'startup_report_page.dart';
@@ -70,17 +71,21 @@ class _ConnectionRepairPageState extends ConsumerState<ConnectionRepairPage> {
           '${now.minute.toString().padLeft(2, '0')}'
           '${now.second.toString().padLeft(2, '0')}';
       final fileName = 'yuelink-diagnostics-$stamp.txt';
-      Directory? outDir;
-      if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
-        try {
-          outDir = await getDownloadsDirectory();
-        } catch (_) {}
-      }
-      outDir ??= await getApplicationDocumentsDirectory();
-      final outFile = File('${outDir.path}/$fileName');
-      await outFile.writeAsString(buffer.toString());
-      if (mounted) {
-        AppNotifier.success('${S.current.exportLogsSuccess}: ${outFile.path}');
+      final result = await LogExportService.saveText(
+        fileName: fileName,
+        content: buffer.toString(),
+        dialogTitle: S.current.exportLogs,
+      );
+      if (!mounted) return;
+      if (result.cancelled) return;
+      if (result.saved) {
+        AppNotifier.success(
+          '${S.current.exportLogsSuccess}: ${result.path ?? fileName}',
+        );
+      } else {
+        AppNotifier.error(
+          '${S.current.exportLogsFailed}: ${result.error ?? ''}',
+        );
       }
     } catch (e) {
       if (mounted) AppNotifier.error('${S.current.exportLogsFailed}: $e');
