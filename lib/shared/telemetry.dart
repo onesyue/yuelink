@@ -52,6 +52,11 @@ class TelemetryEvents {
   static const logExport = 'log_export';
   static const diagnosticExport = 'diagnostic_export';
 
+  // Onboarding (persona split — feature-flagged via `onboarding_split`)
+  static const onboardingStart = 'onboarding_start';
+  static const onboardingAnswer = 'onboarding_answer';
+  static const onboardingFinish = 'onboarding_finish';
+
   // Errors
   static const crash = 'crash';
 }

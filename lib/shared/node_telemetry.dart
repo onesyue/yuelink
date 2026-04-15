@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
+import 'package:yaml/yaml.dart';
 
 import 'telemetry.dart';
 
@@ -140,6 +141,46 @@ class NodeTelemetry {
         'nodes': rows,
       },
     );
+  }
+
+  /// Warm the in-process `name → fp` / `name → type` maps at startup so
+  /// URL-test and smart-node features have lookups available before the
+  /// user triggers a subscription sync.
+  ///
+  /// Idempotent: if the inventory cache is already populated, returns
+  /// immediately. Otherwise invokes [loadActiveConfig] to fetch the active
+  /// profile YAML, parses its `proxies:` list, and populates the maps.
+  /// When [Telemetry] is opted in AND the cache was previously empty, also
+  /// emits a `node_inventory` event.
+  ///
+  /// Never throws and never blocks — wrap the whole call in `unawaited(...)`
+  /// at startup. On any failure we silently no-op.
+  static Future<void> ensureInventoryLoaded({
+    required Future<String?> Function() loadActiveConfig,
+  }) async {
+    try {
+      if (_nameToFp.isNotEmpty) return;
+      final yaml = await loadActiveConfig();
+      if (yaml == null || yaml.isEmpty) return;
+      final doc = loadYaml(yaml);
+      if (doc is! Map) return;
+      final rawProxies = doc['proxies'];
+      if (rawProxies is! List) return;
+      final proxies = <Map<String, dynamic>>[];
+      for (final p in rawProxies) {
+        if (p is Map) {
+          proxies.add(
+            Map<String, dynamic>.from(
+              p.map((k, v) => MapEntry(k.toString(), v)),
+            ),
+          );
+        }
+      }
+      if (proxies.isEmpty) return;
+      recordInventory(proxies);
+    } catch (_) {
+      // Swallow — warmup must never affect cold start.
+    }
   }
 
   static void recordUrlTest({

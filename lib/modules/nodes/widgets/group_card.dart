@@ -13,6 +13,7 @@ import '../protocol_color.dart';
 import '../providers/node_providers.dart';
 import '../providers/nodes_providers.dart';
 import '../favorites/node_favorites_providers.dart';
+import '../smart_score.dart';
 
 List<String> _sortedNodes(
     List<String> nodes, NodeSortMode mode, Map<String, int> delays) {
@@ -50,6 +51,8 @@ List<String> _sortedNodes(
         return db.compareTo(da);
       });
       return copy;
+    case NodeSortMode.smartRecommend:
+      return sortBySmartScore(nodes, delays);
   }
 }
 
@@ -138,6 +141,9 @@ class _GroupCardState extends ConsumerState<GroupCard>
     final delays = sortMode == NodeSortMode.defaultOrder
         ? const <String, int>{}
         : ref.watch(delayResultsProvider);
+    // Pipe-in a 推荐 header when the Smart Recommend mode is active.
+    // Matches the type-badge pill visual style (same _Badge widget).
+    final showSmartHeader = sortMode == NodeSortMode.smartRecommend;
     final sorted = _sortedNodes(group.all, sortMode, delays);
     final query = widget.searchQuery.trim().toLowerCase();
     final nodeList = query.isEmpty
@@ -196,6 +202,16 @@ class _GroupCardState extends ConsumerState<GroupCard>
                   const SizedBox(width: YLSpacing.sm),
                   // Type badge — stays near name
                   _Badge(label: groupTypeLabel(context, group.type), isDark: isDark),
+                  if (showSmartHeader) ...[
+                    const SizedBox(width: 4),
+                    _Badge(
+                      label: S.of(context).sortDefault == 'Default'
+                          ? 'Smart'
+                          : '推荐',
+                      isDark: isDark,
+                      accent: true,
+                    ),
+                  ],
                   const SizedBox(width: YLSpacing.sm),
                   // Count badge — far right before lightning
                   _Badge(

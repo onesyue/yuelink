@@ -16,7 +16,7 @@ import '../../../shared/node_telemetry.dart';
 // Node sort / view mode
 // ------------------------------------------------------------------
 
-enum NodeSortMode { defaultOrder, latencyAsc, latencyDesc, nameAsc }
+enum NodeSortMode { defaultOrder, latencyAsc, latencyDesc, nameAsc, smartRecommend }
 
 final nodeSortModeProvider =
     StateProvider<NodeSortMode>((ref) => NodeSortMode.defaultOrder);

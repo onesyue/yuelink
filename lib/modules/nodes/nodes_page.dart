@@ -9,6 +9,8 @@ import '../../core/providers/core_provider.dart';
 import '../../core/kernel/core_manager.dart';
 import '../../core/storage/settings_service.dart';
 import '../../shared/app_notifier.dart';
+import '../../shared/feature_flags.dart';
+import '../../shared/telemetry.dart';
 import '../../theme.dart';
 import '../../infrastructure/repositories/profile_repository.dart';
 import '../../modules/yue_auth/providers/yue_auth_providers.dart';
@@ -288,10 +290,29 @@ class _NodesPageState extends ConsumerState<NodesPage> {
                   // Sort chip — shows current mode, taps to cycle
                   GestureDetector(
                     onTap: () {
-                      final modes = NodeSortMode.values;
-                      final next =
-                          modes[(sortMode.index + 1) % modes.length];
+                      // Build the cycle list: always include defaults;
+                      // include smartRecommend only when the feature flag
+                      // is on. If the user is already on smartRecommend
+                      // (e.g. flag was just turned off), we still let them
+                      // cycle away naturally.
+                      final smartOn = FeatureFlags.I
+                          .boolFlag('smart_node_recommend');
+                      final modes = <NodeSortMode>[
+                        NodeSortMode.defaultOrder,
+                        NodeSortMode.latencyAsc,
+                        NodeSortMode.latencyDesc,
+                        NodeSortMode.nameAsc,
+                        if (smartOn) NodeSortMode.smartRecommend,
+                      ];
+                      final idx = modes.indexOf(sortMode);
+                      final next = modes[(idx + 1) % modes.length];
                       ref.read(nodeSortModeProvider.notifier).state = next;
+                      if (next == NodeSortMode.smartRecommend) {
+                        Telemetry.event(
+                          'sort_mode_change',
+                          props: {'mode': 'smart'},
+                        );
+                      }
                     },
                     child: Container(
                       padding: const EdgeInsets.symmetric(
@@ -431,6 +452,10 @@ String _sortModeLabel(S s, NodeSortMode mode) {
       return s.sortLatencyDesc;
     case NodeSortMode.nameAsc:
       return s.sortNameAsc;
+    case NodeSortMode.smartRecommend:
+      // i18n strings_g.dart is generated; keep the label local to avoid
+      // a regen step. English vs Chinese decided by sortDefault heuristic.
+      return s.sortDefault == 'Default' ? 'Smart' : '推荐';
   }
 }
 

@@ -8,6 +8,7 @@ import '../group_type_label.dart';
 import '../../../shared/app_notifier.dart';
 import '../../../theme.dart';
 import '../providers/nodes_providers.dart';
+import '../smart_score.dart';
 import 'node_tile.dart';
 
 /// Flat list view of a proxy group (non-expandable, always visible nodes).
@@ -62,6 +63,8 @@ class GroupListSection extends ConsumerWidget {
           return db.compareTo(da);
         });
         return copy;
+      case NodeSortMode.smartRecommend:
+        return sortBySmartScore(nodes, delays);
     }
   }
 
@@ -114,6 +117,16 @@ class GroupListSection extends ConsumerWidget {
                 ),
                 const SizedBox(width: YLSpacing.sm),
                 _Badge(label: groupTypeLabel(context, group.type), isDark: isDark),
+                if (sortMode == NodeSortMode.smartRecommend) ...[
+                  const SizedBox(width: 4),
+                  _Badge(
+                    label: S.of(context).sortDefault == 'Default'
+                        ? 'Smart'
+                        : '推荐',
+                    isDark: isDark,
+                    accent: true,
+                  ),
+                ],
                 const SizedBox(width: YLSpacing.sm),
                 _Badge(
                   label: isFiltered

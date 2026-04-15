@@ -22,6 +22,7 @@ import 'modules/nodes/nodes_page.dart';
 import 'modules/settings/settings_page.dart';
 import 'domain/models/proxy.dart';
 import 'modules/onboarding/onboarding_page.dart';
+import 'modules/onboarding/persona_prompt_page.dart';
 import 'modules/carrier/carrier_provider.dart';
 import 'modules/yue_auth/presentation/yue_auth_page.dart';
 import 'modules/yue_auth/providers/yue_auth_providers.dart';
@@ -40,6 +41,7 @@ import 'core/env_config.dart';
 import 'shared/error_logger.dart';
 import 'shared/event_log.dart';
 import 'shared/telemetry.dart';
+import 'shared/node_telemetry.dart';
 import 'shared/feature_flags.dart';
 import 'core/profile/profile_service.dart';
 import 'core/profile/subscription_sync_service.dart';
@@ -98,6 +100,11 @@ final initialTabIndexProvider = Provider<int>((ref) => 0);
 
 /// Pre-loaded onboarding flag (avoids async blank flash in _AuthGate).
 final hasSeenOnboardingProvider = StateProvider<bool>((ref) => false);
+
+/// Pre-loaded onboarding persona ('newcomer' | 'experienced' | 'unknown' | null).
+/// Null means the persona prompt hasn't been answered yet. Gated behind the
+/// `onboarding_split` feature flag in `_AuthGate`.
+final onboardingPersonaProvider = StateProvider<String?>((ref) => null);
 
 /// Pre-loaded built tabs (avoids SizedBox.shrink for previously visited tabs).
 final initialBuiltTabsProvider = Provider<List<int>>((ref) => [0]);
@@ -179,6 +186,7 @@ void main() async {
   final savedTabIndex = await SettingsService.getLastTabIndex();
   final savedBuiltTabs = await SettingsService.getBuiltTabs();
   final savedOnboarding = await SettingsService.getHasSeenOnboarding();
+  final savedPersona = await SettingsService.get<String>('onboardingPersona');
   final savedTileShowNodeInfo = await SettingsService.getTileShowNodeInfo();
 
   // Profile fetch is gated on token presence — only one secure-storage
@@ -233,6 +241,16 @@ void main() async {
     }
   }
 
+  // Warm the NodeTelemetry inventory cache from the active profile so
+  // URL-test / smart-node features have fp/type lookups available before
+  // the user triggers a subscription sync. Fire-and-forget — never blocks
+  // cold start, never throws.
+  if (savedProfileId != null && savedProfileId.isNotEmpty) {
+    unawaited(NodeTelemetry.ensureInventoryLoaded(
+      loadActiveConfig: () => ProfileService.loadConfig(savedProfileId),
+    ));
+  }
+
   // Initialize core manager
   CoreManager.instance;
 
@@ -261,6 +279,7 @@ void main() async {
       expandedGroupNamesProvider.overrideWith((ref) => <String>{}),
       initialTabIndexProvider.overrideWithValue(savedTabIndex),
       hasSeenOnboardingProvider.overrideWith((ref) => savedOnboarding),
+      onboardingPersonaProvider.overrideWith((ref) => savedPersona),
       initialBuiltTabsProvider.overrideWithValue(savedBuiltTabs),
       tileShowNodeInfoProvider.overrideWith((ref) => savedTileShowNodeInfo),
       // Pre-loaded auth state: eliminates blank screen from async AuthNotifier._init()
@@ -1356,8 +1375,26 @@ class _AuthGate extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final hasSeenOnboarding = ref.watch(hasSeenOnboardingProvider);
+    final persona = ref.watch(onboardingPersonaProvider);
 
-    // 1. Onboarding first — before login, on ALL platforms
+    // 1a. Persona prompt (feature-flagged, first-launch only).
+    //     Only shown when the `onboarding_split` flag is on AND the user
+    //     hasn't answered yet. Both personas fall through to the normal
+    //     OnboardingPage — we only record the answer here for later UX
+    //     tailoring (skip-tooltips etc.). When the flag is off this branch
+    //     is inert and the visual flow is unchanged.
+    if (!hasSeenOnboarding &&
+        persona == null &&
+        FeatureFlags.I.boolFlag('onboarding_split')) {
+      return PersonaPromptPage(
+        onChosen: (chosen) async {
+          await SettingsService.set('onboardingPersona', chosen);
+          ref.read(onboardingPersonaProvider.notifier).state = chosen;
+        },
+      );
+    }
+
+    // 1b. Onboarding first — before login, on ALL platforms
     if (!hasSeenOnboarding) {
       return OnboardingPage(
         onComplete: () {
