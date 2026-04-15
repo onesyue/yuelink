@@ -25,7 +25,6 @@ import 'widgets/quick_actions.dart';
 import '../mine/widgets/notices_card.dart';
 import 'widgets/emby_preview_row.dart';
 import 'widgets/stale_subscription_banner.dart';
-import 'widgets/scene_preset_bar.dart';
 import '../../shared/nps_service.dart';
 import '../../shared/widgets/nps_sheet.dart';
 
@@ -108,14 +107,6 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                               onToggle: () => _toggle(context, ref),
                             ),
                           ),
-                        ),
-
-                        const SizedBox(height: 12),
-
-                        // ── 1.2 场景预设（feature-flag 保护）──────────
-                        const _StaggeredIn(
-                          index: 1,
-                          child: RepaintBoundary(child: ScenePresetBar()),
                         ),
 
                         const SizedBox(height: 12),
