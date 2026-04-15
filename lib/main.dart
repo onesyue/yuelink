@@ -38,6 +38,7 @@ import 'core/platform/vpn_service.dart';
 import 'core/storage/auth_token_service.dart';
 import 'core/env_config.dart';
 import 'shared/error_logger.dart';
+import 'shared/event_log.dart';
 import 'shared/telemetry.dart';
 import 'core/profile/profile_service.dart';
 import 'core/profile/subscription_sync_service.dart';
@@ -999,13 +1000,55 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
   }
 
   @override
-  void onTrayMenuItemClick(MenuItem menuItem) async {
+  void onTrayMenuItemClick(MenuItem menuItem) {
     final key = menuItem.key ?? '';
+    // Write every tray click to event.log so if a user reports "Quit
+    // doesn't exit" we can confirm from the log file whether the
+    // callback actually fired (and with what key).
+    debugPrint('[Tray] menu click: key="$key" label="${menuItem.label}"');
+    try {
+      EventLog.write('[Tray] click key=$key label=${menuItem.label}');
+    } catch (_) {}
 
-    // Ignore disabled status labels
+    // ── HARD EXIT PATH ──
+    // Nothing is awaited here. exit(0) is a synchronous C-level process
+    // termination; the OS reclaims windows, tray icons, sockets, and
+    // proxy state automatically. Previous "bulletproof" attempts used
+    // a 3s Future.delayed safety net but still left yuelink.exe alive
+    // on Windows — something in the await chain was hanging even
+    // before the timer could fire. Going aggressive: best-effort
+    // fire-and-forget cleanup, then exit(0) on the same sync call.
+    if (key == 'quit' || menuItem.label == S.current.trayQuit) {
+      _isQuitting = true;
+      // Fire-and-forget cleanup — don't await, don't catch, don't care
+      // whether any of them complete before the OS kills us.
+      try {
+        ref.read(coreActionsProvider).stop();
+      } catch (_) {}
+      try {
+        CoreActions.clearSystemProxyStatic();
+      } catch (_) {}
+      try {
+        _singleInstanceServer?.close();
+      } catch (_) {}
+      try {
+        trayManager.destroy();
+      } catch (_) {}
+      // Synchronous process termination. exit() is a top-level dart:io
+      // call that maps directly to _exit on POSIX and ExitProcess on
+      // Windows — no Dart event loop, no Flutter engine, no platform
+      // channel. If this line is reached the process WILL die.
+      exit(0);
+    }
+
+    // All other tray items continue async.
+    _dispatchTrayMenuItemAsync(key);
+  }
+
+  Future<void> _dispatchTrayMenuItemAsync(String key) async {
+    // Ignore disabled status labels.
     if (key.startsWith('_')) return;
 
-    // Proxy group node switch
     if (key.startsWith('proxy_')) {
       final resolved = _resolveProxyKey(key);
       if (resolved != null) {
@@ -1016,12 +1059,9 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
       return;
     }
 
-    // Recent node switch
     if (key.startsWith('recent_')) {
       final idx = int.tryParse(key.substring(7));
-      if (idx != null) {
-        await _handleRecentNodeSwitch(idx);
-      }
+      if (idx != null) await _handleRecentNodeSwitch(idx);
       return;
     }
 
@@ -1036,8 +1076,6 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
         await _showMainWindow();
       case 'sync':
         await _handleSyncSubscription();
-      case 'quit':
-        await _handleQuit();
     }
   }
 
