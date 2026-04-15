@@ -18,6 +18,7 @@ import java.io.File
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.android.RenderMode
 import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.embedding.engine.FlutterEngineCache
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
@@ -27,6 +28,31 @@ class MainActivity : FlutterActivity() {
     // Surface mode destroys and recreates the EGL surface on pause/resume;
     // texture mode keeps the Flutter texture alive, giving a smooth transition.
     override fun getRenderMode(): RenderMode = RenderMode.texture
+
+    /**
+     * Reuse the shared FlutterEngine pre-warmed by MainApplication so the
+     * UI and the Quick Settings tile share a single engine (one CoreManager,
+     * no Go-core race). Returns null and falls back to the default engine
+     * creation only if the cache is empty for some reason.
+     */
+    override fun provideFlutterEngine(context: Context): FlutterEngine? {
+        return FlutterEngineCache.getInstance().get(MainApplication.SHARED_ENGINE_ID)
+            ?: super.provideFlutterEngine(context)
+    }
+
+    /**
+     * Tell FlutterActivity which cached engine ID to attach to. Without
+     * this, FlutterActivity ignores provideFlutterEngine in some builds
+     * because it tracks engines by ID.
+     */
+    override fun getCachedEngineId(): String? = MainApplication.SHARED_ENGINE_ID
+
+    /**
+     * The shared engine is owned by the Application — must NOT be destroyed
+     * when the activity finishes, otherwise the tile loses its target and
+     * subsequent toggles fall back to launching the activity again.
+     */
+    override fun shouldDestroyEngineWithHost(): Boolean = false
 
     companion object {
         private const val VPN_CHANNEL  = "com.yueto.yuelink/vpn"
@@ -186,6 +212,23 @@ class MainActivity : FlutterActivity() {
                     val isActive = call.argument<Boolean>("active") ?: false
                     updateTilePrefs(isActive)
                     result.success(true)
+                }
+                "consumePendingToggle" -> {
+                    // Atomic getAndClear of the pending_toggle flag set by
+                    // ProxyTileService when it failed to invoke into a
+                    // not-yet-ready engine.
+                    val prefs = getSharedPreferences(
+                        ProxyTileService.PREFS_NAME, MODE_PRIVATE
+                    )
+                    val had = prefs.getBoolean(
+                        ProxyTileService.KEY_PENDING_TOGGLE, false
+                    )
+                    if (had) {
+                        prefs.edit()
+                            .putBoolean(ProxyTileService.KEY_PENDING_TOGGLE, false)
+                            .apply()
+                    }
+                    result.success(had)
                 }
                 else -> result.notImplemented()
             }

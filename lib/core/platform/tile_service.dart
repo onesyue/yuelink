@@ -39,4 +39,23 @@ class TileService {
       debugPrint('[TileService] updateTileState error: $e');
     }
   }
+
+  /// Drain any toggle queued by ProxyTileService while the Flutter engine
+  /// was still booting (cold-start tile click). Returns true if there was
+  /// a pending toggle that was consumed; the caller should then trigger
+  /// the toggle action.
+  ///
+  /// Backed by the same SharedPreferences (`yuelink_tile_prefs`) the
+  /// native tile service writes to — atomic flip via getAndClear so we
+  /// can't double-fire if init runs twice.
+  static Future<bool> consumePendingToggle() async {
+    if (!Platform.isAndroid) return false;
+    try {
+      final result = await _channel.invokeMethod<bool>('consumePendingToggle');
+      return result == true;
+    } catch (e) {
+      debugPrint('[TileService] consumePendingToggle error: $e');
+      return false;
+    }
+  }
 }

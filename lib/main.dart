@@ -419,30 +419,39 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
   /// and sets the callback to toggle VPN via the existing core lifecycle.
   void _setupTileService() {
     TileService.init();
-    TileService.onToggleRequested = () async {
-      final status = ref.read(coreStatusProvider);
-      if (status == CoreStatus.starting || status == CoreStatus.stopping) {
-        debugPrint('[App] Tile toggle ignored — core is $status');
-        return;
-      }
-      debugPrint('[App] Tile toggle — current status: $status');
-      final actions = ref.read(coreActionsProvider);
-      if (status == CoreStatus.running) {
-        await actions.stop();
-      } else {
-        // Need a config to start — load the selected profile
-        final configYaml = await _loadSelectedProfileConfig();
-        if (configYaml != null) {
-          await actions.start(configYaml);
-        } else {
-          debugPrint('[App] Tile toggle: no profile selected, cannot start');
-        }
-      }
-    };
+    TileService.onToggleRequested = _performTileToggle;
     // Sync initial tile state — the tile may have been added while app was
     // closed, and its SharedPreferences state could be stale.
     final currentStatus = ref.read(coreStatusProvider);
     TileService.updateState(active: currentStatus == CoreStatus.running);
+    // Drain any toggle queued by the native ProxyTileService while the
+    // engine was still booting (the headless cold-start path).
+    Future.microtask(() async {
+      if (await TileService.consumePendingToggle()) {
+        debugPrint('[App] Draining queued tile toggle from cold-start');
+        await _performTileToggle();
+      }
+    });
+  }
+
+  Future<void> _performTileToggle() async {
+    final status = ref.read(coreStatusProvider);
+    if (status == CoreStatus.starting || status == CoreStatus.stopping) {
+      debugPrint('[App] Tile toggle ignored — core is $status');
+      return;
+    }
+    debugPrint('[App] Tile toggle — current status: $status');
+    final actions = ref.read(coreActionsProvider);
+    if (status == CoreStatus.running) {
+      await actions.stop();
+    } else {
+      final configYaml = await _loadSelectedProfileConfig();
+      if (configYaml != null) {
+        await actions.start(configYaml);
+      } else {
+        debugPrint('[App] Tile toggle: no profile selected, cannot start');
+      }
+    }
   }
 
   /// Load the config YAML from the currently selected profile.
