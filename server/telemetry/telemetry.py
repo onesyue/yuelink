@@ -342,12 +342,11 @@ async def ingest(request: Request) -> JSONResponse:
             json.dumps(props, ensure_ascii=False) if props else None,
         ))
 
-        # Fan out node_* into flat rows.
+        # Fan out node_* into flat rows. Pass the RAW event `e` (not merged
+        # with the stringified `props`) so numeric/bool fields keep their
+        # original types — the extractor casts them explicitly.
         if name.startswith("node_"):
-            node_rows.extend(_extract_node_rows(name, {**e, "client_id": e.get("client_id"),
-                                                        "platform": e.get("platform"),
-                                                        "version": e.get("version"),
-                                                        "ts": ts, **props}, today))
+            node_rows.extend(_extract_node_rows(name, e, today))
 
     if not event_rows:
         return JSONResponse({"ok": True, "count": 0})
@@ -367,6 +366,9 @@ async def ingest(request: Request) -> JSONResponse:
                 node_rows,
             )
             # Upsert node_identity — last_seen keeps moving forward.
+            # Region/protocol only update when the incoming row has a non-null
+            # value; otherwise a later urltest/connect row (which carries no
+            # region) would clobber the good data from an earlier inventory row.
             for r in node_rows:
                 fp = r[6]
                 typ = r[7]
@@ -377,7 +379,10 @@ async def ingest(request: Request) -> JSONResponse:
                 c.execute(
                     "INSERT INTO node_identity(current_fp, protocol, region, "
                     "first_seen, last_seen) VALUES (?, ?, ?, ?, ?) "
-                    "ON CONFLICT(current_fp) DO UPDATE SET last_seen=excluded.last_seen",
+                    "ON CONFLICT(current_fp) DO UPDATE SET "
+                    "  last_seen=excluded.last_seen, "
+                    "  protocol=COALESCE(excluded.protocol, node_identity.protocol), "
+                    "  region=COALESCE(excluded.region, node_identity.region)",
                     (fp, typ, region, now_ts, now_ts),
                 )
 
@@ -655,14 +660,23 @@ def stats_nodes(
     """
     start, end = _day_window(days)
     with db() as c:
+        # Pull region from node_identity — urltest/connect rows don't carry
+        # it, only inventory_item rows do, and identity upsert propagates
+        # the best-known value via COALESCE.
         urltest = c.execute(
-            "SELECT fp, type, region, COUNT(*) AS tests, "
-            "SUM(ok) AS ok_count, "
-            "COUNT(DISTINCT client_id) AS users, "
-            "AVG(delay_ms) AS avg_delay, "
-            "MAX(delay_ms) AS max_delay "
-            "FROM node_events WHERE event='urltest' AND day BETWEEN ? AND ? "
-            "AND fp IS NOT NULL GROUP BY fp, type, region",
+            "SELECT ne.fp AS fp, "
+            "       COALESCE(ni.protocol, ne.type) AS type, "
+            "       ni.region AS region, "
+            "       COUNT(*) AS tests, "
+            "       SUM(ne.ok) AS ok_count, "
+            "       COUNT(DISTINCT ne.client_id) AS users, "
+            "       AVG(ne.delay_ms) AS avg_delay, "
+            "       MAX(ne.delay_ms) AS max_delay "
+            "FROM node_events ne "
+            "LEFT JOIN node_identity ni ON ni.current_fp = ne.fp "
+            "WHERE ne.event='urltest' AND ne.day BETWEEN ? AND ? "
+            "AND ne.fp IS NOT NULL "
+            "GROUP BY ne.fp",
             (start, end),
         ).fetchall()
         connect = c.execute(
