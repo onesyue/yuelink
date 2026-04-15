@@ -209,30 +209,30 @@ class _ProfileContent extends ConsumerWidget {
                   ],
                 ),
               ),
-              // Devices online — show whenever we have any device data,
-              // even if deviceLimit is missing (XBoard sometimes omits it).
-              if (profile.onlineCount != null ||
-                  profile.deviceLimit != null) ...[
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Text(s.mineDevices,
-                          style: YLText.caption
-                              .copyWith(color: YLColors.zinc500)),
-                      const SizedBox(height: 2),
-                      Text(
-                        _deviceText(profile),
-                        style: YLText.label.copyWith(
-                          fontWeight: FontWeight.w600,
-                          color: _deviceColor(profile, isDark),
-                          fontFeatures: YLText.tabularNums,
-                        ),
+              // Devices online — always show for authenticated users.
+              // XBoard's getSubscribe response sometimes omits both
+              // online_count and device_limit; we still show the row with
+              // a sensible "1" fallback (this device is online), instead
+              // of letting the row vanish.
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Text(s.mineDevices,
+                        style: YLText.caption
+                            .copyWith(color: YLColors.zinc500)),
+                    const SizedBox(height: 2),
+                    Text(
+                      _deviceText(profile),
+                      style: YLText.label.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: _deviceColor(profile, isDark),
+                        fontFeatures: YLText.tabularNums,
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
               // Expiry
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
@@ -298,14 +298,16 @@ class _ProfileContent extends ConsumerWidget {
   }
 
   String _deviceText(UserProfile p) {
-    final online = p.onlineCount ?? 0;
+    // When XBoard doesn't return online_count, assume at least this
+    // device (1). This is always accurate — we ARE one online device.
+    final online = p.onlineCount ?? 1;
     final limit = p.deviceLimit;
     if (limit == null || limit <= 0) return '$online';
     return '$online / $limit';
   }
 
   Color _deviceColor(UserProfile p, bool isDark) {
-    final online = p.onlineCount ?? 0;
+    final online = p.onlineCount ?? 1;
     final limit = p.deviceLimit;
     if (limit != null && limit > 0 && online >= limit) return Colors.orange;
     return isDark ? Colors.white : YLColors.zinc900;

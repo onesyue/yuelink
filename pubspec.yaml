@@ -83,6 +83,7 @@ flutter:
     - assets/tray_icon_macos.png
     - assets/tray_icon_win.png
     - assets/app_icon.ico
+    - assets/app_icon_tray.ico
     - assets/geodata/GeoIP.dat
     - assets/geodata/GeoSite.dat
     - assets/geodata/country.mmdb

@@ -118,14 +118,22 @@ class UserProfile {
     );
   }
 
-  /// XBoard returns numeric fields as int, double, or bool (tinyint(1) on
-  /// the Laravel side). All store/profile models go through this helper to
-  /// avoid the `type 'bool' is not a subtype of int?` runtime crash.
+  /// XBoard returns numeric fields as int, double, bool (tinyint(1) on
+  /// the Laravel side), or sometimes JSON strings ("5"). All store/profile
+  /// models go through this helper to avoid the
+  /// `type 'bool' is not a subtype of int?` runtime crash and to keep the
+  /// device row from silently disappearing when device_limit comes back as
+  /// a string.
   static int? _toInt(dynamic v) {
     if (v == null) return null;
     if (v is int) return v;
     if (v is double) return v.toInt();
     if (v is bool) return v ? 1 : 0;
+    if (v is String) {
+      final t = v.trim();
+      if (t.isEmpty) return null;
+      return int.tryParse(t) ?? double.tryParse(t)?.toInt();
+    }
     return null;
   }
 
