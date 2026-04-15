@@ -10,6 +10,12 @@ class AccountOverview {
   final DateTime? expireAt;
   final int? daysRemaining;
   final String renewalUrl;
+  // Device-online counters, sourced from v2_user.online_count / device_limit
+  // via the Checkin API (applies a 10-min freshness filter matching the
+  // yuebot DAO and XBoard plugin).
+  final int? onlineCount;
+  final int? deviceLimit;
+  final DateTime? lastOnlineAt;
 
   const AccountOverview({
     required this.email,
@@ -20,6 +26,9 @@ class AccountOverview {
     this.expireAt,
     this.daysRemaining,
     required this.renewalUrl,
+    this.onlineCount,
+    this.deviceLimit,
+    this.lastOnlineAt,
   });
 
   factory AccountOverview.fromJson(Map<String, dynamic> json) {
@@ -28,6 +37,14 @@ class AccountOverview {
     if (rawExpire != null && rawExpire is String && rawExpire.isNotEmpty) {
       try {
         expireAt = DateTime.parse(rawExpire).toLocal();
+      } catch (_) {}
+    }
+
+    DateTime? lastOnlineAt;
+    final rawLastOnline = json['last_online_at'];
+    if (rawLastOnline is String && rawLastOnline.isNotEmpty) {
+      try {
+        lastOnlineAt = DateTime.parse(rawLastOnline).toLocal();
       } catch (_) {}
     }
 
@@ -45,6 +62,9 @@ class AccountOverview {
       expireAt: expireAt,
       daysRemaining: _toInt(json['days_remaining']),
       renewalUrl: json['renewal_url'] as String? ?? 'https://yuetong.app/#/plan',
+      onlineCount: _toInt(json['online_count']),
+      deviceLimit: _toInt(json['device_limit']),
+      lastOnlineAt: lastOnlineAt,
     );
   }
 

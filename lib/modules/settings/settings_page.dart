@@ -29,6 +29,7 @@ import '../updater/update_checker.dart';
 import '../../shared/rich_content.dart';
 import '../../shared/widgets/setting_icon.dart';
 import '../../theme.dart';
+import '../../domain/account/account_overview.dart';
 import '../mine/providers/account_providers.dart';
 import '../surge_modules/pages/modules_page.dart';
 import '../surge_modules/providers/module_provider.dart';
@@ -1085,10 +1086,48 @@ class _MineTrafficSection extends ConsumerWidget {
                 ),
               ],
             ),
+            // Device-online row — only shown when we have live data from
+            // the Checkin API. overview.onlineCount falls back to null
+            // before the first successful fetch, in which case we hide
+            // the row to avoid stale "0 / —" flashing.
+            if (overview != null &&
+                (overview.onlineCount != null ||
+                    overview.deviceLimit != null)) ...[
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _deviceRowText(overview),
+                      style: YLText.caption.copyWith(
+                        color: _deviceRowColor(overview),
+                        fontFeatures: YLText.tabularNums,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
       ),
     );
+  }
+
+  String _deviceRowText(AccountOverview o) {
+    final online = o.onlineCount ?? 0;
+    final limit = o.deviceLimit ?? 0;
+    final label = S.current.mineDevices;
+    if (limit > 0) return '$label $online / $limit';
+    return '$label $online';
+  }
+
+  Color _deviceRowColor(AccountOverview o) {
+    final online = o.onlineCount ?? 0;
+    final limit = o.deviceLimit ?? 0;
+    if (limit > 0 && online >= limit) return Colors.orange;
+    return YLColors.zinc500;
   }
 }
 
