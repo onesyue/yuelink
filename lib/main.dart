@@ -179,6 +179,8 @@ void main() async {
   ]);
   final savedToken = earlyResults[1] as String?;
 
+  // One-time accent reset (v1.0.16): force Blue-500 default for existing installs
+  await SettingsService.migrateAccentToBlueIfNeeded();
   final savedAccentColor = await SettingsService.getAccentColor();
   final savedSubSyncInterval = await SettingsService.getSubSyncInterval();
   final savedTheme = await SettingsService.getThemeMode();

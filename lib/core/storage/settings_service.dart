@@ -145,6 +145,16 @@ class SettingsService {
     await set('accentColor', hex);
   }
 
+  /// One-time migration (v1.0.16): force-reset persisted accent to Blue-500.
+  /// Runs once per install — gated by `accentResetV1016` flag. After this
+  /// fires, any subsequent user color choice persists normally.
+  static Future<void> migrateAccentToBlueIfNeeded() async {
+    final done = (await get<bool>('accentResetV1016')) ?? false;
+    if (done) return;
+    await setAccentColor(_defaultAccentHex);
+    await set('accentResetV1016', true);
+  }
+
   // ── Subscription sync interval ──────────────────────────────────────────
 
   /// Interval in hours: 0 = disabled, 1, 6, 12, 24, 48.
