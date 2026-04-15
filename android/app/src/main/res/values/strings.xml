@@ -5,4 +5,6 @@
     <string name="vpn_blacklist">Bypass selected apps</string>
     <string name="tile_connected">Connected</string>
     <string name="tile_disconnected">Disconnected</string>
+    <string name="tile_connecting">Connecting…</string>
+    <string name="tile_disconnecting">Disconnecting…</string>
 </resources>

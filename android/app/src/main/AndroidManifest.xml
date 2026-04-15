@@ -39,6 +39,11 @@
                 <data android:scheme="clash"/>
                 <data android:scheme="mihomo"/>
             </intent-filter>
+            <!-- Long-press on the Quick Settings tile routes here. -->
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE_PREFERENCES"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+            </intent-filter>
         </activity>
 
         <!-- VPN Service -->

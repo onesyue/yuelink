@@ -105,21 +105,41 @@ class MainActivity : FlutterActivity() {
         handleTileToggleIntent(intent)
     }
 
+    /** True when the tile long-press arrived before the Flutter channel was ready. */
+    private var pendingOpenPreferences = false
+
     /**
-     * Check if the intent is a tile toggle request and forward to Flutter.
-     * If Flutter engine is not ready yet, set a flag to deliver on configure.
+     * Forward tile-driven intents to Flutter. Two actions:
+     *   - ACTION_TOGGLE (from the tile service's activity-bootstrap fallback
+     *     path) → sent as "toggle"
+     *   - ACTION_QS_TILE_PREFERENCES (system-driven when the user long-presses
+     *     the tile in the Quick Settings panel) → sent as "openPreferences"
+     *
+     * If the tile channel isn't set up yet (Flutter engine hasn't finished
+     * initializing), the request is queued and delivered from
+     * configureFlutterEngine.
      */
     private fun handleTileToggleIntent(intent: Intent?) {
-        if (intent?.action != ProxyTileService.ACTION_TOGGLE) return
-
-        val channel = tileChannel
-        if (channel != null) {
-            channel.invokeMethod("toggle", null)
-        } else {
-            // Flutter engine not configured yet — deliver when ready
-            pendingTileToggle = true
+        val action = intent?.action ?: return
+        when (action) {
+            ProxyTileService.ACTION_TOGGLE -> {
+                val channel = tileChannel
+                if (channel != null) {
+                    channel.invokeMethod("toggle", null)
+                } else {
+                    pendingTileToggle = true
+                }
+            }
+            "android.service.quicksettings.action.QS_TILE_PREFERENCES" -> {
+                val channel = tileChannel
+                if (channel != null) {
+                    channel.invokeMethod("openPreferences", null)
+                } else {
+                    pendingOpenPreferences = true
+                }
+            }
+            else -> return
         }
-        // Clear the action so it doesn't re-trigger on config changes
         intent.action = null
     }
 
@@ -210,7 +230,9 @@ class MainActivity : FlutterActivity() {
             when (call.method) {
                 "updateTileState" -> {
                     val isActive = call.argument<Boolean>("active") ?: false
-                    updateTilePrefs(isActive)
+                    val transition = call.argument<String?>("transition")
+                    val subtitle = call.argument<String?>("subtitle")
+                    updateTilePrefs(isActive, transition, subtitle)
                     result.success(true)
                 }
                 "consumePendingToggle" -> {
@@ -240,6 +262,10 @@ class MainActivity : FlutterActivity() {
             pendingTileToggle = false
             tc.invokeMethod("toggle", null)
         }
+        if (pendingOpenPreferences) {
+            pendingOpenPreferences = false
+            tc.invokeMethod("openPreferences", null)
+        }
 
         // Also check the initial launch intent (cold start from tile)
         handleTileToggleIntent(intent)
@@ -248,14 +274,29 @@ class MainActivity : FlutterActivity() {
     // ── Tile helpers ─────────────────────────────────────────────────────────
 
     /**
-     * Write VPN active state to SharedPreferences and request tile UI refresh.
-     * Called from Flutter via the tile MethodChannel when core status changes.
+     * Write VPN active state + optional transition ("starting"/"stopping") +
+     * optional subtitle override into SharedPreferences and request tile UI
+     * refresh. Called from Flutter via the tile MethodChannel whenever the
+     * core status changes or the exit node is resolved.
      */
-    private fun updateTilePrefs(active: Boolean) {
-        getSharedPreferences(ProxyTileService.PREFS_NAME, MODE_PRIVATE)
-            .edit()
-            .putBoolean(ProxyTileService.KEY_VPN_ACTIVE, active)
-            .apply()
+    private fun updateTilePrefs(
+        active: Boolean,
+        transition: String? = null,
+        subtitle: String? = null,
+    ) {
+        val edit = getSharedPreferences(ProxyTileService.PREFS_NAME, MODE_PRIVATE).edit()
+        edit.putBoolean(ProxyTileService.KEY_VPN_ACTIVE, active)
+        if (transition.isNullOrEmpty()) {
+            edit.remove(ProxyTileService.KEY_IN_TRANSITION)
+        } else {
+            edit.putString(ProxyTileService.KEY_IN_TRANSITION, transition)
+        }
+        if (subtitle.isNullOrEmpty()) {
+            edit.remove(ProxyTileService.KEY_SUBTITLE)
+        } else {
+            edit.putString(ProxyTileService.KEY_SUBTITLE, subtitle)
+        }
+        edit.apply()
 
         // Request the system to refresh the tile — triggers onStartListening()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {

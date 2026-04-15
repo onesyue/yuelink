@@ -299,6 +299,21 @@ class SettingsService {
     await set('autoConnect', value);
   }
 
+  // ── Android Quick Settings tile — show node/region in subtitle ───────────
+  //
+  // When on, the tile subtitle reads "🇭🇰 香港" instead of "已连接". Default
+  // is off because the Quick Settings panel is visible to anyone who pulls
+  // down the notification shade, and the user may not want the node
+  // visible there.
+
+  static Future<bool> getTileShowNodeInfo() async {
+    return (await get<bool>('tileShowNodeInfo')) ?? false;
+  }
+
+  static Future<void> setTileShowNodeInfo(bool value) async {
+    await set('tileShowNodeInfo', value);
+  }
+
   // ── System proxy on connect (macOS / Windows) ────────────────────────────
 
   static Future<bool> getSystemProxyOnConnect() async {

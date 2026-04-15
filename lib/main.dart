@@ -98,6 +98,16 @@ final hasSeenOnboardingProvider = StateProvider<bool>((ref) => false);
 /// Pre-loaded built tabs (avoids SizedBox.shrink for previously visited tabs).
 final initialBuiltTabsProvider = Provider<List<int>>((ref) => [0]);
 
+/// One-shot navigation request from outside the widget tree (e.g. the
+/// Android Quick Settings tile long-press). MainShell listens and swaps
+/// to the requested tab, then resets to null.
+final tileNavRequestProvider = StateProvider<int?>((ref) => null);
+
+/// Android-only: include current exit node ("🇭🇰 香港") in the tile
+/// subtitle when connected. Default off — the Quick Settings panel is
+/// visible to anyone who pulls down the shade.
+final tileShowNodeInfoProvider = StateProvider<bool>((ref) => false);
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -146,6 +156,7 @@ void main() async {
   final savedTabIndex = await SettingsService.getLastTabIndex();
   final savedBuiltTabs = await SettingsService.getBuiltTabs();
   final savedOnboarding = await SettingsService.getHasSeenOnboarding();
+  final savedTileShowNodeInfo = await SettingsService.getTileShowNodeInfo();
 
   // Profile fetch is gated on token presence — only one secure-storage
   // read here, and only if we actually need it.
@@ -228,6 +239,7 @@ void main() async {
       initialTabIndexProvider.overrideWithValue(savedTabIndex),
       hasSeenOnboardingProvider.overrideWith((ref) => savedOnboarding),
       initialBuiltTabsProvider.overrideWithValue(savedBuiltTabs),
+      tileShowNodeInfoProvider.overrideWith((ref) => savedTileShowNodeInfo),
       // Pre-loaded auth state: eliminates blank screen from async AuthNotifier._init()
       preloadedAuthStateProvider.overrideWithValue(
         (savedToken != null && savedToken.isNotEmpty)
@@ -267,6 +279,8 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
   ProviderSubscription? _profilesSub;
   ProviderSubscription? _hotkeySub;
   ProviderSubscription? _carrierSub;
+  ProviderSubscription? _exitIpSub;
+  ProviderSubscription? _tileNodeInfoSub;
 
   /// Guard to prevent onWindowClose from interfering during programmatic quit.
   bool _isQuitting = false;
@@ -349,9 +363,10 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
         status: next,
         groups: ref.read(proxyGroupsProvider),
       );
-      // Update Android Quick Settings tile state
+      // Update Android Quick Settings tile state (includes transition
+      // flag for "连接中..." / "断开中..." intermediate UX).
       if (Platform.isAndroid) {
-        TileService.updateState(active: next == CoreStatus.running);
+        _pushTileState();
       }
       if (prev == CoreStatus.running && next == CoreStatus.stopped) {
         if (!ref.read(userStoppedProvider) &&
@@ -389,6 +404,18 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
         ref.read(carrierProvider.notifier).stopPolling();
       }
     });
+
+    // Android tile subtitle refresh on exit-IP resolution and on the
+    // show-node-info toggle. Both are cheap and idempotent.
+    if (Platform.isAndroid) {
+      _exitIpSub = ref.listenManual(exitIpInfoProvider, (_, __) {
+        _pushTileState();
+      });
+      _tileNodeInfoSub =
+          ref.listenManual(tileShowNodeInfoProvider, (_, __) {
+        _pushTileState();
+      });
+    }
   }
 
   /// Register VPN revocation listener (Android only).
@@ -420,10 +447,13 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
   void _setupTileService() {
     TileService.init();
     TileService.onToggleRequested = _performTileToggle;
-    // Sync initial tile state — the tile may have been added while app was
-    // closed, and its SharedPreferences state could be stale.
-    final currentStatus = ref.read(coreStatusProvider);
-    TileService.updateState(active: currentStatus == CoreStatus.running);
+    TileService.onOpenPreferences = () {
+      // Route long-press (QS_TILE_PREFERENCES) to the Nodes tab.
+      ref.read(tileNavRequestProvider.notifier).state = MainShell.tabProxies;
+    };
+    // Push the current state immediately — the tile may have been added
+    // while the app was closed and its SharedPreferences may be stale.
+    _pushTileState();
     // Drain any toggle queued by the native ProxyTileService while the
     // engine was still booting (the headless cold-start path).
     Future.microtask(() async {
@@ -432,6 +462,36 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
         await _performTileToggle();
       }
     });
+  }
+
+  /// Compute and push the full tile state to native — active flag,
+  /// transition (starting/stopping), and optional "🇭🇰 香港" subtitle.
+  /// Called on any of: core status change, exit-IP resolution, or the
+  /// showNodeInTile toggle.
+  void _pushTileState() {
+    if (!Platform.isAndroid) return;
+    final status = ref.read(coreStatusProvider);
+    final active = status == CoreStatus.running;
+    final transition = switch (status) {
+      CoreStatus.starting => 'starting',
+      CoreStatus.stopping => 'stopping',
+      _ => null,
+    };
+    String? subtitle;
+    if (active &&
+        transition == null &&
+        ref.read(tileShowNodeInfoProvider)) {
+      final info = ref.read(exitIpInfoProvider).valueOrNull;
+      if (info != null && info.flagEmoji.isNotEmpty) {
+        final loc = info.locationLine;
+        subtitle = loc.isNotEmpty ? '${info.flagEmoji} $loc' : info.flagEmoji;
+      }
+    }
+    TileService.updateState(
+      active: active,
+      transition: transition,
+      subtitle: subtitle,
+    );
   }
 
   Future<void> _performTileToggle() async {
@@ -483,7 +543,10 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
     _profilesSub?.close();
     _hotkeySub?.close();
     _carrierSub?.close();
+    _exitIpSub?.close();
+    _tileNodeInfoSub?.close();
     TileService.onToggleRequested = null;
+    TileService.onOpenPreferences = null;
     WidgetsBinding.instance.removeObserver(this);
     _appLinksSub?.cancel();
     if (_trayInitialized) trayManager.removeListener(this);
@@ -1258,6 +1321,7 @@ class MainShell extends ConsumerStatefulWidget {
 class _MainShellState extends ConsumerState<MainShell> {
   late int _currentIndex;
   late final Map<int, bool> _builtTabs;
+  ProviderSubscription? _tileNavSub;
 
   void switchTab(int index) {
     setState(() {
@@ -1289,6 +1353,23 @@ class _MainShellState extends ConsumerState<MainShell> {
         if (i >= 0 && i < _pages.length) i: true,
     };
     _builtTabs[_currentIndex] = true;
+
+    // Listen for one-shot navigation requests from outside the widget
+    // tree (currently: Android tile long-press). Reset to null after
+    // handling so a re-set to the same value still fires.
+    _tileNavSub = ref.listenManual<int?>(tileNavRequestProvider, (_, next) {
+      if (next == null) return;
+      if (next >= 0 && next < _pages.length) switchTab(next);
+      // Use microtask so the notifier isn't mutated during the notification.
+      Future.microtask(
+          () => ref.read(tileNavRequestProvider.notifier).state = null);
+    });
+  }
+
+  @override
+  void dispose() {
+    _tileNavSub?.close();
+    super.dispose();
   }
 
   @override

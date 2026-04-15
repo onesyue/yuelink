@@ -15,6 +15,7 @@ import '../../../core/storage/settings_service.dart';
 import '../../../core/env_config.dart';
 import '../../../i18n/app_strings.dart';
 import '../../../core/providers/core_provider.dart';
+import '../../../main.dart' show tileShowNodeInfoProvider;
 import '../../updater/update_checker.dart';
 import '../providers/split_tunnel_provider.dart';
 import '../../../shared/app_notifier.dart';
@@ -456,6 +457,28 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
                         },
                       ),
                     ),
+                    if (Platform.isAndroid) ...[
+                      Divider(height: 1, thickness: 0.5, color: dividerColor),
+                      // Android Quick Settings tile: show current exit
+                      // node in the tile subtitle.
+                      YLSettingsRow(
+                        title: isEn
+                            ? 'Show node in Quick Settings tile'
+                            : '磁贴显示当前节点',
+                        description: isEn
+                            ? 'Shows the exit region in the tile — visible to anyone who pulls down the shade.'
+                            : '磁贴副标题显示当前节点出口地区，拉下通知栏的人都会看到',
+                        trailing: CupertinoSwitch(
+                          value: ref.watch(tileShowNodeInfoProvider),
+                          activeTrackColor: YLColors.connected,
+                          onChanged: (v) async {
+                            ref.read(tileShowNodeInfoProvider.notifier).state =
+                                v;
+                            await SettingsService.setTileShowNodeInfo(v);
+                          },
+                        ),
+                      ),
+                    ],
                     Divider(height: 1, thickness: 0.5, color: dividerColor),
                     // Subscription sync interval
                     YLInfoRow(
