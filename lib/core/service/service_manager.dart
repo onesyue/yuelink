@@ -567,7 +567,14 @@ exit `$code
 "@
 
 try {
-  $process = Start-Process PowerShell -Verb RunAs -Wait -PassThru -ArgumentList @(
+  # -WindowStyle Hidden: keep the elevated PowerShell invisible. Without it,
+  # on Windows 11 22H2+ the new console window gets captured by Windows
+  # Terminal, which then tries to load its own settings.json — and a user
+  # with a broken `defaultProfile` GUID sees a "加载用户设置时遇到错误"
+  # dialog the moment they approve UAC. Hiding the window sidesteps
+  # Windows Terminal entirely; the elevated process still runs and the
+  # Start-Transcript below still captures its output to our temp file.
+  $process = Start-Process PowerShell -Verb RunAs -Wait -PassThru -WindowStyle Hidden -ArgumentList @(
     '-NoProfile',
     '-ExecutionPolicy', 'Bypass',
     '-Command', $inner
