@@ -10,6 +10,16 @@ class AppDelegate: FlutterAppDelegate {
         return false
     }
 
+    override func applicationWillTerminate(_ notification: Notification) {
+        // Native safety net for paths that don't reach the Dart quit handler:
+        // macOS shutdown/logout, force-quit via Activity Monitor, Cmd+Q when
+        // the Dart side has already torn down, and `kill` outside SIGTERM
+        // reach. shell() is synchronous (waitUntilExit), so the OS gives us
+        // the full clear before killing the process. Idempotent — no-op if
+        // proxy already off.
+        clearSystemProxy()
+    }
+
     override func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {
         return true
     }

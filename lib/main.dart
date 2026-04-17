@@ -119,7 +119,17 @@ final tileNavRequestProvider = StateProvider<int?>((ref) => null);
 /// visible to anyone who pulls down the shade.
 final tileShowNodeInfoProvider = StateProvider<bool>((ref) => false);
 
-void main() async {
+void main() {
+  // Zone-level safety net — catches fire-and-forget async exceptions that
+  // would otherwise kill the Dart isolate (and on Android, the whole app
+  // process). ErrorLogger.init() wires FlutterError + PlatformDispatcher,
+  // but Zone errors are a separate channel that neither of those covers.
+  runZonedGuarded(_bootstrap, (error, stack) {
+    ErrorLogger.captureException(error, stack, source: 'Zone');
+  });
+}
+
+Future<void> _bootstrap() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // ── Android 15 edge-to-edge ──
@@ -144,6 +154,13 @@ void main() async {
 
   // ── Error logging (local crash.log + optional remote Sentry/Crashlytics) ──
   ErrorLogger.init();
+
+  // Scan for any Android-native crashes written by MainApplication's Kotlin
+  // uncaught handler since our last start. Fire-and-forget — runs after
+  // Telemetry.init below has initialized, and silently skips on non-Android.
+  if (Platform.isAndroid) {
+    unawaited(ErrorLogger.scanAndroidNativeCrashes());
+  }
 
   // ── Anonymous telemetry (opt-in, default OFF) ──
   unawaited(Telemetry.init().then((_) async {
@@ -219,6 +236,23 @@ void main() async {
     final isFirst = await _ensureSingleInstance();
     if (!isFirst) {
       exit(0);
+    }
+  }
+
+  // ── Signal-driven shutdown cleanup (macOS / Linux) ──────────────────────
+  // Catches system shutdown, `kill`, and Ctrl+C — paths that bypass the
+  // Dart tray/window-close handlers. Windows has no POSIX signals; its
+  // WM_ENDSESSION is handled in windows/runner/flutter_window.cpp. Keeps
+  // the 2s cap in lockstep with _handleQuit so behaviour is consistent.
+  if (Platform.isMacOS || Platform.isLinux) {
+    for (final sig in [ProcessSignal.sigterm, ProcessSignal.sigint]) {
+      sig.watch().listen((_) async {
+        try {
+          await CoreActions.clearSystemProxyStatic()
+              .timeout(const Duration(seconds: 2));
+        } catch (_) {}
+        exit(0);
+      });
     }
   }
 
@@ -1048,35 +1082,14 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
       EventLog.write('[Tray] click key=$key label=${menuItem.label}');
     } catch (_) {}
 
-    // ── HARD EXIT PATH ──
-    // Nothing is awaited here. exit(0) is a synchronous C-level process
-    // termination; the OS reclaims windows, tray icons, sockets, and
-    // proxy state automatically. Previous "bulletproof" attempts used
-    // a 3s Future.delayed safety net but still left yuelink.exe alive
-    // on Windows — something in the await chain was hanging even
-    // before the timer could fire. Going aggressive: best-effort
-    // fire-and-forget cleanup, then exit(0) on the same sync call.
+    // Unified quit path — _handleQuit awaits the system-proxy clear (critical
+    // on macOS, where fire-and-forget would have exit(0) race past the
+    // networksetup subprocesses), and carries its own 3s hard-cap safety
+    // timer so this can't hang. Previous fire-and-forget implementation
+    // was dropping the clear entirely on fast machines.
     if (key == 'quit' || menuItem.label == S.current.trayQuit) {
-      _isQuitting = true;
-      // Fire-and-forget cleanup — don't await, don't catch, don't care
-      // whether any of them complete before the OS kills us.
-      try {
-        ref.read(coreActionsProvider).stop();
-      } catch (_) {}
-      try {
-        CoreActions.clearSystemProxyStatic();
-      } catch (_) {}
-      try {
-        _singleInstanceServer?.close();
-      } catch (_) {}
-      try {
-        trayManager.destroy();
-      } catch (_) {}
-      // Synchronous process termination. exit() is a top-level dart:io
-      // call that maps directly to _exit on POSIX and ExitProcess on
-      // Windows — no Dart event loop, no Flutter engine, no platform
-      // channel. If this line is reached the process WILL die.
-      exit(0);
+      unawaited(_handleQuit());
+      return;
     }
 
     // All other tray items continue async.
@@ -1219,18 +1232,20 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
               onTimeout: () {},
             );
       }
-      // Fire-and-forget — none of these are awaited, so a hang in any of
-      // them can't block the exit. clearSystemProxy is the most likely
-      // culprit on Windows (registry write).
       try { _singleInstanceServer?.close(); } catch (_) {}
-      CoreActions.clearSystemProxyStatic().catchError((_) {});
+      // System proxy clear is the user-visible correctness requirement —
+      // must complete before exit, or the OS keeps routing traffic through
+      // a dead mixed-port. 2s cap covers the slow macOS path (N network
+      // services × 3 networksetup calls); the global 3s timer above is the
+      // hard safety net if this itself hangs.
+      try {
+        await CoreActions.clearSystemProxyStatic()
+            .timeout(const Duration(seconds: 2));
+      } catch (_) {}
       try { trayManager.destroy(); } catch (_) {}
       try { windowManager.setPreventClose(false); } catch (_) {}
       try { windowManager.destroy(); } catch (_) {}
     } catch (_) {}
-    // Give the fire-and-forget calls one event loop tick to flush, then
-    // terminate. exit(0) runs even if the awaits above completed instantly.
-    await Future<void>.delayed(const Duration(milliseconds: 200));
     exit(0);
   }
 
