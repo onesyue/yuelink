@@ -70,3 +70,37 @@ provider-heavy；运行时流、Timer、WebSocket、缓存、登录/登出后的
   回归测试。
 - WebSocket 重连本轮以代码审计和 analyze/test 验证为主；完整 socket harness
   可后续补独立 fake server。
+
+## 2026-04-18 Addendum — v1.0.18 pre cleanup + P0 series closure
+
+### 审计基线
+
+- Baseline: 2026-04-15；HEAD at write time: `8756d10`。
+- 以下条目覆盖自基线至该 HEAD 之间的落地修复。
+
+### P0 已关闭
+
+- **P0-A** logs provider 冷启动监听 — `a82425c chore(quality): audit 2026 — EventLog.formatTagged + logs provider cold-start fix`
+- **P0-B** dispose guards（4 处）：
+  - checkin → `97b052a fix(checkin): avoid state writes after provider dispose`
+  - auth `_init()` → `8efb445 fix(auth): avoid state writes in _init() after provider dispose`
+  - connections + traffic → `43b1eaa fix(runtime): avoid state writes after provider dispose in connections and traffic`
+- **P0-C** nodes `testDelay` try/finally 收尾 — `ec7a30a cleanup+fix: drop dead setting + testDelay unmark + cover secret persistence`
+- **P0-D** MihomoStream 重连诊断日志 — `767eb56 fix(stream): add diagnostics for MihomoStream reconnect failures`
+
+### 本轮 P1 小修
+
+- carrier `_pollSni()` 的 `_disposed` guard 位置上移到 state 读写块之前 — `8756d10`
+- emby player `_progressTimer` tick 回调增加 `mounted` 前置判断 — `8756d10`
+
+### 刻意未做
+
+- auth `login()` / `logout()` dispose guard — pending evaluation; see addendum update if commit lands.
+- Telemetry `flush()` 与 `setEnabled(false)` 竞争窗口 — 仅 microtask 宽度，setEnabled 已同步清空 buffer，并非真实缺陷。
+- FeatureFlags 单例 timer 架构重排 — 需要 singleton→provider 重构，超出本轮范围。
+- Timer 全仓审计 — 2026-04-18 仅对 carrier / emby / telemetry / feature_flags / hero_banner / subscription_sync_service / emby_player_page 做抽样，完整扫荡延后。
+
+### 测试与 CI 基线
+
+- `flutter test`：`All tests passed!`，总计 280 条通过（HEAD `8756d10`）。
+- `dart analyze lib/`：error/warning 计数 0。
