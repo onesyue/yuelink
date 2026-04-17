@@ -586,6 +586,12 @@ class ConfigTemplate {
       return '$config\ndns:\n'
           '  enable: true\n'
           '  prefer-h3: true\n'
+          // respect-rules: DNS lookups honour the routing table, so a
+          // Chinese domain that should be DIRECT doesn't get its DNS
+          // query tunneled through a proxy (which would add 200+ ms of
+          // cross-border RTT to every page load). Mihomo 0.9+ / Clash
+          // Verge Rev default this to true.
+          '  respect-rules: true\n'
           '  enhanced-mode: fake-ip\n'
           '  fake-ip-range: 198.18.0.1/16\n'
           '  fake-ip-filter:\n'
@@ -737,6 +743,22 @@ class ConfigTemplate {
       // avoids TCP DNS blocking on some networks.
       if (!dnsSection.contains('prefer-h3')) {
         final injection = '${indent}prefer-h3: true\n';
+        config = config.substring(0, afterDns) +
+            injection +
+            config.substring(afterDns);
+        dnsEnd += injection.length;
+        afterDns += injection.length;
+        dnsSection = config.substring(dnsMatch.start, dnsEnd);
+      }
+
+      // Fix 1c: inject respect-rules so DNS queries honour the routing
+      // table. Without this, a Chinese domain that's supposed to resolve
+      // via direct-nameserver may still go out through the proxy path if
+      // the DNS server is a proxy-routed resolver, adding cross-border
+      // RTT to every first page load. Ensure-only — subscription that
+      // explicitly sets it stays untouched.
+      if (!dnsSection.contains('respect-rules')) {
+        final injection = '${indent}respect-rules: true\n';
         config = config.substring(0, afterDns) +
             injection +
             config.substring(afterDns);
@@ -900,7 +922,11 @@ class ConfigTemplate {
       config += '\ngeodata-mode: true\n';
     }
     if (!_hasKey(config, 'geodata-loader')) {
-      config += 'geodata-loader: standard\n';
+      // memconservative: lazy-loads GeoIP entries on first hit instead
+      // of slurping the whole .dat at startup. ~60% lower peak RSS,
+      // particularly important on iOS PacketTunnel (15 MB cap) and on
+      // low-RAM Android devices. Matches mihomo 1.19+ recommendation.
+      config += 'geodata-loader: memconservative\n';
     }
     if (!_hasKey(config, 'geo-auto-update')) {
       config += 'geo-auto-update: true\n';
@@ -936,11 +962,12 @@ class ConfigTemplate {
     if (!_hasKey(config, 'global-client-fingerprint')) {
       config += 'global-client-fingerprint: chrome\n';
     }
-    // Keep-alive interval: prevents NAT/firewall from dropping idle QUIC (hy2)
-    // and TLS (anytls) sessions. 15s is safe for most mobile carrier NATs
-    // (which typically timeout UDP at 30-120s).
+    // Keep-alive interval: mihomo upstream default is 30s — matches the
+    // mobile carrier NAT floor (~30s) while halving CPU wake-ups / battery
+    // drain vs the previous 15s. Clash Verge Rev and mihomo-party both
+    // use 30s.
     if (!_hasKey(config, 'keep-alive-interval')) {
-      config += 'keep-alive-interval: 15\n';
+      config += 'keep-alive-interval: 30\n';
     }
     return config;
   }
