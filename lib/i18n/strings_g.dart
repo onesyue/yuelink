@@ -6,7 +6,7 @@
 /// Locales: 2
 /// Strings: 1430 (715 per locale)
 ///
-/// Built on 2026-04-17 at 01:01 UTC
+/// Built on 2026-04-17 at 06:15 UTC
 
 // coverage:ignore-file
 // ignore_for_file: type=lint
@@ -317,7 +317,7 @@ class Translations implements BaseTranslations<AppLocale, Translations> {
 	String get splitTunnelSearchHint => 'Search apps...';
 	String get splitTunnelEffectHint => 'Changes take effect on next connect';
 	String get sectionGeoResources => 'Geo Resources';
-	String get geoResourcesHint => 'mihomo uses these files for rule-based routing';
+	String get geoResourcesHint => 'Required geo database files for rule-based routing';
 	String get geoUpdateAll => 'Update All';
 	String get geoUpdateSuccess => 'Geo resources updated';
 	String get geoUpdateFailed => 'Update failed';
@@ -438,11 +438,11 @@ class Translations implements BaseTranslations<AppLocale, Translations> {
 	String get serviceModeInstall => 'Install Service';
 	String get serviceModeUninstall => 'Uninstall';
 	String get serviceModeRefresh => 'Refresh';
-	String get serviceModeNotInstalled => 'Privileged helper not installed';
-	String get serviceModeInstalled => 'Privileged helper installed';
-	String get serviceModeUnreachable => 'Installed, but helper is not reachable';
-	String serviceModeRunning({required Object pid}) => 'Helper reachable · Mihomo running (PID ${pid})';
-	String get serviceModeIdle => 'Helper reachable · Mihomo is stopped';
+	String get serviceModeNotInstalled => 'Privileged service not installed';
+	String get serviceModeInstalled => 'Privileged service installed';
+	String get serviceModeUnreachable => 'Installed, but service is not ready';
+	String serviceModeRunning({required Object pid}) => 'Service ready · Core running (PID ${pid})';
+	String get serviceModeIdle => 'Service ready · Core stopped';
 	String serviceModeNeedsUpdate({required Object version}) => 'Version mismatch (${version}) — please reinstall';
 	String get serviceModeUpdate => 'Update';
 	String get serviceModeUpdateOk => 'Service updated successfully';
@@ -1060,7 +1060,7 @@ class _StringsGZhCn extends Translations {
 	@override String get splitTunnelSearchHint => '搜索应用...';
 	@override String get splitTunnelEffectHint => '下次连接时生效';
 	@override String get sectionGeoResources => 'GeoIP/GeoSite 资源';
-	@override String get geoResourcesHint => 'mihomo 路由分流所需的地理数据库文件';
+	@override String get geoResourcesHint => '路由分流所需的地理数据库文件';
 	@override String get geoUpdateAll => '一键更新';
 	@override String get geoUpdateSuccess => 'Geo 资源更新成功';
 	@override String get geoUpdateFailed => '更新失败';
@@ -1183,9 +1183,9 @@ class _StringsGZhCn extends Translations {
 	@override String get serviceModeRefresh => '刷新状态';
 	@override String get serviceModeNotInstalled => '特权服务未安装';
 	@override String get serviceModeInstalled => '特权服务已安装';
-	@override String get serviceModeUnreachable => '已安装，但 helper 不可达';
-	@override String serviceModeRunning({required Object pid}) => 'helper 可用 · Mihomo 运行中 (PID ${pid})';
-	@override String get serviceModeIdle => 'helper 可用 · Mihomo 未运行';
+	@override String get serviceModeUnreachable => '服务已安装，但未就绪';
+	@override String serviceModeRunning({required Object pid}) => '服务可用 · 核心运行中 (PID ${pid})';
+	@override String get serviceModeIdle => '服务可用 · 核心未运行';
 	@override String serviceModeNeedsUpdate({required Object version}) => '版本不匹配 (${version}) — 请重新安装';
 	@override String get serviceModeUpdate => '更新';
 	@override String get serviceModeUpdateOk => '服务更新成功';
@@ -1783,7 +1783,7 @@ extension on Translations {
 			case 'splitTunnelSearchHint': return 'Search apps...';
 			case 'splitTunnelEffectHint': return 'Changes take effect on next connect';
 			case 'sectionGeoResources': return 'Geo Resources';
-			case 'geoResourcesHint': return 'mihomo uses these files for rule-based routing';
+			case 'geoResourcesHint': return 'Required geo database files for rule-based routing';
 			case 'geoUpdateAll': return 'Update All';
 			case 'geoUpdateSuccess': return 'Geo resources updated';
 			case 'geoUpdateFailed': return 'Update failed';
@@ -1904,11 +1904,11 @@ extension on Translations {
 			case 'serviceModeInstall': return 'Install Service';
 			case 'serviceModeUninstall': return 'Uninstall';
 			case 'serviceModeRefresh': return 'Refresh';
-			case 'serviceModeNotInstalled': return 'Privileged helper not installed';
-			case 'serviceModeInstalled': return 'Privileged helper installed';
-			case 'serviceModeUnreachable': return 'Installed, but helper is not reachable';
-			case 'serviceModeRunning': return ({required Object pid}) => 'Helper reachable · Mihomo running (PID ${pid})';
-			case 'serviceModeIdle': return 'Helper reachable · Mihomo is stopped';
+			case 'serviceModeNotInstalled': return 'Privileged service not installed';
+			case 'serviceModeInstalled': return 'Privileged service installed';
+			case 'serviceModeUnreachable': return 'Installed, but service is not ready';
+			case 'serviceModeRunning': return ({required Object pid}) => 'Service ready · Core running (PID ${pid})';
+			case 'serviceModeIdle': return 'Service ready · Core stopped';
 			case 'serviceModeNeedsUpdate': return ({required Object version}) => 'Version mismatch (${version}) — please reinstall';
 			case 'serviceModeUpdate': return 'Update';
 			case 'serviceModeUpdateOk': return 'Service updated successfully';
@@ -2506,7 +2506,7 @@ extension on _StringsGZhCn {
 			case 'splitTunnelSearchHint': return '搜索应用...';
 			case 'splitTunnelEffectHint': return '下次连接时生效';
 			case 'sectionGeoResources': return 'GeoIP/GeoSite 资源';
-			case 'geoResourcesHint': return 'mihomo 路由分流所需的地理数据库文件';
+			case 'geoResourcesHint': return '路由分流所需的地理数据库文件';
 			case 'geoUpdateAll': return '一键更新';
 			case 'geoUpdateSuccess': return 'Geo 资源更新成功';
 			case 'geoUpdateFailed': return '更新失败';
@@ -2629,9 +2629,9 @@ extension on _StringsGZhCn {
 			case 'serviceModeRefresh': return '刷新状态';
 			case 'serviceModeNotInstalled': return '特权服务未安装';
 			case 'serviceModeInstalled': return '特权服务已安装';
-			case 'serviceModeUnreachable': return '已安装，但 helper 不可达';
-			case 'serviceModeRunning': return ({required Object pid}) => 'helper 可用 · Mihomo 运行中 (PID ${pid})';
-			case 'serviceModeIdle': return 'helper 可用 · Mihomo 未运行';
+			case 'serviceModeUnreachable': return '服务已安装，但未就绪';
+			case 'serviceModeRunning': return ({required Object pid}) => '服务可用 · 核心运行中 (PID ${pid})';
+			case 'serviceModeIdle': return '服务可用 · 核心未运行';
 			case 'serviceModeNeedsUpdate': return ({required Object version}) => '版本不匹配 (${version}) — 请重新安装';
 			case 'serviceModeUpdate': return '更新';
 			case 'serviceModeUpdateOk': return '服务更新成功';

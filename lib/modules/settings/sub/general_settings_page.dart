@@ -14,8 +14,10 @@ import '../../../core/service/service_mode_provider.dart';
 import '../../../core/storage/settings_service.dart';
 import '../../../core/env_config.dart';
 import '../../../i18n/app_strings.dart';
+import '../../../core/profile/profile_service.dart';
 import '../../../core/providers/core_provider.dart';
 import '../../../main.dart' show tileShowNodeInfoProvider;
+import '../../profiles/providers/profiles_providers.dart';
 import '../../updater/update_checker.dart';
 import '../providers/split_tunnel_provider.dart';
 import '../../../shared/app_notifier.dart';
@@ -93,6 +95,14 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
     try {
       await ServiceManager.install();
       await _refreshDesktopService();
+      // If the core was already running (in FFI mode, since service didn't
+      // exist yet), it won't transparently switch to service mode — the
+      // mode decision happens in CoreManager.start(). Restart it so TUN
+      // picks up the now-installed helper without the user needing to
+      // manually disconnect + reconnect. The previous behaviour made
+      // users report "installed OK but nothing works until I click
+      // refresh" — refresh was a red herring, the real fix was a restart.
+      await _restartCoreIfRunning();
       if (!mounted) return;
       AppNotifier.success(s.serviceModeInstallOk);
     } catch (e) {
@@ -102,6 +112,24 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
       );
     } finally {
       if (mounted) setState(() => _serviceBusy = false);
+    }
+  }
+
+  /// After install/update completes, restart the core so the new helper
+  /// is actually used. No-op if the core isn't running. Errors are
+  /// swallowed — the install itself already succeeded and the user can
+  /// manually reconnect from the dashboard if this auto-restart fails.
+  Future<void> _restartCoreIfRunning() async {
+    try {
+      if (ref.read(coreStatusProvider) != CoreStatus.running) return;
+      final activeId = ref.read(activeProfileIdProvider);
+      if (activeId == null) return;
+      final config = await ProfileService.loadConfig(activeId);
+      if (config == null) return;
+      await ref.read(coreActionsProvider).restart(config);
+    } catch (_) {
+      // swallow — install succeeded; if restart fails the user sees the
+      // old running state and can manually reconnect.
     }
   }
 
@@ -134,6 +162,9 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
     try {
       await ServiceManager.update();
       await _refreshDesktopService();
+      // Same rationale as install — the running core still holds handles
+      // from the old helper binary. Restart so the new helper is picked up.
+      await _restartCoreIfRunning();
       if (!mounted) return;
       AppNotifier.success(s.serviceModeUpdateOk);
     } catch (e) {
