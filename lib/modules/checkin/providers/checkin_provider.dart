@@ -26,10 +26,25 @@ final checkinProvider =
     NotifierProvider<CheckinNotifier, CheckinState>(CheckinNotifier.new);
 
 class CheckinNotifier extends Notifier<CheckinState> {
+  /// Dispose guard. Every `await` in this notifier returns into code that
+  /// writes `state = ...`; a Notifier whose provider has been disposed
+  /// throws on `state =`. The pattern here is: after every `await`, check
+  /// `_disposed` and return early before touching state.
+  ///
+  /// The checkin page is typically opened from the Dashboard and can be
+  /// dismissed mid-flight (user quickly pops back, logs out, switches
+  /// account). Without this guard, an in-flight `_repo.checkin` completing
+  /// after dispose throws and lands in the Zone error handler.
+  bool _disposed = false;
+
   @override
   CheckinState build() {
+    _disposed = false;
+    ref.onDispose(() => _disposed = true);
+
     // Reset + refresh whenever auth changes (login / logout).
     ref.listen(authProvider, (prev, next) {
+      if (_disposed) return;
       if (prev?.isLoggedIn == true && !next.isLoggedIn) {
         state = const CheckinState();
       } else if (prev?.isLoggedIn == false && next.isLoggedIn) {
@@ -66,14 +81,17 @@ class CheckinNotifier extends Notifier<CheckinState> {
 
     try {
       final result = await _repo.getCheckinStatus(auth.token!);
+      if (_disposed) return;
       if (result == null) return;
 
       if (result.alreadyChecked) {
         final self = await _local.selfCheckedToday();
+        if (_disposed) return;
         // Status API returns amount=0 — restore saved reward from local storage
         var displayResult = result;
         if (result.amount == 0 && self) {
           final saved = await _local.getSavedReward();
+          if (_disposed) return;
           if (saved != null) {
             displayResult = CheckinResult(
               type: saved.type,
@@ -99,6 +117,7 @@ class CheckinNotifier extends Notifier<CheckinState> {
   /// Perform check-in. Distinguishes "other device already checked" from
   /// "this device already checked" for a clear user message.
   Future<void> checkin() async {
+    if (_disposed) return;
     if (state.loading || state.checkedIn) return;
 
     final auth = ref.read(authProvider);
@@ -111,10 +130,12 @@ class CheckinNotifier extends Notifier<CheckinState> {
 
     try {
       final result = await _repo.checkin(auth.token!);
+      if (_disposed) return;
 
       if (result.alreadyChecked) {
         // Server says today is already done — check if it was us or another device.
         final self = await _local.selfCheckedToday();
+        if (_disposed) return;
         state = state.copyWith(
           checkedIn: true,
           loading: false,
@@ -131,6 +152,7 @@ class CheckinNotifier extends Notifier<CheckinState> {
         rewardType: result.type,
         rewardText: result.amountText,
       );
+      if (_disposed) return;
       state = state.copyWith(
         checkedIn: true,
         loading: false,
@@ -150,11 +172,13 @@ class CheckinNotifier extends Notifier<CheckinState> {
       // Refresh user profile to reflect new traffic/balance.
       ref.read(authProvider.notifier).refreshUserInfo();
     } on XBoardApiException catch (e) {
+      if (_disposed) return;
       // Some checkin servers return a business error (e.g. "cannot determine
       // user ID") instead of alreadyChecked:true when the user has already
       // checked in. Intercept known patterns and show the correct message.
       if (_isAlreadyCheckedError(e.message)) {
         final self = await _local.selfCheckedToday();
+        if (_disposed) return;
         state = state.copyWith(
           checkedIn: true,
           loading: false,
@@ -172,6 +196,7 @@ class CheckinNotifier extends Notifier<CheckinState> {
       );
       AppNotifier.error(S.current.checkinFailed);
     } catch (e) {
+      if (_disposed) return;
       debugPrint('[Checkin] error: $e');
       state = state.copyWith(loading: false, error: e.toString());
       Telemetry.event(
@@ -186,6 +211,7 @@ class CheckinNotifier extends Notifier<CheckinState> {
   /// Reset state and re-check from server (e.g. called on app resume or
   /// when pulling to refresh on the Dashboard).
   Future<void> refresh() async {
+    if (_disposed) return;
     state = const CheckinState();
     await _checkStatus();
   }
