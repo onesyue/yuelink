@@ -65,16 +65,31 @@ class ServiceManager {
   static Future<bool> isInstalled() async {
     if (!isSupported) return false;
 
+    // macOS / Linux: plist|systemd unit + helper + mihomo binary must all
+    // exist AND the Dart-side socket path must be recorded. Same rationale
+    // as the Windows token check — a partial uninstall that clears
+    // SettingsService config but leaves files on disk (or vice-versa) used
+    // to surface downstream as `ServiceClient` throwing "socket path is
+    // missing" instead of a clean "not installed" state the UI can guide
+    // the user out of.
     if (Platform.isMacOS) {
-      return File(_macPlistPath).existsSync() &&
-          File(_macInstalledHelperPath).existsSync() &&
-          File(_macInstalledMihomoPath).existsSync();
+      if (!File(_macPlistPath).existsSync() ||
+          !File(_macInstalledHelperPath).existsSync() ||
+          !File(_macInstalledMihomoPath).existsSync()) {
+        return false;
+      }
+      final socket = await SettingsService.getServiceSocketPath();
+      return socket != null && socket.isNotEmpty;
     }
 
     if (Platform.isLinux) {
-      return File(_linuxUnitPath).existsSync() &&
-          File(_linuxInstalledHelperPath).existsSync() &&
-          File(_linuxInstalledMihomoPath).existsSync();
+      if (!File(_linuxUnitPath).existsSync() ||
+          !File(_linuxInstalledHelperPath).existsSync() ||
+          !File(_linuxInstalledMihomoPath).existsSync()) {
+        return false;
+      }
+      final socket = await SettingsService.getServiceSocketPath();
+      return socket != null && socket.isNotEmpty;
     }
 
     // Windows: SCM must have the service AND the Dart side must have the
@@ -306,7 +321,14 @@ Start-Service -Name $serviceName
         await _runWindowsElevated(script.path);
       }
     } finally {
+      // Clear every piece of client-side state unconditionally — even if
+      // the elevated script failed. Mismatched state (e.g. SCM entry or
+      // plist still present but settings.json has nothing) is what caused
+      // the "Desktop service X is missing" cascade. Next install starts
+      // from a known-clean settings baseline; the install scripts already
+      // handle deleting residual OS-level registrations.
       await SettingsService.setServiceAuthToken(null);
+      await SettingsService.setServiceSocketPath(null);
       try {
         await tempDir.delete(recursive: true);
       } catch (_) {}
