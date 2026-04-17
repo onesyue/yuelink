@@ -123,7 +123,15 @@ class YueLinkVpnService : VpnService() {
             // No IPv6 route — mihomo TUN only has inet4-address.
             // Use TUN gateway as DNS so queries reliably enter TUN for dns-hijack.
             .addDnsServer("172.19.0.2")
-            .setMtu(9000)
+            // mtu: 1500 matches the physical cellular/Wi-Fi MTU. The
+            // previous 9000 was inherited from mihomo's jumbo-frame
+            // default (only makes sense for desktop utun), but Android
+            // apps emit IP packets through the kernel socket layer
+            // which is still bound to the physical MTU — the extra 7500
+            // bytes of TUN MTU weren't helping and wasted buffer memory
+            // in sing-tun's gvisor stack. Clash Meta for Android and
+            // mihomo-party desktop both use 1500.
+            .setMtu(1500)
             .setBlocking(false)
 
         // Tell Android this VPN is not metered — prevents traffic throttling

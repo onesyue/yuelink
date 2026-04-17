@@ -47,7 +47,12 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         settings.ipv4Settings = ipv4
 
         settings.dnsSettings = NEDNSSettings(servers: ["223.5.5.5", "8.8.8.8"])
-        settings.mtu = 9000
+        // mtu: 1500 matches the physical cellular/Wi-Fi MTU. The earlier
+        // 9000 was inherited from mihomo's jumbo-frame default but doesn't
+        // help on iOS because upstream sockets are 1500-bound and the
+        // extension runs under a 15 MB memory cap where we can't afford to
+        // oversize buffers in sing-tun's gvisor stack.
+        settings.mtu = 1500
 
         setTunnelNetworkSettings(settings) { [weak self] error in
             if let error = error {
@@ -112,7 +117,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
             + "  file-descriptor: \(fd)\n"
             + "  inet4-address:\n"
             + "    - 172.19.0.1/30\n"
-            + "  mtu: 9000\n"
+            + "  mtu: 1500\n"
             + "  auto-route: false\n"
             + "  auto-detect-interface: false\n"
             + "  dns-hijack:\n"

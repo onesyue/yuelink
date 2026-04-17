@@ -433,14 +433,15 @@ class ConfigTemplate {
     // Force fake-ip DNS mode for TUN (CVR does the same in use_tun())
     config = _ensureFakeIpForTun(config);
 
-    // mtu: 1500 for desktop — matches physical Ethernet/Wi-Fi MTU so the
-    // kernel doesn't have to fragment every single TUN packet. The previous
-    // `9000` inherited from mihomo's jumbo-frame default (only safe on
-    // VpnService fd where kernel handles framing) cost ~15-30% throughput
-    // on desktop because each 9000-byte packet got split into 6×1500
-    // downstream. Matches mihomo-party's explicit `mtu: 1500`; Android/iOS
-    // stay on 9000 in _injectTunFd since their VpnService fds do accept
-    // jumbo frames without re-fragmentation.
+    // mtu: 1500 — matches the physical Ethernet/Wi-Fi MTU. Previous 9000
+    // was mihomo's jumbo-frame default, designed for point-to-point
+    // virtual links. On a real desktop the TUN packets traverse the
+    // kernel socket layer which is 1500-bound, so the extra 7500 bytes
+    // per packet either get re-fragmented (TCP) or silently dropped
+    // (UDP without PMTUD), costing 15-30% throughput. mihomo-party
+    // explicitly sets 1500; CVR/FlClash rely on mihomo's default which
+    // we now override to match reality. Android/iOS in _injectTunFd
+    // also use 1500 now for the same reason.
     final buf = StringBuffer()
       ..write('$config\ntun:\n')
       ..write('  enable: true\n')
@@ -537,7 +538,9 @@ class ConfigTemplate {
   /// - `auto-route: false` — VpnService handles routing (netlink banned on Android 14+)
   /// - `auto-detect-interface: false` — avoid NetworkUpdateMonitor (netlink)
   /// - `dns-hijack: [any:53]` — intercept DNS for fake-ip/redir
-  /// - `mtu: 9000` — match VpnService builder's `setMtu(9000)`
+  /// - `mtu: 1500` — match VpnService builder's `setMtu(1500)` and the
+  ///   physical cellular/Wi-Fi MTU. Larger values don't help on Android
+  ///   (see YueLinkVpnService.kt comment).
   static String _injectTunFd(String config, int fd) {
     // Remove existing tun section entirely and replace with Android-safe config.
     // This avoids partial merges where subscription settings (auto-route: true)
@@ -566,7 +569,7 @@ class ConfigTemplate {
         '  file-descriptor: $fd\n'
         '  inet4-address:\n'
         '    - 172.19.0.1/30\n'
-        '  mtu: 9000\n'
+        '  mtu: 1500\n'
         '  auto-route: false\n'
         '  auto-detect-interface: false\n'
         '  dns-hijack:\n'
