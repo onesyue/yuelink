@@ -53,9 +53,15 @@ class _OnboardingPageState extends State<OnboardingPage> {
     final s = S.of(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
+    // Step order + icons map to the user funnel (awareness → activation
+    // → value → retention), not app-page order:
+    //  1. Welcome + positioning  → Public icon (global network)
+    //  2. One-tap connect        → Power icon (core action)
+    //  3. Emby streaming perk    → Movie icon (differentiator)
+    //  4. Check-in + multi-sync  → Card-gift icon (retention hook)
     final steps = [
       _Step(
-        icon: Icons.link_rounded,
+        icon: Icons.public_rounded,
         title: s.onboardingWelcome,
         desc: s.onboardingWelcomeDesc,
       ),
@@ -65,12 +71,12 @@ class _OnboardingPageState extends State<OnboardingPage> {
         desc: s.onboardingConnectDesc,
       ),
       _Step(
-        icon: Icons.public_rounded,
+        icon: Icons.movie_outlined,
         title: s.onboardingNodes,
         desc: s.onboardingNodesDesc,
       ),
       _Step(
-        icon: Icons.storefront_rounded,
+        icon: Icons.card_giftcard_rounded,
         title: s.onboardingStore,
         desc: s.onboardingStoreDesc,
       ),

@@ -6,7 +6,7 @@
 /// Locales: 2
 /// Strings: 1430 (715 per locale)
 ///
-/// Built on 2026-04-17 at 06:15 UTC
+/// Built on 2026-04-17 at 06:22 UTC
 
 // coverage:ignore-file
 // ignore_for_file: type=lint
@@ -667,13 +667,13 @@ class Translations implements BaseTranslations<AppLocale, Translations> {
 	String get switchProfileReconnectHint => 'Connection is active. You need to reconnect after switching.';
 	String get switchProfileConfirm => 'Switch';
 	String get onboardingWelcome => 'Welcome to YueLink';
-	String get onboardingWelcomeDesc => 'A modern proxy client for secure and fast internet access.';
+	String get onboardingWelcomeDesc => 'Global network · Fast, secure, reliable · Sync across devices';
 	String get onboardingConnect => 'One-Tap Connect';
-	String get onboardingConnectDesc => 'Tap the power button on the home page to connect instantly.';
-	String get onboardingNodes => 'Choose Your Line';
-	String get onboardingNodesDesc => 'Switch between nodes on the Lines page for the best speed.';
-	String get onboardingStore => 'Get a Plan';
-	String get onboardingStoreDesc => 'Visit the Store to subscribe and start using the service.';
+	String get onboardingConnectDesc => 'Smart node selection · No config needed · Ready out of the box';
+	String get onboardingNodes => 'Emby Streaming Included';
+	String get onboardingNodesDesc => 'Licensed movies & TV shows · Watch as soon as you\'re connected';
+	String get onboardingStore => 'Daily Check-in for Traffic';
+	String get onboardingStoreDesc => 'Earn free traffic every day · One account syncs all platforms';
 	String get onboardingSkip => 'Skip';
 	String get onboardingNext => 'Next';
 	String get onboardingDone => 'Get Started';
@@ -1410,13 +1410,13 @@ class _StringsGZhCn extends Translations {
 	@override String get switchProfileReconnectHint => '当前已连接，切换后需要重新连接才能生效。';
 	@override String get switchProfileConfirm => '确认切换';
 	@override String get onboardingWelcome => '欢迎使用悦通';
-	@override String get onboardingWelcomeDesc => '一款现代化的代理客户端，安全高速地访问互联网。';
-	@override String get onboardingConnect => '一键连接';
-	@override String get onboardingConnectDesc => '在首页点击电源按钮即可快速连接。';
-	@override String get onboardingNodes => '选择线路';
-	@override String get onboardingNodesDesc => '在线路页面切换节点，选择最快的线路。';
-	@override String get onboardingStore => '购买套餐';
-	@override String get onboardingStoreDesc => '前往商店页面订阅套餐，开始使用服务。';
+	@override String get onboardingWelcomeDesc => '全球稳定线路 · 极速安全 · 跨平台同步';
+	@override String get onboardingConnect => '一键直连';
+	@override String get onboardingConnectDesc => '智能选择最快节点 · 无需复杂配置 · 即连即用';
+	@override String get onboardingNodes => '专属 Emby 影视';
+	@override String get onboardingNodesDesc => '海量正版电影剧集 · 连接悦通即可畅享';
+	@override String get onboardingStore => '签到领流量';
+	@override String get onboardingStoreDesc => '每日签到赚取流量 · 全平台一个账号同步';
 	@override String get onboardingSkip => '跳过';
 	@override String get onboardingNext => '下一步';
 	@override String get onboardingDone => '开始使用';
@@ -2133,13 +2133,13 @@ extension on Translations {
 			case 'switchProfileReconnectHint': return 'Connection is active. You need to reconnect after switching.';
 			case 'switchProfileConfirm': return 'Switch';
 			case 'onboardingWelcome': return 'Welcome to YueLink';
-			case 'onboardingWelcomeDesc': return 'A modern proxy client for secure and fast internet access.';
+			case 'onboardingWelcomeDesc': return 'Global network · Fast, secure, reliable · Sync across devices';
 			case 'onboardingConnect': return 'One-Tap Connect';
-			case 'onboardingConnectDesc': return 'Tap the power button on the home page to connect instantly.';
-			case 'onboardingNodes': return 'Choose Your Line';
-			case 'onboardingNodesDesc': return 'Switch between nodes on the Lines page for the best speed.';
-			case 'onboardingStore': return 'Get a Plan';
-			case 'onboardingStoreDesc': return 'Visit the Store to subscribe and start using the service.';
+			case 'onboardingConnectDesc': return 'Smart node selection · No config needed · Ready out of the box';
+			case 'onboardingNodes': return 'Emby Streaming Included';
+			case 'onboardingNodesDesc': return 'Licensed movies & TV shows · Watch as soon as you\'re connected';
+			case 'onboardingStore': return 'Daily Check-in for Traffic';
+			case 'onboardingStoreDesc': return 'Earn free traffic every day · One account syncs all platforms';
 			case 'onboardingSkip': return 'Skip';
 			case 'onboardingNext': return 'Next';
 			case 'onboardingDone': return 'Get Started';
@@ -2856,13 +2856,13 @@ extension on _StringsGZhCn {
 			case 'switchProfileReconnectHint': return '当前已连接，切换后需要重新连接才能生效。';
 			case 'switchProfileConfirm': return '确认切换';
 			case 'onboardingWelcome': return '欢迎使用悦通';
-			case 'onboardingWelcomeDesc': return '一款现代化的代理客户端，安全高速地访问互联网。';
-			case 'onboardingConnect': return '一键连接';
-			case 'onboardingConnectDesc': return '在首页点击电源按钮即可快速连接。';
-			case 'onboardingNodes': return '选择线路';
-			case 'onboardingNodesDesc': return '在线路页面切换节点，选择最快的线路。';
-			case 'onboardingStore': return '购买套餐';
-			case 'onboardingStoreDesc': return '前往商店页面订阅套餐，开始使用服务。';
+			case 'onboardingWelcomeDesc': return '全球稳定线路 · 极速安全 · 跨平台同步';
+			case 'onboardingConnect': return '一键直连';
+			case 'onboardingConnectDesc': return '智能选择最快节点 · 无需复杂配置 · 即连即用';
+			case 'onboardingNodes': return '专属 Emby 影视';
+			case 'onboardingNodesDesc': return '海量正版电影剧集 · 连接悦通即可畅享';
+			case 'onboardingStore': return '签到领流量';
+			case 'onboardingStoreDesc': return '每日签到赚取流量 · 全平台一个账号同步';
 			case 'onboardingSkip': return '跳过';
 			case 'onboardingNext': return '下一步';
 			case 'onboardingDone': return '开始使用';

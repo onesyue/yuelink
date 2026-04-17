@@ -14,7 +14,7 @@ void main() {
         ),
       ));
 
-      expect(find.text('你用过 VPN/代理类工具吗？'), findsOneWidget);
+      expect(find.text('你用过类似的网络工具吗？'), findsOneWidget);
       expect(find.text('我是新手'), findsOneWidget);
 
       await tester.tap(find.text('我是新手'));

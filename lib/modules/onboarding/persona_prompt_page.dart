@@ -79,7 +79,7 @@ class _PersonaPromptPageState extends State<PersonaPromptPage> {
                   ),
                   const Spacer(flex: 2),
                   Text(
-                    '你用过 VPN/代理类工具吗？',
+                    '你用过类似的网络工具吗？',
                     style: YLText.titleLarge.copyWith(
                       fontSize: 22,
                       fontWeight: FontWeight.w700,
