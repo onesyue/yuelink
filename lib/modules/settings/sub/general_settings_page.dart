@@ -25,8 +25,8 @@ import '../../../shared/app_notifier.dart';
 import '../../../shared/event_log.dart';
 import '../../../shared/telemetry.dart';
 import '../../../theme.dart';
-import '../settings_page.dart';
 import '../providers/settings_providers.dart';
+import '../widgets/primitives.dart';
 import '../hotkey_codec.dart';
 import 'telemetry_preview_page.dart';
 

@@ -23,6 +23,7 @@ import '../updater/update_checker.dart';
 import '../../shared/rich_content.dart';
 import '../../shared/widgets/setting_icon.dart';
 import '../../theme.dart';
+import 'widgets/primitives.dart';
 import '../../domain/account/account_overview.dart';
 import '../mine/providers/account_providers.dart';
 import '../surge_modules/pages/modules_page.dart';
@@ -305,8 +306,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                     ],
 
                     // ══ 1. Service (订阅相关) ══════════════════════════════
-                    _SectionTitle(s.sectionService),
-                    _SettingsCard(
+                    SettingsSectionTitle(s.sectionService),
+                    SettingsCard(
                       child: Column(
                         children: [
                           YLInfoRow(
@@ -355,8 +356,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                     ),
 
                     // ══ 2. 设置（偏好 / 覆写 / 修复 / 模块）═══════════════
-                    _SectionTitle(s.sectionSettings),
-                    _SettingsCard(
+                    SettingsSectionTitle(s.sectionSettings),
+                    SettingsCard(
                       child: Column(
                         children: [
                           YLInfoRow(
@@ -449,8 +450,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                     ),
 
                     // ══ 关于 ═════════════════════════════════════════════
-                    _SectionTitle(s.sectionAbout),
-                    _SettingsCard(
+                    SettingsSectionTitle(s.sectionAbout),
+                    SettingsCard(
                       child: Column(
                         children: [
                           // "Check for updates" — hidden in store builds to pass
@@ -591,7 +592,7 @@ class _ProfileRow extends ConsumerWidget {
     final email = overview?.email ?? S.current.loading;
     final plan = overview?.planName ?? '--';
 
-    return _SettingsCard(
+    return SettingsCard(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
         child: Column(
@@ -775,7 +776,7 @@ class _MineTrafficSection extends ConsumerWidget {
                     ? '今日到期'
                     : '${overview.daysRemaining} 天后到期';
 
-    return _SettingsCard(
+    return SettingsCard(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 22),
         child: Column(
@@ -885,7 +886,7 @@ class _GuestLoginCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isEn = S.of(context).isEn;
-    return _SettingsCard(
+    return SettingsCard(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
         child: Column(
@@ -920,157 +921,7 @@ class _GuestLoginCard extends ConsumerWidget {
   }
 }
 
-// ── Settings page helper widgets ─────────────────────────────────────────────
-
-/// Section title — matches the dashboard top bar label style.
-class _SectionTitle extends StatelessWidget {
-  final String text;
-  const _SectionTitle(this.text);
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
-      child: Text(
-        text.toUpperCase(),
-        style: const TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w400,
-          color: YLColors.zinc500,
-          letterSpacing: -0.08,
-        ),
-      ),
-    );
-  }
-}
-
-/// Card container matching the dashboard card style.
-class _SettingsCard extends StatelessWidget {
-  final Widget child;
-  const _SettingsCard({required this.child});
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Container(
-      clipBehavior: Clip.hardEdge,
-      decoration: BoxDecoration(
-        color: isDark ? YLColors.zinc800 : Colors.white,
-        borderRadius: BorderRadius.circular(YLRadius.xl),
-        border: Border.all(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.08)
-              : Colors.black.withValues(alpha: 0.08),
-          width: 0.5,
-        ),
-        boxShadow: YLShadow.card(context),
-      ),
-      child: child,
-    );
-  }
-}
-
-// ── Split Tunnel Section (Android) ────────────────────────────────────────────
-
-/// A single settings row with a label on the left and a value or trailing widget on the right.
-class YLInfoRow extends StatelessWidget {
-  final String label;
-  final String? value;
-  final Widget? trailing;
-  final Widget? leading;
-  final VoidCallback? onTap;
-  final bool enabled;
-  final TextStyle? labelStyle;
-
-  const YLInfoRow({
-    super.key,
-    required this.label,
-    this.value,
-    this.trailing,
-    this.leading,
-    this.onTap,
-    this.enabled = true,
-    this.labelStyle,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final labelColor = enabled
-        ? (isDark ? YLColors.zinc200 : YLColors.zinc700)
-        : YLColors.zinc400;
-    final valueColor = enabled
-        ? (isDark ? YLColors.zinc400 : YLColors.zinc500)
-        : YLColors.zinc300;
-
-    final content = Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Row(
-        children: [
-          if (leading != null) ...[
-            leading!,
-            const SizedBox(width: 12),
-          ],
-          Expanded(
-            child: Text(label,
-                style: labelStyle ?? YLText.body.copyWith(color: labelColor)),
-          ),
-          if (value != null)
-            Text(value!, style: YLText.body.copyWith(color: valueColor)),
-          if (trailing != null) trailing!,
-        ],
-      ),
-    );
-
-    if (onTap != null && enabled) {
-      return InkWell(onTap: onTap, child: content);
-    }
-    return Opacity(opacity: enabled ? 1.0 : 0.5, child: content);
-  }
-}
-
-
-
-class YLSettingsRow extends StatelessWidget {
-  final String title;
-  final String? description;
-  final Widget trailing;
-
-  const YLSettingsRow({
-    super.key,
-    required this.title,
-    this.description,
-    required this.trailing,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final titleColor = isDark ? YLColors.zinc200 : YLColors.zinc700;
-    final descColor = isDark ? YLColors.zinc500 : YLColors.zinc400;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: YLText.body.copyWith(color: titleColor)),
-                if (description != null) ...[
-                  const SizedBox(height: 2),
-                  Text(description!,
-                      style: YLText.caption.copyWith(color: descColor)),
-                ],
-              ],
-            ),
-          ),
-          trailing,
-        ],
-      ),
-    );
-  }
-}
+// Primitive widgets (SettingsSectionTitle / SettingsCard / YLInfoRow /
+// YLSettingsRow) live in `widgets/primitives.dart`.
 
 
