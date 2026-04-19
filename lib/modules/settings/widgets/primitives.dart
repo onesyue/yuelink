@@ -37,6 +37,34 @@ class SettingsSectionTitle extends StatelessWidget {
   }
 }
 
+/// Narrower section title variant used by the General Settings sub-page.
+///
+/// Different on purpose from [SettingsSectionTitle]: the sub-page layout
+/// is tighter (4 vs 20 horizontal padding), the label runs at 12/w500
+/// with positive letterSpacing instead of 13/w400 with negative. Kept as
+/// a separate class so sub-page styling can evolve without dragging the
+/// dashboard-style title with it.
+class GsGeneralSectionTitle extends StatelessWidget {
+  final String text;
+  const GsGeneralSectionTitle(this.text, {super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
+      child: Text(
+        text.toUpperCase(),
+        style: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+          letterSpacing: 0.4,
+          color: YLColors.zinc500,
+        ),
+      ),
+    );
+  }
+}
+
 /// Card container matching the dashboard card style.
 class SettingsCard extends StatelessWidget {
   final Widget child;

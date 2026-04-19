@@ -389,8 +389,8 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
             padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
             children: [
               // === 外观 / Appearance ===
-              _GsSectionTitle(s.sectionAppearance),
-              _Card(
+              GsGeneralSectionTitle(s.sectionAppearance),
+              SettingsCard(
                 child: Column(
                   children: [
                     YLInfoRow(
@@ -466,8 +466,8 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
               const SizedBox(height: 16),
 
               // === 连接 / Connection ===
-              _GsSectionTitle(isEn ? 'Connection' : '连接'),
-              _Card(
+              GsGeneralSectionTitle(isEn ? 'Connection' : '连接'),
+              SettingsCard(
                 child: Column(
                   children: [
                     YLSettingsRow(
@@ -582,8 +582,8 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
 
               // === 高级 / Advanced (desktop only) ===
               if (isDesktop) ...[
-                _GsSectionTitle(isEn ? 'Advanced' : '高级'),
-                _Card(
+                GsGeneralSectionTitle(isEn ? 'Advanced' : '高级'),
+                SettingsCard(
                   child: Column(
                     children: [
                       YLInfoRow(
@@ -775,8 +775,8 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
 
               // === 启动与快捷键 / Startup & Hotkey (desktop only) ===
               if (isDesktop) ...[
-                _GsSectionTitle(isEn ? 'Startup & Hotkey' : '启动与快捷键'),
-                _Card(
+                GsGeneralSectionTitle(isEn ? 'Startup & Hotkey' : '启动与快捷键'),
+                SettingsCard(
                   child: Column(
                     children: [
                       YLSettingsRow(
@@ -809,8 +809,8 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
               ],
 
               // === 订阅 / Subscription ===
-              _GsSectionTitle(isEn ? 'Subscription' : '订阅'),
-              _Card(
+              GsGeneralSectionTitle(isEn ? 'Subscription' : '订阅'),
+              SettingsCard(
                 child: Column(
                   children: [
                     YLInfoRow(
@@ -855,8 +855,8 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
 
               // === 更新 / Updates ===
               if (EnvConfig.isStandalone) ...[
-                _GsSectionTitle(isEn ? 'Updates' : '更新'),
-                _Card(
+                GsGeneralSectionTitle(isEn ? 'Updates' : '更新'),
+                SettingsCard(
                   child: Column(
                     children: [
                       YLInfoRow(
@@ -950,14 +950,14 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
 
               // === 分流 / Split Tunnel (Android only) ===
               if (Platform.isAndroid) ...[
-                _GsSectionTitle(isEn ? 'Split Tunnel' : '分流'),
+                GsGeneralSectionTitle(isEn ? 'Split Tunnel' : '分流'),
                 const _SplitTunnelSection(),
                 const SizedBox(height: 16),
               ],
 
               // === 隐私 / Privacy ===
-              _GsSectionTitle(s.privacy),
-              _Card(
+              GsGeneralSectionTitle(s.privacy),
+              SettingsCard(
                 child: Column(
                   children: [
                     YLSettingsRow(
@@ -992,51 +992,6 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _GsSectionTitle extends StatelessWidget {
-  final String text;
-  const _GsSectionTitle(this.text);
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
-      child: Text(
-        text.toUpperCase(),
-        style: const TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w500,
-          letterSpacing: 0.4,
-          color: YLColors.zinc500,
-        ),
-      ),
-    );
-  }
-}
-
-class _Card extends StatelessWidget {
-  final Widget child;
-  const _Card({required this.child});
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Container(
-      clipBehavior: Clip.hardEdge,
-      decoration: BoxDecoration(
-        color: isDark ? YLColors.zinc800 : Colors.white,
-        borderRadius: BorderRadius.circular(YLRadius.xl),
-        border: Border.all(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.08)
-              : Colors.black.withValues(alpha: 0.08),
-          width: 0.5,
-        ),
-        boxShadow: YLShadow.card(context),
-      ),
-      child: child,
     );
   }
 }
@@ -1250,7 +1205,7 @@ class _SplitTunnelSectionState extends ConsumerState<_SplitTunnelSection> {
         ? Colors.white.withValues(alpha: 0.06)
         : Colors.black.withValues(alpha: 0.06);
 
-    return _Card(
+    return SettingsCard(
       child: Column(
         children: [
           // Mode selector
