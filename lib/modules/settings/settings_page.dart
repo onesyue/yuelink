@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../constants.dart';
@@ -19,7 +18,6 @@ import 'connection_repair_page.dart';
 import '../../modules/yue_auth/providers/yue_auth_providers.dart';
 import '../../shared/formatters/subscription_parser.dart' show formatBytes;
 import '../../shared/app_notifier.dart';
-import '../../core/storage/settings_service.dart';
 import '../../core/env_config.dart';
 import '../updater/update_checker.dart';
 import '../../shared/rich_content.dart';
@@ -30,118 +28,10 @@ import '../mine/providers/account_providers.dart';
 import '../surge_modules/pages/modules_page.dart';
 import '../surge_modules/providers/module_provider.dart';
 
-// ── Settings-level providers ─────────────────────────────────────────────────
-
-final themeProvider = StateProvider<ThemeMode>((ref) => ThemeMode.system);
-final languageProvider = StateProvider<String>((ref) => 'zh');
-
-/// Accent color stored as hex string (without '#'), e.g. '3B82F6'.
-final accentColorProvider = StateProvider<String>((ref) => '3B82F6');
-
-/// Subscription sync interval in hours (0 = disabled).
-final subSyncIntervalProvider = StateProvider<int>((ref) => 6);
-
-/// QUIC reject policy: off | googlevideo | all.
-final quicPolicyProvider =
-    StateProvider<String>((ref) => SettingsService.defaultQuicPolicy);
-
-/// Desktop: close window behavior. Values: 'tray' (default) | 'exit'.
-final closeBehaviorProvider = StateProvider<String>((ref) => 'tray');
-
-/// Desktop: toggle connection hotkey stored as "ctrl+alt+c" lowercase.
-final toggleHotkeyProvider = StateProvider<String>((ref) => 'ctrl+alt+c');
-
-// ── Hotkey utilities ──────────────────────────────────────────────────────────
-
-/// Parse stored hotkey string to a [HotKey].
-HotKey parseStoredHotkey(String stored) {
-  final parts = stored.toLowerCase().split('+');
-  final modifiers = <HotKeyModifier>[];
-  LogicalKeyboardKey key = LogicalKeyboardKey.keyC;
-  for (final p in parts) {
-    switch (p) {
-      case 'ctrl':
-      case 'control':
-        modifiers.add(HotKeyModifier.control);
-      case 'shift':
-        modifiers.add(HotKeyModifier.shift);
-      case 'alt':
-        modifiers.add(HotKeyModifier.alt);
-      case 'meta':
-      case 'cmd':
-      case 'win':
-        modifiers.add(HotKeyModifier.meta);
-      default:
-        key = _logicalKeyFromLabel(p);
-    }
-  }
-  return HotKey(key: key, modifiers: modifiers, scope: HotKeyScope.system);
-}
-
-/// Format stored hotkey string to display label, e.g. "ctrl+alt+c" → "Ctrl+Alt+C".
-/// Consumed by sub/general_settings_page's own _HotkeyRow — do not inline or
-/// delete without checking that sub page first.
-String displayHotkey(String stored) {
-  return stored.split('+').map((p) {
-    switch (p.toLowerCase()) {
-      case 'ctrl':
-      case 'control':
-        return 'Ctrl';
-      case 'shift':
-        return 'Shift';
-      case 'alt':
-        return 'Alt';
-      case 'meta':
-      case 'cmd':
-      case 'win':
-        return Platform.isMacOS ? '⌘' : 'Win';
-      default:
-        return p.toUpperCase();
-    }
-  }).join('+');
-}
-
-LogicalKeyboardKey _logicalKeyFromLabel(String label) {
-  const map = {
-    'a': LogicalKeyboardKey.keyA,
-    'b': LogicalKeyboardKey.keyB,
-    'c': LogicalKeyboardKey.keyC,
-    'd': LogicalKeyboardKey.keyD,
-    'e': LogicalKeyboardKey.keyE,
-    'f': LogicalKeyboardKey.keyF,
-    'g': LogicalKeyboardKey.keyG,
-    'h': LogicalKeyboardKey.keyH,
-    'i': LogicalKeyboardKey.keyI,
-    'j': LogicalKeyboardKey.keyJ,
-    'k': LogicalKeyboardKey.keyK,
-    'l': LogicalKeyboardKey.keyL,
-    'm': LogicalKeyboardKey.keyM,
-    'n': LogicalKeyboardKey.keyN,
-    'o': LogicalKeyboardKey.keyO,
-    'p': LogicalKeyboardKey.keyP,
-    'q': LogicalKeyboardKey.keyQ,
-    'r': LogicalKeyboardKey.keyR,
-    's': LogicalKeyboardKey.keyS,
-    't': LogicalKeyboardKey.keyT,
-    'u': LogicalKeyboardKey.keyU,
-    'v': LogicalKeyboardKey.keyV,
-    'w': LogicalKeyboardKey.keyW,
-    'x': LogicalKeyboardKey.keyX,
-    'y': LogicalKeyboardKey.keyY,
-    'z': LogicalKeyboardKey.keyZ,
-    '0': LogicalKeyboardKey.digit0,
-    '1': LogicalKeyboardKey.digit1,
-    '2': LogicalKeyboardKey.digit2,
-    '3': LogicalKeyboardKey.digit3,
-    '4': LogicalKeyboardKey.digit4,
-    '5': LogicalKeyboardKey.digit5,
-    '6': LogicalKeyboardKey.digit6,
-    '7': LogicalKeyboardKey.digit7,
-    '8': LogicalKeyboardKey.digit8,
-    '9': LogicalKeyboardKey.digit9,
-  };
-  return map[label.toLowerCase()] ?? LogicalKeyboardKey.keyC;
-}
+// Settings-level providers live in `providers/settings_providers.dart`;
+// hotkey codec (parseStoredHotkey / displayHotkey) lives in `hotkey_codec.dart`.
+// This page doesn't itself consume them anymore — consumers import those
+// modules directly instead of reaching through the page file.
 
 // ─────────────────────────────────────────────────────────────────────────────
 

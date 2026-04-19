@@ -20,6 +20,8 @@ import 'i18n/strings_g.dart';
 import 'modules/dashboard/dashboard_page.dart';
 import 'modules/nodes/nodes_page.dart';
 import 'modules/settings/settings_page.dart';
+import 'modules/settings/providers/settings_providers.dart';
+import 'modules/settings/hotkey_codec.dart';
 import 'domain/models/proxy.dart';
 import 'modules/onboarding/onboarding_page.dart';
 import 'modules/onboarding/persona_prompt_page.dart';

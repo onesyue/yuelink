@@ -21,12 +21,13 @@ import '../../../core/providers/core_provider.dart';
 import '../../../main.dart' show tileShowNodeInfoProvider;
 import '../../profiles/providers/profiles_providers.dart';
 import '../../updater/update_checker.dart';
-import '../providers/split_tunnel_provider.dart';
 import '../../../shared/app_notifier.dart';
 import '../../../shared/event_log.dart';
 import '../../../shared/telemetry.dart';
 import '../../../theme.dart';
 import '../settings_page.dart';
+import '../providers/settings_providers.dart';
+import '../hotkey_codec.dart';
 import 'telemetry_preview_page.dart';
 
 /// Standalone settings sub-page — displays all general settings

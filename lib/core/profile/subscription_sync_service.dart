@@ -6,7 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../kernel/core_manager.dart';
 import '../../infrastructure/repositories/profile_repository.dart';
 import '../../modules/profiles/providers/profiles_providers.dart';
-import '../../modules/settings/settings_page.dart' show subSyncIntervalProvider;
+import '../../modules/settings/providers/settings_providers.dart'
+    show subSyncIntervalProvider;
 import '../../shared/event_log.dart';
 
 /// Silently updates stale subscriptions in the background.
