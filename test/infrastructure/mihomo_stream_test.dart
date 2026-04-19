@@ -25,8 +25,18 @@ class _FakeMihomoServer {
   /// etc. Each inner list is drained then the connection is closed.
   late List<List<Map<String, dynamic>>> frames;
 
-  Future<void> start({required List<List<Map<String, dynamic>>> frames}) async {
+  /// When true, connections whose frame list is exhausted stay OPEN and
+  /// silent instead of closing. Simulates a half-open TCP socket where the
+  /// kernel keeps the connection but no data flows — the exact scenario the
+  /// idle watchdog targets.
+  bool holdSilent = false;
+
+  Future<void> start({
+    required List<List<Map<String, dynamic>>> frames,
+    bool holdSilent = false,
+  }) async {
     this.frames = frames;
+    this.holdSilent = holdSilent;
     _server = await HttpServer.bind('127.0.0.1', 0);
     _server!.listen((HttpRequest req) async {
       if (WebSocketTransformer.isUpgradeRequest(req)) {
@@ -40,7 +50,11 @@ class _FakeMihomoServer {
           // Small gap so the client actually reads frames in order.
           await Future<void>.delayed(const Duration(milliseconds: 20));
         }
-        await socket.close();
+        if (!this.holdSilent) {
+          await socket.close();
+        }
+        // Otherwise leave the socket open but silent until the client
+        // closes it (idle watchdog fire) or tearDown closes the server.
       } else {
         req.response.statusCode = 400;
         await req.response.close();
@@ -133,6 +147,42 @@ void main() {
       await Future<void>.delayed(const Duration(seconds: 3));
       expect(server.connectionCount, countAtCancel,
           reason: 'No new connections should happen after cancel');
+    });
+
+    test('idle watchdog reconnects when server goes silent mid-stream',
+        () async {
+      // First connection delivers one frame then holds the socket open
+      // but silent — simulates a wedged/half-open TCP after OS suspend,
+      // NAT rebind, or tethered-hotspot transitions. With the 500ms
+      // idleTimeout, the client must force-close and reconnect; the
+      // second connection then delivers another frame.
+      await server.start(
+        frames: [
+          [
+            {'up': 1, 'down': 2},
+          ],
+          [
+            {'up': 3, 'down': 4},
+          ],
+        ],
+        holdSilent: true,
+      );
+
+      final stream = MihomoStream(host: '127.0.0.1', port: server.port);
+      final events = <({int up, int down})>[];
+      final sub = stream
+          .trafficStream(idleTimeout: const Duration(milliseconds: 500))
+          .listen(events.add);
+
+      // Wait longer than: first frame + idle timeout (500ms) + 2s retry
+      // + second frame. 4s is the safety margin.
+      await Future<void>.delayed(const Duration(seconds: 4));
+      await sub.cancel();
+
+      expect(server.connectionCount, greaterThanOrEqualTo(2),
+          reason: 'Idle watchdog should have forced a reconnect');
+      expect(events.map((e) => e.up), containsAll([1, 3]),
+          reason: 'Both frames must reach the consumer');
     });
 
     test('malformed JSON frame is dropped, stream stays alive', () async {

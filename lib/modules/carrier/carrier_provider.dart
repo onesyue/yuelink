@@ -247,11 +247,15 @@ class CarrierNotifier extends Notifier<CarrierState> {
   ///
   /// Checks YueOps every 30 minutes for SNI domain changes.
   /// If domain changed, returns true (caller should trigger subscription refresh).
-  void startPolling() {
+  ///
+  /// Pass [immediate]: true to also trigger a poll right now. Default is
+  /// false because callers that start polling at app boot usually have
+  /// already called [detectCarrier], which fetches the same `/config`
+  /// endpoint; running an eager poll duplicated that in-flight request.
+  void startPolling({bool immediate = false}) {
     _pollingTimer?.cancel();
     _pollingTimer = Timer.periodic(_pollInterval, (_) => _pollAndRefresh());
-    // Also run immediately
-    _pollAndRefresh();
+    if (immediate) _pollAndRefresh();
   }
 
   /// Poll SNI and auto-refresh subscription if domain changed.

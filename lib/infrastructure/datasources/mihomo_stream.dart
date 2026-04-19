@@ -35,11 +35,21 @@ class MihomoStream {
   // Traffic stream
   // ------------------------------------------------------------------
 
-  Stream<({int up, int down})> trafficStream() {
-    return _connectWithRetry('/traffic').map((data) => (
-          up: (data['up'] as num?)?.toInt() ?? 0,
-          down: (data['down'] as num?)?.toInt() ?? 0,
-        ));
+  /// [idleTimeout] exists mainly so tests can override the 15s production
+  /// default for determinism. Production code should call `trafficStream()`
+  /// with no args.
+  Stream<({int up, int down})> trafficStream({
+    Duration idleTimeout = const Duration(seconds: 15),
+  }) {
+    // mihomo emits /traffic at 1Hz; a 15s gap means the socket is wedged
+    // (half-open after suspend/NAT rebind). Idle watchdog force-closes so
+    // the retry loop reconnects without user action.
+    return _connectWithRetry('/traffic', idleTimeout: idleTimeout).map(
+      (data) => (
+        up: (data['up'] as num?)?.toInt() ?? 0,
+        down: (data['down'] as num?)?.toInt() ?? 0,
+      ),
+    );
   }
 
   // ------------------------------------------------------------------
@@ -58,7 +68,9 @@ class MihomoStream {
   // ------------------------------------------------------------------
 
   Stream<int> memoryStream() {
-    return _connectWithRetry('/memory')
+    // Also 1Hz periodic — apply the same half-open watchdog as /traffic.
+    return _connectWithRetry('/memory',
+            idleTimeout: const Duration(seconds: 15))
         .map((data) => (data['inuse'] as num?)?.toInt() ?? 0);
   }
 
@@ -80,11 +92,21 @@ class MihomoStream {
   /// waits [_reconnectDelay] then transparently reconnects. Callers never
   /// see a stream termination — they just keep receiving events.
   ///
+  /// [idleTimeout] enables a half-open watchdog: if no frame arrives within
+  /// that duration (including the initial connect), the channel is force-
+  /// closed so the retry loop reconnects. Intended for endpoints that emit
+  /// periodically (`/traffic`, `/memory`). Pass `null` for event-driven
+  /// endpoints like `/logs` where a long quiet period is normal.
+  ///
   /// The retry loop stops as soon as the consumer cancels its subscription.
-  Stream<Map<String, dynamic>> _connectWithRetry(String path) {
+  Stream<Map<String, dynamic>> _connectWithRetry(
+    String path, {
+    Duration? idleTimeout,
+  }) {
     late StreamController<Map<String, dynamic>> controller;
     bool cancelled = false;
     IOWebSocketChannel? activeChannel;
+    Timer? idleTimer;
 
     Future<void> connect() async {
       var retryDelay = const Duration(seconds: 2);
@@ -104,7 +126,26 @@ class MihomoStream {
           activeChannel = channel;
           var gotFirstMessage = false;
 
+          // Arm the idle watchdog immediately — a wedged TCP handshake
+          // would otherwise park us inside `await for` with no error.
+          void bumpIdle() {
+            if (idleTimeout == null) return;
+            idleTimer?.cancel();
+            idleTimer = Timer(idleTimeout, () {
+              debugPrint(
+                '[MihomoStream] idle_timeout path=$path '
+                'after=${idleTimeout.inMilliseconds}ms — force-reconnect',
+              );
+              // Closing the sink makes `channel.stream` terminate, which
+              // exits the `await for` and falls into the reconnect branch.
+              activeChannel?.sink.close();
+            });
+          }
+
+          bumpIdle();
+
           await for (final event in channel.stream) {
+            bumpIdle();
             // Reset backoff only after receiving first message — prevents
             // tight 2s retry loop when server accepts then immediately closes.
             if (!gotFirstMessage) {
@@ -112,6 +153,7 @@ class MihomoStream {
               retryDelay = const Duration(seconds: 2);
             }
             if (cancelled) {
+              idleTimer?.cancel();
               activeChannel = null;
               return;
             }
@@ -127,9 +169,11 @@ class MihomoStream {
               );
             }
           }
+          idleTimer?.cancel();
           activeChannel = null;
           // Stream ended cleanly (server closed); fall through to reconnect
         } catch (e) {
+          idleTimer?.cancel();
           activeChannel = null;
           // Connection failed or dropped
           final msg = e.toString();
@@ -159,6 +203,7 @@ class MihomoStream {
       onListen: () => connect(),
       onCancel: () {
         cancelled = true;
+        idleTimer?.cancel();
         activeChannel?.sink.close();
         activeChannel = null;
         controller.close();

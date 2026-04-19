@@ -393,6 +393,13 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
   /// _onAppResumed() on the same engine-create cycle.
   bool _initialRecoveryDone = false;
 
+  /// True while `_onAppResumed` is executing. Fast background↔foreground
+  /// flips on mobile (and multi-window surface redraws on desktop) can
+  /// deliver a second `resumed` before the first handler's awaits return;
+  /// without this guard, two handlers race on the same provider invalidations
+  /// and `RecoveryManager.checkCoreHealth()` calls.
+  bool _resumeInFlight = false;
+
   @override
   void initState() {
     super.initState();
@@ -655,10 +662,15 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
 
   /// Detect carrier via YueOps after VPN connects.
   /// Fetches the user's real (direct) IP to determine ISP (CT/CU/CM).
+  ///
+  /// Order matters: `detectCarrier()` fetches `/config` as part of its
+  /// Future.wait; `startPolling()` schedules the periodic poll without
+  /// firing an immediate one, so we don't hit `/config` twice in the same
+  /// tick. The scheduled poll kicks in at its normal 30-minute interval.
   void _startCarrierDetection() {
     final carrier = ref.read(carrierProvider.notifier);
-    carrier.startPolling();
     carrier.detectCarrier();
+    carrier.startPolling();
   }
 
   @override
@@ -717,7 +729,17 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
             '[AppLifecycle] skipping resumed — initial recovery pending');
         return;
       }
-      _onAppResumed().then((_) {
+      // Second-level guard: coalesce overlapping resume events. If a handler
+      // is already running, drop this one — the in-flight call will finish
+      // refreshing everything. Without this, two resume events during the
+      // same ~1-2s window double-invalidate streams and race on recovery.
+      if (_resumeInFlight) {
+        debugPrint('[AppLifecycle] resumed coalesced — handler in flight');
+        return;
+      }
+      _resumeInFlight = true;
+      _onAppResumed().whenComplete(() {
+        _resumeInFlight = false;
         // Clear recovery guard for subsequent resume calls (background→foreground).
         // The initial engine-create path clears this in the post-frame callback.
         if (Platform.isAndroid) {
