@@ -573,10 +573,10 @@ experimental:
     test(
         'desktop tun uses AppConstants.defaultTunMtu (matches hot-switch PATCH)',
         () {
-      // Only assert on desktop — other platforms take a different branch.
-      if (!(Platform.isMacOS || Platform.isWindows || Platform.isLinux)) {
-        return;
-      }
+      // Production code path `if (Platform.isMacOS || Platform.isWindows)`
+      // only injects the TUN section on those two desktops. Linux + mobile
+      // fall through untouched, so the assertion below doesn't apply there.
+      if (!(Platform.isMacOS || Platform.isWindows)) return;
       const config = 'mixed-port: 7890\nproxies: []\n';
       final result = ConfigTemplate.process(config, connectionMode: 'tun');
       expect(result, contains('mtu: ${AppConstants.defaultTunMtu}'));
