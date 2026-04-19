@@ -5,18 +5,16 @@
 // CoreActions reads them directly. They are re-exported here for convenience so
 // settings widgets can import from this single location.
 //
+// `subSyncIntervalProvider` lives in `core/providers/subscription_sync_providers.dart`
+// for the same reason (consumed by `core/profile/subscription_sync_service.dart`),
+// and is re-exported here so settings-side imports stay stable.
+//
 // proxyProvidersProvider + ProxyProvidersNotifier have moved here from
 // lib/providers/proxy_provider_provider.dart.
 //
-// The seven "UI preference" StateProviders below (theme, language, accent,
-// sub-sync interval, QUIC policy, desktop close behavior, toggle hotkey)
-// were previously declared at the top of settings_page.dart. Externalising
-// them so main.dart and subscription_sync_service can pull them without
-// importing the page file.
-//
-// NOTE: `core/profile/subscription_sync_service.dart` imports this file
-// from inside `core/`, i.e. still `core -> modules`. Fixing that reverse
-// dependency is out of scope for this batch — tracked for a follow-up.
+// The six "UI preference" StateProviders below (theme, language, accent,
+// QUIC policy, desktop close behavior, toggle hotkey) were previously
+// declared at the top of settings_page.dart.
 
 import 'package:flutter/material.dart' show ThemeMode;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -33,6 +31,12 @@ export '../../../core/providers/core_provider.dart'
         systemProxyOnConnectProvider,
         autoConnectProvider;
 
+// Re-export subscription-sync interval (now defined under core/providers/
+// so that core/profile/subscription_sync_service doesn't have to import
+// back into modules/).
+export '../../../core/providers/subscription_sync_providers.dart'
+    show subSyncIntervalProvider;
+
 // Re-export split tunnel providers.
 export 'split_tunnel_provider.dart';
 
@@ -46,9 +50,6 @@ final languageProvider = StateProvider<String>((ref) => 'zh');
 
 /// Accent color stored as hex string (without '#'), e.g. '3B82F6'.
 final accentColorProvider = StateProvider<String>((ref) => '3B82F6');
-
-/// Subscription sync interval in hours (0 = disabled).
-final subSyncIntervalProvider = StateProvider<int>((ref) => 6);
 
 /// QUIC reject policy: off | googlevideo | all.
 final quicPolicyProvider =
