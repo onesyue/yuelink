@@ -2,6 +2,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../domain/models/profile.dart';
 import '../../../core/kernel/core_manager.dart';
+import '../../../core/providers/subscription_sync_providers.dart'
+    show profileSyncGenerationProvider;
 import '../../../infrastructure/repositories/profile_repository.dart';
 import '../../../core/storage/settings_service.dart';
 import '../../../shared/telemetry.dart';
@@ -42,6 +44,12 @@ final profilesProvider =
 class ProfilesNotifier extends Notifier<AsyncValue<List<Profile>>> {
   @override
   AsyncValue<List<Profile>> build() {
+    // Re-read profiles whenever the background sync service finishes a
+    // batch update. One-way notification from core — ignored on first
+    // build (prev == null) since `load()` below already seeds the list.
+    ref.listen<int>(profileSyncGenerationProvider, (prev, next) {
+      if (prev != null) load();
+    });
     load();
     return const AsyncValue.loading();
   }

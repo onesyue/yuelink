@@ -5,9 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../kernel/core_manager.dart';
 import '../../infrastructure/repositories/profile_repository.dart';
-import '../../modules/profiles/providers/profiles_providers.dart';
 import '../providers/subscription_sync_providers.dart'
-    show subSyncIntervalProvider;
+    show subSyncIntervalProvider, profileSyncGenerationProvider;
 import '../../shared/event_log.dart';
 
 /// Silently updates stale subscriptions in the background.
@@ -52,10 +51,16 @@ Future<void> _syncStaleProfiles(Ref ref) async {
   if (_syncing) return;
   _syncing = true;
   try {
-    final profiles = ref.read(profilesProvider).valueOrNull;
-    if (profiles == null || profiles.isEmpty) return;
-
+    // Read directly from the repository (infrastructure layer) instead of
+    // reaching into `modules/profiles/providers/profiles_providers.dart`
+    // to read `profilesProvider.valueOrNull`. This keeps `core/` free of
+    // any `modules/` import. The UI's `profilesProvider` is still the
+    // source of truth for screens; this service just fetches the list
+    // it needs for its own staleness check.
     final repo = ref.read(profileRepositoryProvider);
+    final profiles = await repo.loadProfiles();
+    if (profiles.isEmpty) return;
+
     final now = DateTime.now();
     final proxyPort = CoreManager.instance.isRunning
         ? CoreManager.instance.mixedPort
@@ -90,9 +95,12 @@ Future<void> _syncStaleProfiles(Ref ref) async {
       }
     }
 
-    // Refresh in-memory profiles list once after all updates, not per profile.
+    // Refresh in-memory profiles list once after all updates, not per
+    // profile. The modules/profiles notifier listens to this counter and
+    // re-runs its own load(); this service does not hold a reference to
+    // the modules provider.
     if (updated > 0) {
-      ref.read(profilesProvider.notifier).load();
+      ref.read(profileSyncGenerationProvider.notifier).state++;
     }
   } finally {
     _syncing = false;

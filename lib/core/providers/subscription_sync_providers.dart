@@ -17,3 +17,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 /// `modules/settings/providers/settings_providers.dart`, so their import
 /// paths are unchanged.
 final subSyncIntervalProvider = StateProvider<int>((ref) => 6);
+
+/// One-way notification bump that `subscription_sync_service` increments
+/// after it finishes a batch update of stale profiles. The
+/// `ProfilesNotifier` in `modules/profiles/providers/profiles_providers.dart`
+/// listens for changes and re-runs `load()`, so the UI's `lastUpdated`
+/// badges refresh without `core/` having to import the profiles module.
+///
+/// Direction: `modules → core` (the notifier subscribes to a core-side
+/// counter). Core never references `profilesProvider` directly anymore.
+/// Bumping this counter is a pure side-effect signal — do NOT read the
+/// counter value; only listen for transitions.
+final profileSyncGenerationProvider = StateProvider<int>((ref) => 0);
