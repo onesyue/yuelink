@@ -96,7 +96,12 @@ final offlineProxyGroupsProvider =
       groups.add(ProxyGroup(name: name, type: type, all: all, now: ''));
     }
     return groups;
-  } catch (_) {
+  } catch (e) {
+    // Offline mode silently returning [] here means the user sees an
+    // empty node list with no idea why — typically the active profile's
+    // YAML is malformed or truncated. Log so support can map "no groups
+    // shown" to a parse error instead of guessing.
+    debugPrint('[OfflineProxyGroups] YAML parse failed: $e');
     return [];
   }
 });
@@ -474,8 +479,14 @@ class DelayTestActions {
             );
           }
         }
-      } catch (_) {
-        // API error, mark all as failed
+      } catch (e) {
+        // Group test failure surfaces to the user as every node showing
+        // a timeout dot — without a log line, the actual cause (HTTP
+        // 4xx/5xx from mihomo, network drop, auth token rejection) is
+        // invisible. Log once with context before marking nodes failed.
+        debugPrint(
+            '[DelayTest] group "$groupName" (${proxyNames.length} nodes) '
+            'failed: $e');
         final current = Map<String, int>.from(ref.read(delayResultsProvider));
         for (final name in proxyNames) {
           current[name] = -1;
