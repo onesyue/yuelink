@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:launch_at_startup/launch_at_startup.dart';
 
@@ -27,8 +26,9 @@ import '../../../shared/telemetry.dart';
 import '../../../theme.dart';
 import '../providers/settings_providers.dart';
 import '../widgets/primitives.dart';
-import '../hotkey_codec.dart';
 import 'widgets/accent_color_row.dart';
+import 'widgets/close_behavior_row.dart';
+import 'widgets/hotkey_row.dart';
 import 'telemetry_preview_page.dart';
 
 /// Standalone settings sub-page — displays all general settings
@@ -798,10 +798,10 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
                       ),
                       if (!Platform.isLinux) ...[
                         Divider(height: 1, thickness: 0.5, color: dividerColor),
-                        _CloseBehaviorRow(),
+                        const CloseBehaviorRow(),
                       ],
                       Divider(height: 1, thickness: 0.5, color: dividerColor),
-                      _HotkeyRow(),
+                      const HotkeyRow(),
                     ],
                   ),
                 ),
@@ -996,159 +996,6 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
   }
 }
 
-class _CloseBehaviorRow extends ConsumerWidget {
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final s = S.of(context);
-    final behavior = ref.watch(closeBehaviorProvider);
-    return YLInfoRow(
-      label: s.closeWindowBehavior,
-      trailing: SizedBox(
-        width: 260,
-        child: SegmentedButton<String>(
-          showSelectedIcon: false,
-          style: SegmentedButton.styleFrom(
-            visualDensity: VisualDensity.compact,
-            textStyle: const TextStyle(fontSize: 12),
-          ),
-          segments: [
-            ButtonSegment(value: 'tray', label: Text(s.closeBehaviorTray)),
-            ButtonSegment(value: 'exit', label: Text(s.closeBehaviorExit)),
-          ],
-          selected: {behavior},
-          onSelectionChanged: (v) async {
-            final val = v.first;
-            ref.read(closeBehaviorProvider.notifier).state = val;
-            await SettingsService.setCloseBehavior(val);
-          },
-        ),
-      ),
-    );
-  }
-}
-
-class _HotkeyRow extends ConsumerStatefulWidget {
-  @override
-  ConsumerState<_HotkeyRow> createState() => _HotkeyRowState();
-}
-
-class _HotkeyRowState extends ConsumerState<_HotkeyRow> {
-  bool _registering = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final s = S.of(context);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final stored = ref.watch(toggleHotkeyProvider);
-    final display = displayHotkey(stored);
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(s.toggleConnectionHotkey,
-                    style: YLText.body.copyWith(
-                        color: isDark ? YLColors.zinc200 : YLColors.zinc700)),
-              ),
-              Text(
-                display,
-                style: YLText.body.copyWith(
-                  fontFamily: 'monospace',
-                  color: isDark ? YLColors.zinc300 : YLColors.zinc600,
-                ),
-              ),
-              const SizedBox(width: 8),
-              TextButton(
-                onPressed: _registering ? null : () => _startRecording(s),
-                child: Text(_registering ? s.hotkeyListening : s.hotkeyEdit),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _startRecording(S s) {
-    setState(() => _registering = true);
-    final focusNode = FocusNode();
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        title: Text(s.hotkeyListening),
-        content: KeyboardListener(
-          focusNode: focusNode..requestFocus(),
-          autofocus: true,
-          onKeyEvent: (event) {
-            if (event is! KeyDownEvent) return;
-            if (_isModifierOnly(event.logicalKey)) return;
-
-            final parts = <String>[];
-            if (HardwareKeyboard.instance.isControlPressed) parts.add('ctrl');
-            if (HardwareKeyboard.instance.isAltPressed) parts.add('alt');
-            if (HardwareKeyboard.instance.isShiftPressed) parts.add('shift');
-            if (HardwareKeyboard.instance.isMetaPressed) parts.add('meta');
-
-            final label = event.logicalKey.keyLabel.toLowerCase();
-            if (label.isNotEmpty && !parts.contains(label)) parts.add(label);
-
-            if (parts.length >= 2) {
-              final combo = parts.join('+');
-              ref.read(toggleHotkeyProvider.notifier).state = combo;
-              SettingsService.setToggleHotkey(combo);
-              Navigator.pop(ctx);
-            }
-          },
-          child: SizedBox(
-            height: 60,
-            child: Center(
-              child: Text(
-                s.hotkeyPrompt,
-                style: YLText.body.copyWith(color: YLColors.zinc500),
-              ),
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text(s.cancel),
-          ),
-        ],
-      ),
-    ).whenComplete(() {
-      setState(() => _registering = false);
-      focusNode.dispose();
-    });
-  }
-
-  bool _isModifierOnly(LogicalKeyboardKey key) {
-    final modifiers = {
-      LogicalKeyboardKey.control,
-      LogicalKeyboardKey.controlLeft,
-      LogicalKeyboardKey.controlRight,
-      LogicalKeyboardKey.shift,
-      LogicalKeyboardKey.shiftLeft,
-      LogicalKeyboardKey.shiftRight,
-      LogicalKeyboardKey.alt,
-      LogicalKeyboardKey.altLeft,
-      LogicalKeyboardKey.altRight,
-      LogicalKeyboardKey.meta,
-      LogicalKeyboardKey.metaLeft,
-      LogicalKeyboardKey.metaRight,
-      LogicalKeyboardKey.capsLock,
-      LogicalKeyboardKey.fn,
-    };
-    return modifiers.contains(key);
-  }
-}
 
 // ── Split Tunnel (Android only) ──────────────────────────────────────────────
 
