@@ -48,7 +48,7 @@ dependencies:
   media_kit_libs_video: ^1.0.5
   media_kit_libs_ios_video: ^1.0.5
   volume_controller: ^3.4.4
-  flutter_widget_from_html_core: ^0.15.2
+  flutter_widget_from_html_core: ^0.17.2
   mobile_scanner: ^6.0.0
   google_fonts: ^6.2.1
   # Material You — pull system dynamic color palette on Android 12+.
