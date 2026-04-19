@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:developer' as developer;
 import 'dart:ffi';
 
 import 'package:ffi/ffi.dart';
@@ -20,8 +21,13 @@ class CoreController {
       final _ = bindings.isRunning; // probe symbol to verify core is linked
       _bindings = bindings;
       _useMock = false;
-    } catch (_) {
-      // Native library not found — use mock for UI development
+    } catch (e) {
+      // Native library not found — use mock for UI development. In a
+      // production build, hitting this path means libclash failed to load
+      // or link (often an install/bundling regression), and silent mock
+      // fallback hides it from the startup report.
+      developer.log('FFI probe failed, falling back to mock: $e',
+          name: 'CoreController');
       _useMock = true;
     }
   }
@@ -198,7 +204,14 @@ class CoreController {
       if (map['running'] == true) {
         return (map['port'] as num?)?.toInt() ?? 0;
       }
-    } catch (_) {}
+    } catch (e) {
+      // Shape of status JSON is owned by the Go side; a parse failure here
+      // usually means the native exports changed without Dart side syncing.
+      // Returning 0 makes the UI think MITM is off — worth logging so the
+      // Go<->Dart drift is visible instead of silent.
+      developer.log('MITM status JSON parse failed: $e',
+          name: 'CoreController');
+    }
     return 0;
   }
 

@@ -513,8 +513,15 @@ class SystemProxyManager {
       _cachedNetworkServices = services;
       _networkServicesCachedAt = DateTime.now();
       return services;
-    } catch (_) {
-      return ['Wi-Fi']; // Fallback
+    } catch (e) {
+      // `networksetup` ships with macOS — reaching this branch means the
+      // user's system is broken in an unusual way. Falling back to
+      // ['Wi-Fi'] means Ethernet/VPN interfaces will silently miss the
+      // proxy setting; surface the reason so "proxy on but some traffic
+      // bypasses" is debuggable.
+      debugPrint('[SystemProxy] networksetup -listallnetworkservices failed: '
+          '$e — falling back to [Wi-Fi]');
+      return ['Wi-Fi'];
     }
   }
 }

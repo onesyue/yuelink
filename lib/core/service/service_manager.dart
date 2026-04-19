@@ -888,7 +888,12 @@ if (Test-Path $serviceDir) {
         final uid = int.tryParse(r.stdout.toString().trim());
         if (uid != null) return uid;
       }
-    } catch (_) {}
+    } catch (e) {
+      // Extremely rare — `id` is part of coreutils. If we hit this, the
+      // service side is about to log its own "unexpected uid" diagnostic
+      // and we want the client-side line to pair up with it.
+      EventLog.write('[ServiceManager] uid probe failed: $e');
+    }
     return -1;
   }
 
@@ -983,7 +988,11 @@ rm -rf ${_shellQuote(_linuxServiceDir)}
       final content = f.readAsStringSync();
       try { f.deleteSync(); } catch (_) {}
       return content;
-    } catch (_) {
+    } catch (e) {
+      // Caller can't distinguish "script produced empty output" from
+      // "we failed to read it" without this line. Keep the message short —
+      // event.log is tailed by the desktop repair page.
+      EventLog.write('[ServiceManager] readAndDelete failed: path=$path err=$e');
       return '';
     }
   }
