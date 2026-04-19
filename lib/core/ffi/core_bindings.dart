@@ -48,56 +48,72 @@ class CoreBindings {
 
   static DynamicLibrary _loadWindowsLibrary() {
     final exeDir = File(Platform.resolvedExecutable).parent.path;
-    // ignore: avoid_print
-    print('[CoreBindings] exe directory: $exeDir');
-
-    // Search order: next to exe, then bare name (system PATH)
-    final candidates = [
-      '$exeDir\\libclash.dll',
-      'libclash.dll',
-    ];
-
-    for (final path in candidates) {
-      final file = File(path);
-      final exists = file.existsSync();
-      // ignore: avoid_print
-      print('[CoreBindings] trying: $path (exists: $exists)');
-      if (exists) {
-        try {
-          return DynamicLibrary.open(path);
-        } catch (e) {
-          // ignore: avoid_print
-          print('[CoreBindings] load failed for $path: $e');
-        }
-      }
-    }
-
-    throw Exception(
-      'Cannot load libclash.dll\n'
-      'exe directory: $exeDir\n'
-      'Searched: ${candidates.join(", ")}\n'
-      'Run: dart setup.dart build -p windows && dart setup.dart install -p windows',
+    // Search order: next to exe, then bare name (system PATH).
+    final candidates = ['$exeDir\\libclash.dll', 'libclash.dll'];
+    return _tryOpen(
+      candidates,
+      missingLibName: 'libclash.dll',
+      exeDir: exeDir,
+      installHint:
+          'dart setup.dart build -p windows && dart setup.dart install -p windows',
     );
   }
 
   static DynamicLibrary _loadLinuxLibrary() {
     final exeDir = File(Platform.resolvedExecutable).parent.path;
-    // Flutter Linux bundle: executable is in bundle/, .so files are in bundle/lib/
+    // Flutter Linux bundle: executable is in bundle/, .so files in bundle/lib/.
     final candidates = [
       '$exeDir/lib/libclash.so',
       '$exeDir/libclash.so',
       'libclash.so',
     ];
+    return _tryOpen(
+      candidates,
+      missingLibName: 'libclash.so',
+      exeDir: exeDir,
+      installHint:
+          'dart setup.dart build -p linux && dart setup.dart install -p linux',
+    );
+  }
+
+  /// Try each candidate path in order. Silent on success. On total failure,
+  /// throws a single Exception whose message lists every attempt and the
+  /// reason it didn't work (missing / open-failed + error). Callers never
+  /// see the normal-path prints that used to fire on every startup.
+  ///
+  /// Path-shaped candidates (contain `/` or `\`) get an `existsSync()`
+  /// pre-check so we skip obviously-absent files without invoking the
+  /// loader. Bare-name candidates (e.g. `libclash.dll`, `libclash.so`)
+  /// skip that check and go straight to `DynamicLibrary.open` — the OS
+  /// loader resolves them against its own search list (Windows PATH,
+  /// Linux LD_LIBRARY_PATH + system paths) and our cwd `existsSync()`
+  /// would falsely mark a system-resident library as missing.
+  static DynamicLibrary _tryOpen(
+    List<String> candidates, {
+    required String missingLibName,
+    required String exeDir,
+    required String installHint,
+  }) {
+    final attempts = <String>[];
     for (final path in candidates) {
-      if (File(path).existsSync()) {
-        try {
-          return DynamicLibrary.open(path);
-        } catch (_) {}
+      final isBareName = !path.contains('/') && !path.contains('\\');
+      if (!isBareName && !File(path).existsSync()) {
+        attempts.add('$path — missing');
+        continue;
+      }
+      try {
+        return DynamicLibrary.open(path);
+      } catch (e) {
+        attempts.add(isBareName
+            ? '$path — loader search failed: $e'
+            : '$path — open failed: $e');
       }
     }
     throw Exception(
-      'Cannot load libclash.so\n'
-      'Run: dart setup.dart build -p linux && dart setup.dart install -p linux',
+      'Cannot load $missingLibName\n'
+      'exe directory: $exeDir\n'
+      'Attempts:\n  - ${attempts.join("\n  - ")}\n'
+      'Run: $installHint',
     );
   }
 

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../infrastructure/home/home_repository.dart';
@@ -181,8 +182,13 @@ final homeContentProvider = FutureProvider<HomeContent>((ref) async {
     final proxyPort = ref.watch(businessProxyPortProvider);
     final json = await HomeRepository(proxyPort: proxyPort).fetchHomeConfig();
     if (json != null) return HomeContent.fromJson(json);
-  } catch (_) {}
-  return HomeContent.local(); // fallback to local defaults
+  } catch (e) {
+    // Non-fatal: widget layer falls back to local defaults. Log so the cause
+    // (network / JSON shape / parse) is visible in diagnostics instead of
+    // silently degrading to the local banner set.
+    debugPrint('[HomeContent] remote fetch failed, using local defaults: $e');
+  }
+  return HomeContent.local();
 });
 
 // ── Derived sync providers ────────────────────────────────────────────────────

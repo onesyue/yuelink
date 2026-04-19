@@ -45,8 +45,21 @@ class MihomoApi {
           .timeout(const Duration(seconds: 2));
       final ok = resp.statusCode == 200;
       if (ok) _breaker.reset();
+      if (!ok) {
+        debugPrint(
+            '[MihomoApi] /version returned HTTP ${resp.statusCode} @ $_baseUrl');
+      }
       return ok;
-    } catch (_) {
+    } on SocketException {
+      // Expected during startup / stopped state — mihomo not listening yet.
+      return false;
+    } on TimeoutException {
+      // Expected when core is starting up or firewalled locally.
+      return false;
+    } catch (e) {
+      // Anything else (malformed response, TLS mismatch, unexpected throw)
+      // is worth surfacing — callers only see a bool.
+      debugPrint('[MihomoApi] /version health-check unexpected failure: $e');
       return false;
     }
   }

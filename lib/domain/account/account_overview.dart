@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 /// 账户总览数据模型（来自 YueLink Checkin API）。
 ///
 /// GET https://yue.yuebao.website/api/client/account/overview
@@ -37,7 +39,12 @@ class AccountOverview {
     if (rawExpire != null && rawExpire is String && rawExpire.isNotEmpty) {
       try {
         expireAt = DateTime.parse(rawExpire).toLocal();
-      } catch (_) {}
+      } catch (e) {
+        developer.log(
+          'expire_at parse failed: "$rawExpire" ($e)',
+          name: 'AccountOverview',
+        );
+      }
     }
 
     DateTime? lastOnlineAt;
@@ -45,7 +52,12 @@ class AccountOverview {
     if (rawLastOnline is String && rawLastOnline.isNotEmpty) {
       try {
         lastOnlineAt = DateTime.parse(rawLastOnline).toLocal();
-      } catch (_) {}
+      } catch (e) {
+        developer.log(
+          'last_online_at parse failed: "$rawLastOnline" ($e)',
+          name: 'AccountOverview',
+        );
+      }
     }
 
     final used = _toInt(json['transfer_used_bytes']) ?? 0;
