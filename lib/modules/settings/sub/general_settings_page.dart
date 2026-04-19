@@ -11,14 +11,12 @@ import '../../../core/service/service_manager.dart';
 import '../../../core/service/service_models.dart';
 import '../../../core/service/service_mode_provider.dart';
 import '../../../core/storage/settings_service.dart';
-import '../../../core/env_config.dart';
 import '../../../i18n/app_strings.dart';
 import '../../../i18n/strings_g.dart';
 import '../../../core/profile/profile_service.dart';
 import '../../../core/providers/core_provider.dart';
 import '../../../main.dart' show tileShowNodeInfoProvider;
 import '../../profiles/providers/profiles_providers.dart';
-import '../../updater/update_checker.dart';
 import '../../../shared/app_notifier.dart';
 import '../../../shared/event_log.dart';
 import '../../../shared/telemetry.dart';
@@ -27,6 +25,7 @@ import '../providers/settings_providers.dart';
 import '../widgets/primitives.dart';
 import 'widgets/appearance_section.dart';
 import 'widgets/close_behavior_row.dart';
+import 'widgets/updates_section.dart';
 import 'widgets/hotkey_row.dart';
 import 'widgets/split_tunnel_section.dart';
 import 'telemetry_preview_page.dart';
@@ -45,9 +44,6 @@ class GeneralSettingsPage extends ConsumerStatefulWidget {
 class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
   bool _launchAtStartup = false;
   bool _serviceBusy = false;
-  String _updateChannel = 'stable';
-  bool _autoCheckUpdates = true;
-  DateTime? _lastUpdateCheck;
   bool _telemetryEnabled = false;
 
   @override
@@ -58,35 +54,13 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
 
   Future<void> _loadSettings() async {
     final startup = await SettingsService.getLaunchAtStartup();
-    final channel = await UpdateChecker.getChannel();
-    final autoCheck = await UpdateChecker.getAutoCheck();
-    final lastCheck = await UpdateChecker.getLastCheck();
     final telemetry = await SettingsService.getTelemetryEnabled();
     if (mounted) {
       setState(() {
         _launchAtStartup = startup;
-        _updateChannel = channel;
-        _autoCheckUpdates = autoCheck;
-        _lastUpdateCheck = lastCheck;
         _telemetryEnabled = telemetry;
       });
     }
-  }
-
-  String _formatLastChecked(DateTime? dt, {required bool isEn}) {
-    if (dt == null) return isEn ? 'Never checked' : '从未检查';
-    final diff = DateTime.now().difference(dt);
-    if (diff.inSeconds < 60) return isEn ? 'Just now' : '刚刚';
-    if (diff.inMinutes < 60) {
-      return isEn ? '${diff.inMinutes} min ago' : '${diff.inMinutes} 分钟前';
-    }
-    if (diff.inHours < 24) {
-      return isEn ? '${diff.inHours} h ago' : '${diff.inHours} 小时前';
-    }
-    if (diff.inDays < 30) {
-      return isEn ? '${diff.inDays} d ago' : '${diff.inDays} 天前';
-    }
-    return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
   }
 
   String _quicPolicyDescription(Translations strings, String policy) {
@@ -775,100 +749,7 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
               ),
               const SizedBox(height: 16),
 
-              // === 更新 / Updates ===
-              if (EnvConfig.isStandalone) ...[
-                GsGeneralSectionTitle(isEn ? 'Updates' : '更新'),
-                SettingsCard(
-                  child: Column(
-                    children: [
-                      YLInfoRow(
-                        label: isEn ? 'Last checked' : '上次检查',
-                        value: _formatLastChecked(
-                          _lastUpdateCheck,
-                          isEn: isEn,
-                        ),
-                        trailing: const SizedBox.shrink(),
-                      ),
-                      Divider(height: 1, thickness: 0.5, color: dividerColor),
-                      YLSettingsRow(
-                        title: isEn
-                            ? 'Auto-check updates on startup'
-                            : '启动时自动检查更新',
-                        trailing: CupertinoSwitch(
-                          value: _autoCheckUpdates,
-                          activeTrackColor: YLColors.connected,
-                          onChanged: (v) async {
-                            await UpdateChecker.setAutoCheck(v);
-                            if (mounted) setState(() => _autoCheckUpdates = v);
-                          },
-                        ),
-                      ),
-                      Divider(height: 1, thickness: 0.5, color: dividerColor),
-                      YLInfoRow(
-                        label: isEn ? 'Update channel' : '更新通道',
-                        value: _updateChannel == 'pre'
-                            ? (isEn ? 'Pre-release' : '预发布')
-                            : (isEn ? 'Stable' : '稳定版'),
-                        trailing: const Icon(Icons.chevron_right,
-                            size: 18, color: YLColors.zinc400),
-                        onTap: () async {
-                          final picked = await showModalBottomSheet<String>(
-                            context: context,
-                            builder: (ctx) => SafeArea(
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  ListTile(
-                                    title: Text(
-                                      isEn ? 'Stable (stable)' : '稳定版 (stable)',
-                                    ),
-                                    subtitle: Text(
-                                      isEn
-                                          ? 'Only receive formal v* releases'
-                                          : '只接收正式 v* 版本，更稳定',
-                                      style: const TextStyle(fontSize: 12),
-                                    ),
-                                    trailing: _updateChannel == 'stable'
-                                        ? const Icon(Icons.check,
-                                            color: YLColors.primary)
-                                        : null,
-                                    onTap: () => Navigator.pop(ctx, 'stable'),
-                                  ),
-                                  ListTile(
-                                    title: Text(
-                                      isEn
-                                          ? 'Pre-release (pre-release)'
-                                          : '预发布 (pre-release)',
-                                    ),
-                                    subtitle: Text(
-                                      isEn
-                                          ? 'Get new builds early, may be unstable'
-                                          : '抢先体验新功能，可能有问题',
-                                      style: const TextStyle(fontSize: 12),
-                                    ),
-                                    trailing: _updateChannel == 'pre'
-                                        ? const Icon(Icons.check,
-                                            color: YLColors.primary)
-                                        : null,
-                                    onTap: () => Navigator.pop(ctx, 'pre'),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                          if (picked != null && picked != _updateChannel) {
-                            await UpdateChecker.setChannel(picked);
-                            if (mounted) {
-                              setState(() => _updateChannel = picked);
-                            }
-                          }
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-              ],
+              const UpdatesSection(),
 
               // === 分流 / Split Tunnel (Android only) ===
               if (Platform.isAndroid) ...[
