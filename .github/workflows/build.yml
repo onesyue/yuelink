@@ -551,6 +551,12 @@ jobs:
   # ───────────────────────────────────────────────────────────────────────────
   release:
     name: Create Release
+    # Tag-only guard: workflow_dispatch on a branch would otherwise run
+    # this job with GITHUB_REF_NAME=<branch>, which the manifest block
+    # below treats as "stable" (non-pre) and would happily overwrite
+    # update.json with the branch build. Restrict release/updater output
+    # strictly to tag pushes — branch dispatches stop at the build matrix.
+    if: startsWith(github.ref, 'refs/tags/')
     needs: [build]
     runs-on: ubuntu-latest
     permissions:
