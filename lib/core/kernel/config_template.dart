@@ -22,6 +22,12 @@ class ConfigTemplate {
   /// Prefix for temporary per-node wrapper groups injected for chain proxy.
   /// Groups are named _YueLink_Chain_0, _YueLink_Chain_1, …
   static const chainGroupPrefix = '_YueLink_Chain_';
+  static const quicRejectPolicyOff = 'off';
+  static const quicRejectPolicyGooglevideo = 'googlevideo';
+  static const quicRejectPolicyAll = 'all';
+  static const defaultQuicRejectPolicy = quicRejectPolicyGooglevideo;
+
+  static String _runtimeQuicRejectPolicy = defaultQuicRejectPolicy;
   ConfigTemplate._();
 
   /// Template variables and their replacement values.
@@ -46,6 +52,21 @@ class ConfigTemplate {
   static final _reSecret =
       RegExp(r'^secret:\s*["\x27]?(.+?)["\x27]?\s*$', multiLine: true);
   static final _reProxiesSection = RegExp(r'^proxies:\s*\n', multiLine: true);
+
+  static String normalizeQuicRejectPolicy(String? policy) {
+    switch (policy) {
+      case quicRejectPolicyOff:
+      case quicRejectPolicyGooglevideo:
+      case quicRejectPolicyAll:
+        return policy!;
+      default:
+        return defaultQuicRejectPolicy;
+    }
+  }
+
+  static void setDefaultQuicRejectPolicy(String? policy) {
+    _runtimeQuicRejectPolicy = normalizeQuicRejectPolicy(policy);
+  }
 
   /// Process a raw config from a subscription.
   ///
@@ -81,7 +102,11 @@ class ConfigTemplate {
     List<String> tunBypassAddresses = const [],
     List<String> tunBypassProcesses = const [],
     int? tunFd,
+    String? quicRejectPolicy,
   }) {
+    final effectiveQuicRejectPolicy = normalizeQuicRejectPolicy(
+      quicRejectPolicy ?? _runtimeQuicRejectPolicy,
+    );
     if (rawConfig.length < 200 * 1024) {
       return Future.value(process(
         rawConfig,
@@ -93,6 +118,7 @@ class ConfigTemplate {
         tunBypassAddresses: tunBypassAddresses,
         tunBypassProcesses: tunBypassProcesses,
         tunFd: tunFd,
+        quicRejectPolicy: effectiveQuicRejectPolicy,
       ));
     }
     // All closure captures are immutable value types — safe to send to a
@@ -107,6 +133,7 @@ class ConfigTemplate {
           tunBypassAddresses: tunBypassAddresses,
           tunBypassProcesses: tunBypassProcesses,
           tunFd: tunFd,
+          quicRejectPolicy: effectiveQuicRejectPolicy,
         ));
   }
 
@@ -120,7 +147,11 @@ class ConfigTemplate {
     List<String> tunBypassAddresses = const [],
     List<String> tunBypassProcesses = const [],
     int? tunFd,
+    String? quicRejectPolicy,
   }) {
+    final effectiveQuicRejectPolicy = normalizeQuicRejectPolicy(
+      quicRejectPolicy ?? _runtimeQuicRejectPolicy,
+    );
     var config = rawConfig;
 
     debugPrint('[Config] process start, len=${config.length}');
@@ -179,7 +210,7 @@ class ConfigTemplate {
     config = _ensureConnectivityRules(config);
     debugPrint('[Config] 10b connectivityRules done');
 
-    config = _ensureQuicReject(config);
+    config = _ensureQuicReject(config, effectiveQuicRejectPolicy);
     debugPrint('[Config] 10c quicReject done');
 
     if (!_hasKey(config, 'mode')) {
@@ -292,8 +323,10 @@ class ConfigTemplate {
 
       // Merge external proxies (from other subscriptions) into the proxies list.
       if (externalProxies != null && externalProxies.isNotEmpty) {
-        final existingNames =
-            proxies.whereType<Map<String, dynamic>>().map((p) => p['name']).toSet();
+        final existingNames = proxies
+            .whereType<Map<String, dynamic>>()
+            .map((p) => p['name'])
+            .toSet();
         for (final ep in externalProxies) {
           if (ep['name'] != null && !existingNames.contains(ep['name'])) {
             proxies.add(Map<String, dynamic>.from(ep));
@@ -487,15 +520,10 @@ class ConfigTemplate {
     // Force fake-ip DNS mode for TUN (CVR does the same in use_tun())
     config = _ensureFakeIpForTun(config);
 
-    // mtu: 1500 — matches the physical Ethernet/Wi-Fi MTU. Previous 9000
-    // was mihomo's jumbo-frame default, designed for point-to-point
-    // virtual links. On a real desktop the TUN packets traverse the
-    // kernel socket layer which is 1500-bound, so the extra 7500 bytes
-    // per packet either get re-fragmented (TCP) or silently dropped
-    // (UDP without PMTUD), costing 15-30% throughput. mihomo-party
-    // explicitly sets 1500; CVR/FlClash rely on mihomo's default which
-    // we now override to match reality. Android/iOS in _injectTunFd
-    // also use 1500 now for the same reason.
+    // mtu: AppConstants.defaultTunMtu — matches physical Ethernet/Wi-Fi MTU.
+    // Single source of truth shared with _injectTunFd (Android/iOS) and
+    // CoreLifecycleManager.hotSwitchConnectionMode so cold-start and
+    // hot-switch can never diverge again.
     final buf = StringBuffer()
       ..write('$config\ntun:\n')
       ..write('  enable: true\n')
@@ -504,7 +532,7 @@ class ConfigTemplate {
       ..write('  auto-detect-interface: true\n')
       ..write('  dns-hijack:\n')
       ..write('    - any:53\n')
-      ..write('  mtu: 1500\n');
+      ..write('  mtu: ${AppConstants.defaultTunMtu}\n');
 
     // TUN bypass: exclude addresses from TUN routing
     if (bypassAddresses.isNotEmpty) {
@@ -623,7 +651,7 @@ class ConfigTemplate {
         '  file-descriptor: $fd\n'
         '  inet4-address:\n'
         '    - 172.19.0.1/30\n'
-        '  mtu: 1500\n'
+        '  mtu: ${AppConstants.defaultTunMtu}\n'
         '  auto-route: false\n'
         '  auto-detect-interface: false\n'
         '  dns-hijack:\n'
@@ -1095,23 +1123,16 @@ class ConfigTemplate {
     return config;
   }
 
-  /// Ensure mihomo `experimental` tuning for cross-border QUIC/hy2.
-  ///
-  /// - `quic-go-disable-gso`: Windows 11 + some older Linux kernels have GSO
-  ///   (Generic Segmentation Offload) bugs that silently drop or duplicate
-  ///   UDP packets on high-throughput QUIC streams. Affects hy2 heavily.
-  /// - `quic-go-disable-ecn`: several Chinese ISPs (CM/CT/CU provincial links)
-  ///   clear or rewrite IP ECN bits on transit; quic-go interprets this as
-  ///   congestion and throttles itself to a crawl. Disabling ECN ends that.
-  ///
-  /// Cost: ~5-10% throughput on fully-compliant paths (uncommon in the
-  /// YueLink user population). Benefit: eliminates two well-documented
-  /// silent-slowness classes. Skip if user has set either key already.
+  /// `experimental` policy: do NOT inject defaults. Aligned with mihomo
+  /// upstream (both `quic-go-disable-gso` and `quic-go-disable-ecn` default
+  /// to `false`). The previous default-on setup was a workaround for
+  /// Windows 11 GSO bugs + CN ISP ECN rewrites, but quic-go's GSO is
+  /// Linux-only anyway and forcing either off on compliant paths costs
+  /// ~20-30% hy2/QUIC throughput — which shows up as visible regressions
+  /// vs. ClashMeta Verge Rev on the same node.
+  /// If a subscription ships its own `experimental` block, keep it.
   static String _ensureExperimental(String config) {
-    if (_hasKey(config, 'experimental')) return config;
-    return '$config\nexperimental:\n'
-        '  quic-go-disable-gso: true\n'
-        '  quic-go-disable-ecn: true\n';
+    return config;
   }
 
   /// Ensure allow-lan for mixed-port to listen on all interfaces.
@@ -1290,8 +1311,9 @@ class ConfigTemplate {
     for (final d in domains) {
       // Google/gstatic/msft 域名被 GFW 干扰，不注入 DIRECT
       // 让订阅自带的 Google→代理 规则处理
-      if (d.contains('google') || d.contains('gstatic') || d.contains('msft'))
+      if (d.contains('google') || d.contains('gstatic') || d.contains('msft')) {
         continue;
+      }
       if (!config.contains('DOMAIN,$d,')) {
         injection += '$ruleIndent- "DOMAIN,$d,DIRECT"\n';
       }
@@ -1304,39 +1326,59 @@ class ConfigTemplate {
         config.substring(rulesMatch.end);
   }
 
-  /// Reject QUIC (all UDP/443) so apps fall back to TCP/TLS.
+  /// Apply the configured QUIC fallback policy.
+  static String _ensureQuicReject(String config, String policy) {
+    switch (normalizeQuicRejectPolicy(policy)) {
+      case quicRejectPolicyOff:
+        return config;
+      case quicRejectPolicyGooglevideo:
+        return _ensureGooglevideoQuicReject(config);
+      case quicRejectPolicyAll:
+        return _ensureGlobalQuicReject(config);
+      default:
+        return config;
+    }
+  }
+
+  /// Reject UDP/QUIC to YouTube video CDN so clients fall back to TCP/HTTP/2.
   ///
-  /// Symptom it fixes: "封面加载很快，视频播放很卡" — thumbnails over TCP/TLS
-  /// stream fine while video bytes over QUIC/UDP-443 stall. Affects YouTube
-  /// (`*.googlevideo.com`), Cloudflare-hosted media, Meta/TikTok, any site
-  /// advertising `Alt-Svc: h3=...`. Root causes: on Android, TUN `stack:
-  /// gvisor` + `file-descriptor` caps UDP conntrack at a few Mbps (TCP gets
-  /// kernel offload and handles 4K); on HY2 tunnels, CN-ISP UDP throttling /
-  /// QUIC-path instability compounds the problem.
-  ///
-  /// Chrome/Safari/Firefox and mobile apps all honor the QUIC `broken-path`
-  /// signal when UDP handshake times out (REJECT-DROP silently drops the
-  /// packet) and fall back to HTTP/2 over TLS/TCP within ~100ms, yielding a
-  /// slight first-stream delay then smooth playback at TCP speed.
-  ///
-  /// Matches the panel's clashmeta subscription template and the node-side
-  /// `route-singbox.json` UDP:443 block — three defense layers agree.
-  /// Idempotent: skip if any rule already rejects UDP/443 globally.
-  static String _ensureQuicReject(String config) {
+  /// This keeps the previous narrow fix for `*.googlevideo.com` without
+  /// breaking other HTTP/3-capable streaming apps that rely on QUIC.
+  static String _ensureGooglevideoQuicReject(String config) {
     final rulesMatch =
         RegExp(r'^rules:\s*\n', multiLine: true).firstMatch(config);
     if (rulesMatch == null) return config;
 
     final rulesBody = config.substring(rulesMatch.end);
-    // Idempotent: skip when a UDP/443 REJECT already exists (either
-    // ordering of the AND condition). The panel subscription template now
-    // injects this exact rule, so this prevents duplication on re-process.
     final alreadyHandled = RegExp(
-      r'AND,\(\(NETWORK,UDP\),\(DST-PORT,443\)\),REJECT'
-      r'|AND,\(\(DST-PORT,443\),\(NETWORK,UDP\)\),REJECT',
+      r'googlevideo\.com[^\n]*REJECT',
       caseSensitive: false,
     ).hasMatch(rulesBody);
-    if (alreadyHandled) return config;
+    if (alreadyHandled || _hasGlobalUdp443Reject(rulesBody)) return config;
+
+    final firstRule =
+        RegExp(r'^([ \t]*)-\s', multiLine: true).firstMatch(rulesBody);
+    final ruleIndent = firstRule?.group(1) ?? '  ';
+
+    final injection =
+        '$ruleIndent- "AND,((DOMAIN-SUFFIX,googlevideo.com),(NETWORK,UDP)),REJECT-DROP"\n';
+
+    return config.substring(0, rulesMatch.end) +
+        injection +
+        config.substring(rulesMatch.end);
+  }
+
+  /// Reject QUIC (all UDP/443) so apps fall back to TCP/TLS.
+  ///
+  /// This is intentionally reserved for manual diagnostics because it impacts
+  /// all HTTP/3-capable services, including region-unlock streaming apps.
+  static String _ensureGlobalQuicReject(String config) {
+    final rulesMatch =
+        RegExp(r'^rules:\s*\n', multiLine: true).firstMatch(config);
+    if (rulesMatch == null) return config;
+
+    final rulesBody = config.substring(rulesMatch.end);
+    if (_hasGlobalUdp443Reject(rulesBody)) return config;
 
     final firstRule =
         RegExp(r'^([ \t]*)-\s', multiLine: true).firstMatch(rulesBody);
@@ -1348,6 +1390,14 @@ class ConfigTemplate {
     return config.substring(0, rulesMatch.end) +
         injection +
         config.substring(rulesMatch.end);
+  }
+
+  static bool _hasGlobalUdp443Reject(String rulesBody) {
+    return RegExp(
+      r'AND,\(\(NETWORK,UDP\),\(DST-PORT,443\)\),REJECT'
+      r'|AND,\(\(DST-PORT,443\),\(NETWORK,UDP\)\),REJECT',
+      caseSensitive: false,
+    ).hasMatch(rulesBody);
   }
 
   /// Determine if a subscription config is complete (has groups + rules).

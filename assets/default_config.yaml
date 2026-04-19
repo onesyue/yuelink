@@ -28,13 +28,6 @@ global-client-fingerprint: chrome
 find-process-mode: always
 keep-alive-interval: 30
 
-# Cross-border QUIC/hy2 tuning. quic-go-disable-gso works around Win11 +
-# older-kernel GSO bugs; quic-go-disable-ecn avoids Chinese ISP ECN rewrites
-# that quic-go misinterprets as congestion.
-experimental:
-  quic-go-disable-gso: true
-  quic-go-disable-ecn: true
-
 profile:
   # store-fake-ip: false — subscriptions refresh daily and persisted fake-IP
   # mappings survive rule changes (mihomo discussions #1334 / #1629 / #1816).

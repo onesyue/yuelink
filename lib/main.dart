@@ -33,6 +33,7 @@ import 'core/managers/system_proxy_manager.dart';
 import 'core/providers/core_provider.dart';
 import 'modules/profiles/providers/profiles_providers.dart';
 import 'shared/app_notifier.dart';
+import 'core/kernel/config_template.dart';
 import 'core/kernel/core_manager.dart';
 import 'core/kernel/recovery_manager.dart';
 import 'core/platform/tile_service.dart';
@@ -204,6 +205,7 @@ Future<void> _bootstrap() async {
   final savedProfileId = await SettingsService.getActiveProfileId();
   final savedRoutingMode = await SettingsService.getRoutingMode();
   final savedConnectionMode = await SettingsService.getConnectionMode();
+  final savedQuicPolicy = await SettingsService.getQuicPolicy();
   final savedDesktopTunStack = await SettingsService.getDesktopTunStack();
   final savedLogLevel = await SettingsService.getLogLevel();
   final savedAutoConnect = await SettingsService.getAutoConnect();
@@ -309,6 +311,7 @@ Future<void> _bootstrap() async {
   }
 
   // Initialize core manager
+  ConfigTemplate.setDefaultQuicRejectPolicy(savedQuicPolicy);
   CoreManager.instance;
 
   // ── Global hotkeys (desktop) ─────────────────────────────────────────────
@@ -325,6 +328,7 @@ Future<void> _bootstrap() async {
       preloadedProfileIdProvider.overrideWithValue(savedProfileId),
       routingModeProvider.overrideWith((ref) => savedRoutingMode),
       connectionModeProvider.overrideWith((ref) => savedConnectionMode),
+      quicPolicyProvider.overrideWith((ref) => savedQuicPolicy),
       desktopTunStackProvider.overrideWith((ref) => savedDesktopTunStack),
       logLevelProvider.overrideWith((ref) => savedLogLevel),
       autoConnectProvider.overrideWith((ref) => savedAutoConnect),

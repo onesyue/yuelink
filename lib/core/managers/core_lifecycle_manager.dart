@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../constants.dart';
 import '../../core/kernel/core_manager.dart';
 import '../../core/storage/settings_service.dart';
 import '../../domain/models/traffic.dart';
@@ -224,7 +225,7 @@ class CoreLifecycleManager {
             'auto-route': true,
             'auto-detect-interface': true,
             'dns-hijack': ['any:53'],
-            'mtu': 9000,
+            'mtu': AppConstants.defaultTunMtu,
           },
         });
         if (!ok) {

@@ -19,6 +19,10 @@ import 'package:path_provider/path_provider.dart';
 class SettingsService {
   static const _fileName = 'settings.json';
   static const _flushInterval = Duration(milliseconds: 250);
+  static const quicPolicyOff = 'off';
+  static const quicPolicyGooglevideo = 'googlevideo';
+  static const quicPolicyAll = 'all';
+  static const defaultQuicPolicy = quicPolicyGooglevideo;
 
   static Map<String, dynamic>? _cache;
 
@@ -72,9 +76,8 @@ class SettingsService {
     _flushPending = false;
     final snapshot = _cache;
     if (snapshot == null) return;
-    _saveGuard = _saveGuard
-        .then((_) => _writeWithRetry(snapshot))
-        .catchError((e) {
+    _saveGuard =
+        _saveGuard.then((_) => _writeWithRetry(snapshot)).catchError((e) {
       debugPrint('[SettingsService] save failed (swallowed): $e');
     });
     return _saveGuard;
@@ -275,6 +278,27 @@ class SettingsService {
 
   static Future<void> setConnectionMode(String mode) async {
     await set('connectionMode', mode);
+  }
+
+  // ── QUIC reject policy (off / googlevideo / all) ────────────────────────
+
+  static Future<String> getQuicPolicy() async {
+    return _normalizeQuicPolicy(await get<String>('quicPolicy'));
+  }
+
+  static Future<void> setQuicPolicy(String policy) async {
+    await set('quicPolicy', _normalizeQuicPolicy(policy));
+  }
+
+  static String _normalizeQuicPolicy(String? policy) {
+    switch (policy) {
+      case quicPolicyOff:
+      case quicPolicyGooglevideo:
+      case quicPolicyAll:
+        return policy!;
+      default:
+        return defaultQuicPolicy;
+    }
   }
 
   // ── Desktop TUN stack (mixed / system / gvisor) ─────────────────────────
@@ -600,8 +624,7 @@ class SettingsService {
   static Future<bool> getTelemetryEnabled() async =>
       (await get<bool>('telemetryEnabled')) ?? false;
 
-  static Future<void> setTelemetryEnabled(bool v) =>
-      set('telemetryEnabled', v);
+  static Future<void> setTelemetryEnabled(bool v) => set('telemetryEnabled', v);
 
   /// Anonymous per-install client id (UUID v4). Generated lazily on first
   /// telemetry event; survives upgrades, resets on reinstall / storage wipe.

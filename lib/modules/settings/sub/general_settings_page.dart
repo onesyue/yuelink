@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:launch_at_startup/launch_at_startup.dart';
 
+import '../../../core/kernel/config_template.dart';
 import '../../../core/kernel/core_manager.dart';
 import '../../../core/platform/vpn_service.dart';
 import '../../../core/service/service_manager.dart';
@@ -14,6 +15,7 @@ import '../../../core/service/service_mode_provider.dart';
 import '../../../core/storage/settings_service.dart';
 import '../../../core/env_config.dart';
 import '../../../i18n/app_strings.dart';
+import '../../../i18n/strings_g.dart';
 import '../../../core/profile/profile_service.dart';
 import '../../../core/providers/core_provider.dart';
 import '../../../main.dart' show tileShowNodeInfoProvider;
@@ -83,6 +85,18 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
       return isEn ? '${diff.inDays} d ago' : '${diff.inDays} 天前';
     }
     return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+  }
+
+  String _quicPolicyDescription(Translations strings, String policy) {
+    switch (policy) {
+      case SettingsService.quicPolicyOff:
+        return strings.quicPolicyCompatibilityDesc;
+      case SettingsService.quicPolicyAll:
+        return strings.quicPolicyForceFallbackDesc;
+      case SettingsService.quicPolicyGooglevideo:
+      default:
+        return strings.quicPolicyStandardDesc;
+    }
   }
 
   Future<void> _refreshDesktopService() async {
@@ -339,6 +353,7 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
+    final strings = Translations.of(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isEn = Localizations.localeOf(context).languageCode == 'en';
     final theme = ref.watch(themeProvider);
@@ -347,6 +362,7 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
     final language = ref.watch(languageProvider);
     final autoConnect = ref.watch(autoConnectProvider);
     final connectionMode = ref.watch(connectionModeProvider);
+    final quicPolicy = ref.watch(quicPolicyProvider);
     final desktopTunStack = ref.watch(desktopTunStackProvider);
     final systemProxyOnConnect = ref.watch(systemProxyOnConnectProvider);
     final status = ref.watch(coreStatusProvider);
@@ -502,6 +518,39 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
                             }
                           },
                         ),
+                      ),
+                    ),
+                    Divider(height: 1, thickness: 0.5, color: dividerColor),
+                    YLSettingsRow(
+                      title: strings.quicPolicyLabel,
+                      description: _quicPolicyDescription(strings, quicPolicy),
+                      trailing: DropdownButton<String>(
+                        value: quicPolicy,
+                        underline: const SizedBox.shrink(),
+                        style: YLText.body.copyWith(
+                          color: isDark ? YLColors.zinc200 : YLColors.zinc700,
+                        ),
+                        dropdownColor: isDark ? YLColors.zinc800 : Colors.white,
+                        items: [
+                          DropdownMenuItem(
+                            value: SettingsService.quicPolicyGooglevideo,
+                            child: Text(strings.quicPolicyStandard),
+                          ),
+                          DropdownMenuItem(
+                            value: SettingsService.quicPolicyOff,
+                            child: Text(strings.quicPolicyCompatibility),
+                          ),
+                          DropdownMenuItem(
+                            value: SettingsService.quicPolicyAll,
+                            child: Text(strings.quicPolicyForceFallback),
+                          ),
+                        ],
+                        onChanged: (v) async {
+                          if (v == null || v == quicPolicy) return;
+                          ref.read(quicPolicyProvider.notifier).state = v;
+                          ConfigTemplate.setDefaultQuicRejectPolicy(v);
+                          await SettingsService.setQuicPolicy(v);
+                        },
                       ),
                     ),
                     if (Platform.isAndroid) ...[
@@ -680,9 +729,8 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
                             ],
                             onChanged: (v) async {
                               if (v == null) return;
-                              ref
-                                  .read(desktopTunStackProvider.notifier)
-                                  .state = v;
+                              ref.read(desktopTunStackProvider.notifier).state =
+                                  v;
                               await SettingsService.setDesktopTunStack(v);
                             },
                           ),
@@ -848,9 +896,7 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
                                 children: [
                                   ListTile(
                                     title: Text(
-                                      isEn
-                                          ? 'Stable (stable)'
-                                          : '稳定版 (stable)',
+                                      isEn ? 'Stable (stable)' : '稳定版 (stable)',
                                     ),
                                     subtitle: Text(
                                       isEn
@@ -1186,8 +1232,7 @@ class _SplitTunnelSectionState extends ConsumerState<_SplitTunnelSection> {
         setState(() {
           _apps = [];
           _loading = false;
-          _loadError =
-              '${S.of(context).loadAppListFailed}: $e';
+          _loadError = '${S.of(context).loadAppListFailed}: $e';
         });
       }
     }
@@ -1471,8 +1516,7 @@ class _AccentColorRow extends StatelessWidget {
             children: _presets.map((preset) {
               final hex = preset.$1;
               final color = Color(int.parse('FF$hex', radix: 16));
-              final isSelected =
-                  currentHex.toUpperCase() == hex.toUpperCase();
+              final isSelected = currentHex.toUpperCase() == hex.toUpperCase();
               return _ColorDot(
                 color: color,
                 selected: isSelected,
@@ -1548,4 +1592,3 @@ class _ColorDot extends StatelessWidget {
     );
   }
 }
-

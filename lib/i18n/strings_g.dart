@@ -4,9 +4,9 @@
 /// To regenerate, run: `dart run slang`
 ///
 /// Locales: 2
-/// Strings: 1430 (715 per locale)
+/// Strings: 1444 (722 per locale)
 ///
-/// Built on 2026-04-17 at 06:22 UTC
+/// Built on 2026-04-19 at 08:46 UTC
 
 // coverage:ignore-file
 // ignore_for_file: type=lint
@@ -432,6 +432,13 @@ class Translations implements BaseTranslations<AppLocale, Translations> {
 	String get copiedToClipboard => 'Copied to clipboard';
 	String get sectionLanguage => 'Language';
 	String get connectionMode => 'Connection Mode';
+	String get quicPolicyLabel => 'QUIC Policy';
+	String get quicPolicyStandard => 'Standard (Recommended)';
+	String get quicPolicyStandardDesc => 'Only disables QUIC for YouTube video traffic so most services keep HTTP/3 while YouTube falls back to TCP.';
+	String get quicPolicyCompatibility => 'Compatibility';
+	String get quicPolicyCompatibilityDesc => 'Does not block QUIC. Best for MyTV Super and other Hong Kong streaming unlock scenarios.';
+	String get quicPolicyForceFallback => 'Force Fallback';
+	String get quicPolicyForceFallbackDesc => 'Rejects all UDP:443 traffic to force TCP fallback. Use only for troubleshooting video playback issues.';
 	String get modeTun => 'TUN Mode';
 	String get modeSystemProxy => 'System Proxy';
 	String get serviceModeLabel => 'Service Mode';
@@ -1175,6 +1182,13 @@ class _StringsGZhCn extends Translations {
 	@override String get copiedToClipboard => '已复制到剪贴板';
 	@override String get sectionLanguage => '语言';
 	@override String get connectionMode => '接入方式';
+	@override String get quicPolicyLabel => 'QUIC 策略';
+	@override String get quicPolicyStandard => '标准（推荐）';
+	@override String get quicPolicyStandardDesc => '仅对 YouTube 视频流量禁用 QUIC，让 YouTube 回落到 TCP，其它多数服务仍可继续使用 HTTP/3。';
+	@override String get quicPolicyCompatibility => '兼容模式';
+	@override String get quicPolicyCompatibilityDesc => '不拦截 QUIC，适合 MyTV Super 和其他港区流媒体解锁场景。';
+	@override String get quicPolicyForceFallback => '强制回落';
+	@override String get quicPolicyForceFallbackDesc => '拒绝全部 UDP:443 流量以强制回落到 TCP，仅用于排查视频播放问题。';
 	@override String get modeTun => 'TUN 模式';
 	@override String get modeSystemProxy => '系统代理';
 	@override String get serviceModeLabel => '服务模式';
@@ -1898,6 +1912,13 @@ extension on Translations {
 			case 'copiedToClipboard': return 'Copied to clipboard';
 			case 'sectionLanguage': return 'Language';
 			case 'connectionMode': return 'Connection Mode';
+			case 'quicPolicyLabel': return 'QUIC Policy';
+			case 'quicPolicyStandard': return 'Standard (Recommended)';
+			case 'quicPolicyStandardDesc': return 'Only disables QUIC for YouTube video traffic so most services keep HTTP/3 while YouTube falls back to TCP.';
+			case 'quicPolicyCompatibility': return 'Compatibility';
+			case 'quicPolicyCompatibilityDesc': return 'Does not block QUIC. Best for MyTV Super and other Hong Kong streaming unlock scenarios.';
+			case 'quicPolicyForceFallback': return 'Force Fallback';
+			case 'quicPolicyForceFallbackDesc': return 'Rejects all UDP:443 traffic to force TCP fallback. Use only for troubleshooting video playback issues.';
 			case 'modeTun': return 'TUN Mode';
 			case 'modeSystemProxy': return 'System Proxy';
 			case 'serviceModeLabel': return 'Service Mode';
@@ -2621,6 +2642,13 @@ extension on _StringsGZhCn {
 			case 'copiedToClipboard': return '已复制到剪贴板';
 			case 'sectionLanguage': return '语言';
 			case 'connectionMode': return '接入方式';
+			case 'quicPolicyLabel': return 'QUIC 策略';
+			case 'quicPolicyStandard': return '标准（推荐）';
+			case 'quicPolicyStandardDesc': return '仅对 YouTube 视频流量禁用 QUIC，让 YouTube 回落到 TCP，其它多数服务仍可继续使用 HTTP/3。';
+			case 'quicPolicyCompatibility': return '兼容模式';
+			case 'quicPolicyCompatibilityDesc': return '不拦截 QUIC，适合 MyTV Super 和其他港区流媒体解锁场景。';
+			case 'quicPolicyForceFallback': return '强制回落';
+			case 'quicPolicyForceFallbackDesc': return '拒绝全部 UDP:443 流量以强制回落到 TCP，仅用于排查视频播放问题。';
 			case 'modeTun': return 'TUN 模式';
 			case 'modeSystemProxy': return '系统代理';
 			case 'serviceModeLabel': return '服务模式';

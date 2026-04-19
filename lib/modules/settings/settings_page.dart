@@ -45,6 +45,10 @@ final accentColorProvider = StateProvider<String>((ref) => '3B82F6');
 /// Subscription sync interval in hours (0 = disabled).
 final subSyncIntervalProvider = StateProvider<int>((ref) => 6);
 
+/// QUIC reject policy: off | googlevideo | all.
+final quicPolicyProvider =
+    StateProvider<String>((ref) => SettingsService.defaultQuicPolicy);
+
 /// Desktop: close window behavior. Values: 'tray' (default) | 'exit'.
 final closeBehaviorProvider = StateProvider<String>((ref) => 'tray');
 

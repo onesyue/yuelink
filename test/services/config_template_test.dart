@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:yuelink/constants.dart';
 import 'package:yuelink/core/kernel/config_template.dart';
 
 void main() {
@@ -412,11 +413,11 @@ proxy-groups:
     });
   });
 
-  group('ConfigTemplate QUIC reject', () {
-    const quicRejectRule = 'AND,((NETWORK,UDP),(DST-PORT,443)),REJECT-DROP';
-
-    test('injects QUIC reject rule at top of rules section', () {
-      const config = '''
+  group('ConfigTemplate QUIC reject policy', () {
+    const globalRejectRule = 'AND,((NETWORK,UDP),(DST-PORT,443)),REJECT-DROP';
+    const googlevideoRejectRule =
+        'AND,((DOMAIN-SUFFIX,googlevideo.com),(NETWORK,UDP)),REJECT-DROP';
+    const baseConfig = '''
 mixed-port: 7890
 proxy-groups:
   - name: YueLink
@@ -426,67 +427,106 @@ rules:
   - DOMAIN-SUFFIX,example.com,YueLink
   - MATCH,YueLink
 ''';
-      final result = ConfigTemplate.process(config);
-      expect(result, contains(quicRejectRule));
+
+    test('off does not inject QUIC reject rules', () {
+      final result = ConfigTemplate.process(
+        baseConfig,
+        quicRejectPolicy: ConfigTemplate.quicRejectPolicyOff,
+      );
+      expect(result, isNot(contains(globalRejectRule)));
+      expect(result, isNot(contains(googlevideoRejectRule)));
+    });
+
+    test('googlevideo injects narrow rule at top without global block', () {
+      final result = ConfigTemplate.process(
+        baseConfig,
+        quicRejectPolicy: ConfigTemplate.quicRejectPolicyGooglevideo,
+      );
+      expect(result, contains(googlevideoRejectRule));
+      expect(result, isNot(contains(globalRejectRule)));
 
       final rulesStart = result.indexOf('rules:');
-      final rejectIdx = result.indexOf(quicRejectRule, rulesStart);
+      final rejectIdx = result.indexOf(googlevideoRejectRule, rulesStart);
       final matchIdx = result.indexOf('MATCH,YueLink', rulesStart);
       expect(rejectIdx, greaterThan(0));
       expect(matchIdx, greaterThan(0));
       expect(rejectIdx, lessThan(matchIdx),
-          reason: 'reject rule must precede other rules');
+          reason: 'googlevideo reject rule must precede other rules');
     });
 
-    test('is idempotent — double-processing does not duplicate', () {
+    test('all injects global UDP:443 reject rule at top of rules section', () {
+      final result = ConfigTemplate.process(
+        baseConfig,
+        quicRejectPolicy: ConfigTemplate.quicRejectPolicyAll,
+      );
+      expect(result, contains(globalRejectRule));
+      expect(result, isNot(contains(googlevideoRejectRule)));
+
+      final rulesStart = result.indexOf('rules:');
+      final rejectIdx = result.indexOf(globalRejectRule, rulesStart);
+      final matchIdx = result.indexOf('MATCH,YueLink', rulesStart);
+      expect(rejectIdx, greaterThan(0));
+      expect(matchIdx, greaterThan(0));
+      expect(rejectIdx, lessThan(matchIdx),
+          reason: 'global reject rule must precede other rules');
+    });
+
+    test('repeated process does not duplicate injected rules', () {
+      final once = ConfigTemplate.process(
+        baseConfig,
+        quicRejectPolicy: ConfigTemplate.quicRejectPolicyGooglevideo,
+      );
+      final twice = ConfigTemplate.process(
+        once,
+        quicRejectPolicy: ConfigTemplate.quicRejectPolicyGooglevideo,
+      );
+      final occurrences =
+          RegExp(RegExp.escape(googlevideoRejectRule)).allMatches(twice).length;
+      expect(occurrences, 1);
+      expect(twice, isNot(contains(globalRejectRule)));
+    });
+
+    test('skips global injection when subscription already has UDP/443 REJECT',
+        () {
       const config = '''
 mixed-port: 7890
-proxy-groups:
-  - name: YueLink
-    type: select
-    proxies: [DIRECT]
 rules:
   - DOMAIN-SUFFIX,example.com,YueLink
-  - MATCH,YueLink
-''';
-      final once = ConfigTemplate.process(config);
-      final twice = ConfigTemplate.process(once);
-      final occurrences = RegExp(RegExp.escape(quicRejectRule))
-          .allMatches(twice)
-          .length;
-      expect(occurrences, 1);
-    });
-
-    test('skips injection when subscription already has UDP/443 REJECT', () {
-      const config = '''
-mixed-port: 7890
-rules:
   - AND,((NETWORK,UDP),(DST-PORT,443)),REJECT-DROP
   - MATCH,DIRECT
 ''';
-      final result = ConfigTemplate.process(config);
+      final result = ConfigTemplate.process(
+        config,
+        quicRejectPolicy: ConfigTemplate.quicRejectPolicyAll,
+      );
       // Panel-injected rule already present — must not duplicate
-      final occurrences = RegExp(RegExp.escape(quicRejectRule))
-          .allMatches(result)
-          .length;
+      final occurrences =
+          RegExp(RegExp.escape(globalRejectRule)).allMatches(result).length;
       expect(occurrences, 1);
     });
 
-    test('skips injection when subscription uses reversed AND ordering', () {
+    test('skips global injection when subscription uses reversed AND ordering',
+        () {
       const config = '''
 mixed-port: 7890
 rules:
   - AND,((DST-PORT,443),(NETWORK,UDP)),REJECT-DROP
   - MATCH,DIRECT
 ''';
-      final result = ConfigTemplate.process(config);
+      final result = ConfigTemplate.process(
+        config,
+        quicRejectPolicy: ConfigTemplate.quicRejectPolicyAll,
+      );
       // Should NOT inject our variant — equivalent rule already present
-      expect(result, isNot(contains(quicRejectRule)));
+      expect(result, isNot(contains(globalRejectRule)));
     });
 
     test('does nothing when config has no rules section', () {
       const config = 'mixed-port: 7890\nproxies: []\n';
-      final result = ConfigTemplate.process(config);
+      final result = ConfigTemplate.process(
+        config,
+        quicRejectPolicy: ConfigTemplate.quicRejectPolicyGooglevideo,
+      );
       expect(result, isNot(contains('NETWORK,UDP')));
     });
 
@@ -497,9 +537,49 @@ rules:
     - DOMAIN-SUFFIX,example.com,DIRECT
     - MATCH,DIRECT
 ''';
+      final result = ConfigTemplate.process(
+        config,
+        quicRejectPolicy: ConfigTemplate.quicRejectPolicyGooglevideo,
+      );
+      expect(result, contains('''
+    - "AND,((DOMAIN-SUFFIX,googlevideo.com),(NETWORK,UDP)),REJECT-DROP"'''));
+    });
+  });
+
+  group('ConfigTemplate experimental defaults', () {
+    test('does not inject quic-go-disable-gso/ecn when subscription has none',
+        () {
+      const config = 'mixed-port: 7890\nproxies: []\n';
       final result = ConfigTemplate.process(config);
-      expect(result,
-          contains('    - "AND,((NETWORK,UDP),(DST-PORT,443)),REJECT-DROP"'));
+      expect(result, isNot(contains('quic-go-disable-gso')));
+      expect(result, isNot(contains('quic-go-disable-ecn')));
+      expect(result, isNot(contains('\nexperimental:')));
+    });
+
+    test('keeps subscription-provided experimental block verbatim', () {
+      const config = '''
+mixed-port: 7890
+experimental:
+  quic-go-disable-gso: true
+  sniff-tls-sni: true
+''';
+      final result = ConfigTemplate.process(config);
+      expect(result, contains('quic-go-disable-gso: true'));
+      expect(result, contains('sniff-tls-sni: true'));
+    });
+  });
+
+  group('ConfigTemplate TUN MTU', () {
+    test(
+        'desktop tun uses AppConstants.defaultTunMtu (matches hot-switch PATCH)',
+        () {
+      // Only assert on desktop — other platforms take a different branch.
+      if (!(Platform.isMacOS || Platform.isWindows || Platform.isLinux)) {
+        return;
+      }
+      const config = 'mixed-port: 7890\nproxies: []\n';
+      final result = ConfigTemplate.process(config, connectionMode: 'tun');
+      expect(result, contains('mtu: ${AppConstants.defaultTunMtu}'));
     });
   });
 }

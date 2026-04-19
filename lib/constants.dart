@@ -26,6 +26,11 @@ class AppConstants {
   static const defaultMixedPort = 7890;
   static const defaultApiPort = 9090;
   static const defaultDesktopTunStack = 'mixed';
+
+  /// TUN MTU used everywhere we own the device (desktop + mobile). Matches
+  /// physical Ethernet/Wi-Fi MTU; jumbo frames silently re-fragment or drop
+  /// at the kernel socket layer and cost 15-30% throughput.
+  static const defaultTunMtu = 1500;
   static const serviceListenHost = '127.0.0.1';
   static const serviceListenPort = 28653;
   static const desktopServiceName = 'YueLinkServiceHelper';
