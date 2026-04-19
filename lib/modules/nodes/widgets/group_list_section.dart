@@ -7,8 +7,8 @@ import '../../../i18n/app_strings.dart';
 import '../group_type_label.dart';
 import '../../../shared/app_notifier.dart';
 import '../../../theme.dart';
+import '../node_list_filter.dart';
 import '../providers/nodes_providers.dart';
-import '../smart_score.dart';
 import 'node_tile.dart';
 
 /// Flat list view of a proxy group (non-expandable, always visible nodes).
@@ -27,47 +27,6 @@ class GroupListSection extends ConsumerWidget {
   final NodeSortMode sortMode;
   final String searchQuery;
 
-  List<String> _sortedNodes(
-      List<String> nodes, NodeSortMode mode, Map<String, int> delays) {
-    switch (mode) {
-      case NodeSortMode.defaultOrder:
-        return nodes;
-      case NodeSortMode.nameAsc:
-        final copy = List<String>.from(nodes)..sort();
-        return copy;
-      case NodeSortMode.latencyAsc:
-        final copy = List<String>.from(nodes);
-        copy.sort((a, b) {
-          final da = delays[a];
-          final db = delays[b];
-          if (da == null && db == null) return 0;
-          if (da == null) return 1;
-          if (db == null) return -1;
-          if (da < 0 && db < 0) return 0;
-          if (da < 0) return 1;
-          if (db < 0) return -1;
-          return da.compareTo(db);
-        });
-        return copy;
-      case NodeSortMode.latencyDesc:
-        final copy = List<String>.from(nodes);
-        copy.sort((a, b) {
-          final da = delays[a];
-          final db = delays[b];
-          if (da == null && db == null) return 0;
-          if (da == null) return 1;
-          if (db == null) return -1;
-          if (da < 0 && db < 0) return 0;
-          if (da < 0) return 1;
-          if (db < 0) return -1;
-          return db.compareTo(da);
-        });
-        return copy;
-      case NodeSortMode.smartRecommend:
-        return sortBySmartScore(nodes, delays);
-    }
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -79,12 +38,9 @@ class GroupListSection extends ConsumerWidget {
     final delays = sortMode == NodeSortMode.defaultOrder
         ? const <String, int>{}
         : ref.watch(delayResultsProvider);
-    final sorted = _sortedNodes(group.all, sortMode, delays);
-    final query = searchQuery.trim().toLowerCase();
-    final nodeList = query.isEmpty
-        ? sorted
-        : sorted.where((n) => n.toLowerCase().contains(query)).toList();
-    final isFiltered = query.isNotEmpty;
+    final nodeList =
+        sortAndFilterNodes(group.all, sortMode, delays, searchQuery);
+    final isFiltered = searchQuery.trim().isNotEmpty;
 
     return Container(
       decoration: BoxDecoration(

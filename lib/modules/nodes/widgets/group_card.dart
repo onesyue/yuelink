@@ -9,52 +9,11 @@ import '../../../shared/app_notifier.dart';
 import '../../../theme.dart';
 import '../group_type_label.dart';
 import '../../chain_proxy/chain_proxy_provider.dart';
+import '../node_list_filter.dart';
 import '../protocol_color.dart';
 import '../providers/node_providers.dart';
 import '../providers/nodes_providers.dart';
 import '../favorites/node_favorites_providers.dart';
-import '../smart_score.dart';
-
-List<String> _sortedNodes(
-    List<String> nodes, NodeSortMode mode, Map<String, int> delays) {
-  switch (mode) {
-    case NodeSortMode.defaultOrder:
-      return nodes;
-    case NodeSortMode.nameAsc:
-      final copy = List<String>.from(nodes)..sort();
-      return copy;
-    case NodeSortMode.latencyAsc:
-      final copy = List<String>.from(nodes);
-      copy.sort((a, b) {
-        final da = delays[a];
-        final db = delays[b];
-        if (da == null && db == null) return 0;
-        if (da == null) return 1;
-        if (db == null) return -1;
-        if (da < 0 && db < 0) return 0;
-        if (da < 0) return 1;
-        if (db < 0) return -1;
-        return da.compareTo(db);
-      });
-      return copy;
-    case NodeSortMode.latencyDesc:
-      final copy = List<String>.from(nodes);
-      copy.sort((a, b) {
-        final da = delays[a];
-        final db = delays[b];
-        if (da == null && db == null) return 0;
-        if (da == null) return 1;
-        if (db == null) return -1;
-        if (da < 0 && db < 0) return 0;
-        if (da < 0) return 1;
-        if (db < 0) return -1;
-        return db.compareTo(da);
-      });
-      return copy;
-    case NodeSortMode.smartRecommend:
-      return sortBySmartScore(nodes, delays);
-  }
-}
 
 /// Expandable proxy group card.
 ///
@@ -144,14 +103,9 @@ class _GroupCardState extends ConsumerState<GroupCard>
     // Pipe-in a 推荐 header when the Smart Recommend mode is active.
     // Matches the type-badge pill visual style (same _Badge widget).
     final showSmartHeader = sortMode == NodeSortMode.smartRecommend;
-    final sorted = _sortedNodes(group.all, sortMode, delays);
-    final query = widget.searchQuery.trim().toLowerCase();
-    final nodeList = query.isEmpty
-        ? sorted
-        : sorted
-            .where((n) => n.toLowerCase().contains(query))
-            .toList();
-    final isFiltered = query.isNotEmpty;
+    final nodeList = sortAndFilterNodes(
+        group.all, sortMode, delays, widget.searchQuery);
+    final isFiltered = widget.searchQuery.trim().isNotEmpty;
 
     return Container(
       decoration: BoxDecoration(
