@@ -1,9 +1,9 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../domain/module_entity.dart';
-import '../infrastructure/module_downloader.dart';
-import '../infrastructure/module_repository.dart';
+import '../../../domain/surge_modules/module_entity.dart';
+import '../../../infrastructure/surge_modules/module_downloader.dart';
+import '../../../infrastructure/surge_modules/module_repository.dart';
 
 // ── State ─────────────────────────────────────────────────────────────────────
 

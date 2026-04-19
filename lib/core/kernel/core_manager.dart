@@ -23,7 +23,7 @@ import 'overwrite_service.dart';
 import 'process_manager.dart';
 import '../storage/settings_service.dart';
 import '../platform/vpn_service.dart' as vpn;
-import '../../modules/surge_modules/infrastructure/module_rule_injector.dart';
+import '../../infrastructure/surge_modules/module_rule_injector.dart';
 import '../../shared/telemetry.dart';
 
 /// How mihomo is managed.

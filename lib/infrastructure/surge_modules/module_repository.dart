@@ -7,7 +7,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
-import '../domain/module_entity.dart';
+import '../../domain/surge_modules/module_entity.dart';
 
 /// Manages persistent storage for [ModuleRecord]s.
 ///

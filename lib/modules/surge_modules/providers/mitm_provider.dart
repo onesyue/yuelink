@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/ffi/core_controller.dart';
-import '../domain/module_entity.dart';
+import '../../../domain/surge_modules/module_entity.dart';
 import 'module_provider.dart';
 
 // ── Data classes ──────────────────────────────────────────────────────────────

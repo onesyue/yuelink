@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:yuelink/modules/surge_modules/infrastructure/module_rule_injector.dart';
+import 'package:yuelink/infrastructure/surge_modules/module_rule_injector.dart';
 
 // ignore_for_file: lines_longer_than_80_chars
 

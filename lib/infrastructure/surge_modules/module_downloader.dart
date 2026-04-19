@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
-import '../domain/module_entity.dart';
+import '../../domain/surge_modules/module_entity.dart';
 import 'module_parser.dart';
 import 'module_repository.dart';
 

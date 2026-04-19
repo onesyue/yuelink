@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../theme.dart';
-import '../domain/module_entity.dart';
+import '../../../domain/surge_modules/module_entity.dart';
 
 /// Small badge summarising what capabilities a module uses
 /// and whether they are active in the current version.

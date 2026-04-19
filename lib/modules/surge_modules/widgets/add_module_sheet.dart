@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../i18n/app_strings.dart';
 import '../../../theme.dart';
-import '../domain/module_entity.dart';
+import '../../../domain/surge_modules/module_entity.dart';
 import '../providers/module_provider.dart';
 
 /// Bottom sheet for adding a new module by URL.
