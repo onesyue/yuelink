@@ -25,7 +25,7 @@ import '../../../shared/telemetry.dart';
 import '../../../theme.dart';
 import '../providers/settings_providers.dart';
 import '../widgets/primitives.dart';
-import 'widgets/accent_color_row.dart';
+import 'widgets/appearance_section.dart';
 import 'widgets/close_behavior_row.dart';
 import 'widgets/hotkey_row.dart';
 import 'widgets/split_tunnel_section.dart';
@@ -358,10 +358,7 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
     final strings = Translations.of(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isEn = Localizations.localeOf(context).languageCode == 'en';
-    final theme = ref.watch(themeProvider);
-    final accentHex = ref.watch(accentColorProvider);
     final subSyncInterval = ref.watch(subSyncIntervalProvider);
-    final language = ref.watch(languageProvider);
     final autoConnect = ref.watch(autoConnectProvider);
     final connectionMode = ref.watch(connectionModeProvider);
     final quicPolicy = ref.watch(quicPolicyProvider);
@@ -388,82 +385,7 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
             children: [
-              // === 外观 / Appearance ===
-              GsGeneralSectionTitle(s.sectionAppearance),
-              SettingsCard(
-                child: Column(
-                  children: [
-                    YLInfoRow(
-                      label: s.themeLabel,
-                      trailing: SizedBox(
-                        width: 240,
-                        child: SegmentedButton<ThemeMode>(
-                          showSelectedIcon: false,
-                          style: SegmentedButton.styleFrom(
-                            visualDensity: VisualDensity.compact,
-                            textStyle: const TextStyle(fontSize: 12),
-                          ),
-                          segments: [
-                            ButtonSegment(
-                                value: ThemeMode.system,
-                                label: Text(s.themeSystem)),
-                            ButtonSegment(
-                                value: ThemeMode.light,
-                                label: Text(s.themeLight)),
-                            ButtonSegment(
-                                value: ThemeMode.dark,
-                                label: Text(s.themeDark)),
-                          ],
-                          selected: {theme},
-                          onSelectionChanged: (v) {
-                            ref.read(themeProvider.notifier).state = v.first;
-                            SettingsService.setThemeMode(v.first);
-                            Telemetry.event(
-                              TelemetryEvents.themeChange,
-                              props: {'mode': v.first.name},
-                            );
-                          },
-                        ),
-                      ),
-                    ),
-                    Divider(height: 1, thickness: 0.5, color: dividerColor),
-                    AccentColorRow(
-                      currentHex: accentHex,
-                      onChanged: (hex) {
-                        ref.read(accentColorProvider.notifier).state = hex;
-                        SettingsService.setAccentColor(hex);
-                      },
-                      isEn: isEn,
-                    ),
-                    Divider(height: 1, thickness: 0.5, color: dividerColor),
-                    YLInfoRow(
-                      label: s.sectionLanguage,
-                      trailing: SizedBox(
-                        width: 160,
-                        child: SegmentedButton<String>(
-                          showSelectedIcon: false,
-                          style: SegmentedButton.styleFrom(
-                            visualDensity: VisualDensity.compact,
-                            textStyle: const TextStyle(fontSize: 12),
-                          ),
-                          segments: [
-                            ButtonSegment(
-                                value: 'zh', label: Text(s.languageChinese)),
-                            ButtonSegment(
-                                value: 'en', label: Text(s.languageEnglish)),
-                          ],
-                          selected: {language},
-                          onSelectionChanged: (v) async {
-                            ref.read(languageProvider.notifier).state = v.first;
-                            await SettingsService.setLanguage(v.first);
-                          },
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
+              const AppearanceSection(),
 
               // === 连接 / Connection ===
               GsGeneralSectionTitle(isEn ? 'Connection' : '连接'),
