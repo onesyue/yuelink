@@ -25,10 +25,10 @@ import '../providers/settings_providers.dart';
 import '../widgets/primitives.dart';
 import 'widgets/appearance_section.dart';
 import 'widgets/close_behavior_row.dart';
-import 'widgets/updates_section.dart';
 import 'widgets/hotkey_row.dart';
+import 'widgets/privacy_section.dart';
 import 'widgets/split_tunnel_section.dart';
-import 'telemetry_preview_page.dart';
+import 'widgets/updates_section.dart';
 
 /// Standalone settings sub-page — displays all general settings
 /// (theme, language, auto-connect, routing, connection mode, etc.)
@@ -44,7 +44,6 @@ class GeneralSettingsPage extends ConsumerStatefulWidget {
 class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
   bool _launchAtStartup = false;
   bool _serviceBusy = false;
-  bool _telemetryEnabled = false;
 
   @override
   void initState() {
@@ -54,11 +53,9 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
 
   Future<void> _loadSettings() async {
     final startup = await SettingsService.getLaunchAtStartup();
-    final telemetry = await SettingsService.getTelemetryEnabled();
     if (mounted) {
       setState(() {
         _launchAtStartup = startup;
-        _telemetryEnabled = telemetry;
       });
     }
   }
@@ -758,39 +755,7 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
                 const SizedBox(height: 16),
               ],
 
-              // === 隐私 / Privacy ===
-              GsGeneralSectionTitle(s.privacy),
-              SettingsCard(
-                child: Column(
-                  children: [
-                    YLSettingsRow(
-                      title: s.telemetryTitle,
-                      description: s.telemetrySubtitle,
-                      trailing: CupertinoSwitch(
-                        value: _telemetryEnabled,
-                        activeTrackColor: YLColors.connected,
-                        onChanged: (v) {
-                          setState(() => _telemetryEnabled = v);
-                          Telemetry.setEnabled(v);
-                        },
-                      ),
-                    ),
-                    Divider(height: 1, thickness: 0.5, color: dividerColor),
-                    YLInfoRow(
-                      label: s.telemetryViewEvents,
-                      trailing: const Icon(Icons.chevron_right,
-                          size: 18, color: YLColors.zinc400),
-                      onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => const TelemetryPreviewPage(),
-                          ),
-                        );
-                      },
-                    ),
-                  ],
-                ),
-              ),
+              const PrivacySection(),
             ],
           ),
         ),
