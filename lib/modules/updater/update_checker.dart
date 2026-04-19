@@ -32,12 +32,7 @@ import '../../core/storage/settings_service.dart';
 ///         "macos-universal": { "url": "...", "sha256": "..." },
 ///         "windows-amd64-setup": { "url": "...", "sha256": "..." },
 ///         "windows-amd64-portable": { "url": "...", "sha256": "..." },
-///         "linux-amd64-deb": { "url": "...", "sha256": "..." },
-///         "linux-amd64-rpm": { "url": "...", "sha256": "..." },
-///         "linux-amd64-appimage": { "url": "...", "sha256": "..." },
-///         "linux-arm64-deb": { "url": "...", "sha256": "..." },
-///         "linux-arm64-rpm": { "url": "...", "sha256": "..." },
-///         "linux-arm64-appimage": { "url": "...", "sha256": "..." }
+///         "linux-amd64-appimage": { "url": "...", "sha256": "..." }
 ///       }
 ///     }
 ///
@@ -272,10 +267,10 @@ class UpdateChecker {
     if (Platform.isMacOS) return 'macos-universal';
     if (Platform.isWindows) return 'windows-$arch-setup';
     if (Platform.isLinux) {
-      // Linux ships three formats per arch — prefer .deb for Debian/Ubuntu,
-      // .rpm for Fedora/RHEL, AppImage as the universal fallback.
-      final fmt = _linuxPreferredFormat();
-      return 'linux-$arch-$fmt';
+      // Release only ships AppImage. Distro-native .deb / .rpm were removed
+      // from the matrix — keep the updater pointed at the real asset so
+      // users don't get a dead link on Debian/Fedora hosts.
+      return 'linux-$arch-appimage';
     }
     return null;
   }
@@ -298,17 +293,6 @@ class UpdateChecker {
     if (v.contains('x86_64') || v.contains('x64')) return 'x86_64';
     if (v.contains('arm')) return 'armeabi-v7a';
     return 'universal';
-  }
-
-  /// Returns 'deb' on Debian-family, 'rpm' on Red Hat-family, otherwise
-  /// 'appimage'. Determined by the presence of /etc/debian_version etc.
-  static String _linuxPreferredFormat() {
-    try {
-      if (File('/etc/debian_version').existsSync()) return 'deb';
-      if (File('/etc/redhat-release').existsSync()) return 'rpm';
-      if (File('/etc/fedora-release').existsSync()) return 'rpm';
-    } catch (_) {}
-    return 'appimage';
   }
 
   /// Legacy asset suffix matching (used by the GitHub API fallback path).

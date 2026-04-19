@@ -11,12 +11,27 @@
 #   - libgtk-3-dev, libblkid-dev, liblzma-dev (build deps)
 #
 # Output:
-#   YueLink-<version>-linux-x86_64.AppImage
+#   YueLink-<version>-linux-amd64.AppImage
 
 set -euo pipefail
 
 VERSION="${1:-$(grep '^version:' pubspec.yaml | awk '{print $2}' | tr -d '+' | cut -d'+' -f1)}"
-ARCH="$(uname -m)"
+
+# Release matrix is linux-amd64 only. The rest of this script (setup.dart
+# build target, BUNDLE_DIR under build/linux/x64/, installer layout) is
+# hardcoded to x86_64 and would silently produce a misnamed AppImage on an
+# arm64 host. Refuse non-amd64 hosts up front instead of drifting.
+RAW_ARCH="$(uname -m)"
+case "$RAW_ARCH" in
+  x86_64|amd64) ;;
+  *)
+    echo "ERROR: unsupported host arch '$RAW_ARCH'. Only x86_64/amd64 is supported." >&2
+    echo "  Release matrix ships linux-amd64 only; see .github/workflows/build.yml." >&2
+    exit 1
+    ;;
+esac
+ARCH="amd64"
+APPIMAGE_ARCH="x86_64"
 OUTPUT="YueLink-${VERSION}-linux-${ARCH}.AppImage"
 BUNDLE_DIR="build/linux/x64/release/bundle"
 APPDIR="build/AppDir"
@@ -109,7 +124,7 @@ fi
 # ── 6. Create AppImage ───────────────────────────────────────────────────────
 echo ""
 echo "▸ Creating AppImage..."
-ARCH="${ARCH}" "${APPIMAGETOOL}" "${APPDIR}" "${OUTPUT}"
+ARCH="${APPIMAGE_ARCH}" "${APPIMAGETOOL}" "${APPDIR}" "${OUTPUT}"
 
 echo ""
 echo "✓ Done: ${OUTPUT} ($(du -sh "${OUTPUT}" | cut -f1))"

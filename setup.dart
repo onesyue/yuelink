@@ -185,6 +185,76 @@ String resolveAndroidCC(String ndkPath, String arch) {
   throw Exception('Cannot find Android clang at: $clang');
 }
 
+/// Apply every patch in `core/patches/` to the `core/mihomo/` submodule.
+///
+/// Idempotent: a patch that is already applied is skipped silently
+/// (`git apply --reverse --check` succeeds on an applied patch). A patch
+/// that cannot be applied and is not already applied aborts the build
+/// with a clear error — same behavior as CI.
+///
+/// Called before any `go build` so local developer builds go through the
+/// same patched mihomo that CI produces. Without this, local builds and
+/// CI builds drift apart — e.g. Android PackageManager failures crash
+/// locally but not in CI.
+Future<void> applyMihomoPatches() async {
+  const patchesDir = 'core/patches';
+  const repoDir = 'core/mihomo';
+
+  final pDir = Directory(patchesDir);
+  if (!pDir.existsSync()) return;
+
+  if (!Directory('$repoDir/.git').existsSync() &&
+      !File('$repoDir/.git').existsSync()) {
+    throw Exception(
+      'core/mihomo submodule not initialized. Run: git submodule update --init --recursive',
+    );
+  }
+
+  // `File.path` returns the native form — `core/patches/foo.patch` on POSIX,
+  // `core\patches\foo.patch` on Windows. Splitting on `/` alone silently
+  // breaks on Windows, so split on both separators to recover the basename.
+  String baseName(String p) => p.split(RegExp(r'[/\\]')).last;
+
+  final patches = pDir
+      .listSync()
+      .whereType<File>()
+      .map((f) => baseName(f.path))
+      .where((name) => name.endsWith('.patch'))
+      .toList()
+    ..sort();
+  if (patches.isEmpty) return;
+
+  for (final name in patches) {
+    // Always forward slashes — git accepts them on every platform and keeps
+    // the command identical to CI's explicit `git apply ../patches/*.patch`.
+    final rel = '../patches/$name';
+    // Already-applied → skip.
+    final reverse = Process.runSync(
+      'git',
+      ['apply', '--reverse', '--check', rel],
+      workingDirectory: repoDir,
+    );
+    if (reverse.exitCode == 0) {
+      print('Patch already applied: $name');
+      continue;
+    }
+    // Fresh tree → apply.
+    final forward = Process.runSync(
+      'git',
+      ['apply', '--check', rel],
+      workingDirectory: repoDir,
+    );
+    if (forward.exitCode != 0) {
+      throw Exception(
+        'Patch $name neither applied cleanly nor already present.\n'
+        'git apply --check stderr:\n${forward.stderr}',
+      );
+    }
+    await run('git', ['apply', rel], workingDirectory: repoDir);
+    print('Applied patch: $name');
+  }
+}
+
 /// Run a command, printing it and streaming output. Throws on failure.
 Future<void> run(
   String executable,
@@ -935,6 +1005,11 @@ Future<void> main(List<String> args) async {
         print('Run: cd core && git submodule update --init');
         exit(1);
       }
+
+      // Apply mihomo patches once per build invocation — idempotent,
+      // so re-running is safe and CI's explicit apply step (which runs
+      // before us) just leaves the patches already applied.
+      await applyMihomoPatches();
 
       if (platform == 'all') {
         for (final p in outputNames.keys) {
