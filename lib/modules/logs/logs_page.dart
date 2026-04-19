@@ -386,35 +386,46 @@ class _LogsTabState extends ConsumerState<_LogsTab> {
     );
   }
 
+  static const _levelOrder = {
+    'debug': 0,
+    'info': 1,
+    'warning': 2,
+    'error': 3,
+  };
+
   List<LogEntry> _filterLogs(List<LogEntry> logs) {
-    final level = ref.read(logLevelProvider);
-    final levelOrder = {
-      'debug': 0,
-      'info': 1,
-      'warning': 2,
-      'error': 3
-    };
-    final minLevel = levelOrder[level] ?? 1;
+    final minLevel = _levelOrder[ref.read(logLevelProvider)] ?? 1;
+    final hasSearch = _searchQuery.isNotEmpty;
+    final noLevelFilter = minLevel == 0; // 'debug' lets everything through
 
-    var filtered = logs
-        .where((l) => (levelOrder[l.type] ?? 1) >= minLevel)
-        .toList();
+    // Fast path — both filters no-op. Previously this still allocated a
+    // fresh List on every build (widget rebuilds from tab switches,
+    // scroll, keyboard events, log batch flushes). Returning `logs` keeps
+    // identity stable and lets ListView.builder skip item diffs.
+    if (!hasSearch && noLevelFilter) return logs;
 
-    if (_searchQuery.isNotEmpty) {
+    RegExp? regex;
+    String? lowerQuery;
+    if (hasSearch) {
       if (_regexMode) {
-        final regex = _cachedRegex;
-        if (regex == null) return []; // invalid regex
-        filtered =
-            filtered.where((l) => regex.hasMatch(l.payload)).toList();
+        regex = _cachedRegex;
+        if (regex == null) return const []; // invalid regex — caller knows
       } else {
-        final q = _searchQuery.toLowerCase();
-        filtered = filtered
-            .where((l) => l.payload.toLowerCase().contains(q))
-            .toList();
+        lowerQuery = _searchQuery.toLowerCase();
       }
     }
 
-    return filtered;
+    // Single-pass predicate so level + search share one allocation rather
+    // than two consecutive `.where().toList()` chains.
+    return logs.where((l) {
+      if (!noLevelFilter &&
+          (_levelOrder[l.type] ?? 1) < minLevel) {
+        return false;
+      }
+      if (!hasSearch) return true;
+      if (regex != null) return regex.hasMatch(l.payload);
+      return l.payload.toLowerCase().contains(lowerQuery!);
+    }).toList();
   }
 }
 

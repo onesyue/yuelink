@@ -109,12 +109,17 @@ final connectionSearchProvider = StateProvider<String>((ref) => '');
 
 final filteredConnectionsProvider =
     Provider<List<ActiveConnection>>((ref) {
-  final snapshot = ref.watch(connectionsSnapshotProvider);
+  // Watch only the connections list, not the whole snapshot — we don't
+  // care about totals here, and the Provider subscribers shouldn't
+  // re-enter this body when only the totals tick.
+  final connections = ref.watch(
+    connectionsSnapshotProvider.select((s) => s.connections),
+  );
   final query = ref.watch(connectionSearchProvider).toLowerCase().trim();
 
-  if (query.isEmpty) return snapshot.connections;
+  if (query.isEmpty) return connections;
 
-  return snapshot.connections.where((c) {
+  return connections.where((c) {
     return c.target.toLowerCase().contains(query) ||
         c.processName.toLowerCase().contains(query) ||
         c.rule.toLowerCase().contains(query) ||
@@ -141,11 +146,18 @@ class ProxyStats {
 }
 
 /// Aggregate connection stats by the last proxy in the chain (the exit node).
+///
+/// Only the top [_proxyStatsLimit] proxies (by total download) are returned —
+/// that's all the UI ever renders in [ProxyStatsBar]. Capping here avoids
+/// the consumer's `.take().toList()` re-allocation and keeps the provider's
+/// output size bounded even when connections are spread across many exits.
 final proxyStatsProvider = Provider<List<ProxyStats>>((ref) {
-  final snapshot = ref.watch(connectionsSnapshotProvider);
+  final connections = ref.watch(
+    connectionsSnapshotProvider.select((s) => s.connections),
+  );
   final statsMap = <String, ProxyStats>{};
 
-  for (final conn in snapshot.connections) {
+  for (final conn in connections) {
     // The last element in chains is the exit proxy
     final proxyName =
         conn.chains.isNotEmpty ? conn.chains.last : 'DIRECT';
@@ -158,10 +170,13 @@ final proxyStatsProvider = Provider<List<ProxyStats>>((ref) {
     stats.totalUpload += conn.upload;
   }
 
-  final result = statsMap.values.toList()
+  final sorted = statsMap.values.toList()
     ..sort((a, b) => b.totalDownload.compareTo(a.totalDownload));
-  return result;
+  if (sorted.length <= _proxyStatsLimit) return sorted;
+  return sorted.sublist(0, _proxyStatsLimit);
 });
+
+const _proxyStatsLimit = 5;
 
 // ------------------------------------------------------------------
 // Connection actions

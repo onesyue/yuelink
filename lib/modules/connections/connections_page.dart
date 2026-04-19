@@ -137,9 +137,12 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
     // 500 ms (per ConnectionRepository throttle) and would rebuild the
     // entire page including the table. Instead use thin derived providers
     // that only fire when the specific value the page header cares about
-    // actually flips.
+    // actually flips. `filteredConnectionsProvider` is intentionally NOT
+    // watched here — it produces a fresh List every tick; watching it at
+    // the parent level would rebuild the whole scaffold every 500 ms.
+    // The Count Consumer and the list Consumer below each watch their
+    // narrowest slice of it locally.
     final isEmpty = ref.watch(connectionsEmptyProvider);
-    final filtered = ref.watch(filteredConnectionsProvider);
     final actions = ref.read(connectionActionsProvider);
 
     return Scaffold(
@@ -181,7 +184,9 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
               child: Consumer(builder: (context, ref, _) {
                 final stats = ref.watch(proxyStatsProvider);
                 if (stats.isEmpty) return const SizedBox.shrink();
-                return ProxyStatsBar(stats: stats.take(5).toList());
+                // Provider already caps at the top 5 — no client-side
+                // trim or copy needed here.
+                return ProxyStatsBar(stats: stats);
               }),
             ),
           const SizedBox(height: 12),
@@ -192,29 +197,15 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
             child: Row(
               children: [
                 Expanded(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      boxShadow: YLShadow.card(context),
-                    ),
-                    child: TextField(
-                      controller: _searchCtrl,
-                      style: YLText.body,
-                      decoration: InputDecoration(
-                        hintText: s.searchConnHint,
-                        hintStyle: YLText.body.copyWith(color: YLColors.zinc500),
-                        prefixIcon: Icon(Icons.search_rounded, size: 20, color: YLColors.zinc400),
-                        suffixIcon: _searchCtrl.text.isNotEmpty
-                            ? IconButton(
-                                icon: Icon(Icons.cancel_rounded, size: 18, color: YLColors.zinc400),
-                                onPressed: () {
-                                  _searchCtrl.clear();
-                                  _searchDebounce?.cancel();
-                                  ref.read(connectionSearchProvider.notifier).state = '';
-                                },
-                              )
-                            : null,
-                      ),
-                    ),
+                  child: ConnectionsSearchField(
+                    controller: _searchCtrl,
+                    hintText: s.searchConnHint,
+                    onClear: () {
+                      _searchDebounce?.cancel();
+                      ref
+                          .read(connectionSearchProvider.notifier)
+                          .state = '';
+                    },
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -238,12 +229,16 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
             ),
           ),
 
-          // Count badge
+          // Count badge — only rebuilds when the filtered-list *length*
+          // flips (cheap int identity), not on every 500 ms tick. The
+          // total count already uses a .select internally.
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
             child: Consumer(builder: (context, ref, _) {
+              final filteredCount = ref.watch(
+                filteredConnectionsProvider.select((l) => l.length),
+              );
               final totalCount = ref.watch(connectionCountProvider);
-              final filteredCount = filtered.length;
               return Text(
                 filteredCount != totalCount
                     ? s.connectionsCountFiltered(filteredCount)
@@ -254,38 +249,48 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
             }),
           ),
 
-          // Connections list
+          // Connections list — own Consumer so the 500 ms rebuild is
+          // scoped to this subtree. The parent Scaffold / AppBar /
+          // summary / search row sit outside this rebuild path.
           Expanded(
-            child: filtered.isEmpty
-                ? Center(
-                    child: YLEmptyState(
-                      icon: isEmpty
-                          ? Icons.cable_rounded
-                          : Icons.search_off_rounded,
-                      title: isEmpty
-                          ? s.noActiveConnections
-                          : s.noMatchingConnections,
-                    ),
-                  )
-                : (Platform.isMacOS || Platform.isWindows || Platform.isLinux)
-                    ? _ConnectionsDataTable(
-                        connections: _sorted(filtered),
-                        sortColumn: _sortCol,
-                        ascending: _sortAsc,
-                        onSort: (col, asc) =>
-                            setState(() { _sortCol = col; _sortAsc = asc; }),
-                        onClose: (id) => actions.close(id),
-                      )
-                    : ListView.builder(
-                        padding: const EdgeInsets.only(left: 16, right: 16, bottom: 32),
-                        physics: const BouncingScrollPhysics(),
-                        itemCount: filtered.length,
-                        addAutomaticKeepAlives: false,
-                        itemBuilder: (context, i) => ConnectionTile(
-                          connection: filtered[i],
-                          onClose: () => actions.close(filtered[i].id),
-                        ),
-                      ),
+            child: Consumer(builder: (context, ref, _) {
+              final filtered = ref.watch(filteredConnectionsProvider);
+              if (filtered.isEmpty) {
+                return Center(
+                  child: YLEmptyState(
+                    icon: isEmpty
+                        ? Icons.cable_rounded
+                        : Icons.search_off_rounded,
+                    title: isEmpty
+                        ? s.noActiveConnections
+                        : s.noMatchingConnections,
+                  ),
+                );
+              }
+              if (Platform.isMacOS ||
+                  Platform.isWindows ||
+                  Platform.isLinux) {
+                return _ConnectionsDataTable(
+                  connections: _sorted(filtered),
+                  sortColumn: _sortCol,
+                  ascending: _sortAsc,
+                  onSort: (col, asc) =>
+                      setState(() { _sortCol = col; _sortAsc = asc; }),
+                  onClose: (id) => actions.close(id),
+                );
+              }
+              return ListView.builder(
+                padding:
+                    const EdgeInsets.only(left: 16, right: 16, bottom: 32),
+                physics: const BouncingScrollPhysics(),
+                itemCount: filtered.length,
+                addAutomaticKeepAlives: false,
+                itemBuilder: (context, i) => ConnectionTile(
+                  connection: filtered[i],
+                  onClose: () => actions.close(filtered[i].id),
+                ),
+              );
+            }),
           ),
         ],
       ),
@@ -526,3 +531,65 @@ class _ConnectionRow extends StatelessWidget {
   }
 }
 
+/// Search input for the connections page.
+///
+/// Extracted so the suffix clear-button visibility can be driven by a
+/// `ListenableBuilder` that listens to [controller] directly, rather than
+/// relying on the parent page rebuilding. The parent used to rebuild
+/// implicitly every 500 ms when it watched `filteredConnectionsProvider`;
+/// after P4-B scoped that watch into a local Consumer, the clear button
+/// would get stuck in its previous state until some other rebuild trigger
+/// happened. Listening to the controller inside this widget keeps the
+/// refresh range limited to this subtree.
+///
+/// [onClear] runs AFTER `controller.clear()` has already been called —
+/// it's the place for parent-side side-effects (cancelling debounce,
+/// resetting provider state).
+@visibleForTesting
+class ConnectionsSearchField extends StatelessWidget {
+  const ConnectionsSearchField({
+    super.key,
+    required this.controller,
+    required this.hintText,
+    required this.onClear,
+  });
+
+  final TextEditingController controller;
+  final String hintText;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        boxShadow: YLShadow.card(context),
+      ),
+      child: ListenableBuilder(
+        listenable: controller,
+        builder: (context, _) {
+          final hasText = controller.text.isNotEmpty;
+          return TextField(
+            controller: controller,
+            style: YLText.body,
+            decoration: InputDecoration(
+              hintText: hintText,
+              hintStyle: YLText.body.copyWith(color: YLColors.zinc500),
+              prefixIcon: Icon(Icons.search_rounded,
+                  size: 20, color: YLColors.zinc400),
+              suffixIcon: hasText
+                  ? IconButton(
+                      icon: Icon(Icons.cancel_rounded,
+                          size: 18, color: YLColors.zinc400),
+                      onPressed: () {
+                        controller.clear();
+                        onClear();
+                      },
+                    )
+                  : null,
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
