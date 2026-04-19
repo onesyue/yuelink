@@ -24,7 +24,12 @@ concurrency:
 
 env:
   FLUTTER_VERSION: '3.41.5'
-  GO_VERSION: '1.23'
+  # Aligned to the mihomo upstream release toolchain (v1.19.23 builds with
+  # Go 1.26.2). Bumped from 1.23 without changing mihomo's tag or touching
+  # core/go.mod / service/go.mod's `go 1.22` directive (that stays at the
+  # compatibility floor). If CI cores fail the post-bump rebuild, roll
+  # this back to 1.23 before rolling back anything else.
+  GO_VERSION: '1.26.2'
 
 jobs:
   # ───────────────────────────────────────────────────────────────────────────
@@ -585,10 +590,19 @@ jobs:
           VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f1)
           TAG="${GITHUB_REF_NAME}"
           NOTES_FILE=""
-          if [ "$TAG" = "pre" ]; then
+          # Prerelease detection must mirror the manifest / release-flag
+          # branches above — `pre` and any `vX.Y.Z-pre` both get the
+          # "Pre-release" title. Previously only the floating `pre` tag
+          # took this branch, so `v1.0.19-pre` was getting the plain
+          # stable title and skipping docs/releases/pre.md fallback.
+          if [[ "$TAG" == "pre" || "$TAG" == *-pre ]]; then
             VERSION="${VERSION}-pre"
             TITLE="YueLink v${VERSION} Pre-release"
-            [ -f docs/releases/pre.md ] && NOTES_FILE="docs/releases/pre.md"
+            if [ -f "docs/releases/${TAG}.md" ]; then
+              NOTES_FILE="docs/releases/${TAG}.md"
+            elif [ -f docs/releases/pre.md ]; then
+              NOTES_FILE="docs/releases/pre.md"
+            fi
           else
             TITLE="YueLink v${VERSION}"
             [ -f "docs/releases/v${VERSION}.md" ] && NOTES_FILE="docs/releases/v${VERSION}.md"
@@ -638,7 +652,19 @@ jobs:
         run: |
           VERSION="${{ env.APP_VERSION }}"
           TAG="${GITHUB_REF_NAME}"
-          MANIFEST_NAME=$([ "$TAG" = "pre" ] && echo "update-pre.json" || echo "update.json")
+          # Pre-release detection must match the Release job's `prerelease`
+          # flag above — both the floating `pre` tag AND any `vX.Y.Z-pre`
+          # variant route to the pre-release manifest/channel. The previous
+          # `[ "$TAG" = "pre" ]` check treated `v1.0.19-pre` as stable,
+          # pushing it into update.json and flipping the stable channel to
+          # an unreleased build.
+          if [[ "$TAG" == "pre" || "$TAG" == *-pre ]]; then
+            MANIFEST_NAME="update-pre.json"
+            CHANNEL="pre"
+          else
+            MANIFEST_NAME="update.json"
+            CHANNEL="stable"
+          fi
           BASE="https://github.com/${{ github.repository }}/releases/download/${TAG}"
           RELEASE_URL="https://github.com/${{ github.repository }}/releases/tag/${TAG}"
           NOTES=$(cat release_notes.md | head -100 | jq -Rs .)
@@ -673,12 +699,12 @@ jobs:
 
           jq -n \
             --arg version "$VERSION" \
-            --arg channel "$TAG" \
+            --arg channel "$CHANNEL" \
             --arg publishedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             --arg releaseUrl "$RELEASE_URL" \
             --argjson notes "$NOTES" \
             --argjson platforms "$PLATFORMS" \
-            '{version: $version, channel: (if $channel == "pre" then "pre" else "stable" end), publishedAt: $publishedAt, releaseUrl: $releaseUrl, notes: $notes, platforms: $platforms}' \
+            '{version: $version, channel: $channel, publishedAt: $publishedAt, releaseUrl: $releaseUrl, notes: $notes, platforms: $platforms}' \
             > "$MANIFEST_NAME"
           echo "MANIFEST_NAME=$MANIFEST_NAME" >> $GITHUB_ENV
           cat "$MANIFEST_NAME" | jq .
@@ -705,7 +731,10 @@ jobs:
   # ───────────────────────────────────────────────────────────────────────────
   submit-to-winget:
     name: Submit to winget
-    if: startsWith(github.ref, 'refs/tags/v')
+    # Stable v* only — `-pre` variants must not propagate to public
+    # package registries. `startsWith` alone was matching v1.2.3-pre,
+    # which would have pushed a pre-release build to winget.
+    if: startsWith(github.ref, 'refs/tags/v') && !endsWith(github.ref_name, '-pre')
     needs: [release]
     runs-on: ubuntu-latest
     continue-on-error: true
@@ -717,12 +746,17 @@ jobs:
         uses: vedantmgoyal9/winget-releaser@main
         with:
           identifier: Yueto.YueLink
-          installers-regex: '_(amd64|arm64|x64)-setup\.exe$'
+          # Matches `YueLink-<version>-windows-amd64-setup.exe`. The artifact
+          # uses dash-separated segments throughout (see "Build Windows
+          # installer + portable zip" above), so the previous underscore
+          # prefix `_(amd64|...)` never matched any release asset.
+          installers-regex: '-windows-(amd64|arm64|x64)-setup\.exe$'
           token: ${{ secrets.WINGET_TOKEN }}
 
   submit-to-homebrew:
     name: Submit to Homebrew
-    if: startsWith(github.ref, 'refs/tags/v')
+    # Stable v* only — same rationale as winget above.
+    if: startsWith(github.ref, 'refs/tags/v') && !endsWith(github.ref_name, '-pre')
     needs: [release]
     runs-on: macos-latest
     continue-on-error: true

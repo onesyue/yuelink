@@ -19,7 +19,7 @@ flutter test
 flutter build apk|ios|macos|windows
 ```
 
-Requires Go ≥ 1.22, Flutter ≥ 3.27, Dart ≥ 3.6. CI uses Flutter 3.41.5 / Go 1.23. Xcode ≥ 15. Android NDK r26+.
+Requires Go ≥ 1.22, Flutter ≥ 3.38.4, Dart ≥ 3.10.3. CI uses Flutter 3.41.5 / Go 1.23. Xcode ≥ 15. Android NDK r26+.
 
 **macOS universal**: build `arm64` and `x86_64` separately, then `install` merges via `lipo`.
 

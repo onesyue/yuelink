@@ -189,8 +189,8 @@ YueLink 在**独立分发版**中内置自更新逻辑：
 
 | 工具 | 版本要求 | 备注 |
 |------|---------|------|
-| Flutter | `>= 3.27` | CI 当前使用 `3.41.5` |
-| Dart | `>= 3.6` | 随 Flutter 安装 |
+| Flutter | `>= 3.38.4` | CI 当前使用 `3.41.5` |
+| Dart | `>= 3.10.3` | 随 Flutter 安装 |
 | Go | `>= 1.22` | CI 当前使用 `1.23` |
 | Xcode | `>= 15` | iOS / macOS 构建 |
 | Android NDK | `r26+` | Android 原生构建 |
@@ -207,6 +207,16 @@ flutter run
 ```
 
 当本地没有原生内核时，YueLink 会自动进入 mock mode，用模拟的代理组、节点、流量和连接数据驱动界面。
+
+### mihomo 子模块与补丁
+
+`core/mihomo/` 是 git 子模块，首次克隆必须带 `--recursive`，或者在已有仓库中执行：
+
+```bash
+git submodule update --init --recursive
+```
+
+`core/patches/*.patch` 会在 **本地** `dart setup.dart build` 执行时自动应用到子模块，CI 也会在构建前应用同一份补丁。补丁应用是幂等的：若已应用会直接跳过，重复执行不会失败。出现冲突时会中止构建并提示具体 patch 名称。
 
 ### 完整原生构建
 
@@ -284,20 +294,28 @@ flutter test
 
 ## CI 与发布
 
-当前 GitHub Actions 发布流程基于 tag：
+CI 只在推送 tag 或手动 `workflow_dispatch` 时触发：
 
-- `pre`：构建全平台预发布，并刷新预发布 manifest
-- `vX.Y.Z`：构建全平台正式版，创建 GitHub Release，并发布稳定 manifest
+- `pre`：构建全平台预发布，覆盖上一个 pre-release，并刷新 `update-pre.json` manifest
+- `vX.Y.Z`：构建全平台正式版，创建 GitHub Release，并刷新 `update.json` manifest
+- `vX.Y.Z-pre` 同样视为 pre-release（`prerelease: true`）
 
-发布矩阵覆盖：
+`dev` / `master` 分支的 push 不会触发 `build.yml`，仅触发 `ci.yml`（analyze + test）。
 
-- Android
-- iOS
-- macOS
-- Windows
-- Linux
+### 发布流程
 
-产物由 CI 自动命名、自动附加 `.sha256`、自动更新 release notes / updater manifest。
+1. 所有代码先合入 `dev`，触发 `ci.yml`
+2. 需要预发布时移动 `pre` tag：
+
+   ```bash
+   git tag -d pre && git push origin :refs/tags/pre
+   git tag pre && git push origin pre
+   ```
+
+3. 正式版：`dev` → `master` 合入后再打 `vX.Y.Z` 并推送
+4. CI 执行：应用 `core/patches/*.patch` → 构建 Go 核心 → `dart setup.dart install` → Flutter 打包 → 签名 / 归档 → 上传产物 → 创建 Release + manifest
+
+发布矩阵覆盖 Android / iOS / macOS / Windows / Linux（仅 `linux-amd64.AppImage`）。产物由 CI 自动命名、附加 `.sha256`、刷新 release notes 与 updater manifest。
 
 ---
 

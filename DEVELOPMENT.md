@@ -21,7 +21,7 @@ flutter test test/models/                          # Run single test directory
 flutter build apk|ios|macos|windows                # Release builds
 ```
 
-Go >= 1.22 required for core compilation. Flutter >= 3.22, Dart >= 3.4. CI uses Flutter 3.27.4, Go 1.23.
+Go >= 1.22 required for core compilation. Flutter >= 3.38.4, Dart >= 3.10.3. CI uses Flutter 3.41.5, Go 1.23.
 
 ## Architecture
 
@@ -140,14 +140,14 @@ Groups are ordered by the `GLOBAL` group's `all` field from the mihomo API (`/pr
 
 ## Git & CI
 
-- **Branches**: `master` (main/release), `dev` (development). CI triggers on push to `main` and `dev`, and on tags.
-- **Tag strategy**: `alpha.N` tags trigger full builds (APK/IPA/DMG/EXE as artifacts, no GitHub Release) for testing. `v*` tags additionally create a GitHub Release. Use `alpha.*` during development, `v1.0.0` etc. for production releases.
-- **Release flow**: commit to `dev` → `git tag alpha.N && git push origin alpha.N` (test build) or `git tag vX.Y.Z && git push origin vX.Y.Z` (release). Never tag before pushing the commit.
-- **CI pipeline** (`.github/workflows/build.yml`): analyze+test → build Go cores (per-platform matrix) → Flutter builds (download core artifacts → install → build) → release (on `v*` tags only).
-- **Release artifacts**: `YueLink-<version>-android-{universal,arm64-v8a,armeabi-v7a,x86_64}.apk`, `YueLink-<version>-ios.ipa`, `YueLink-<version>-macos-universal.dmg`, `YueLink-<version>-windows-amd64-{setup.exe,portable.zip}`, `YueLink-<version>-linux-amd64.AppImage`。每个产物都会附带同名 `.sha256` 校验文件。
+- **Branches**: `master` (release), `dev` (development). The release workflow (`build.yml`) only runs on tag pushes and manual `workflow_dispatch`. Branch pushes run `ci.yml` (analyze + test) only.
+- **Tag strategy**: `v*` tags publish a GitHub Release (stable). `pre` is a floating pre-release tag that is re-pointed and overwritten each iteration. `vX.Y.Z-pre` tags are also treated as pre-releases.
+- **Release flow**: commit to `dev` → move `pre` for a test build (`git tag -d pre && git push origin :refs/tags/pre && git tag pre && git push origin pre`) → merge `dev` → `master` → `git tag -a vX.Y.Z -m "…" && git push origin vX.Y.Z`. Never tag before pushing the commit.
+- **CI pipeline** (`.github/workflows/build.yml`): checkout + submodule → apply `core/patches/*.patch` → build Go cores (per-platform matrix) → `dart setup.dart install` → Flutter build/package → upload artifact → release job downloads all artifacts, hashes, publishes, refreshes updater manifest.
+- **Release artifacts**: `YueLink-<version>-android-{universal,arm64-v8a,armeabi-v7a,x86_64}.apk`, `YueLink-<version>-ios.ipa`, `YueLink-<version>-macos-universal.dmg`, `YueLink-<version>-windows-amd64-{setup.exe,portable.zip}`, `YueLink-<version>-linux-amd64.AppImage`. 每个产物都会附带同名 `.sha256` 校验文件。
 - **Analyze in CI** uses `--no-fatal-infos --no-fatal-warnings` — only errors fail the build.
 - Submodules: `core/mihomo` is a git submodule. Clone with `--recursive` or run `git submodule update --init --recursive`.
-- **mihomo patches** (`core/patches/`): Applied during CI build. `0001-non-fatal-buildAndroidRules.patch` (PackageManager errors non-fatal), `0002-non-fatal-mmdb-and-iptables.patch` (MMDB/ASN `log.Fatalln` → `log.Errorln`, removes `os.Exit(2)` from iptables handler). These prevent the Go core from killing the entire Flutter process on non-critical failures.
+- **mihomo patches** (`core/patches/`): applied to `core/mihomo/` both by CI and by the local `dart setup.dart build` step (idempotent — already-applied patches are skipped). `0001-non-fatal-buildAndroidRules.patch` (PackageManager errors non-fatal), `0002-non-fatal-mmdb-and-iptables.patch` (MMDB/ASN `log.Fatalln` → `log.Errorln`, removes `os.Exit(2)` from iptables handler). These prevent the Go core from killing the entire Flutter process on non-critical failures.
 
 ## Testing
 
