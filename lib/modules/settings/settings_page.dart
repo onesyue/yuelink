@@ -19,7 +19,6 @@ import 'connection_repair_page.dart';
 import '../../modules/yue_auth/providers/yue_auth_providers.dart';
 import '../../shared/formatters/subscription_parser.dart' show formatBytes;
 import '../../shared/app_notifier.dart';
-import '../../core/kernel/geodata_service.dart';
 import '../../core/storage/settings_service.dart';
 import '../../core/env_config.dart';
 import '../updater/update_checker.dart';
@@ -80,6 +79,8 @@ HotKey parseStoredHotkey(String stored) {
 }
 
 /// Format stored hotkey string to display label, e.g. "ctrl+alt+c" → "Ctrl+Alt+C".
+/// Consumed by sub/general_settings_page's own _HotkeyRow — do not inline or
+/// delete without checking that sub page first.
 String displayHotkey(String stored) {
   return stored.split('+').map((p) {
     switch (p.toLowerCase()) {
@@ -98,26 +99,6 @@ String displayHotkey(String stored) {
         return p.toUpperCase();
     }
   }).join('+');
-}
-
-bool _isModifierKey(LogicalKeyboardKey key) {
-  final modifiers = {
-    LogicalKeyboardKey.control,
-    LogicalKeyboardKey.controlLeft,
-    LogicalKeyboardKey.controlRight,
-    LogicalKeyboardKey.shift,
-    LogicalKeyboardKey.shiftLeft,
-    LogicalKeyboardKey.shiftRight,
-    LogicalKeyboardKey.alt,
-    LogicalKeyboardKey.altLeft,
-    LogicalKeyboardKey.altRight,
-    LogicalKeyboardKey.meta,
-    LogicalKeyboardKey.metaLeft,
-    LogicalKeyboardKey.metaRight,
-    LogicalKeyboardKey.capsLock,
-    LogicalKeyboardKey.fn,
-  };
-  return modifiers.contains(key);
 }
 
 LogicalKeyboardKey _logicalKeyFromLabel(String label) {
@@ -1158,210 +1139,7 @@ class YLInfoRow extends StatelessWidget {
   }
 }
 
-// ── Hotkey row (desktop) ──────────────────────────────────────────────────────
 
-class _HotkeyRow extends ConsumerStatefulWidget {
-  @override
-  ConsumerState<_HotkeyRow> createState() => _HotkeyRowState();
-}
-
-class _HotkeyRowState extends ConsumerState<_HotkeyRow> {
-  bool _registering = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final s = S.of(context);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final stored = ref.watch(toggleHotkeyProvider);
-    final display = displayHotkey(stored);
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(s.toggleConnectionHotkey,
-                    style: YLText.body.copyWith(
-                        color: isDark ? YLColors.zinc200 : YLColors.zinc700)),
-              ),
-              Text(
-                display,
-                style: YLText.body.copyWith(
-                  fontFamily: 'monospace',
-                  fontSize: 13,
-                  color: isDark ? YLColors.zinc400 : YLColors.zinc500,
-                ),
-              ),
-              const SizedBox(width: 8),
-              if (_registering)
-                const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2))
-              else
-                TextButton(
-                  onPressed: _editHotkey,
-                  style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 8)),
-                  child:
-                      Text(s.hotkeyEdit, style: const TextStyle(fontSize: 12)),
-                ),
-            ],
-          ),
-          if (Platform.isLinux)
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Text(
-                s.hotkeyLinuxNotice,
-                style: YLText.caption.copyWith(color: YLColors.zinc400),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _editHotkey() async {
-    final s = S.of(context);
-    final newKey = await _showHotkeyDialog(context, s);
-    if (newKey == null || !mounted) return;
-    setState(() => _registering = true);
-    try {
-      ref.read(toggleHotkeyProvider.notifier).state = newKey;
-      await SettingsService.setToggleHotkey(newKey);
-      // Re-registration is handled by ref.listen in _YueLinkAppState
-      AppNotifier.success(s.hotkeySaved);
-    } catch (_) {
-      AppNotifier.error(s.hotkeyFailed);
-    } finally {
-      if (mounted) setState(() => _registering = false);
-    }
-  }
-
-  Future<String?> _showHotkeyDialog(BuildContext context, S s) {
-    final focusNode = FocusNode();
-    return showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(s.toggleConnectionHotkey),
-        content: KeyboardListener(
-          focusNode: focusNode,
-          autofocus: true,
-          onKeyEvent: (event) {
-            if (event is! KeyDownEvent) return;
-            if (_isModifierKey(event.logicalKey)) return;
-            final parts = <String>[];
-            if (HardwareKeyboard.instance.isControlPressed) {
-              parts.add('ctrl');
-            }
-            if (HardwareKeyboard.instance.isShiftPressed) parts.add('shift');
-            if (HardwareKeyboard.instance.isAltPressed) parts.add('alt');
-            if (HardwareKeyboard.instance.isMetaPressed) parts.add('meta');
-            final label = event.logicalKey.keyLabel.toLowerCase();
-            if (label.isNotEmpty) parts.add(label);
-            if (parts.length >= 2) Navigator.pop(ctx, parts.join('+'));
-          },
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            child: Text(
-              s.hotkeyListening,
-              textAlign: TextAlign.center,
-              style: YLText.body.copyWith(color: YLColors.zinc400),
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, null), child: Text(s.cancel)),
-        ],
-      ),
-    ).whenComplete(focusNode.dispose);
-  }
-}
-
-// ── GeoData row ───────────────────────────────────────────────────────────────
-
-// ── GeoData row ───────────────────────────────────────────────────────────────
-
-class _GeoDataRow extends StatefulWidget {
-  @override
-  State<_GeoDataRow> createState() => _GeoDataRowState();
-}
-
-class _GeoDataRowState extends State<_GeoDataRow> {
-  DateTime? _lastUpdated;
-  bool _loading = false;
-  bool _loaded = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadLastUpdated();
-  }
-
-  Future<void> _loadLastUpdated() async {
-    final dt = await GeoDataService.lastUpdated();
-    if (mounted) {
-      setState(() {
-        _lastUpdated = dt;
-        _loaded = true;
-      });
-    }
-  }
-
-  Future<void> _update() async {
-    if (_loading) return;
-    final s = S.of(context);
-    setState(() => _loading = true);
-    try {
-      final ok = await GeoDataService.forceUpdate();
-      if (!mounted) return;
-      if (ok) {
-        await _loadLastUpdated();
-        AppNotifier.success(s.geoUpdated);
-      } else {
-        AppNotifier.error(s.geoUpdateFailed);
-      }
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final s = S.of(context);
-    String subtitle;
-    if (!_loaded) {
-      subtitle = '...';
-    } else if (_lastUpdated != null) {
-      final d = _lastUpdated!;
-      subtitle =
-          s.geoLastUpdated('${d.year}-${d.month.toString().padLeft(2, '0')}-'
-              '${d.day.toString().padLeft(2, '0')}');
-    } else {
-      subtitle = s.noData;
-    }
-    return YLSettingsRow(
-      title: s.geoDatabase,
-      description: subtitle,
-      trailing: _loading
-          ? const SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(strokeWidth: 2))
-          : TextButton(
-              onPressed: _update,
-              style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 8)),
-              child: Text(s.geoUpdateNow, style: const TextStyle(fontSize: 12)),
-            ),
-    );
-  }
-}
 
 class YLSettingsRow extends StatelessWidget {
   final String title;
