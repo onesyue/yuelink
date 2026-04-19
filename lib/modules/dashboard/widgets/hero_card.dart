@@ -61,8 +61,12 @@ class HeroCard extends ConsumerWidget {
         (Theme.of(context).platform == TargetPlatform.macOS ||
             Theme.of(context).platform == TargetPlatform.windows ||
             Theme.of(context).platform == TargetPlatform.linux);
-    final modePillLabel =
-        connectionMode == 'tun' ? 'TUN' : s.modeSystemProxy;
+    final isTun = connectionMode == 'tun';
+    final modePillLabel = isTun ? 'TUN' : s.modeSystemProxy;
+
+    // Active "running" accent: emerald for system-proxy, indigo for TUN.
+    // Gives the user a mode signal even before reading the pill text.
+    final runningAccent = YLColors.runningAccent(tun: isTun);
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -71,7 +75,7 @@ class HeroCard extends ConsumerWidget {
         borderRadius: BorderRadius.circular(YLRadius.xxl),
         border: Border.all(
           color: isRunning
-              ? YLColors.connected.withValues(alpha: 0.30)
+              ? runningAccent.withValues(alpha: 0.30)
               : (isDark
                   ? Colors.white.withValues(alpha: 0.08)
                   : Colors.black.withValues(alpha: 0.08)),
@@ -87,7 +91,7 @@ class HeroCard extends ConsumerWidget {
             children: [
               _PulsingStatusDot(
                 color: isRunning
-                    ? YLColors.connected
+                    ? runningAccent
                     : (isTransitioning ? YLColors.connecting : YLColors.zinc400),
                 pulsing: status == CoreStatus.starting,
               ),
@@ -114,7 +118,7 @@ class HeroCard extends ConsumerWidget {
                           : (isTransitioning ? 'processing' : 'disconnected'),
                     ),
                     style: YLText.label.copyWith(
-                      color: isRunning ? YLColors.connected : YLColors.zinc500,
+                      color: isRunning ? runningAccent : YLColors.zinc500,
                       fontWeight: FontWeight.w600,
                     ),
                     maxLines: 1,
@@ -126,6 +130,7 @@ class HeroCard extends ConsumerWidget {
               PowerButton(
                 isRunning: isRunning,
                 isTransitioning: isTransitioning,
+                accent: runningAccent,
                 onTap: onToggle,
               ),
             ],
@@ -149,7 +154,7 @@ class HeroCard extends ConsumerWidget {
                   ),
                 ),
                 if (isRunning)
-                  Icon(Icons.chevron_right_rounded,
+                  const Icon(Icons.chevron_right_rounded,
                       size: 18, color: YLColors.zinc400),
               ],
             ),
@@ -171,8 +176,9 @@ class HeroCard extends ConsumerWidget {
               spacing: 8,
               runSpacing: 6,
               children: [
-                Pill(routeLabel, primary: true),
-                if (showModePill) Pill(modePillLabel),
+                Pill(routeLabel, primary: true, accent: runningAccent),
+                if (showModePill)
+                  Pill(modePillLabel, primary: isTun, accent: runningAccent),
                 if (profileName != null) Pill(profileName),
               ],
             ),
@@ -195,12 +201,14 @@ class HeroCard extends ConsumerWidget {
 class PowerButton extends StatelessWidget {
   final bool isRunning;
   final bool isTransitioning;
+  final Color? accent;
   final VoidCallback onTap;
 
   const PowerButton({
     super.key,
     required this.isRunning,
     required this.isTransitioning,
+    this.accent,
     required this.onTap,
   });
 
@@ -215,6 +223,7 @@ class PowerButton extends StatelessWidget {
       );
     }
 
+    final fill = accent ?? YLColors.connected;
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -223,7 +232,7 @@ class PowerButton extends StatelessWidget {
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           color: isRunning
-              ? YLColors.connected
+              ? fill
               : (isDark ? YLColors.zinc700 : YLColors.zinc100),
           border: isRunning
               ? null
@@ -313,19 +322,21 @@ class _PulsingStatusDotState extends State<_PulsingStatusDot>
 class Pill extends StatelessWidget {
   final String label;
   final bool primary;
-  const Pill(this.label, {super.key, this.primary = false});
+  final Color? accent;
+  const Pill(this.label, {super.key, this.primary = false, this.accent});
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final tint = accent ?? YLColors.connected;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
         color: primary
             ? (isDark
-                ? YLColors.connected.withValues(alpha: 0.12)
-                : YLColors.connected.withValues(alpha: 0.08))
+                ? tint.withValues(alpha: 0.12)
+                : tint.withValues(alpha: 0.08))
             : (isDark
                 ? Colors.white.withValues(alpha: 0.06)
                 : Colors.black.withValues(alpha: 0.04)),
@@ -336,7 +347,7 @@ class Pill extends StatelessWidget {
           style: YLText.caption.copyWith(
             fontWeight: primary ? FontWeight.w600 : FontWeight.w500,
             color: primary
-                ? YLColors.connected
+                ? tint
                 : (isDark ? YLColors.zinc400 : YLColors.zinc600),
           )),
     );

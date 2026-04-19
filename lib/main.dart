@@ -1132,7 +1132,14 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
   }
 
   Future<void> _dispatchTrayMenuItemAsync(String key) async {
-    // Ignore disabled status labels.
+    // Status header: the top "YueLink · 已连接 · <node>" line. Treat a click
+    // on it as a shortcut to the main window so users don't have to scroll
+    // down to the explicit "显示窗口" item.
+    if (key == '_status') {
+      await _showMainWindow();
+      return;
+    }
+    // Ignore other disabled status labels (mode / traffic submenu entries).
     if (key.startsWith('_')) return;
 
     if (key.startsWith('proxy_')) {

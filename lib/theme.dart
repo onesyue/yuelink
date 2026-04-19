@@ -39,6 +39,17 @@ class YLColors {
   static const error        = Color(0xFFEF4444); // Red-500
   static const errorLight   = Color(0xFFFEF2F2); // Red-50
 
+  /// TUN-mode connected accent. Indigo-500 (YueLink brand family) — visually
+  /// distinct from the emerald [connected] used for system-proxy mode so the
+  /// user can tell at a glance which connection mode is active on desktop.
+  static const tunConnected = Color(0xFF6366F1); // Indigo-500
+
+  /// Pick the "running" accent color based on the active connection mode.
+  /// Use [connected] (emerald) for system-proxy, [tunConnected] (indigo)
+  /// for TUN.
+  static Color runningAccent({required bool tun}) =>
+      tun ? tunConnected : connected;
+
   // ── Legacy aliases ────────────────────────────────────────────────────────
   static const bgLight = zinc100;
   static const bgDark  = zinc950;
