@@ -386,6 +386,7 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
   ProviderSubscription? _carrierSub;
   ProviderSubscription? _exitIpSub;
   ProviderSubscription? _tileNodeInfoSub;
+  ProviderSubscription? _delayResetSub;
 
   /// Guard to prevent onWindowClose from interfering during programmatic quit.
   bool _isQuitting = false;
@@ -517,6 +518,24 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
       }
     });
 
+    // Single source of truth for "core just died → wipe cached delay
+    // results". Previously duplicated across main.dart (VPN revoked,
+    // resume check), core/managers/core_heartbeat_manager (retry giveup,
+    // proxy conflict) and core/managers/core_lifecycle_manager (stop
+    // finally). Those call sites now rely on this one listener so the
+    // two core/managers files can drop their modules/nodes imports.
+    _delayResetSub = ref.listenManual<CoreStatus>(
+      coreStatusProvider,
+      (prev, next) {
+        if (prev != null &&
+            prev != CoreStatus.stopped &&
+            next == CoreStatus.stopped) {
+          ref.read(delayResultsProvider.notifier).state = {};
+          ref.read(delayTestingProvider.notifier).state = {};
+        }
+      },
+    );
+
     // Android tile subtitle refresh on exit-IP resolution and on the
     // show-node-info toggle. Both are cheap and idempotent.
     if (Platform.isAndroid) {
@@ -546,8 +565,7 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
         }
         debugPrint('[App] VPN revoked — resetting state');
         resetCoreToStopped(ref);
-        ref.read(delayResultsProvider.notifier).state = {};
-        ref.read(delayTestingProvider.notifier).state = {};
+        // delay-state wipe happens via _delayResetSub (core status → stopped).
         AppNotifier.warning(S.current.disconnectedUnexpected);
       },
       onTransportChanged: (prev, now) async {
@@ -685,6 +703,7 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
     _carrierSub?.close();
     _exitIpSub?.close();
     _tileNodeInfoSub?.close();
+    _delayResetSub?.close();
     TileService.onToggleRequested = null;
     TileService.onOpenPreferences = null;
     WidgetsBinding.instance.removeObserver(this);
@@ -816,8 +835,7 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
       if (!health.alive || !health.apiOk) {
         debugPrint('[AppLifecycle] core dead after resume — resetting state');
         resetCoreToStopped(ref);
-        ref.read(delayResultsProvider.notifier).state = {};
-        ref.read(delayTestingProvider.notifier).state = {};
+        // delay-state wipe happens via _delayResetSub (core status → stopped).
       } else {
         // Core alive — refresh data but do NOT invalidate trafficStreamProvider.
         // Invalidating it creates a new TrafficHistory(), wiping the chart.

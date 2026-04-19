@@ -204,8 +204,8 @@ class CoreLifecycleManager {
       ref.read(trafficProvider.notifier).state = const Traffic();
       ref.read(trafficHistoryProvider.notifier).state = TrafficHistory();
       ref.read(trafficHistoryVersionProvider.notifier).state = 0;
-      ref.read(delayResultsProvider.notifier).state = {};
-      ref.read(delayTestingProvider.notifier).state = {};
+      // delay-state wipe is handled by _delayResetSub in main.dart (listens
+      // for coreStatusProvider → stopped transition).
     }
   }
 

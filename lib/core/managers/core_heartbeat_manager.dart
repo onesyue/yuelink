@@ -8,10 +8,9 @@ import '../../core/ffi/core_controller.dart';
 import '../../core/kernel/core_manager.dart';
 import '../../core/kernel/recovery_manager.dart';
 import '../../core/profile/profile_service.dart';
+import '../../core/storage/settings_service.dart';
 import '../../i18n/app_strings.dart';
 import '../providers/core_provider.dart';
-import '../../modules/nodes/providers/nodes_providers.dart';
-import '../../modules/profiles/providers/profiles_providers.dart';
 import '../../shared/app_notifier.dart';
 import 'system_proxy_manager.dart';
 
@@ -111,8 +110,8 @@ class CoreHeartbeatManager {
     // Second round of 3 failures after a restart attempt — give up.
     debugPrint('[Heartbeat] core dead after retry, cleaning up');
     resetCoreToStopped(ref);
-    ref.read(delayResultsProvider.notifier).state = {};
-    ref.read(delayTestingProvider.notifier).state = {};
+    // delay-state wipe is handled by _delayResetSub in main.dart (listens
+    // for coreStatusProvider → stopped transition).
     _failures = 0;
     _retriedThisOutage = false;
   }
@@ -123,7 +122,10 @@ class CoreHeartbeatManager {
   Future<void> _silentRestart() async {
     _restartInFlight = true;
     try {
-      final activeId = ref.read(activeProfileIdProvider);
+      // Read persisted value rather than watching `activeProfileIdProvider`
+      // (modules/). Silent restart fires after 3 × 10 s of failed heartbeats
+      // — any in-memory profile switch has long since been persisted.
+      final activeId = await SettingsService.getActiveProfileId();
       if (activeId == null) {
         debugPrint('[Heartbeat] silent restart skipped — no active profile');
         return;
@@ -170,8 +172,8 @@ class CoreHeartbeatManager {
     debugPrint('[ProxyGuard] restore failed — another client took over');
     AppNotifier.warning(S.current.msgSystemProxyConflict);
     resetCoreToStopped(ref, clearDesktopProxy: false);
-    ref.read(delayResultsProvider.notifier).state = {};
-    ref.read(delayTestingProvider.notifier).state = {};
+    // delay-state wipe is handled by _delayResetSub in main.dart (listens
+    // for coreStatusProvider → stopped transition).
     _failures = 0;
   }
 }
