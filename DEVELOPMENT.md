@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project Overview
 
 YueLink (by Yue.to) is a cross-platform proxy client built with Flutter + mihomo (Clash.Meta) Go core.
-Supports: Android, iOS, macOS, Windows. (No Linux support.)
+Supports: Android, iOS, macOS, Windows, Linux.
 
 ## Build Commands
 

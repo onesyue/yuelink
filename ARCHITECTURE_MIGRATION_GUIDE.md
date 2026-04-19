@@ -121,7 +121,7 @@ final announcementsProvider = FutureProvider<List<Announcement>>((ref) async {
 > 每迁移完一个模块，**必须同步删除**所有关联的旧文件：
 > - 旧 Model（如 xboard_api.dart 中内嵌的 class）
 > - 旧 Service（如 singleton 的 `XxxService.instance`）
-> - 旧 re-export（如 yue_auth_repository.dart 中的 show 列表）
+> - 旧 re-export 桥接层（比如旧 xxx_repository.dart 里的 show 列表）
 > - 空壳文件和空目录
 >
 > 绝不容忍新旧两份代码并存。迁移 PR 的 diff 中，删除行数应当接近新增行数。
