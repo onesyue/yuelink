@@ -626,7 +626,12 @@ jobs:
           name: ${{ env.RELEASE_TITLE }}
           body_path: release_notes.md
           files: dist/*
-          prerelease: ${{ github.ref == 'refs/tags/pre' }}
+          # Prerelease rule: the floating `pre` tag and any `vX.Y.Z-pre`
+          # variant are pre-releases. Plain `vX.Y.Z` tags publish as full
+          # releases. Previously only `refs/tags/pre` matched, so a tag like
+          # `v1.0.19-pre` was getting published as "latest" and manual
+          # `gh release edit --prerelease` kept getting overwritten.
+          prerelease: ${{ github.ref_name == 'pre' || endsWith(github.ref_name, '-pre') }}
 
       # ── Updater manifest published to fixed `updater` tag ────────────────
       - name: Generate updater manifest
