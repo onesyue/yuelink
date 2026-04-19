@@ -11,7 +11,6 @@ import '../../domain/models/traffic.dart';
 import '../../domain/models/traffic_history.dart';
 import '../../i18n/app_strings.dart';
 import '../providers/core_provider.dart';
-import '../../modules/nodes/providers/nodes_providers.dart';
 import '../../shared/app_notifier.dart';
 import '../../shared/event_log.dart';
 import '../../shared/nps_service.dart';
@@ -132,8 +131,11 @@ class CoreLifecycleManager {
         }
       }
 
-      // Trigger initial proxy data fetch
-      ref.read(proxyGroupsProvider.notifier).refresh();
+      // Initial proxy-data fetch is handled by ProxyGroupsNotifier's own
+      // listener on coreStatusProvider — it fires on the stopped/other
+      // → running transition that coreStatusProvider now holds after
+      // CoreManager.start() returns. This keeps lifecycle_manager free
+      // of any modules/ import.
       return true;
     } catch (e, st) {
       debugPrint('[CoreLifecycle] start() error: $e\n$st');

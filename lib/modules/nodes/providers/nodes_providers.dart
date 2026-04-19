@@ -130,7 +130,25 @@ bool shouldFetchLiveProxyGroups({
 
 class ProxyGroupsNotifier extends Notifier<List<ProxyGroup>> {
   @override
-  List<ProxyGroup> build() => [];
+  List<ProxyGroup> build() {
+    // Auto-refresh on core startup. `core_lifecycle_manager.start()`
+    // used to call `refresh()` directly after flipping status to
+    // running — that was the last `core -> modules` reverse dependency
+    // core_lifecycle_manager had. Listening here keeps the lifecycle
+    // side free of modules/ imports; direction is modules → core.
+    //
+    // Manual refresh call sites (nodes_page pull-to-refresh, sync &
+    // reconnect, chain proxy, resume check) continue to work
+    // unchanged — this listener only covers the initial fetch.
+    ref.listen<CoreStatus>(coreStatusProvider, (prev, next) {
+      if (prev != null &&
+          prev != CoreStatus.running &&
+          next == CoreStatus.running) {
+        refresh();
+      }
+    });
+    return [];
+  }
 
   ProxyRepository get _repo => ref.read(proxyRepositoryProvider);
 
