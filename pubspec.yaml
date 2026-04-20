@@ -32,7 +32,7 @@ dependencies:
   window_manager: ^0.5.1
   package_info_plus: ^9.0.1
   file_picker: ^11.0.2
-  app_links: ^6.3.4
+  app_links: ^7.0.0
   hotkey_manager: ^0.2.3
   flutter_secure_storage: ^9.2.4
   yaml: ^3.1.2
