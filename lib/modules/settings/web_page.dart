@@ -74,7 +74,7 @@ class _InAppWebPageState extends State<InAppWebPage> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(_error!,
-                          style: TextStyle(color: YLColors.zinc500),
+                          style: const TextStyle(color: YLColors.zinc500),
                           textAlign: TextAlign.center),
                       const SizedBox(height: 16),
                       FilledButton.tonal(

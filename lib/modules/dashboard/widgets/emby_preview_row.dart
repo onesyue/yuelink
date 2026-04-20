@@ -304,7 +304,7 @@ class _PosterRow extends ConsumerWidget {
       // State 3: Loading
       loading: () => _buildSkeleton(isDark),
       // State 4: Error → graceful degradation (placeholder tiles, still tappable)
-      error: (_, __) => _buildPlaceholderTiles(context, isDark, onTapLibrary),
+      error: (_, _) => _buildPlaceholderTiles(context, isDark, onTapLibrary),
       data: (items) {
         // State 5: Empty
         if (items.isEmpty) return _buildEmpty(context, isDark, onTapLibrary);
@@ -323,8 +323,8 @@ class _PosterRow extends ConsumerWidget {
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: 8,
-        separatorBuilder: (_, __) => const SizedBox(width: 8),
-        itemBuilder: (_, __) => _SkeletonPoster(isDark: isDark),
+        separatorBuilder: (_, _) => const SizedBox(width: 8),
+        itemBuilder: (_, _) => _SkeletonPoster(isDark: isDark),
       ),
     );
   }
@@ -338,8 +338,8 @@ class _PosterRow extends ConsumerWidget {
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: 6,
-        separatorBuilder: (_, __) => const SizedBox(width: 8),
-        itemBuilder: (_, __) => GestureDetector(
+        separatorBuilder: (_, _) => const SizedBox(width: 8),
+        itemBuilder: (_, _) => GestureDetector(
           onTap: onTap,
           child: ClipRRect(
             borderRadius: BorderRadius.circular(YLRadius.md),
@@ -386,7 +386,7 @@ class _PosterRow extends ConsumerWidget {
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: items.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        separatorBuilder: (_, _) => const SizedBox(width: 8),
         itemBuilder: (context, index) {
           final item = items[index];
           return _PosterTile(
@@ -457,12 +457,12 @@ class _PosterTile extends StatelessWidget {
                   fadeInDuration: const Duration(milliseconds: 200),
                   memCacheWidth: physWidth.clamp(0, 480),
                   memCacheHeight: (physWidth * 3 ~/ 2).clamp(0, 720),
-                  placeholder: (_, __) => Container(
+                  placeholder: (_, _) => Container(
                     color: isDark
                         ? const Color(0xFF1C1C1E)
                         : const Color(0xFFE4E4E7),
                   ),
-                  errorWidget: (_, __, ___) =>
+                  errorWidget: (_, _, _) =>
                       _PosterFallback(isDark: isDark),
                 )
               : _PosterFallback(isDark: isDark),
@@ -524,8 +524,8 @@ class _AccessLoadingSkeleton extends StatelessWidget {
         scrollDirection: Axis.horizontal,
         physics: const NeverScrollableScrollPhysics(),
         itemCount: 6,
-        separatorBuilder: (_, __) => const SizedBox(width: 8),
-        itemBuilder: (_, __) => ClipRRect(
+        separatorBuilder: (_, _) => const SizedBox(width: 8),
+        itemBuilder: (_, _) => ClipRRect(
           borderRadius: BorderRadius.circular(YLRadius.md),
           child: Container(
             width: 90,

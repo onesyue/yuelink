@@ -68,9 +68,9 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     // streams run but don't cause this widget to rebuild every second.
     // coreHeartbeatProvider is watched globally in _YueLinkAppState.
     if (isRunning) {
-      ref.listen(trafficStreamProvider, (_, __) {});
-      ref.listen(memoryStreamProvider, (_, __) {});
-      ref.listen(connectionsStreamProvider, (_, __) {});
+      ref.listen(trafficStreamProvider, (_, _) {});
+      ref.listen(memoryStreamProvider, (_, _) {});
+      ref.listen(connectionsStreamProvider, (_, _) {});
     }
 
     return Scaffold(

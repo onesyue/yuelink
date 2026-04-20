@@ -12,7 +12,7 @@ import '../../infrastructure/repositories/profile_repository.dart';
 class ProfileService {
   ProfileService._();
 
-  static final _repo = ProfileRepository();
+  static const _repo = ProfileRepository();
 
   static Future<List<Profile>> loadProfiles() => _repo.loadProfiles();
 

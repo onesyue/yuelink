@@ -32,7 +32,7 @@ void main() {
     });
 
     test('calculates remaining correctly', () {
-      final info = const SubscriptionInfo(
+      const info = SubscriptionInfo(
         upload: 100,
         download: 200,
         total: 1000,
@@ -41,12 +41,12 @@ void main() {
     });
 
     test('usagePercent returns null when total is null', () {
-      final info = const SubscriptionInfo(upload: 100, download: 200);
+      const info = SubscriptionInfo(upload: 100, download: 200);
       expect(info.usagePercent, isNull);
     });
 
     test('usagePercent calculates correctly', () {
-      final info = const SubscriptionInfo(upload: 250, download: 250, total: 1000);
+      const info = SubscriptionInfo(upload: 250, download: 250, total: 1000);
       expect(info.usagePercent, closeTo(0.5, 0.001));
     });
 

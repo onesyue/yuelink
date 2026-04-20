@@ -27,8 +27,8 @@ T _quietFontZone<T>(T Function() body) {
     () {
       result = body();
     },
-    (_, __) {},
-    zoneSpecification: ZoneSpecification(print: (_, __, ___, ____) {}),
+    (_, _) {},
+    zoneSpecification: ZoneSpecification(print: (_, _, _, _) {}),
   );
   return result;
 }

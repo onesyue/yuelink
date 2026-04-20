@@ -5,7 +5,6 @@
 // server closes mid-stream, (3) cancellation actually stops the retry
 // loop so tearing a provider down leaves no dangling Futures.
 
-import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 

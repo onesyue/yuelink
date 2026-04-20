@@ -187,12 +187,12 @@ class EmbyImage extends StatelessWidget {
       fadeInDuration: const Duration(milliseconds: 200),
       memCacheWidth: memW,
       memCacheHeight: memH,
-      placeholder: (_, __) => Container(
+      placeholder: (_, _) => Container(
         color: Theme.of(context).brightness == Brightness.dark
             ? const Color(0xFF1C1C1E)
             : const Color(0xFFE4E4E7), // YLColors.zinc200
       ),
-      errorWidget: (_, __, ___) => placeholder,
+      errorWidget: (_, _, _) => placeholder,
     );
   }
 }

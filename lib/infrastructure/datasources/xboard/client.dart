@@ -192,7 +192,7 @@ class XBoardHttpClient {
   Map<String, String> _headers({String? token}) => {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
-        if (token != null) 'Authorization': token,
+        'Authorization': ?token,
       };
 
   /// XBoard returns HTTP 200 with `{"status":"fail","message":"..."}` for

@@ -245,7 +245,7 @@ class ProfileRepository {
       url: url,
       configContent: finalContent,
       lastUpdated: DateTime.now(),
-      subInfo: SubscriptionInfo(),
+      subInfo: const SubscriptionInfo(),
       updateInterval: updateInterval,
     );
 

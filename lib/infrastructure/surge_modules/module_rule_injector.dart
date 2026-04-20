@@ -25,7 +25,7 @@ class ModuleRuleInjector {
   /// [configYaml]. Returns the modified config string unchanged when there is
   /// nothing to inject.
   static Future<String> inject(String configYaml, {int mitmPort = 0}) async {
-    final repo = const ModuleRepository();
+    const repo = ModuleRepository();
     final moduleRules = await repo.getEnabledRules();
     final mitmHostnames = mitmPort > 0
         ? await repo.getEnabledMitmHostnames()
@@ -152,7 +152,7 @@ class ModuleRuleInjector {
 
     // Fallback: append at end.
     final sep = yaml.endsWith('\n') ? '' : '\n';
-    return '${yaml}${sep}proxies:\n$proxyEntry\n';
+    return '$yaml${sep}proxies:\n$proxyEntry\n';
   }
 
   // ---------------------------------------------------------------------------
@@ -191,6 +191,6 @@ class ModuleRuleInjector {
     // No rules: section — append with default 2-space indent.
     final rulesBlock = rules.map((r) => '  - $r').join('\n');
     final sep = yaml.endsWith('\n') ? '' : '\n';
-    return '${yaml}${sep}rules:\n$rulesBlock\n';
+    return '$yaml${sep}rules:\n$rulesBlock\n';
   }
 }

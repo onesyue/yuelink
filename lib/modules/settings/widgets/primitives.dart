@@ -136,7 +136,7 @@ class YLInfoRow extends StatelessWidget {
           ),
           if (value != null)
             Text(value!, style: YLText.body.copyWith(color: valueColor)),
-          if (trailing != null) trailing!,
+          ?trailing,
         ],
       ),
     );

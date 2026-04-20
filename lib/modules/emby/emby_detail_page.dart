@@ -490,7 +490,7 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> {
           ],
           if (actors.isNotEmpty) ...[
             Text(S.current.embyCast,
-                style: TextStyle(
+                style: const TextStyle(
                     color: Colors.white,
                     fontSize: 15,
                     fontWeight: FontWeight.w600)),
@@ -500,7 +500,7 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> {
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
                 itemCount: actors.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 12),
+                separatorBuilder: (_, _) => const SizedBox(width: 12),
                 itemBuilder: (_, i) => _buildActorChip(actors[i]),
               ),
             ),
@@ -560,7 +560,7 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Text(S.current.embySimilar,
-                style: TextStyle(
+                style: const TextStyle(
                     color: Colors.white,
                     fontSize: 15,
                     fontWeight: FontWeight.w600)),
@@ -572,7 +572,7 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> {
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 16),
               itemCount: _similar!.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 10),
+              separatorBuilder: (_, _) => const SizedBox(width: 10),
               itemBuilder: (_, i) => _buildSimilarCard(_similar![i]),
             ),
           ),
@@ -653,7 +653,7 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> {
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(horizontal: 16),
           itemCount: _seasons!.length,
-          separatorBuilder: (_, __) => const SizedBox(width: 8),
+          separatorBuilder: (_, _) => const SizedBox(width: 8),
           itemBuilder: (_, i) {
             final s = _seasons![i];
             final selected = s.id == _selectedSeasonId;

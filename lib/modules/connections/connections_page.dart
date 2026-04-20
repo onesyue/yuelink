@@ -574,11 +574,11 @@ class ConnectionsSearchField extends StatelessWidget {
             decoration: InputDecoration(
               hintText: hintText,
               hintStyle: YLText.body.copyWith(color: YLColors.zinc500),
-              prefixIcon: Icon(Icons.search_rounded,
+              prefixIcon: const Icon(Icons.search_rounded,
                   size: 20, color: YLColors.zinc400),
               suffixIcon: hasText
                   ? IconButton(
-                      icon: Icon(Icons.cancel_rounded,
+                      icon: const Icon(Icons.cancel_rounded,
                           size: 18, color: YLColors.zinc400),
                       onPressed: () {
                         controller.clear();

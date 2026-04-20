@@ -116,7 +116,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                   ),
                 ),
                 PopupMenuButton<String>(
-                  icon: Icon(Icons.more_vert, size: 20, color: YLColors.zinc500),
+                  icon: const Icon(Icons.more_vert, size: 20, color: YLColors.zinc500),
                   tooltip: s.isEn ? 'More' : '更多',
                   onSelected: (action) {
                     switch (action) {

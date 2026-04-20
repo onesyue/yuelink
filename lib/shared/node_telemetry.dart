@@ -236,7 +236,7 @@ class NodeTelemetry {
         'fp': fp,
         'type': type.toLowerCase(),
         'ok': ok,
-        if (reason != null) 'reason': reason,
+        'reason': ?reason,
         if (handshakeMs != null) 'handshake_ms': handshakeMs.clamp(0, 60000),
       },
     );

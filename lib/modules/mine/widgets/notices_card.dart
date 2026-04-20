@@ -19,7 +19,7 @@ class NoticesCard extends ConsumerWidget {
 
     return noticesAsync.when(
       loading: () => const SizedBox.shrink(),
-      error: (_, __) => const SizedBox.shrink(),
+      error: (_, _) => const SizedBox.shrink(),
       data: (notices) {
         if (notices.isEmpty) return const SizedBox.shrink();
         final display = notices.take(3).toList();

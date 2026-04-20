@@ -228,7 +228,7 @@ class XBoardApi {
       token: token,
       body: {
         'trade_no': tradeNo,
-        if (method != null) 'method': method,
+        'method': ?method,
       },
     );
     if (raw is Map<String, dynamic>) {

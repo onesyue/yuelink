@@ -238,7 +238,7 @@ class _EmptyState extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.add_link_rounded, size: 48, color: YLColors.zinc300),
+          const Icon(Icons.add_link_rounded, size: 48, color: YLColors.zinc300),
           const SizedBox(height: 12),
           Text(s.chainEmptyHint,
               style: YLText.body.copyWith(color: YLColors.zinc400)),
@@ -373,7 +373,7 @@ class _ChainPickerSheetState extends ConsumerState<_ChainPickerSheet> {
               const Spacer(),
               GestureDetector(
                 onTap: () => Navigator.pop(context),
-                child: Icon(Icons.close_rounded,
+                child: const Icon(Icons.close_rounded,
                     size: 20, color: YLColors.zinc400),
               ),
             ],
@@ -496,7 +496,7 @@ class _ChainPickerSheetState extends ConsumerState<_ChainPickerSheet> {
     final crossAsync = ref.watch(crossProfileNodesProvider);
     return crossAsync.when(
       loading: () => const [],
-      error: (_, __) => const [],
+      error: (_, _) => const [],
       data: (entries) {
         if (entries.isEmpty) return [];
         final widgets = <Widget>[
@@ -830,15 +830,15 @@ class _ChainNodeTile extends StatelessWidget {
                   overflow: TextOverflow.ellipsis),
             ),
             if (!isExit && index < 99)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 4),
                 child: Icon(Icons.arrow_forward_rounded,
                     size: 14, color: YLColors.zinc400),
               ),
             GestureDetector(
               onTap: onRemove,
-              child: Padding(
-                padding: const EdgeInsets.all(4),
+              child: const Padding(
+                padding: EdgeInsets.all(4),
                 child: Icon(Icons.close_rounded,
                     size: 16, color: YLColors.zinc400),
               ),

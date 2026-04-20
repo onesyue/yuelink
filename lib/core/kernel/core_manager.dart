@@ -319,8 +319,9 @@ class CoreManager {
           _apiPort = ConfigTemplate.getApiPort(processed);
           _mixedPort = ConfigTemplate.getMixedPort(processed);
           final parsedSecret = ConfigTemplate.getSecret(processed);
-          if (parsedSecret != null && parsedSecret.isNotEmpty)
+          if (parsedSecret != null && parsedSecret.isNotEmpty) {
             _apiSecret = parsedSecret;
+          }
           _api = null;
           _stream = null;
           _clashCore = null;
@@ -344,8 +345,9 @@ class CoreManager {
           _apiPort = ConfigTemplate.getApiPort(processed);
           _mixedPort = ConfigTemplate.getMixedPort(processed);
           final parsedSecret = ConfigTemplate.getSecret(processed);
-          if (parsedSecret != null && parsedSecret.isNotEmpty)
+          if (parsedSecret != null && parsedSecret.isNotEmpty) {
             _apiSecret = parsedSecret;
+          }
           _api = null;
           _stream = null;
           _clashCore = null;
@@ -553,8 +555,9 @@ class CoreManager {
         _apiPort = ConfigTemplate.getApiPort(processed);
         _mixedPort = ConfigTemplate.getMixedPort(processed);
         final parsedSecret = ConfigTemplate.getSecret(processed);
-        if (parsedSecret != null && parsedSecret.isNotEmpty)
+        if (parsedSecret != null && parsedSecret.isNotEmpty) {
           _apiSecret = parsedSecret;
+        }
         _api = null;
         _stream = null;
         _clashCore = null;
@@ -659,8 +662,9 @@ class CoreManager {
         _apiPort = ConfigTemplate.getApiPort(processed);
         _mixedPort = ConfigTemplate.getMixedPort(processed);
         final parsedSecret = ConfigTemplate.getSecret(processed);
-        if (parsedSecret != null && parsedSecret.isNotEmpty)
+        if (parsedSecret != null && parsedSecret.isNotEmpty) {
           _apiSecret = parsedSecret;
+        }
         _api = null;
         _stream = null;
         _clashCore = null;

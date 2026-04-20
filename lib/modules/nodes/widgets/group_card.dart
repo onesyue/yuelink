@@ -141,7 +141,7 @@ class _GroupCardState extends ConsumerState<GroupCard>
                 children: [
                   RotationTransition(
                     turns: _chevronAnim,
-                    child: Icon(Icons.expand_more_rounded,
+                    child: const Icon(Icons.expand_more_rounded,
                         size: 20, color: YLColors.zinc400),
                   ),
                   const SizedBox(width: YLSpacing.sm),
@@ -427,7 +427,7 @@ class _NodeCardItemState extends ConsumerState<NodeCardItem> {
                 if (_isSwitching)
                   const CupertinoActivityIndicator(radius: 6)
                 else if (isSelected)
-                  Icon(Icons.check_circle_rounded,
+                  const Icon(Icons.check_circle_rounded,
                       size: 13, color: YLColors.connected),
               ],
             ),

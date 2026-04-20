@@ -212,7 +212,7 @@ class _IpHeader extends StatelessWidget {
     if (isLoading) {
       return Row(
         children: [
-          Icon(Icons.shield_outlined, size: 13, color: YLColors.zinc400),
+          const Icon(Icons.shield_outlined, size: 13, color: YLColors.zinc400),
           const SizedBox(width: 6),
           Text(s.exitIpLabel,
               style: YLText.caption.copyWith(color: YLColors.zinc500)),
@@ -255,7 +255,7 @@ class _IpHeader extends StatelessWidget {
         Row(
           children: [
             // Shield icon
-            Icon(Icons.shield_rounded, size: 13, color: YLColors.connected),
+            const Icon(Icons.shield_rounded, size: 13, color: YLColors.connected),
             const SizedBox(width: 6),
 
             // Flag + location (shrinks if needed)

@@ -211,7 +211,7 @@ class _EmbyPlayerPageState extends State<EmbyPlayerPage> with WidgetsBindingObse
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           title: Text(S.current.embyResumeTitle,
-              style: TextStyle(color: Colors.white, fontSize: 16)),
+              style: const TextStyle(color: Colors.white, fontSize: 16)),
           content: Text(_formatPosition(posSeconds),
               style: const TextStyle(color: Colors.white70)),
           actions: [
@@ -602,7 +602,7 @@ class _EmbyPlayerPageState extends State<EmbyPlayerPage> with WidgetsBindingObse
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: Text(S.current.embySpeedUp,
-                          style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500)),
+                          style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500)),
                     ),
                   ),
                 ),
@@ -634,7 +634,7 @@ class _EmbyPlayerPageState extends State<EmbyPlayerPage> with WidgetsBindingObse
                 color: Colors.white38, size: 48),
             const SizedBox(height: 16),
             Text(S.current.embyPlayFailed,
-                style: TextStyle(
+                style: const TextStyle(
                     color: Colors.white,
                     fontSize: 18,
                     fontWeight: FontWeight.w500)),
@@ -855,7 +855,7 @@ class _SettingsPanelState extends State<_SettingsPanel>
           child: Row(
             children: [
               Text(S.current.embySubtitleSize,
-                  style: TextStyle(color: Colors.white54, fontSize: 12)),
+                  style: const TextStyle(color: Colors.white54, fontSize: 12)),
               const SizedBox(width: 16),
               ...sizes.entries.map((e) => Padding(
                     padding: const EdgeInsets.only(right: 8),
@@ -935,7 +935,7 @@ class _SettingsPanelState extends State<_SettingsPanel>
       if (proxyPort > 0) {
         client.findProxy = (_) => 'PROXY 127.0.0.1:$proxyPort';
       }
-      client.badCertificateCallback = (_, __, ___) => true;
+      client.badCertificateCallback = (_, _, _) => true;
       try {
         final request = await client.getUrl(Uri.parse(url));
         request.headers.set('X-Emby-Authorization', authHeader);

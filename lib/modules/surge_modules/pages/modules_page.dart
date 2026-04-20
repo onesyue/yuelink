@@ -247,7 +247,7 @@ class _MitmEngineCard extends ConsumerWidget {
             const SizedBox(height: 8),
             Row(
               children: [
-                Icon(Icons.info_outline,
+                const Icon(Icons.info_outline,
                     size: 13, color: YLColors.connecting),
                 const SizedBox(width: 4),
                 Expanded(

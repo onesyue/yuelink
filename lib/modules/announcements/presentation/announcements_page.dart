@@ -98,7 +98,7 @@ class _AnnouncementsPageState extends ConsumerState<AnnouncementsPage> {
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
               itemCount: list.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 14),
+              separatorBuilder: (_, _) => const SizedBox(height: 14),
               itemBuilder: (context, i) => _AnnouncementTile(
                 item: list[i],
                 isDark: isDark,

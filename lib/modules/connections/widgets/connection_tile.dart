@@ -92,7 +92,7 @@ class ConnectionTile extends StatelessWidget {
                           padding: const EdgeInsets.only(top: 8),
                           child: Row(
                             children: [
-                              Icon(Icons.south_rounded, size: 12, color: YLColors.connected),
+                              const Icon(Icons.south_rounded, size: 12, color: YLColors.connected),
                               const SizedBox(width: 2),
                               Text(
                                 _formatSpeed(connection.curDownloadSpeed),
@@ -130,7 +130,7 @@ class ConnectionTile extends StatelessWidget {
                           color: YLColors.errorLight.withValues(alpha:isDark ? 0.1 : 0.5),
                           shape: BoxShape.circle,
                         ),
-                        child: Icon(Icons.close_rounded, size: 14, color: YLColors.error),
+                        child: const Icon(Icons.close_rounded, size: 14, color: YLColors.error),
                       ),
                     ),
                   ],

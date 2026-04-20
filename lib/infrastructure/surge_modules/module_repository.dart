@@ -12,8 +12,8 @@ import '../../domain/surge_modules/module_entity.dart';
 /// Manages persistent storage for [ModuleRecord]s.
 ///
 /// Storage layout (under ApplicationSupport):
-///   modules/index.json        — JSON array of ModuleRecord objects
-///   modules_raw/<id>.sgmodule — raw .sgmodule text for each module
+///   `modules/index.json`        — JSON array of ModuleRecord objects
+///   `modules_raw/<id>.sgmodule` — raw .sgmodule text for each module
 ///
 /// Follows the same Completer-based mutex pattern as ProfileRepository.
 class ModuleRepository {

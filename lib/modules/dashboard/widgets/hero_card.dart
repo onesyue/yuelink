@@ -103,7 +103,7 @@ class HeroCard extends ConsumerWidget {
                     alignment: Alignment.centerLeft,
                     children: [
                       ...previousChildren,
-                      if (currentChild != null) currentChild,
+                      ?currentChild,
                     ],
                   ),
                   child: Text(

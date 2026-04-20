@@ -210,7 +210,7 @@ class _ModuleDetailPageState extends ConsumerState<ModuleDetailPage> {
               module.mitmHostnames.isNotEmpty ||
               module.urlRewrites.isNotEmpty ||
               module.headerRewrites.isNotEmpty) ...[
-            _SectionTitle('Currently Active'),
+            const _SectionTitle('Currently Active'),
             _SectionCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -313,7 +313,7 @@ class _ModuleDetailPageState extends ConsumerState<ModuleDetailPage> {
 
           // ── Warnings ─────────────────────────────────────────────────
           if (module.parseWarnings.isNotEmpty) ...[
-            _SectionTitle('Parse Warnings'),
+            const _SectionTitle('Parse Warnings'),
             _SectionCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -336,7 +336,7 @@ class _ModuleDetailPageState extends ConsumerState<ModuleDetailPage> {
           ],
 
           // ── Metadata ─────────────────────────────────────────────────
-          _SectionTitle('Info'),
+          const _SectionTitle('Info'),
           _SectionCard(
             child: Column(
               children: [

@@ -631,7 +631,7 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
                       scrollDirection: Axis.horizontal,
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       itemCount: items.length,
-                      separatorBuilder: (_, __) => const SizedBox(width: 10),
+                      separatorBuilder: (_, _) => const SizedBox(width: 10),
                       itemBuilder: (_, i) =>
                           _buildRowPoster(items[i], height: rowHeight),
                     ),
@@ -899,8 +899,8 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 16),
               itemCount: 5,
-              separatorBuilder: (_, __) => const SizedBox(width: 10),
-              itemBuilder: (_, __) => Container(
+              separatorBuilder: (_, _) => const SizedBox(width: 10),
+              itemBuilder: (_, _) => Container(
                 width: 120,
                 decoration: BoxDecoration(
                     color: shimmer,
@@ -921,8 +921,8 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.symmetric(horizontal: 16),
       itemCount: 5,
-      separatorBuilder: (_, __) => const SizedBox(width: 10),
-      itemBuilder: (_, __) => Container(
+      separatorBuilder: (_, _) => const SizedBox(width: 10),
+      itemBuilder: (_, _) => Container(
         width: 120,
         decoration: BoxDecoration(
             color: shimmer, borderRadius: BorderRadius.circular(6)),

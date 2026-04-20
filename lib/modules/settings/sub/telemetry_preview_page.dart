@@ -67,7 +67,7 @@ class TelemetryPreviewPage extends StatelessWidget {
                 : ListView.separated(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     itemCount: events.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 6),
+                    separatorBuilder: (_, _) => const SizedBox(height: 6),
                     itemBuilder: (_, i) => _EventTile(event: events[i]),
                   ),
           ),

@@ -254,7 +254,7 @@ class _BannerSlide extends StatelessWidget {
                       fit: BoxFit.cover,
                       cacheWidth: w,
                       cacheHeight: h,
-                      errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                      errorBuilder: (_, _, _) => const SizedBox.shrink(),
                     );
                   },
                 ),

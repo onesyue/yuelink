@@ -77,7 +77,7 @@ Future<ExitIpInfo?> _fetchIpViaProxy(int port) async {
   final client = HttpClient();
   client.findProxy = (uri) => 'PROXY 127.0.0.1:$port';
   client.connectionTimeout = const Duration(seconds: 10);
-  client.badCertificateCallback = (_, __, ___) => true;
+  client.badCertificateCallback = (_, _, _) => true;
   try {
     final req = await client.getUrl(Uri.parse('https://api.ip.sb/geoip'));
     req.headers.set('User-Agent', 'YueLink/1.0');
@@ -108,7 +108,7 @@ Future<ExitIpInfo?> _fetchIpViaProxy(int port) async {
 Future<ExitIpInfo> _fetchPublicIp() async {
   final client = HttpClient();
   client.connectionTimeout = const Duration(seconds: 5);
-  client.badCertificateCallback = (_, __, ___) => true;
+  client.badCertificateCallback = (_, _, _) => true;
   try {
     final req = await client.getUrl(Uri.parse('https://api.ip.sb/geoip'));
     req.headers.set('User-Agent', 'YueLink/1.0');
@@ -192,7 +192,7 @@ final aiUnlockTestProvider = FutureProvider.autoDispose<AiUnlockInfo?>((ref) asy
     final client = HttpClient();
     client.findProxy = (uri) => 'PROXY 127.0.0.1:$port';
     client.connectionTimeout = const Duration(seconds: 8);
-    client.badCertificateCallback = (_, __, ___) => true;
+    client.badCertificateCallback = (_, _, _) => true;
     try {
       final req = await client.getUrl(
           Uri.parse('https://chat.openai.com/cdn-cgi/trace'));
@@ -277,7 +277,7 @@ final dnsLeakTestProvider =
 
     return DnsLeakResult(
       leaked: leaked,
-      resolverIps: [...mihomoAnswers, ...systemIps].toSet().toList(),
+      resolverIps: <String>{...mihomoAnswers, ...systemIps}.toList(),
     );
   } catch (e) {
     debugPrint('[DnsLeak] test error: $e');
