@@ -115,14 +115,47 @@ jobs:
           fi
 
       # ── Geodata: declared as Flutter assets, .gitignored — fetch at CI ────
+      # Each upstream .dat/.mmdb ships alongside a <file>.sha256sum sidecar
+      # from MetaCubeX/meta-rules-dat (GNU sha256sum format). We verify the
+      # bytes against the sidecar and HARD FAIL the job on mismatch OR when
+      # the sidecar itself is missing. Rationale: CI produces the artifact
+      # that ships to every user — strict verification here is cheap and
+      # the trust boundary. Runtime (lib/core/kernel/geodata_service.dart)
+      # is fail-soft by design (see comment there).
       - name: Download geodata files
         shell: bash
         run: |
+          set -euo pipefail
           mkdir -p assets/geodata
-          curl -fSL -o assets/geodata/GeoIP.dat    "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.dat"
-          curl -fSL -o assets/geodata/GeoSite.dat  "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geosite.dat"
-          curl -fSL -o assets/geodata/country.mmdb "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/country.mmdb"
-          curl -fSL -o assets/geodata/ASN.mmdb     "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/GeoLite2-ASN.mmdb"
+          BASE="https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release"
+          # Map: local-filename → upstream-remote-filename
+          # Upstream publishes lowercase geoip.dat/geosite.dat; we rename on
+          # save to preserve the capitalised names expected by mihomo assets.
+          fetch_verified() {
+            local local_name="$1"
+            local remote_name="$2"
+            local dest="assets/geodata/${local_name}"
+            local sum="assets/geodata/${local_name}.sha256sum"
+            curl -fSL --retry 3 --retry-delay 2 \
+              -o "$dest" "${BASE}/${remote_name}"
+            curl -fSL --retry 3 --retry-delay 2 \
+              -o "$sum" "${BASE}/${remote_name}.sha256sum"
+            # Rewrite the sidecar's filename column so `sha256sum -c` finds
+            # the locally-renamed file. Preserves the 64-hex digest verbatim.
+            local digest
+            digest=$(awk 'NR==1{print $1}' "$sum")
+            if [ -z "$digest" ] || [ ${#digest} -ne 64 ]; then
+              echo "ERROR: unparseable sidecar for $remote_name" >&2
+              exit 1
+            fi
+            printf '%s  %s\n' "$digest" "$local_name" > "$sum"
+            ( cd assets/geodata && sha256sum -c "${local_name}.sha256sum" )
+            rm -f "$sum"
+          }
+          fetch_verified GeoIP.dat    geoip.dat
+          fetch_verified GeoSite.dat  geosite.dat
+          fetch_verified country.mmdb country.mmdb
+          fetch_verified ASN.mmdb     GeoLite2-ASN.mmdb
 
       # ── Resolve version: pubspec for stable, append -pre for pre tag ──────
       - name: Extract version from pubspec

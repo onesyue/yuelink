@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
@@ -203,6 +204,17 @@ class GeoDataService {
       ).timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200 && response.bodyBytes.length > 1024) {
+        // Checksum verification against sidecar `.sha256sum` on the same
+        // mirror. Fail-soft: a missing sidecar is logged but accepted (some
+        // China CDNs don't mirror the sidecar); a PRESENT sidecar that
+        // disagrees with the bytes is a hard fail and forces the outer loop
+        // to try the next mirror — that's the MITM / corruption signal.
+        final verdict = await _verifyMirrorChecksum(url, response.bodyBytes);
+        if (verdict == _ChecksumVerdict.mismatch) {
+          // Hard fail — bytes don't match the sidecar. Caller loops on.
+          return false;
+        }
+
         // Check if another mirror already wrote the file
         if (isWritten != null && isWritten()) return true;
         if (dest.existsSync() && dest.lengthSync() > 1024) return true;
@@ -216,4 +228,91 @@ class GeoDataService {
     }
     return false;
   }
+
+  /// Fetch `<url>.sha256sum` from the same mirror and compare against the
+  /// SHA-256 of [bytes]. Three outcomes:
+  ///   * [_ChecksumVerdict.ok]       — sidecar present and digest matches.
+  ///   * [_ChecksumVerdict.mismatch] — sidecar present and digest disagrees
+  ///                                   (corruption / MITM). Hard fail.
+  ///   * [_ChecksumVerdict.skipped]  — sidecar unreachable or unparseable.
+  ///                                   Fail-soft: accept the file.
+  static Future<_ChecksumVerdict> _verifyMirrorChecksum(
+      String url, Uint8List bytes) async {
+    final sumUrl = '$url.sha256sum';
+    String sumBody;
+    try {
+      final sumResp = await http.get(
+        Uri.parse(sumUrl),
+        headers: {'User-Agent': 'clash.meta'},
+      ).timeout(const Duration(seconds: 15));
+      if (sumResp.statusCode != 200 || sumResp.body.trim().isEmpty) {
+        EventLog.write(
+            '[Geodata] checksum_skipped mirror=$sumUrl reason=http_${sumResp.statusCode}');
+        return _ChecksumVerdict.skipped;
+      }
+      sumBody = sumResp.body;
+    } catch (e) {
+      EventLog.write('[Geodata] checksum_skipped mirror=$sumUrl reason=$e');
+      return _ChecksumVerdict.skipped;
+    }
+
+    final expected = _parseSha256Line(sumBody);
+    if (expected == null) {
+      EventLog.write(
+          '[Geodata] checksum_skipped mirror=$sumUrl reason=unparseable');
+      return _ChecksumVerdict.skipped;
+    }
+
+    final actual = sha256.convert(bytes).toString();
+    if (actual.toLowerCase() == expected.toLowerCase()) {
+      EventLog.write(
+          '[Geodata] checksum_ok mirror=$url len=${bytes.length} sha=$actual');
+      return _ChecksumVerdict.ok;
+    }
+
+    // Mismatch is a real corruption/MITM signal — elevate to ErrorLogger
+    // so it shows up in crash.log and the server aggregator.
+    final err = StateError(
+        '[Geodata] checksum mismatch url=$url expected=$expected actual=$actual');
+    ErrorLogger.captureException(err, StackTrace.current,
+        source: 'GeodataService._verifyMirrorChecksum');
+    return _ChecksumVerdict.mismatch;
+  }
+
+  /// Parse a GNU `sha256sum` output line.
+  ///
+  /// Canonical format (one or many lines): `<64 hex chars><whitespace><name>`.
+  /// We accept any line whose first token is 64 hex chars. Case-insensitive.
+  /// Returns null when no line matches. Exposed via [verifyChecksumForTest]
+  /// so unit tests don't need to spin up an HTTP server.
+  @visibleForTesting
+  static String? parseSha256Line(String body) => _parseSha256Line(body);
+
+  static String? _parseSha256Line(String body) {
+    for (final raw in body.split('\n')) {
+      final line = raw.trim();
+      if (line.isEmpty) continue;
+      // Grab the first whitespace-separated token.
+      final token = line.split(RegExp(r'\s+')).first;
+      if (token.length == 64 && RegExp(r'^[0-9a-fA-F]{64}$').hasMatch(token)) {
+        return token;
+      }
+    }
+    return null;
+  }
+
+  /// Test hook: pure verification without any network I/O.
+  ///
+  /// Returns true iff [digestLine] (raw contents of a `.sha256sum` sidecar)
+  /// parses to a 64-hex digest that matches `sha256(bytes)`. False when
+  /// parsing fails OR the digest disagrees — unit tests exercise both paths.
+  @visibleForTesting
+  static bool verifyChecksumForTest(List<int> bytes, String digestLine) {
+    final expected = _parseSha256Line(digestLine);
+    if (expected == null) return false;
+    final actual = sha256.convert(bytes).toString();
+    return actual.toLowerCase() == expected.toLowerCase();
+  }
 }
+
+enum _ChecksumVerdict { ok, mismatch, skipped }
