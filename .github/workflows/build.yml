@@ -165,16 +165,25 @@ jobs:
           fetch_verified ASN.mmdb     GeoLite2-ASN.mmdb
 
       # ── Resolve version: pubspec for stable, append -pre for pre tag ──────
+      # Match both the legacy `pre` overwrite-channel tag and the
+      # versioned `vX.Y.Z-pre` / `vX.Y.Z-pre.N` prerelease tags. Before
+      # this expansion only `pre` was recognised, so `v1.0.20-pre`
+      # slipped through the `else` branch and shipped artifacts named
+      # `YueLink-1.0.20-*` (colliding with whatever the eventual stable
+      # v1.0.20 release would produce).
       - name: Extract version from pubspec
         shell: bash
         run: |
           VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f1)
           BUILD_NUM=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f2)
-          if [ "$GITHUB_REF_NAME" = "pre" ]; then
-            APP_VERSION="${VERSION}-pre"
-          else
-            APP_VERSION="${VERSION}"
-          fi
+          case "$GITHUB_REF_NAME" in
+            pre|*-pre|*-pre.*)
+              APP_VERSION="${VERSION}-pre"
+              ;;
+            *)
+              APP_VERSION="${VERSION}"
+              ;;
+          esac
           echo "APP_VERSION=${APP_VERSION}" >> $GITHUB_ENV
           echo "BUILD_NUM=${BUILD_NUM}" >> $GITHUB_ENV
 
