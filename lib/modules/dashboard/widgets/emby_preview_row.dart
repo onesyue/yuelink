@@ -41,7 +41,7 @@ class EmbyPreviewRow extends ConsumerWidget {
     final s = S.of(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final embyAsync = ref.watch(embyProvider);
-    final emby = embyAsync.valueOrNull;
+    final emby = embyAsync.value;
     final hasAccess = emby?.hasAccess == true;
 
     return Column(
@@ -104,7 +104,7 @@ class EmbyPreviewRow extends ConsumerWidget {
       AppNotifier.warning(s.mineEmbyNeedsVpn);
       return;
     }
-    var emby = ref.read(embyProvider).valueOrNull;
+    var emby = ref.read(embyProvider).value;
     if (emby == null || !emby.hasAccess) {
       AppNotifier.info(s.mineEmbyOpening);
       ref.invalidate(embyProvider);

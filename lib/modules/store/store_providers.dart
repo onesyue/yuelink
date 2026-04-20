@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../domain/store/payment_method.dart';
@@ -104,7 +105,7 @@ class PurchaseNotifier extends Notifier<PurchaseState> {
     // Idempotency: check for existing pending order for same plan
     try {
       final List<StoreOrder> orders =
-          ref.read(orderHistoryProvider).valueOrNull ??
+          ref.read(orderHistoryProvider).value ??
               (await repo.fetchOrders(page: 1)).orders;
       final pending = orders
           .where((o) => o.planId == planId && o.status == OrderStatus.pending)
@@ -374,7 +375,7 @@ class OrderHistoryNotifier extends AsyncNotifier<List<StoreOrder>> {
       final result = await repo.fetchOrders(page: _page + 1);
       _hasMore = result.hasMore;
       _page++;
-      final current = state.valueOrNull ?? [];
+      final current = state.value ?? [];
       state = AsyncData([...current, ...result.orders]);
     } catch (e) {
       // Do NOT change _hasMore — the page is still retrievable on retry.

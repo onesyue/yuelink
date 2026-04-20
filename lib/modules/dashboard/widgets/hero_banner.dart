@@ -184,7 +184,7 @@ class _HeroBannerState extends ConsumerState<HeroBanner> {
       AppNotifier.warning(s.mineEmbyNeedsVpn);
       return;
     }
-    var emby = ref.read(embyProvider).valueOrNull;
+    var emby = ref.read(embyProvider).value;
     if (emby == null || !emby.hasAccess) {
       AppNotifier.info(s.mineEmbyOpening);
       ref.invalidate(embyProvider);

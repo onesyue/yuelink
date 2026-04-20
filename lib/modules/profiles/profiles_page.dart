@@ -779,7 +779,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   /// Mobile: falls back to saving each file individually via save dialog.
   Future<void> _exportAllProfiles(BuildContext context, WidgetRef ref) async {
     final s = S.of(context);
-    final profiles = ref.read(profilesProvider).valueOrNull;
+    final profiles = ref.read(profilesProvider).value;
     if (profiles == null || profiles.isEmpty) {
       AppNotifier.info(s.isEn ? 'No subscriptions to export' : '没有可导出的订阅');
       return;

@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
 import '../kernel/core_manager.dart';
 import '../managers/core_heartbeat_manager.dart';

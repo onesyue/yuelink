@@ -463,7 +463,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                                   icon: Icons.system_update,
                                   color: Colors.teal),
                               value:
-                                  ref.watch(appVersionProvider).valueOrNull ??
+                                  ref.watch(appVersionProvider).value ??
                                       '',
                               trailing: _checkingUpdate
                                   ? const SizedBox(
@@ -557,7 +557,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                               context: context,
                               applicationName: AppConstants.appName,
                               applicationVersion:
-                                  ref.watch(appVersionProvider).valueOrNull ??
+                                  ref.watch(appVersionProvider).value ??
                                       '',
                             ),
                           ),
@@ -586,7 +586,7 @@ class _ProfileRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final overviewAsync = ref.watch(accountOverviewProvider);
-    final overview = overviewAsync.valueOrNull;
+    final overview = overviewAsync.value;
 
     // 始终显示，loading/error 时用占位数据
     final email = overview?.email ?? S.current.loading;
@@ -754,7 +754,7 @@ class _MineTrafficSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final overviewAsync = ref.watch(accountOverviewProvider);
-    final overview = overviewAsync.valueOrNull;
+    final overview = overviewAsync.value;
 
     final usageRatio = overview?.usageRatio ?? 0.0;
     final usedStr = overview != null && overview.transferTotalBytes > 0

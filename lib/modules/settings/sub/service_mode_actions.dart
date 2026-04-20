@@ -108,7 +108,7 @@ class ServiceModeActions {
     S s,
     AsyncValue<DesktopServiceInfo> serviceInfo,
   ) {
-    final info = serviceInfo.valueOrNull;
+    final info = serviceInfo.value;
     if (serviceInfo.isLoading && info == null) return '...';
     if (info == null || info.installed == false) {
       return s.serviceModeNotInstalled;

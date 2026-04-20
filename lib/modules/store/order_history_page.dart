@@ -366,7 +366,7 @@ class _OrderDetailSheetState extends ConsumerState<_OrderDetailSheet> {
     // Pre-select first payment method when available
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final methods = ref.read(paymentMethodsProvider).valueOrNull;
+      final methods = ref.read(paymentMethodsProvider).value;
       if (methods != null && methods.isNotEmpty) {
         setState(() => _selectedMethodId = methods.first.id);
       }
@@ -394,7 +394,7 @@ class _OrderDetailSheetState extends ConsumerState<_OrderDetailSheet> {
 
     // Auto-select first method when payment methods load
     ref.listen(paymentMethodsProvider, (_, next) {
-      final methods = next.valueOrNull;
+      final methods = next.value;
       if (methods != null && methods.isNotEmpty && _selectedMethodId == null) {
         if (mounted) setState(() => _selectedMethodId = methods.first.id);
       }

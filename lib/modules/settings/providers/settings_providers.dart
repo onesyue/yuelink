@@ -17,7 +17,7 @@
 // declared at the top of settings_page.dart.
 
 import 'package:flutter/material.dart' show ThemeMode;
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
 import '../../../core/storage/settings_service.dart';
 

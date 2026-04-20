@@ -26,7 +26,7 @@ final crossProfileNodesProvider =
   final profilesAsync = ref.watch(profilesProvider);
   final activeId = ref.watch(activeProfileIdProvider);
 
-  final profiles = profilesAsync.valueOrNull;
+  final profiles = profilesAsync.value;
   if (profiles == null || profiles.isEmpty) return [];
 
   final repo = ref.read(profileRepositoryProvider);

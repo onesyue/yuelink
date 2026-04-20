@@ -201,7 +201,7 @@ final homeContentProvider = FutureProvider<HomeContent>((ref) async {
 /// Falls back to [kLocalHeroBanners] during [homeContentProvider] load/error,
 /// so the carousel is never empty on cold start.
 final heroBannerConfigProvider = Provider<List<HeroBannerItem>>((ref) {
-  return ref.watch(homeContentProvider).valueOrNull?.banners ??
+  return ref.watch(homeContentProvider).value?.banners ??
       kLocalHeroBanners;
 });
 
@@ -209,7 +209,7 @@ final heroBannerConfigProvider = Provider<List<HeroBannerItem>>((ref) {
 ///
 /// **v1:** All tiles visible (defaults). Not yet wired — see [QuickActionsConfig].
 final quickActionsConfigProvider = Provider<QuickActionsConfig>((ref) {
-  return ref.watch(homeContentProvider).valueOrNull?.quickActions ??
+  return ref.watch(homeContentProvider).value?.quickActions ??
       const QuickActionsConfig();
 });
 
@@ -219,7 +219,7 @@ final quickActionsConfigProvider = Provider<QuickActionsConfig>((ref) {
 /// **v2 wiring:** Pass [EmbyPreviewConfig.source] and [EmbyPreviewConfig.maxItems]
 /// into the Emby Items query inside [emby_preview_provider.dart].
 final embyPreviewConfigProvider = Provider<EmbyPreviewConfig>((ref) {
-  return ref.watch(homeContentProvider).valueOrNull?.embyPreview ??
+  return ref.watch(homeContentProvider).value?.embyPreview ??
       const EmbyPreviewConfig();
 });
 
@@ -229,14 +229,14 @@ final embyPreviewConfigProvider = Provider<EmbyPreviewConfig>((ref) {
 /// or in error — the bar should remain visible unless the server explicitly
 /// sets `showServiceStatusBar: false`.
 final serviceStatusBarVisibleProvider = Provider<bool>((ref) {
-  return ref.watch(homeContentProvider).valueOrNull?.showServiceStatusBar ??
+  return ref.watch(homeContentProvider).value?.showServiceStatusBar ??
       true;
 });
 
 /// 场景模式有效配置（本地预设 + 远程覆盖合并）。
 final sceneModeConfigsProvider =
     Provider<Map<SceneMode, SceneModeConfig>>((ref) {
-  final remote = ref.watch(homeContentProvider).valueOrNull?.sceneModes;
+  final remote = ref.watch(homeContentProvider).value?.sceneModes;
   if (remote == null) return kSceneModeDefaults;
 
   // 合并：对每个 mode，如果远程有覆盖就 merge，否则用本地默认

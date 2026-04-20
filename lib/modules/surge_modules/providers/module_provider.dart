@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
 import '../../../domain/surge_modules/module_entity.dart';
 import '../../../infrastructure/surge_modules/module_downloader.dart';

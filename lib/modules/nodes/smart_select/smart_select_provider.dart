@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
 import '../../../core/kernel/core_manager.dart';
 import '../../../core/storage/settings_service.dart';
@@ -82,7 +83,7 @@ class SmartSelectNotifier extends StateNotifier<SmartSelectState> {
 
     final cached = await _loadCache();
     final currentScene =
-        _ref.read(sceneModeProvider).valueOrNull?.name ?? SceneMode.daily.name;
+        _ref.read(sceneModeProvider).value?.name ?? SceneMode.daily.name;
 
     if (cached != null && cached.sceneMode == currentScene) {
       // Show cached result immediately regardless of freshness.
@@ -114,7 +115,7 @@ class SmartSelectNotifier extends StateNotifier<SmartSelectState> {
 
   Future<void> _saveCache(SmartSelectResult result) async {
     final sceneMode =
-        _ref.read(sceneModeProvider).valueOrNull?.name ?? SceneMode.daily.name;
+        _ref.read(sceneModeProvider).value?.name ?? SceneMode.daily.name;
     final cache = SmartSelectCache(
       top: result.top,
       totalTested: result.totalTested,
@@ -270,7 +271,7 @@ class SmartSelectNotifier extends StateNotifier<SmartSelectState> {
 
       // Build the fresh cache object to show the correct age label.
       final sceneMode =
-          _ref.read(sceneModeProvider).valueOrNull?.name ?? SceneMode.daily.name;
+          _ref.read(sceneModeProvider).value?.name ?? SceneMode.daily.name;
       final newCache = SmartSelectCache(
         top: result.top,
         totalTested: result.totalTested,

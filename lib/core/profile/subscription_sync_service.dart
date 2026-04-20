@@ -53,7 +53,7 @@ Future<void> _syncStaleProfiles(Ref ref) async {
   try {
     // Read directly from the repository (infrastructure layer) instead of
     // reaching into `modules/profiles/providers/profiles_providers.dart`
-    // to read `profilesProvider.valueOrNull`. This keeps `core/` free of
+    // to read `profilesProvider.value`. This keeps `core/` free of
     // any `modules/` import. The UI's `profilesProvider` is still the
     // source of truth for screens; this service just fetches the list
     // it needs for its own staleness check.

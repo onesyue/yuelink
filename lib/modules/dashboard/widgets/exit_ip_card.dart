@@ -17,11 +17,11 @@ class ExitIpCard extends ConsumerWidget {
     final aiAsync = ref.watch(aiUnlockTestProvider);
 
     final isLoading = async.isLoading;
-    final info = async.valueOrNull;
+    final info = async.value;
     final hasInfo = info != null;
     final hasGeo = hasInfo && info.country.isNotEmpty;
 
-    final aiInfo = aiAsync.valueOrNull;
+    final aiInfo = aiAsync.value;
 
     final Color headerIconColor = hasInfo
         ? YLColors.connected

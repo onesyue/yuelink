@@ -30,7 +30,7 @@ class SceneModeSheet extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final activeAsync = ref.watch(sceneModeProvider);
-    final active = activeAsync.valueOrNull ?? SceneMode.daily;
+    final active = activeAsync.value ?? SceneMode.daily;
 
     final bg = isDark ? YLColors.zinc900 : Colors.white;
     final divider = isDark

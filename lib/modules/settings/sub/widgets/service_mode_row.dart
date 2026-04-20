@@ -112,8 +112,8 @@ class _ServiceModeRowState extends ConsumerState<ServiceModeRow> {
                   ),
                 ),
                 const SizedBox(width: 4),
-                if (serviceInfo.valueOrNull?.installed == true) ...[
-                  if (serviceInfo.valueOrNull?.needsReinstall == true)
+                if (serviceInfo.value?.installed == true) ...[
+                  if (serviceInfo.value?.needsReinstall == true)
                     FilledButton(
                       onPressed: _update,
                       style: FilledButton.styleFrom(

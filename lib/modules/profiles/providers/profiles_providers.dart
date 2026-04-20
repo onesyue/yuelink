@@ -72,14 +72,14 @@ class ProfilesNotifier extends Notifier<AsyncValue<List<Profile>>> {
         : null;
     final profile =
         await _repo.addProfile(name: name, url: url, proxyPort: proxyPort);
-    final current = state.valueOrNull;
+    final current = state.value;
     state = AsyncValue.data([...?current, profile]);
     return profile;
   }
 
   /// Insert an already-created local profile into the state list.
   void addLocal(Profile profile) {
-    final current = state.valueOrNull;
+    final current = state.value;
     state = AsyncValue.data([...?current, profile]);
   }
 
@@ -89,7 +89,7 @@ class ProfilesNotifier extends Notifier<AsyncValue<List<Profile>>> {
         ? CoreManager.instance.mixedPort
         : null;
     await _repo.updateProfile(profile, proxyPort: proxyPort);
-    final list = state.valueOrNull;
+    final list = state.value;
     if (list != null) {
       final idx = list.indexWhere((p) => p.id == profile.id);
       if (idx != -1) {
@@ -106,7 +106,7 @@ class ProfilesNotifier extends Notifier<AsyncValue<List<Profile>>> {
     if (ref.read(activeProfileIdProvider) == id) {
       ref.read(activeProfileIdProvider.notifier).select(null);
     }
-    final list = state.valueOrNull;
+    final list = state.value;
     if (list != null) {
       state = AsyncValue.data(list.where((p) => p.id != id).toList());
     }

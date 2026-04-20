@@ -43,7 +43,7 @@ class _PurchaseConfirmSheetState extends ConsumerState<PurchaseConfirmSheet> {
     super.initState();
     // Auto-select first payment method when available
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final methods = ref.read(paymentMethodsProvider).valueOrNull;
+      final methods = ref.read(paymentMethodsProvider).value;
       if (mounted && methods != null && methods.isNotEmpty) {
         setState(() => _selectedMethodId = methods.first.id);
       }
@@ -102,7 +102,7 @@ class _PurchaseConfirmSheetState extends ConsumerState<PurchaseConfirmSheet> {
 
     // Auto-select first method when methods load
     ref.listen(paymentMethodsProvider, (_, next) {
-      final methods = next.valueOrNull;
+      final methods = next.value;
       if (methods != null && methods.isNotEmpty && _selectedMethodId == null) {
         setState(() => _selectedMethodId = methods.first.id);
       }

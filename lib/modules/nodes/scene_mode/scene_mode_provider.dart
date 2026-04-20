@@ -28,7 +28,7 @@ final sceneModeProvider =
 /// Reads from [sceneModeConfigsProvider] which merges local presets + remote overrides.
 /// Falls back to [SceneMode.daily] config while loading.
 final sceneModeConfigProvider = Provider<SceneModeConfig>((ref) {
-  final mode = ref.watch(sceneModeProvider).valueOrNull ?? SceneMode.daily;
+  final mode = ref.watch(sceneModeProvider).value ?? SceneMode.daily;
   final configs = ref.watch(sceneModeConfigsProvider);
   return configs[mode] ?? kSceneModeDefaults[mode]!;
 });

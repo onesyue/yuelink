@@ -183,10 +183,10 @@ class _IpHeaderConsumer extends ConsumerWidget {
     return _IpHeader(
       s: s,
       isDark: isDark,
-      info: ipAsync.valueOrNull,
+      info: ipAsync.value,
       isLoading: ipAsync.isLoading,
       hasError: ipAsync.hasError,
-      aiInfo: aiAsync.valueOrNull,
+      aiInfo: aiAsync.value,
     );
   }
 }

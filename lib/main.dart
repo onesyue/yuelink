@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:launch_at_startup/launch_at_startup.dart';
 
@@ -634,7 +635,7 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
     };
     String? subtitle;
     if (active && transition == null && ref.read(tileShowNodeInfoProvider)) {
-      final info = ref.read(exitIpInfoProvider).valueOrNull;
+      final info = ref.read(exitIpInfoProvider).value;
       if (info != null && info.flagEmoji.isNotEmpty) {
         final loc = info.locationLine;
         subtitle = loc.isNotEmpty ? '${info.flagEmoji} $loc' : info.flagEmoji;

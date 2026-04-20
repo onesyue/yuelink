@@ -462,7 +462,7 @@ void main() {
       await notifier.loadMore();
       expect(notifier.hasMore, isFalse);
 
-      final orders = container.read(orderHistoryProvider).valueOrNull;
+      final orders = container.read(orderHistoryProvider).value;
       expect(orders, isNotNull);
       expect(orders!.length, 16); // 15 from page 1 + 1 from page 2
     });
@@ -487,7 +487,7 @@ void main() {
       );
 
       await notifier.refresh();
-      final orders = container.read(orderHistoryProvider).valueOrNull;
+      final orders = container.read(orderHistoryProvider).value;
       expect(orders!.first.tradeNo, 'R2');
     });
 
