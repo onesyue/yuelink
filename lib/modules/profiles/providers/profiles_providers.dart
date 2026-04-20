@@ -60,8 +60,10 @@ class ProfilesNotifier extends Notifier<AsyncValue<List<Profile>>> {
     state = const AsyncValue.loading();
     try {
       final profiles = await _repo.loadProfiles();
+      if (!ref.mounted) return;
       state = AsyncValue.data(profiles);
     } catch (e, st) {
+      if (!ref.mounted) return;
       state = AsyncValue.error(e, st);
     }
   }
@@ -72,6 +74,7 @@ class ProfilesNotifier extends Notifier<AsyncValue<List<Profile>>> {
         : null;
     final profile =
         await _repo.addProfile(name: name, url: url, proxyPort: proxyPort);
+    if (!ref.mounted) return profile;
     final current = state.value;
     state = AsyncValue.data([...?current, profile]);
     return profile;
@@ -89,6 +92,7 @@ class ProfilesNotifier extends Notifier<AsyncValue<List<Profile>>> {
         ? CoreManager.instance.mixedPort
         : null;
     await _repo.updateProfile(profile, proxyPort: proxyPort);
+    if (!ref.mounted) return;
     final list = state.value;
     if (list != null) {
       final idx = list.indexWhere((p) => p.id == profile.id);
@@ -102,6 +106,7 @@ class ProfilesNotifier extends Notifier<AsyncValue<List<Profile>>> {
 
   Future<void> delete(String id) async {
     await _repo.deleteProfile(id);
+    if (!ref.mounted) return;
     // Clear active profile selection if we deleted the active one
     if (ref.read(activeProfileIdProvider) == id) {
       ref.read(activeProfileIdProvider.notifier).select(null);

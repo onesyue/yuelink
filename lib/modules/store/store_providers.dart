@@ -373,6 +373,7 @@ class OrderHistoryNotifier extends AsyncNotifier<List<StoreOrder>> {
     _loadingMore = true;
     try {
       final result = await repo.fetchOrders(page: _page + 1);
+      if (!ref.mounted) return;
       _hasMore = result.hasMore;
       _page++;
       final current = state.value ?? [];

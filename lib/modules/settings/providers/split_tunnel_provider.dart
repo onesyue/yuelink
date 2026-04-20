@@ -66,7 +66,9 @@ class SplitTunnelAppsNotifier extends Notifier<List<String>> {
 
   Future<void> _load() async {
     if (!Platform.isAndroid) return;
-    state = await SettingsService.getSplitTunnelApps();
+    final apps = await SettingsService.getSplitTunnelApps();
+    if (!ref.mounted) return;
+    state = apps;
   }
 
   Future<void> add(String packageName) async {

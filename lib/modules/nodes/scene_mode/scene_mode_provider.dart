@@ -14,6 +14,7 @@ class SceneModeNotifier extends AsyncNotifier<SceneMode> {
   Future<void> setMode(SceneMode mode) async {
     state = const AsyncLoading();
     await SceneModeService.save(mode);
+    if (!ref.mounted) return;
     state = AsyncData(mode);
   }
 }

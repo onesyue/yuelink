@@ -22,7 +22,9 @@ class FavoritesNotifier extends Notifier<Set<String>> {
   }
 
   Future<void> _load() async {
-    state = await NodeFavoritesService.getFavorites();
+    final favs = await NodeFavoritesService.getFavorites();
+    if (!ref.mounted) return;
+    state = favs;
   }
 
   Future<void> toggle(String nodeName) async {
@@ -65,7 +67,9 @@ class RecentNodesNotifier extends Notifier<List<RecentNode>> {
   }
 
   Future<void> _load() async {
-    state = await NodeFavoritesService.getRecent();
+    final recent = await NodeFavoritesService.getRecent();
+    if (!ref.mounted) return;
+    state = recent;
   }
 
   /// Records [name]/[group] as the most-recently-used node.
