@@ -7,18 +7,13 @@ import 'package:launch_at_startup/launch_at_startup.dart';
 
 import '../../../core/kernel/config_template.dart';
 import '../../../core/kernel/core_manager.dart';
-import '../../../core/service/service_manager.dart';
-import '../../../core/service/service_models.dart';
 import '../../../core/service/service_mode_provider.dart';
 import '../../../core/storage/settings_service.dart';
 import '../../../i18n/app_strings.dart';
 import '../../../i18n/strings_g.dart';
-import '../../../core/profile/profile_service.dart';
 import '../../../core/providers/core_provider.dart';
 import '../../../main.dart' show tileShowNodeInfoProvider;
-import '../../profiles/providers/profiles_providers.dart';
 import '../../../shared/app_notifier.dart';
-import '../../../shared/event_log.dart';
 import '../../../shared/telemetry.dart';
 import '../../../theme.dart';
 import '../providers/settings_providers.dart';
@@ -29,6 +24,7 @@ import 'widgets/hotkey_row.dart';
 import 'widgets/privacy_section.dart';
 import 'widgets/split_tunnel_section.dart';
 import 'widgets/updates_section.dart';
+import 'service_mode_actions.dart';
 
 /// Standalone settings sub-page — displays all general settings
 /// (theme, language, auto-connect, routing, connection mode, etc.)
@@ -72,27 +68,15 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
     }
   }
 
-  Future<void> _refreshDesktopService() async {
-    ref.read(desktopServiceRefreshProvider.notifier).state++;
-  }
-
   Future<void> _installDesktopService() async {
     if (_serviceBusy) return;
     final s = S.of(context);
     setState(() => _serviceBusy = true);
     try {
-      await ServiceManager.install();
-      await _refreshDesktopService();
-      // Installing the privileged service is an explicit "I want TUN" signal
-      // — bring the core up right now so the user doesn't have to bounce
-      // back to the dashboard and click connect manually. Covers both
-      // paths: running core (restart to pick up service mode) AND stopped
-      // core (fresh start). The only skip is when the user has explicitly
-      // stopped the VPN in this session, in which case we respect that
-      // intent and leave them stopped.
-      await _applyServiceModeImmediately();
+      final warning = await ServiceModeActions(ref).install();
       if (!mounted) return;
       AppNotifier.success(s.serviceModeInstallOk);
+      if (warning != null) AppNotifier.warning(warning);
     } catch (e) {
       if (!mounted) return;
       AppNotifier.error(
@@ -103,80 +87,12 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
     }
   }
 
-  /// After the service install / update succeeds, put the core into the
-  /// right state without forcing the user to go back to the dashboard:
-  ///   - running  → restart (so service mode takes effect)
-  ///   - stopped  → start (installing the service is an implicit
-  ///                       "I want TUN" intent)
-  /// Only respected the user's explicit stop (userStoppedProvider) —
-  /// if they manually disconnected in this session we leave them off.
-  ///
-  /// Errors used to be fully swallowed — users saw "install succeeded" but
-  /// the core was silently stopped, and they had to click connect on the
-  /// dashboard to find out. Windows TUN cold-start in particular (driver
-  /// init + AV scan) can push first-connect past the 5 s waitApi window,
-  /// even though a retry succeeds immediately. Now we:
-  ///   1. grace-pause 1.5 s to let the freshly-installed helper's child
-  ///      mihomo binary fully bind its API listener;
-  ///   2. retry once on failure (same rationale as heartbeat watchdog);
-  ///   3. surface the last error via AppNotifier so the user isn't left
-  ///      confused after "刷新一下" is all that fixes it.
-  Future<void> _applyServiceModeImmediately() async {
-    try {
-      final activeId = ref.read(activeProfileIdProvider);
-      if (activeId == null) return;
-      final initialStatus = ref.read(coreStatusProvider);
-      final userStopped = ref.read(userStoppedProvider);
-      if (initialStatus == CoreStatus.stopped && userStopped) return;
-
-      final config = await ProfileService.loadConfig(activeId);
-      if (config == null) return;
-
-      // Grace: helper just returned from elevation — mihomo child may
-      // still be binding 127.0.0.1:9090.
-      await Future.delayed(const Duration(milliseconds: 1500));
-
-      final actions = ref.read(coreActionsProvider);
-      Future<bool> attempt() {
-        final status = ref.read(coreStatusProvider);
-        return status == CoreStatus.running
-            ? actions.restart(config)
-            : actions.start(config);
-      }
-
-      bool ok = await attempt();
-      if (!ok) {
-        EventLog.write(
-            '[Service] post-install start failed once, retrying after 2 s');
-        await Future.delayed(const Duration(seconds: 2));
-        ok = await attempt();
-      }
-      if (!ok && mounted) {
-        AppNotifier.warning(
-          '服务已安装，但内核启动失败。请在主页点击"开始连接"重试。',
-        );
-        EventLog.write('[Service] post-install start failed after retry');
-      }
-    } catch (e) {
-      EventLog.write('[Service] post-install start threw: $e');
-      if (mounted) {
-        AppNotifier.warning(
-          '服务已安装，但内核启动失败：${e.toString().split('\n').first}',
-        );
-      }
-    }
-  }
-
   Future<void> _uninstallDesktopService(CoreStatus status) async {
     if (_serviceBusy) return;
     final s = S.of(context);
     setState(() => _serviceBusy = true);
     try {
-      if (status == CoreStatus.running) {
-        await ref.read(coreActionsProvider).stop();
-      }
-      await ServiceManager.uninstall();
-      await _refreshDesktopService();
+      await ServiceModeActions(ref).uninstall(status);
       if (!mounted) return;
       AppNotifier.success(s.serviceModeUninstallOk);
     } catch (e) {
@@ -194,13 +110,10 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
     final s = S.of(context);
     setState(() => _serviceBusy = true);
     try {
-      await ServiceManager.update();
-      await _refreshDesktopService();
-      // Same rationale as install — the running core still holds handles
-      // from the old helper binary. Restart so the new helper is picked up.
-      await _applyServiceModeImmediately();
+      final warning = await ServiceModeActions(ref).update();
       if (!mounted) return;
       AppNotifier.success(s.serviceModeUpdateOk);
+      if (warning != null) AppNotifier.warning(warning);
     } catch (e) {
       if (!mounted) return;
       AppNotifier.error(
@@ -209,31 +122,6 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
     } finally {
       if (mounted) setState(() => _serviceBusy = false);
     }
-  }
-
-  String _serviceDescription(
-    S s,
-    AsyncValue<DesktopServiceInfo> serviceInfo,
-  ) {
-    final info = serviceInfo.valueOrNull;
-    if (serviceInfo.isLoading && info == null) {
-      return '...';
-    }
-    if (info == null || info.installed == false) {
-      return s.serviceModeNotInstalled;
-    }
-    if (!info.reachable) {
-      return info.detail?.isNotEmpty == true
-          ? '${s.serviceModeUnreachable} · ${info.detail}'
-          : s.serviceModeUnreachable;
-    }
-    if (info.needsReinstall) {
-      return s.serviceModeNeedsUpdate(info.serviceVersion ?? '?');
-    }
-    if (info.mihomoRunning) {
-      return s.serviceModeRunning(info.pid ?? 0);
-    }
-    return s.serviceModeIdle;
   }
 
   Future<void> _showTunBypassEditor(BuildContext context) async {
@@ -519,7 +407,8 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
                         Divider(height: 1, thickness: 0.5, color: dividerColor),
                         YLSettingsRow(
                           title: s.serviceModeLabel,
-                          description: _serviceDescription(s, serviceInfo),
+                          description:
+                              ServiceModeActions.describe(s, serviceInfo),
                           trailing: _serviceBusy
                               ? const SizedBox(
                                   width: 18,
@@ -532,7 +421,8 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     TextButton(
-                                      onPressed: _refreshDesktopService,
+                                      onPressed: () =>
+                                          ServiceModeActions(ref).refresh(),
                                       style: TextButton.styleFrom(
                                         padding: const EdgeInsets.symmetric(
                                           horizontal: 8,
