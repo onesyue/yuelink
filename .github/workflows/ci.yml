@@ -35,10 +35,10 @@ jobs:
       - name: Download geodata files
         run: |
           mkdir -p assets/geodata
-          curl -fSL -o assets/geodata/GeoIP.dat   "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.dat"
-          curl -fSL -o assets/geodata/GeoSite.dat "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geosite.dat"
-          curl -fSL -o assets/geodata/country.mmdb "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/country.mmdb"
-          curl -fSL -o assets/geodata/ASN.mmdb     "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/GeoLite2-ASN.mmdb"
+          curl -fSL -o assets/geodata/GeoIP.dat   "https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.dat"
+          curl -fSL -o assets/geodata/GeoSite.dat "https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geosite.dat"
+          curl -fSL -o assets/geodata/country.mmdb "https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/country.mmdb"
+          curl -fSL -o assets/geodata/ASN.mmdb     "https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/GeoLite2-ASN.mmdb"
 
       - run: flutter pub get
       - run: flutter analyze --no-fatal-infos --no-fatal-warnings
@@ -69,10 +69,10 @@ jobs:
       - name: Download geodata files
         run: |
           mkdir -p assets/geodata
-          curl -fSL -o assets/geodata/GeoIP.dat   "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.dat"
-          curl -fSL -o assets/geodata/GeoSite.dat "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geosite.dat"
-          curl -fSL -o assets/geodata/country.mmdb "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/country.mmdb"
-          curl -fSL -o assets/geodata/ASN.mmdb     "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/GeoLite2-ASN.mmdb"
+          curl -fSL -o assets/geodata/GeoIP.dat   "https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.dat"
+          curl -fSL -o assets/geodata/GeoSite.dat "https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geosite.dat"
+          curl -fSL -o assets/geodata/country.mmdb "https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/country.mmdb"
+          curl -fSL -o assets/geodata/ASN.mmdb     "https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/GeoLite2-ASN.mmdb"
 
       - run: flutter config --enable-macos-desktop
       - run: flutter pub get
