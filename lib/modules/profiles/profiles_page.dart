@@ -644,7 +644,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     // Use FileType.any because Android doesn't register YAML MIME type —
     // FileType.custom with ['yaml','yml'] causes the picker to show nothing
     // or not open at all on many devices. Filter by extension in code instead.
-    final result = await FilePicker.platform.pickFiles(
+    final result = await FilePicker.pickFiles(
       type: FileType.any,
       allowMultiple: true,
       withData: true,
@@ -760,7 +760,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     final safeName =
         profile.name.replaceAll(RegExp(r'[<>:"/\\|?*\x00-\x1f]'), '_');
     try {
-      await FilePicker.platform.saveFile(
+      await FilePicker.saveFile(
         dialogTitle: s.exportProfile,
         fileName: '$safeName.yaml',
         bytes: Uint8List.fromList(utf8.encode(config)),
@@ -790,7 +790,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
 
     if (isDesktop) {
       // Desktop: pick a directory, write all YAML files there
-      final dir = await FilePicker.platform.getDirectoryPath(
+      final dir = await FilePicker.getDirectoryPath(
         dialogTitle: s.exportSelectDir,
       );
       if (dir == null) return;
@@ -823,7 +823,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
         if (config == null) continue;
         final safeName = _safeFileName(p.name);
         try {
-          await FilePicker.platform.saveFile(
+          await FilePicker.saveFile(
             dialogTitle: '${s.exportProfile}: ${p.name}',
             fileName: '$safeName.yaml',
             bytes: Uint8List.fromList(utf8.encode(config)),

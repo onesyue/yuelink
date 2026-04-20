@@ -40,9 +40,9 @@ class S {
   static void setLanguage(String langCode) {
     final code = langCode.toLowerCase();
     if (code == 'en') {
-      LocaleSettings.setLocale(AppLocale.en);
+      LocaleSettings.setLocaleSync(AppLocale.en);
     } else {
-      LocaleSettings.setLocale(AppLocale.zhCn);
+      LocaleSettings.setLocaleSync(AppLocale.zhCn);
     }
   }
 

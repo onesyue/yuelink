@@ -31,13 +31,13 @@ dependencies:
   yaml_writer: ^2.0.0
   window_manager: ^0.5.1
   package_info_plus: ^9.0.1
-  file_picker: ^8.3.7
+  file_picker: ^11.0.2
   app_links: ^6.3.4
   hotkey_manager: ^0.2.3
   flutter_secure_storage: ^9.2.4
   yaml: ^3.1.2
-  slang: ^3.31.0
-  slang_flutter: ^3.31.0
+  slang: ^4.14.0
+  slang_flutter: ^4.14.0
   webview_flutter: ^4.13.1
   webview_flutter_wkwebview: ^3.24.3
   webview_windows: ^0.4.0
@@ -65,7 +65,7 @@ dev_dependencies:
   flutter_lints: ^5.0.0
   flutter_launcher_icons: ^0.14.4
   build_runner: ^2.4.13
-  slang_build_runner: ^3.31.0
+  slang_build_runner: ^4.14.0
 
 flutter_launcher_icons:
   # macOS and Windows are handled directly by scripts/generate_icon.dart

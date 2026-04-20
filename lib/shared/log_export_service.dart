@@ -54,7 +54,7 @@ class LogExportService {
   }) async {
     try {
       if (Platform.isAndroid || Platform.isIOS) {
-        final path = await FilePicker.platform.saveFile(
+        final path = await FilePicker.saveFile(
           fileName: fileName,
           bytes: bytes,
           dialogTitle: dialogTitle,
@@ -71,7 +71,7 @@ class LogExportService {
       // Desktop `file_picker` only returns the chosen path — passing `bytes`
       // throws "Bytes are not supported on macOS/Windows/Linux". We always
       // write the file ourselves from the returned path.
-      final path = await FilePicker.platform.saveFile(
+      final path = await FilePicker.saveFile(
         fileName: fileName,
         dialogTitle: dialogTitle,
         initialDirectory: initialDir,
