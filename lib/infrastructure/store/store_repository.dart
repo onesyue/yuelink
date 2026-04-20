@@ -8,8 +8,8 @@ import '../../domain/store/payment_outcome.dart';
 import '../../domain/store/store_error.dart';
 import '../../domain/store/store_order.dart';
 import '../../domain/store/store_plan.dart';
+import 'plan_period_mapping.dart';
 import '../datasources/xboard/index.dart';
-import 'checkout_result.dart';
 
 /// Thin wrapper around [XBoardApi] for all store-related operations.
 ///
@@ -24,20 +24,20 @@ class StoreRepository {
 
   StoreRepository(this._api, this._token);
 
-  Future<List<StorePlan>> fetchPlans() =>
-      _guard(() => _api.getPlans(_token));
+  Future<List<StorePlan>> fetchPlans() => _guard(() => _api.getPlans(_token));
 
   Future<String> createOrder({
     required int planId,
     required PlanPeriod period,
     String? couponCode,
-  }) =>
-      _guard(() => _api.createOrder(
-            token: _token,
-            planId: planId,
-            period: period.apiKey,
-            couponCode: couponCode,
-          ));
+  }) => _guard(
+    () => _api.createOrder(
+      token: _token,
+      planId: planId,
+      period: planPeriodApiKey(period),
+      couponCode: couponCode,
+    ),
+  );
 
   Future<StoreOrder> fetchOrderDetail(String tradeNo) =>
       _guard(() => _api.getOrderDetail(token: _token, tradeNo: tradeNo));

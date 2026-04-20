@@ -51,6 +51,11 @@ class TelemetryEvents {
   static const embyOpen = 'emby_open';
   static const logExport = 'log_export';
   static const diagnosticExport = 'diagnostic_export';
+  static const purchaseStart = 'purchase_start';
+  static const purchaseSuccess = 'purchase_success';
+  static const purchaseFail = 'purchase_fail';
+  static const orderCancel = 'order_cancel';
+  static const pendingOrderReuse = 'pending_order_reuse';
 
   // Onboarding (persona split — feature-flagged via `onboarding_split`)
   static const onboardingStart = 'onboarding_start';
@@ -193,10 +198,7 @@ class Telemetry {
 
   /// Convenience: record an exception's runtime type (no stack, no message).
   /// Pass [context] to identify the call-site group.
-  static void recordException(
-    Object error, {
-    String context = '',
-  }) {
+  static void recordException(Object error, {String context = ''}) {
     event(
       TelemetryEvents.crash,
       priority: true,
@@ -221,10 +223,7 @@ class Telemetry {
   static Future<void> flush() async {
     if (_buffer.isEmpty && _priorityBuffer.isEmpty) return;
 
-    final events = <Map<String, dynamic>>[
-      ..._priorityBuffer,
-      ..._buffer,
-    ];
+    final events = <Map<String, dynamic>>[..._priorityBuffer, ..._buffer];
     _priorityBuffer.clear();
     _buffer.clear();
 
@@ -254,9 +253,11 @@ class Telemetry {
       // (would otherwise grow unbounded during prolonged offline windows).
       _priorityBuffer.insertAll(
         0,
-        events.where((e) =>
-            e['event'] == TelemetryEvents.crash ||
-            e['event'] == TelemetryEvents.startupFail),
+        events.where(
+          (e) =>
+              e['event'] == TelemetryEvents.crash ||
+              e['event'] == TelemetryEvents.startupFail,
+        ),
       );
     } finally {
       client.close();

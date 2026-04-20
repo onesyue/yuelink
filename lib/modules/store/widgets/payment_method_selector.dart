@@ -34,7 +34,7 @@ class PaymentMethodSelector extends ConsumerWidget {
 
     return methodsAsync.when(
       loading: () => const SizedBox(height: 48, child: _MethodShimmer()),
-      error: (_, __) => _MethodErrorRow(
+      error: (_, error) => _MethodErrorRow(
         isEn: isEn,
         isDark: isDark,
         onRetry: () => ref.invalidate(paymentMethodsProvider),
@@ -54,7 +54,7 @@ class PaymentMethodSelector extends ConsumerWidget {
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
                 itemCount: methods.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 8),
+                separatorBuilder: (_, index) => const SizedBox(width: 8),
                 itemBuilder: (context, i) {
                   final m = methods[i];
                   final selected = m.id == selectedId;
@@ -161,10 +161,13 @@ class _MethodErrorRow extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: YLSpacing.md),
       child: GestureDetector(
         onTap: onRetry,
-        child: Row(
-          children: [
-            Icon(Icons.error_outline_rounded,
-                size: 14, color: YLColors.zinc400),
+          child: Row(
+            children: [
+              const Icon(
+                Icons.error_outline_rounded,
+                size: 14,
+                color: YLColors.zinc400,
+              ),
             const SizedBox(width: 6),
             Text(
               isEn

@@ -5,8 +5,10 @@ import '../../../i18n/app_strings.dart';
 import '../../../shared/app_notifier.dart';
 import '../../../theme.dart';
 import '../../../domain/store/coupon_result.dart';
+import '../../../domain/store/purchase_state.dart';
 import '../../../domain/store/store_error.dart';
 import '../../../domain/store/store_plan.dart';
+import '../purchase_notifier.dart';
 import '../store_providers.dart';
 import 'order_result_view.dart';
 import 'payment_method_selector.dart';
@@ -56,8 +58,7 @@ class _PurchaseConfirmSheetState extends ConsumerState<PurchaseConfirmSheet> {
     super.dispose();
   }
 
-  int get _originalFen =>
-      widget.plan.priceForPeriod(widget.period) ?? 0;
+  int get _originalFen => widget.plan.priceForPeriod(widget.period) ?? 0;
 
   int get _discountFen => _couponResult?.discountFor(_originalFen) ?? 0;
 
@@ -76,8 +77,9 @@ class _PurchaseConfirmSheetState extends ConsumerState<PurchaseConfirmSheet> {
     final isEn = s.isEn;
 
     final purchaseState = ref.watch(purchaseProvider);
-    final loadingState =
-        purchaseState is PurchaseLoading ? purchaseState : null;
+    final loadingState = purchaseState is PurchaseLoading
+        ? purchaseState
+        : null;
     // Also treat PurchasePolling as loading: free-plan fallback runs
     // pollOrderResult() inside purchase(), which sets PurchasePolling
     // while the confirm sheet is still visible. Without this, the submit
@@ -119,7 +121,9 @@ class _PurchaseConfirmSheetState extends ConsumerState<PurchaseConfirmSheet> {
         top: false,
         child: Padding(
           padding: const EdgeInsets.symmetric(
-              horizontal: YLSpacing.lg, vertical: YLSpacing.md),
+            horizontal: YLSpacing.lg,
+            vertical: YLSpacing.md,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -185,8 +189,9 @@ class _PurchaseConfirmSheetState extends ConsumerState<PurchaseConfirmSheet> {
                         label: isEn ? 'Discount' : '优惠',
                         value: '-${_formatFen(_discountFen)}',
                         isDark: isDark,
-                        valueStyle: YLText.body
-                            .copyWith(color: YLColors.connected),
+                        valueStyle: YLText.body.copyWith(
+                          color: YLColors.connected,
+                        ),
                       ),
                       const SizedBox(height: 8),
                     ],
@@ -255,9 +260,9 @@ class _PurchaseConfirmSheetState extends ConsumerState<PurchaseConfirmSheet> {
                       ),
                       const SizedBox(width: 8),
                       Text(
-                        loadingState?.message ?? (isEn ? 'Checking...' : '查询中...'),
-                        style:
-                            YLText.caption.copyWith(color: YLColors.zinc500),
+                        loadingState?.message ??
+                            (isEn ? 'Checking...' : '查询中...'),
+                        style: YLText.caption.copyWith(color: YLColors.zinc500),
                       ),
                     ],
                   ),
@@ -270,14 +275,16 @@ class _PurchaseConfirmSheetState extends ConsumerState<PurchaseConfirmSheet> {
                 child: FilledButton(
                   onPressed: isLoading
                       ? null
-                      : () => ref.read(purchaseProvider.notifier).purchase(
-                            planId: widget.plan.id,
-                            period: widget.period,
-                            couponCode: _couponResult != null
-                                ? _couponController.text.trim()
-                                : null,
-                            methodId: _selectedMethodId,
-                          ),
+                      : () => ref
+                            .read(purchaseProvider.notifier)
+                            .purchase(
+                              planId: widget.plan.id,
+                              period: widget.period,
+                              couponCode: _couponResult != null
+                                  ? _couponController.text.trim()
+                                  : null,
+                              methodId: _selectedMethodId,
+                            ),
                   style: FilledButton.styleFrom(
                     backgroundColor: isDark ? Colors.white : YLColors.primary,
                     foregroundColor: isDark ? YLColors.primary : Colors.white,
@@ -334,9 +341,9 @@ class _PurchaseConfirmSheetState extends ConsumerState<PurchaseConfirmSheet> {
     });
 
     try {
-      final repo = ref.read(storeRepositoryProvider);
-      if (repo == null) throw Exception('未登录');
-      final result = await repo.checkCoupon(code, widget.plan.id);
+      final result = await ref
+          .read(purchaseProvider.notifier)
+          .validateCoupon(code, widget.plan.id);
       if (mounted) {
         setState(() {
           _couponResult = result;
@@ -415,8 +422,11 @@ class _CouponSection extends StatelessWidget {
         padding: const EdgeInsets.only(bottom: YLSpacing.sm),
         child: Row(
           children: [
-            Icon(Icons.local_offer_rounded,
-                size: 14, color: YLColors.connected),
+            const Icon(
+              Icons.local_offer_rounded,
+              size: 14,
+              color: YLColors.connected,
+            ),
             const SizedBox(width: 6),
             Text(
               isEn ? 'Coupon applied' : '优惠券已应用',
@@ -476,20 +486,22 @@ class _CouponSection extends StatelessWidget {
                     style: YLText.body,
                     decoration: InputDecoration(
                       hintText: isEn ? 'Enter coupon code' : '请输入优惠码',
-                      hintStyle:
-                          YLText.body.copyWith(color: YLColors.zinc400),
+                      hintStyle: YLText.body.copyWith(color: YLColors.zinc400),
                       contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 8),
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
                       filled: true,
-                      fillColor:
-                          isDark ? YLColors.zinc800 : YLColors.zinc100,
+                      fillColor: isDark ? YLColors.zinc800 : YLColors.zinc100,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(YLRadius.md),
                         borderSide: BorderSide.none,
                       ),
                       errorText: error,
-                      errorStyle: YLText.caption
-                          .copyWith(color: YLColors.error, height: 0),
+                      errorStyle: YLText.caption.copyWith(
+                        color: YLColors.error,
+                        height: 0,
+                      ),
                     ),
                     textCapitalization: TextCapitalization.characters,
                     onSubmitted: (_) => onValidate(),
@@ -502,10 +514,12 @@ class _CouponSection extends StatelessWidget {
                 child: FilledButton(
                   onPressed: isLoading ? null : onValidate,
                   style: FilledButton.styleFrom(
-                    backgroundColor:
-                        isDark ? YLColors.zinc700 : YLColors.zinc200,
-                    foregroundColor:
-                        isDark ? YLColors.zinc200 : YLColors.zinc700,
+                    backgroundColor: isDark
+                        ? YLColors.zinc700
+                        : YLColors.zinc200,
+                    foregroundColor: isDark
+                        ? YLColors.zinc200
+                        : YLColors.zinc700,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(YLRadius.md),
                     ),
@@ -519,8 +533,9 @@ class _CouponSection extends StatelessWidget {
                         )
                       : Text(
                           isEn ? 'Apply' : '验证',
-                          style: YLText.caption
-                              .copyWith(fontWeight: FontWeight.w600),
+                          style: YLText.caption.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                 ),
               ),
@@ -553,13 +568,14 @@ class _Row extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label,
-            style: YLText.body.copyWith(color: YLColors.zinc500)),
+        Text(label, style: YLText.body.copyWith(color: YLColors.zinc500)),
         Text(
           value,
-          style: valueStyle ??
+          style:
+              valueStyle ??
               YLText.body.copyWith(
-                  color: isDark ? YLColors.zinc200 : YLColors.zinc800),
+                color: isDark ? YLColors.zinc200 : YLColors.zinc800,
+              ),
         ),
       ],
     );

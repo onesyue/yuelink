@@ -72,7 +72,12 @@ void main() {
     });
 
     test('formattedPrice formats yuan correctly', () {
-      final plan = const StorePlan(id: 1, name: 'test', monthPrice: 1800, yearPrice: 0);
+      const plan = StorePlan(
+        id: 1,
+        name: 'test',
+        monthPrice: 1800,
+        yearPrice: 0,
+      );
 
       expect(plan.formattedPrice(PlanPeriod.monthly), '¥18');
       expect(plan.formattedPrice(PlanPeriod.yearly), '免费');
@@ -80,7 +85,7 @@ void main() {
     });
 
     test('formattedPrice handles decimal yuan', () {
-      final plan = const StorePlan(id: 1, name: 'test', monthPrice: 1850);
+      const plan = StorePlan(id: 1, name: 'test', monthPrice: 1850);
 
       expect(plan.formattedPrice(PlanPeriod.monthly), '¥18.50');
     });
@@ -109,10 +114,7 @@ void main() {
         const StorePlan(id: 1, name: 'b', speedLimit: 1000).speedLabel,
         '1.0 Gbps',
       );
-      expect(
-        const StorePlan(id: 1, name: 'c').speedLabel,
-        '不限',
-      );
+      expect(const StorePlan(id: 1, name: 'c').speedLabel, '不限');
     });
   });
 
@@ -157,21 +159,39 @@ void main() {
 
     test('formattedAmount formats correctly', () {
       expect(
-        const StoreOrder(tradeNo: '', planId: 0, period: '', totalAmount: 1800,
-            status: OrderStatus.pending, createdAt: 0, updatedAt: 0)
-            .formattedAmount,
+        const StoreOrder(
+          tradeNo: '',
+          planId: 0,
+          period: '',
+          totalAmount: 1800,
+          status: OrderStatus.pending,
+          createdAt: 0,
+          updatedAt: 0,
+        ).formattedAmount,
         '¥18',
       );
       expect(
-        const StoreOrder(tradeNo: '', planId: 0, period: '', totalAmount: 0,
-            status: OrderStatus.pending, createdAt: 0, updatedAt: 0)
-            .formattedAmount,
+        const StoreOrder(
+          tradeNo: '',
+          planId: 0,
+          period: '',
+          totalAmount: 0,
+          status: OrderStatus.pending,
+          createdAt: 0,
+          updatedAt: 0,
+        ).formattedAmount,
         '免费',
       );
       expect(
-        const StoreOrder(tradeNo: '', planId: 0, period: '', totalAmount: 1850,
-            status: OrderStatus.pending, createdAt: 0, updatedAt: 0)
-            .formattedAmount,
+        const StoreOrder(
+          tradeNo: '',
+          planId: 0,
+          period: '',
+          totalAmount: 1850,
+          status: OrderStatus.pending,
+          createdAt: 0,
+          updatedAt: 0,
+        ).formattedAmount,
         '¥18.50',
       );
     });
@@ -260,14 +280,6 @@ void main() {
   });
 
   group('PlanPeriod', () {
-    test('apiKey returns correct values', () {
-      expect(PlanPeriod.monthly.apiKey, 'month_price');
-      expect(PlanPeriod.quarterly.apiKey, 'quarter_price');
-      expect(PlanPeriod.halfYearly.apiKey, 'half_year_price');
-      expect(PlanPeriod.yearly.apiKey, 'year_price');
-      expect(PlanPeriod.onetime.apiKey, 'onetime_price');
-    });
-
     test('label returns localized strings', () {
       expect(PlanPeriod.monthly.label(true), '1 Month');
       expect(PlanPeriod.monthly.label(false), '月付');

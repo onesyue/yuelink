@@ -4,8 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../i18n/app_strings.dart';
+import '../../../domain/store/purchase_state.dart';
 import '../../../theme.dart';
-import '../store_providers.dart';
+import '../purchase_notifier.dart';
 
 /// Bottom sheet shown after checkout redirect — polls order status and
 /// lets user check result or re-open the payment URL.
@@ -64,7 +65,9 @@ class _OrderResultViewState extends ConsumerState<OrderResultView>
         top: false,
         child: Padding(
           padding: const EdgeInsets.symmetric(
-              horizontal: YLSpacing.lg, vertical: YLSpacing.md),
+            horizontal: YLSpacing.lg,
+            vertical: YLSpacing.md,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -97,11 +100,15 @@ class _OrderResultViewState extends ConsumerState<OrderResultView>
     S s,
   ) {
     if (state is PurchaseSuccess) {
-      return _SuccessView(order: state, isDark: isDark, isEn: isEn,
-          onDone: () {
-        ref.read(purchaseProvider.notifier).reset();
-        Navigator.pop(context);
-      });
+      return _SuccessView(
+        order: state,
+        isDark: isDark,
+        isEn: isEn,
+        onDone: () {
+          ref.read(purchaseProvider.notifier).reset();
+          Navigator.pop(context);
+        },
+      );
     }
 
     if (state is PurchasePolling) {
@@ -126,9 +133,8 @@ class _OrderResultViewState extends ConsumerState<OrderResultView>
         state: state,
         isDark: isDark,
         isEn: isEn,
-        onPollNow: () => ref
-            .read(purchaseProvider.notifier)
-            .pollOrderResult(state.tradeNo),
+        onPollNow: () =>
+            ref.read(purchaseProvider.notifier).pollOrderResult(state.tradeNo),
         onCancel: () async {
           await ref.read(purchaseProvider.notifier).cancelCurrentOrder();
           if (context.mounted) Navigator.pop(context);
@@ -163,8 +169,11 @@ class _SuccessView extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        const Icon(Icons.check_circle_rounded,
-            size: 64, color: YLColors.connected),
+        const Icon(
+          Icons.check_circle_rounded,
+          size: 64,
+          color: YLColors.connected,
+        ),
         const SizedBox(height: YLSpacing.md),
         Text(
           isEn ? 'Payment Successful' : '购买成功',
@@ -172,9 +181,7 @@ class _SuccessView extends StatelessWidget {
         ),
         const SizedBox(height: 6),
         Text(
-          isEn
-              ? 'Your subscription has been activated.'
-              : '订阅已开通，同步后即可使用。',
+          isEn ? 'Your subscription has been activated.' : '订阅已开通，同步后即可使用。',
           style: YLText.body.copyWith(color: YLColors.zinc500),
           textAlign: TextAlign.center,
         ),
@@ -292,8 +299,7 @@ class _AwaitingView extends StatelessWidget {
               onPressed: () async {
                 final uri = Uri.tryParse(state.paymentUrl);
                 if (uri != null) {
-                  await launchUrl(uri,
-                      mode: LaunchMode.externalApplication);
+                  await launchUrl(uri, mode: LaunchMode.externalApplication);
                 }
               },
               style: FilledButton.styleFrom(
@@ -322,10 +328,7 @@ class _AwaitingView extends StatelessWidget {
                 borderRadius: BorderRadius.circular(YLRadius.md),
               ),
             ),
-            child: Text(
-              isEn ? 'Check Result' : '查询支付结果',
-              style: YLText.label,
-            ),
+            child: Text(isEn ? 'Check Result' : '查询支付结果', style: YLText.label),
           ),
         ),
 
@@ -360,10 +363,13 @@ class _FailedView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Icon(Icons.error_outline_rounded,
-            size: 56, color: YLColors.error),
+      return Column(
+        children: [
+          const Icon(
+            Icons.error_outline_rounded,
+            size: 56,
+            color: YLColors.error,
+          ),
         const SizedBox(height: YLSpacing.md),
         Text(
           isEn ? 'Order Failed' : '订单失败',

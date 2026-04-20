@@ -39,7 +39,11 @@ class StorePage extends ConsumerWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.lock_outline_rounded, size: 48, color: YLColors.zinc400),
+              const Icon(
+                Icons.lock_outline_rounded,
+                size: 48,
+                color: YLColors.zinc400,
+              ),
               const SizedBox(height: 16),
               Text(isEn ? 'Login to view plans' : '请先登录查看套餐',
                   style: YLText.body.copyWith(color: YLColors.zinc500)),
@@ -197,7 +201,11 @@ class _ErrorView extends StatelessWidget {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Icon(Icons.error_outline_rounded, size: 48, color: YLColors.zinc300),
+        const Icon(
+          Icons.error_outline_rounded,
+          size: 48,
+          color: YLColors.zinc300,
+        ),
         const SizedBox(height: YLSpacing.md),
         Text(
           isEn ? 'Failed to load plans' : '套餐加载失败',

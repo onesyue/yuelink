@@ -51,9 +51,8 @@ class StorePlan {
   });
 
   /// Available billing periods — those with a non-null price.
-  List<PlanPeriod> get availablePeriods => PlanPeriod.values
-      .where((p) => priceForPeriod(p) != null)
-      .toList();
+  List<PlanPeriod> get availablePeriods =>
+      PlanPeriod.values.where((p) => priceForPeriod(p) != null).toList();
 
   /// Price in fen for the given period, or null if unavailable.
   int? priceForPeriod(PlanPeriod period) {
@@ -94,7 +93,9 @@ class StorePlan {
   /// Human-readable speed cap.
   String get speedLabel {
     if (speedLimit == null || speedLimit! <= 0) return '不限';
-    if (speedLimit! >= 1000) return '${(speedLimit! / 1000).toStringAsFixed(1)} Gbps';
+    if (speedLimit! >= 1000) {
+      return '${(speedLimit! / 1000).toStringAsFixed(1)} Gbps';
+    }
     return '$speedLimit Mbps';
   }
 
@@ -154,26 +155,6 @@ enum PlanPeriod {
   twoYearly,
   threeYearly,
   onetime;
-
-  /// The value sent to /api/v1/user/order/save as the `period` field.
-  String get apiKey {
-    switch (this) {
-      case PlanPeriod.monthly:
-        return 'month_price';
-      case PlanPeriod.quarterly:
-        return 'quarter_price';
-      case PlanPeriod.halfYearly:
-        return 'half_year_price';
-      case PlanPeriod.yearly:
-        return 'year_price';
-      case PlanPeriod.twoYearly:
-        return 'two_year_price';
-      case PlanPeriod.threeYearly:
-        return 'three_year_price';
-      case PlanPeriod.onetime:
-        return 'onetime_price';
-    }
-  }
 
   String label(bool isEn) {
     if (isEn) {
