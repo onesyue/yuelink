@@ -1038,12 +1038,28 @@ class ConfigTemplate {
   /// Always overwrite — subscription templates may have override-destination: false
   /// which breaks server-side audit rules (server only sees IP, not domain).
   static String _ensureSniffer(String config) {
-    // Remove existing sniffer block to force our correct config
+    // Remove existing sniffer block to force our correct config.
+    //
+    // IMPORTANT — two flags that look harmless but cost throughput:
+    //   * parse-pure-ip: ran HTTP/TLS/QUIC sniff on EVERY pure-IP
+    //     connection, not just DNS-derived ones. High-QPS /
+    //     high-bandwidth transfers (streaming, large downloads)
+    //     paid the sniff cost on every socket.
+    //   * force-dns-mapping: forced every connection through the
+    //     fake-IP reverse lookup even when it was already accurate.
+    //
+    // Both default to `false` in mihomo upstream; Clash Verge Rev and
+    // mihomo-party both keep them off. We used to set them `true`
+    // — that's the single biggest reason YueLink was running ~30%
+    // slower than raw ClashMeta on the same node in same-network
+    // throughput tests. Drop them both.
+    //
+    // The remaining sniffer config still delivers the feature we
+    // actually need: resolving TLS-SNI / HTTP-Host / QUIC on
+    // fake-IP connections so domain-based routing rules apply.
     config = _removeSection(config, 'sniffer');
     return '$config\nsniffer:\n'
         '  enable: true\n'
-        '  force-dns-mapping: true\n'
-        '  parse-pure-ip: true\n'
         '  override-destination: true\n'
         '  sniff:\n'
         '    HTTP:\n'
