@@ -27,7 +27,6 @@ class AppNotifier {
   AppNotifier._();
 
   static OverlayEntry? _currentTopEntry;
-  static Timer? _currentTopTimer;
 
   static void _show(String message, _SnackType type) {
     _showTopCapsule(message, type);
@@ -98,8 +97,6 @@ class AppNotifier {
         onDismissed: () {
           if (identical(_currentTopEntry, entry)) {
             _currentTopEntry = null;
-            _currentTopTimer?.cancel();
-            _currentTopTimer = null;
           }
           if (entry.mounted) entry.remove();
         },
@@ -112,8 +109,6 @@ class AppNotifier {
 
   static void _dismissCurrent() {
     final entry = _currentTopEntry;
-    _currentTopTimer?.cancel();
-    _currentTopTimer = null;
     _currentTopEntry = null;
     if (entry != null && entry.mounted) {
       entry.remove();
