@@ -188,6 +188,13 @@ class CoreHeartbeatManager {
 
     final port = CoreManager.instance.mixedPort;
     final proxyOk = await SystemProxyManager.verify(port);
+    // null == unknown: the OS doesn't expose a usable verification path
+    // (Linux w/o gsettings). Skip tamper/restore and clear the failure
+    // counter so historical false-positives can't bleed forward.
+    if (proxyOk == null) {
+      _proxyRestoreFailures = 0;
+      return;
+    }
     if (proxyOk) {
       _proxyRestoreFailures = 0;
       return;

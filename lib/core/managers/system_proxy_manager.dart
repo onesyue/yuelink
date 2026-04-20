@@ -141,11 +141,16 @@ class SystemProxyManager {
     if (anySuccess) {
       invalidateVerifyCache();
       final verified = await verify(mixedPort);
-      if (!verified) {
+      // macOS verifier (scutil) is the only platform reached here and
+      // it never returns null — but the common signature is bool?, so
+      // treat the hypothetical unknown as "assume applied" rather than
+      // "failed", since the set commands succeeded.
+      if (verified == false) {
         debugPrint('[SystemProxy] WARNING: proxy set commands succeeded '
             'but verification failed');
+        return false;
       }
-      return verified;
+      return true;
     }
     return false;
   }
@@ -331,18 +336,29 @@ class SystemProxyManager {
   /// Verify the OS system proxy is actually pointing to our [mixedPort].
   /// Cached for [_verifyCacheTtl] to keep heartbeat overhead minimal.
   ///
+  /// Tri-state return:
+  ///   * `true`  — verified, proxy points at our port.
+  ///   * `false` — verified, proxy is tampered / pointing elsewhere.
+  ///   * `null`  — unknown, the OS doesn't expose a usable introspection
+  ///     path on this system (e.g. Linux with gsettings absent on
+  ///     KDE/XFCE). Heartbeat should treat `null` as "skip tamper check"
+  ///     and NOT run restore — falsely classifying unknown as `false`
+  ///     causes a 3-strike restore loop that eventually stops the core.
+  ///
   /// macOS: parses `scutil --proxy` (one subprocess instead of N+1).
   /// Windows: reads two registry values.
   /// Linux: reads gsettings.
-  static Future<bool> verify(int mixedPort) async {
-    if (_verifyCached != null &&
+  static Future<bool?> verify(int mixedPort) async {
+    // Cache presence keyed on the timestamp, not the value, because
+    // `null` is now a valid cached verdict (unknown) distinct from
+    // "cache cold".
+    if (_verifyCachedAt != null &&
         _verifyCachedPort == mixedPort &&
-        _verifyCachedAt != null &&
         DateTime.now().difference(_verifyCachedAt!) < _verifyCacheTtl) {
-      return _verifyCached!;
+      return _verifyCached;
     }
 
-    bool result;
+    bool? result;
     if (Platform.isMacOS) {
       result = await _verifyMacOSScutil(mixedPort);
     } else if (Platform.isWindows) {
@@ -412,7 +428,12 @@ class SystemProxyManager {
     }
   }
 
-  static Future<bool> _verifyLinuxGsettings(int mixedPort) async {
+  /// Linux verifier. Returns `null` (unknown) when gsettings is not
+  /// available — e.g. on KDE/XFCE where the binary is usually missing.
+  /// Caller contract: `null` must NOT be treated as "failed verification",
+  /// otherwise the heartbeat runs restore-loop 3× on systems that are
+  /// working correctly but simply not introspectable this way.
+  static Future<bool?> _verifyLinuxGsettings(int mixedPort) async {
     try {
       final r = await Process.run(
         'gsettings',
@@ -428,7 +449,7 @@ class SystemProxyManager {
       return port == mixedPort;
     } catch (e) {
       EventLog.write('[SysProxy] verifyLinux gsettings_unavailable err=$e');
-      return true; // gsettings not available — can't verify
+      return null;
     }
   }
 

@@ -134,7 +134,7 @@ class CoreActions {
   // _YueLinkAppState exit handler). New code should call SystemProxyManager
   // directly.
   static Future<void> clearSystemProxyStatic() => SystemProxyManager.clear();
-  static Future<bool> verifySystemProxy(int mixedPort) =>
+  static Future<bool?> verifySystemProxy(int mixedPort) =>
       SystemProxyManager.verify(mixedPort);
   static void invalidateVerifyCache() =>
       SystemProxyManager.invalidateVerifyCache();
