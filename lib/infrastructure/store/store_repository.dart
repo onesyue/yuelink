@@ -4,10 +4,12 @@ import 'dart:io';
 import '../../domain/store/coupon_result.dart';
 import '../../domain/store/order_list_result.dart';
 import '../../domain/store/payment_method.dart';
+import '../../domain/store/payment_outcome.dart';
 import '../../domain/store/store_error.dart';
 import '../../domain/store/store_order.dart';
 import '../../domain/store/store_plan.dart';
 import '../datasources/xboard/index.dart';
+import 'checkout_result.dart';
 
 /// Thin wrapper around [XBoardApi] for all store-related operations.
 ///
@@ -40,12 +42,19 @@ class StoreRepository {
   Future<StoreOrder> fetchOrderDetail(String tradeNo) =>
       _guard(() => _api.getOrderDetail(token: _token, tradeNo: tradeNo));
 
-  Future<CheckoutResult> checkoutOrder(String tradeNo, {int? methodId}) =>
-      _guard(() => _api.checkoutOrder(
-            token: _token,
-            tradeNo: tradeNo,
-            method: methodId,
-          ));
+  Future<PaymentOutcome> checkoutOrder(String tradeNo, {int? methodId}) =>
+      _guard(() async {
+        final result = await _api.checkoutOrder(
+          token: _token,
+          tradeNo: tradeNo,
+          method: methodId,
+        );
+        if (result.isFree) return const FreeActivated();
+        if (result.paymentUrl.isNotEmpty) {
+          return AwaitingExternalPayment(result.paymentUrl);
+        }
+        return const FreeActivated();
+      });
 
   Future<List<PaymentMethod>> fetchPaymentMethods() =>
       _guard(() => _api.getPaymentMethods(_token));

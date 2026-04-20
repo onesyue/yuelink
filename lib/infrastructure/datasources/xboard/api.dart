@@ -5,6 +5,7 @@ import '../../../domain/store/coupon_result.dart';
 import '../../../domain/store/order_list_result.dart';
 import '../../../domain/store/payment_method.dart';
 import '../../../domain/store/store_order.dart';
+import '../../store/checkout_result.dart';
 import '../../../domain/store/store_plan.dart';
 import 'client.dart';
 import 'errors.dart';

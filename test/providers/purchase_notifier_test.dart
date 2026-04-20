@@ -1,10 +1,11 @@
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yuelink/domain/store/coupon_result.dart';
 import 'package:yuelink/domain/store/payment_method.dart';
+import 'package:yuelink/domain/store/payment_outcome.dart';
 import 'package:yuelink/domain/store/store_order.dart';
 import 'package:yuelink/domain/store/store_plan.dart';
+import 'package:yuelink/infrastructure/store/payment_launcher.dart';
 import 'package:yuelink/modules/store/store_providers.dart';
 import 'package:yuelink/infrastructure/store/store_repository.dart';
 // ignore: unused_import (AuthState used in overrides)
@@ -14,7 +15,7 @@ import 'package:yuelink/modules/yue_auth/providers/yue_auth_providers.dart';
 
 class FakeStoreRepository implements StoreRepository {
   String? createOrderResult;
-  CheckoutResult? checkoutResult;
+  PaymentOutcome? checkoutOutcome;
   StoreOrder? orderDetailResult;
   List<StorePlan>? plansResult;
   List<PaymentMethod>? paymentMethodsResult;
@@ -36,11 +37,10 @@ class FakeStoreRepository implements StoreRepository {
   }
 
   @override
-  Future<CheckoutResult> checkoutOrder(String tradeNo,
-      {int? methodId}) async {
+  Future<PaymentOutcome> checkoutOrder(String tradeNo, {int? methodId}) async {
     if (checkoutError != null) throw checkoutError!;
-    return checkoutResult ??
-        const CheckoutResult(type: 1, data: 'https://pay.example.com');
+    return checkoutOutcome ??
+        const AwaitingExternalPayment('https://pay.example.com');
   }
 
   @override
@@ -107,13 +107,32 @@ class FakeStoreRepository implements StoreRepository {
       );
 }
 
+// ── Fake PaymentLauncher ──────────────────────────────────────────────────────
+
+class FakePaymentLauncher implements PaymentLauncher {
+  bool shouldSucceed;
+  final List<String> launched = [];
+
+  FakePaymentLauncher({this.shouldSucceed = true});
+
+  @override
+  Future<bool> launch(String url) async {
+    launched.add(url);
+    return shouldSucceed;
+  }
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-ProviderContainer _createContainer(FakeStoreRepository repo) {
+ProviderContainer _createContainer(
+  FakeStoreRepository repo, {
+  FakePaymentLauncher? launcher,
+}) {
+  final fakeLauncher = launcher ?? FakePaymentLauncher();
   return ProviderContainer(
     overrides: [
       storeRepositoryProvider.overrideWithValue(repo),
-      // AuthNotifier needed for _refreshUserSubscription — provide a no-op
+      paymentLauncherProvider.overrideWithValue(fakeLauncher),
       preloadedAuthStateProvider.overrideWithValue(
         const AuthState(status: AuthStatus.guest),
       ),
@@ -123,28 +142,6 @@ ProviderContainer _createContainer(FakeStoreRepository repo) {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-
-  // Stub url_launcher to avoid platform channel errors in tests.
-  // canLaunchUrl/launchUrl delegate to MethodChannel — we fake success.
-  setUp(() {
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(
-      const MethodChannel('plugins.flutter.io/url_launcher'),
-      (call) async {
-        if (call.method == 'canLaunch') return true;
-        if (call.method == 'launch') return true;
-        return null;
-      },
-    );
-  });
-
-  tearDown(() {
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(
-      const MethodChannel('plugins.flutter.io/url_launcher'),
-      null,
-    );
-  });
 
   group('PurchaseNotifier', () {
     test('initial state is PurchaseIdle', () {
@@ -159,16 +156,13 @@ void main() {
     test('purchase transitions to AwaitingPayment on success', () async {
       final repo = FakeStoreRepository();
       repo.createOrderResult = 'TRADE_123';
-      repo.checkoutResult =
-          const CheckoutResult(type: 1, data: 'https://pay.example.com/123');
+      repo.checkoutOutcome =
+          const AwaitingExternalPayment('https://pay.example.com/123');
 
       final container = _createContainer(repo);
       addTearDown(container.dispose);
 
       final notifier = container.read(purchaseProvider.notifier);
-
-      // Start purchase (launchUrl will fail in test — that's OK,
-      // we just check state transitions)
       await notifier.purchase(
         planId: 1,
         period: PlanPeriod.monthly,
@@ -176,19 +170,32 @@ void main() {
       );
 
       final state = container.read(purchaseProvider);
-      // Either AwaitingPayment (URL opened) or Failed (can't launch in test)
-      expect(
-        state,
-        anyOf(
-          isA<PurchaseAwaitingPayment>(),
-          isA<PurchaseFailed>(),
-        ),
-      );
+      expect(state, isA<PurchaseAwaitingPayment>());
 
       if (state is PurchaseAwaitingPayment) {
         expect(state.tradeNo, 'TRADE_123');
         expect(state.paymentUrl, 'https://pay.example.com/123');
       }
+    });
+
+    test('purchase transitions to Failed when launcher fails', () async {
+      final repo = FakeStoreRepository();
+      repo.createOrderResult = 'TRADE_456';
+      repo.checkoutOutcome =
+          const AwaitingExternalPayment('https://pay.example.com/456');
+
+      final launcher = FakePaymentLauncher(shouldSucceed: false);
+      final container = _createContainer(repo, launcher: launcher);
+      addTearDown(container.dispose);
+
+      await container.read(purchaseProvider.notifier).purchase(
+            planId: 1,
+            period: PlanPeriod.monthly,
+            methodId: 1,
+          );
+
+      final state = container.read(purchaseProvider);
+      expect(state, isA<PurchaseFailed>());
     });
 
     test('purchase transitions to Failed on createOrder error', () async {
@@ -206,10 +213,10 @@ void main() {
       expect((state as PurchaseFailed).message, contains('Plan sold out'));
     });
 
-    test('purchase with free plan (empty paymentUrl) polls and succeeds', () async {
+    test('purchase with free plan (FreeActivated) polls and succeeds', () async {
       final repo = FakeStoreRepository();
       repo.createOrderResult = 'FREE_001';
-      repo.checkoutResult = const CheckoutResult(type: -1, data: '');
+      repo.checkoutOutcome = const FreeActivated();
       repo.orderDetailResult = FakeStoreRepository.completedOrder('FREE_001');
 
       final container = _createContainer(repo);
@@ -225,7 +232,6 @@ void main() {
 
     test('purchase rejects double submit', () async {
       final repo = FakeStoreRepository();
-      // Make createOrder slow
       repo.createOrderError = null;
 
       final container = _createContainer(repo);
@@ -234,7 +240,6 @@ void main() {
       final notifier = container.read(purchaseProvider.notifier);
 
       // Manually set loading state to simulate in-progress purchase
-      // (We test the guard, not the full flow)
       notifier.purchase(planId: 1, period: PlanPeriod.monthly);
       // Second call should be ignored (state is already Loading)
       await notifier.purchase(planId: 2, period: PlanPeriod.monthly);
@@ -244,9 +249,8 @@ void main() {
 
     test('pollOrderResult detects completed order', () async {
       final repo = FakeStoreRepository();
-      // Set up AwaitingPayment first (poll returns immediately from Idle)
-      repo.checkoutResult =
-          const CheckoutResult(type: 1, data: 'https://pay.example.com');
+      repo.checkoutOutcome =
+          const AwaitingExternalPayment('https://pay.example.com');
       final container = _createContainer(repo);
       addTearDown(container.dispose);
 
@@ -268,8 +272,8 @@ void main() {
 
     test('pollOrderResult detects cancelled order', () async {
       final repo = FakeStoreRepository();
-      repo.checkoutResult =
-          const CheckoutResult(type: 1, data: 'https://pay.example.com');
+      repo.checkoutOutcome =
+          const AwaitingExternalPayment('https://pay.example.com');
       final container = _createContainer(repo);
       addTearDown(container.dispose);
 
@@ -292,26 +296,21 @@ void main() {
 
     test('pollOrderResult exhausts attempts and reverts to awaiting', () async {
       final repo = FakeStoreRepository();
-      repo.checkoutResult = const CheckoutResult(type: -1, data: '');
-      // orderDetailResult stays pending (default) — poll won't find success
-
       final container = _createContainer(repo);
       addTearDown(container.dispose);
 
       final notifier = container.read(purchaseProvider.notifier);
 
-      // First put notifier into AwaitingPayment state (poll returns
-      // immediately if state is Idle — see line 217 guard)
-      // Use payExistingOrder with a URL checkout to set up state
-      repo.checkoutResult =
-          const CheckoutResult(type: 1, data: 'https://pay.example.com');
+      // Put notifier into AwaitingPayment state via payExistingOrder with URL outcome
+      repo.checkoutOutcome =
+          const AwaitingExternalPayment('https://pay.example.com');
       await notifier.payExistingOrder(tradeNo: 'PENDING_001', methodId: 1);
 
       // Now state should be AwaitingPayment
       expect(container.read(purchaseProvider), isA<PurchaseAwaitingPayment>());
 
-      // Reset repo to return pending orders for the poll
-      repo.checkoutResult = null;
+      // Poll with pending order detail (default) — will exhaust attempts
+      repo.checkoutOutcome = null;
       await notifier.pollOrderResult(
         'PENDING_001',
         maxAttempts: 2,
@@ -326,7 +325,6 @@ void main() {
     test('pollOrderResult rejects concurrent calls', () async {
       final repo = FakeStoreRepository();
       repo.orderDetailResult = null; // keep pending
-      // We can't easily intercept but the _polling flag guard is what we test
 
       final container = _createContainer(repo);
       addTearDown(container.dispose);
@@ -348,9 +346,9 @@ void main() {
       // No crash = success. The _polling flag prevents double execution.
     });
 
-    test('payExistingOrder uses existing tradeNo', () async {
+    test('payExistingOrder uses existing tradeNo (FreeActivated)', () async {
       final repo = FakeStoreRepository();
-      repo.checkoutResult = const CheckoutResult(type: -1, data: '');
+      repo.checkoutOutcome = const FreeActivated();
       repo.orderDetailResult = FakeStoreRepository.completedOrder('EXISTING_001');
 
       final container = _createContainer(repo);
@@ -365,8 +363,8 @@ void main() {
 
     test('cancelCurrentOrder transitions to Idle', () async {
       final repo = FakeStoreRepository();
-      repo.checkoutResult =
-          const CheckoutResult(type: 1, data: 'https://pay.example.com');
+      repo.checkoutOutcome =
+          const AwaitingExternalPayment('https://pay.example.com');
       final container = _createContainer(repo);
       addTearDown(container.dispose);
 
@@ -396,9 +394,11 @@ void main() {
     });
 
     test('purchase without login returns PurchaseFailed', () async {
+      final fakeLauncher = FakePaymentLauncher();
       final container = ProviderContainer(
         overrides: [
           storeRepositoryProvider.overrideWithValue(null),
+          paymentLauncherProvider.overrideWithValue(fakeLauncher),
           preloadedAuthStateProvider.overrideWithValue(
             const AuthState(status: AuthStatus.loggedOut),
           ),
@@ -426,7 +426,6 @@ void main() {
       final container = _createContainer(repo);
       addTearDown(container.dispose);
 
-      // Trigger the build
       final future = container.read(orderHistoryProvider.future);
       final orders = await future;
 
@@ -447,7 +446,6 @@ void main() {
       final container = _createContainer(repo);
       addTearDown(container.dispose);
 
-      // Wait for initial load
       await container.read(orderHistoryProvider.future);
 
       final notifier = container.read(orderHistoryProvider.notifier);

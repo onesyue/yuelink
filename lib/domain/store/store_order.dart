@@ -97,31 +97,3 @@ enum OrderStatus {
       this == OrderStatus.completed ||
       this == OrderStatus.discounted;
 }
-
-// ── Checkout result ───────────────────────────────────────────────────────────
-
-/// Result from POST /api/v1/user/order/checkout.
-class CheckoutResult {
-  /// 0 = QR code image URL, 1 = redirect URL, 2 = HTML form
-  final int type;
-  final String data;
-
-  const CheckoutResult({required this.type, required this.data});
-
-  /// Whether this is a free/instant order (no payment URL needed).
-  bool get isFree => type == -1;
-
-  /// The URL to open in browser (type 1) or display as QR (type 0).
-  /// Empty string for free orders (type -1).
-  String get paymentUrl => isFree ? '' : data;
-
-  bool get isUrl => (type == 1 || type == 0) && data.isNotEmpty;
-
-  factory CheckoutResult.fromJson(Map<String, dynamic> json) {
-    final type = StoreOrder._toInt(json['type']) ?? 1;
-    // data can be: a URL string (type 0/1), bool true (type -1, free), or null
-    final rawData = json['data'];
-    final data = rawData is String ? rawData : '';
-    return CheckoutResult(type: type, data: data);
-  }
-}
