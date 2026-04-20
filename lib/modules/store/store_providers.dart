@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/legacy.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../domain/store/payment_method.dart';
+import '../../domain/store/store_error.dart';
 import '../../domain/store/store_order.dart';
 import '../../domain/store/store_plan.dart';
 import '../../infrastructure/store/store_repository.dart';
@@ -281,7 +282,7 @@ class PurchaseNotifier extends Notifier<PurchaseState> {
     try {
       await repo?.cancelOrder(tradeNo);
       state = const PurchaseIdle();
-    } on XBoardApiException catch (e) {
+    } on StoreError catch (e) {
       state = PurchaseFailed(e.message, tradeNo: tradeNo);
     } on Exception catch (e) {
       state = PurchaseFailed(_extractMessage(e), tradeNo: tradeNo);
@@ -321,7 +322,7 @@ class PurchaseNotifier extends Notifier<PurchaseState> {
   }
 
   String _extractMessage(Object e) {
-    if (e is XBoardApiException) return e.message;
+    if (e is StoreError) return e.message;
     if (e is Exception) {
       final s = e.toString();
       return s.startsWith('Exception: ') ? s.substring(11) : s;

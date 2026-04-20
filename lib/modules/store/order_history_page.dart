@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../infrastructure/store/store_repository.dart';
 import '../../i18n/app_strings.dart';
 import '../../shared/app_notifier.dart';
 import '../../shared/friendly_error.dart';
 import '../../theme.dart';
+import '../../domain/store/store_error.dart';
 import '../../domain/store/store_order.dart';
 import '../../domain/store/store_plan.dart';
 import 'store_providers.dart';
@@ -73,7 +73,7 @@ class _OrderHistoryPageState extends ConsumerState<OrderHistoryPage>
         loading: () =>
             const Center(child: CircularProgressIndicator()),
         error: (err, _) => _ErrorView(
-          message: err is XBoardApiException ? err.message : err.toString(),
+          message: err is StoreError ? err.message : err.toString(),
           onRetry: () =>
               ref.read(orderHistoryProvider.notifier).refresh(),
           isEn: isEn,

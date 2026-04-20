@@ -113,7 +113,7 @@ lib/domain/store/                                  ~400
 - Repository 方法统一 **throw `StoreError`**（domain 层新建 sealed union，见下）。不引入 `Result<T, E>` 类型——throw 与现有 `catch on Exception` 调用形态兼容，Result 会把 S1 的改动面从"4 个文件改 catch 类型"变成"全链路改返回签名"。
 
 **应该加**：
-- `StoreError` sealed union（住 `domain/store/`）：`StoreErrorNetwork` / `StoreErrorUnauthorized` / `StoreErrorInvalidCoupon` / `StoreErrorPaymentDeclined` / `StoreErrorUnknown(raw)`。Repository 内部 catch `XBoardApiException` 映射成这些；UI 只 catch `StoreError`。
+- `StoreError` sealed union（住 `domain/store/`）：4 态 `StoreErrorNetwork` / `StoreErrorUnauthorized(statusCode)` / `StoreErrorApi(statusCode)` / `StoreErrorUnknown`。Repository 内部 `_guard()` 把 `XBoardApiException` / `SocketException` / `TimeoutException` / `HttpException` / 其它 `catch (e)` 映射到这 4 态。UI 只 catch `StoreError`。InvalidCoupon / PaymentDeclined 暂不拆——现在代码只用 `message` 显示不做 branching，等真分支时再加 sealed variant。
 
 ### 2.3 `lib/modules/store/` — UI + Notifier（薄），0 infra 知识
 
@@ -180,7 +180,7 @@ lib/domain/store/                                  ~400
 - `_OrderDetailSheet`（531 行）迁到 `lib/modules/store/widgets/order_detail_sheet.dart`。
 - **cancel order**：UI 回调改成 `ref.read(purchaseProvider.notifier).cancelOrderFromHistory(tradeNo)`。新方法内部：`repo.cancelOrder(tradeNo)` + `ref.invalidate(orderHistoryProvider)` + 返回 bool。UI 只负责关 sheet + toast。
 - **coupon validation**（`purchase_confirm_sheet.dart:336` 的 `ref.read(storeRepositoryProvider).checkCoupon(...)` ）：在 `PurchaseNotifier` 新增 `validateCoupon(code, planId) → Future<CouponResult>`，UI 改为调 notifier；`purchase_confirm_sheet.dart` 删 `import store_repository`。合并到 S4 的原因：把"UI 直接碰 repo 的两个入口"（cancel + coupon）在同一个批次里一起清掉，让 S4 末的硬断言真实可跑。
-- 删掉 `order_history_page.dart:5` 和 `purchase_confirm_sheet.dart:4` 的 `import store_repository`。
+- _(两处 `import store_repository` 的死 import 已在 S1 一并清掉——`storeRepositoryProvider` 实际定义在 `store_providers.dart`，`store_repository.dart` 只有在删掉 `XBoardApiException` re-export 后才成为 dead import。S4 这里只剩语义迁移。)_
 
 **commit msg**：`refactor(store): extract OrderDetailSheet and route cancel/coupon through notifier`  
 **验收**：analyze + test；`git grep "storeRepositoryProvider" lib/modules/store/` 应该只剩 `store_providers.dart`（定义点本身）+ `purchase_notifier.dart` 内部；`git grep "checkCoupon\|cancelOrder" lib/modules/store/widgets/` 应该只剩 notifier 调用，不再有 `ref.read(storeRepositoryProvider).xxx(...)`；手工跑 R3（cancel）+ 在确认 sheet 里输入券码的路径。

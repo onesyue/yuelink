@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../infrastructure/store/store_repository.dart';
 import '../../../i18n/app_strings.dart';
 import '../../../shared/app_notifier.dart';
 import '../../../theme.dart';
 import '../../../domain/store/coupon_result.dart';
+import '../../../domain/store/store_error.dart';
 import '../../../domain/store/store_plan.dart';
 import '../store_providers.dart';
 import 'order_result_view.dart';
@@ -354,7 +354,7 @@ class _PurchaseConfirmSheetState extends ConsumerState<PurchaseConfirmSheet> {
   }
 
   String _friendlyError(Exception e) {
-    if (e is XBoardApiException) return e.message;
+    if (e is StoreError) return e.message;
     final s = e.toString();
     if (s.contains('SocketException') ||
         s.contains('HandshakeException') ||
