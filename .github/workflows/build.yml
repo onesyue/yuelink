@@ -30,6 +30,13 @@ env:
   # compatibility floor). If CI cores fail the post-bump rebuild, roll
   # this back to 1.23 before rolling back anything else.
   GO_VERSION: '1.26.2'
+  # `-mod=mod` lets `go build` auto-download any modules missing from
+  # go.sum and accept a go.mod that isn't fully `go mod tidy`-clean.
+  # Needed after the mihomo v1.19.23 → v1.19.24 bump (a7e48ca): Go
+  # 1.26.2's default `-mod=readonly` rejects the v1.19.24 go.mod with
+  # "updates to go.mod needed". Effects are CI-ephemeral (runner
+  # working tree only); we never commit back into core/mihomo.
+  GOFLAGS: -mod=mod
 
 jobs:
   # ───────────────────────────────────────────────────────────────────────────
