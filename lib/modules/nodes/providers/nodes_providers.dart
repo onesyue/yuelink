@@ -441,11 +441,16 @@ class DelayTestActions {
   /// In mock mode, falls back to sequential testing.
   ///
   /// Auto-recovery: when the HTTP call succeeds but the result map shows
-  /// every node as timed-out (mihomo's DNS/connection pool has gone stale —
-  /// a known upstream issue reproducible after hours of uptime), we silently
-  /// flush client-side connections and retry once before surfacing the
-  /// failure. The manual "restart core" button in connection_repair_page is
-  /// the last-resort escape hatch for when this auto-recovery itself fails.
+  /// every node as timed-out (mihomo's DNS / fake-IP / connection pool
+  /// carrying stale state from a previous session), we silently flush
+  /// client-side connections + fake-IP cache and retry up to twice
+  /// before surfacing the failure.
+  ///
+  /// Bug this fixes: after "disconnect → reconnect → test speed" the
+  /// whole group used to flash red because mihomo's internal state from
+  /// the previous session was not fully reset by stop→start. Users had
+  /// to either wait, reopen the app, or hit the manual "restart core"
+  /// button in connection_repair_page.
   Future<void> testGroup(String groupName, List<String> proxyNames) async {
     final manager = CoreManager.instance;
 
@@ -463,16 +468,26 @@ class DelayTestActions {
             TelemetryEvents.delayTestAllTimeout,
             props: {'group': groupName, 'count': proxyNames.length},
           );
-          // Silent recovery: flush stale connections, give mihomo a beat to
-          // reset its internal pools, then re-test once.
-          try {
-            await manager.api.closeAllConnections();
-          } catch (_) {}
-          await Future.delayed(const Duration(milliseconds: 800));
-          final retried = await _repo.testGroupDelay(groupName, url: testUrl);
-          if (!_isAllTimeout(retried, proxyNames)) {
-            Telemetry.event(TelemetryEvents.delayTestAutoRecovered);
-            results = retried;
+          // Silent recovery: up to 2 rounds of (close connections +
+          // flush fake-IP cache + wait + retry). 1.5 s per round gives
+          // mihomo enough time to rebuild its DNS resolver and
+          // proxy-chain pools; 800 ms wasn't enough for first-test-
+          // after-reconnect on slow networks.
+          for (var attempt = 1; attempt <= 2; attempt++) {
+            try {
+              await manager.api.closeAllConnections();
+            } catch (_) {}
+            try {
+              await manager.api.flushFakeIpCache();
+            } catch (_) {}
+            await Future.delayed(const Duration(milliseconds: 1500));
+            final retried =
+                await _repo.testGroupDelay(groupName, url: testUrl);
+            if (!_isAllTimeout(retried, proxyNames)) {
+              Telemetry.event(TelemetryEvents.delayTestAutoRecovered);
+              results = retried;
+              break;
+            }
           }
         }
 
@@ -526,13 +541,15 @@ class DelayTestActions {
     }
   }
 
-  // Treat a group-test result as "all timed out" when at least 5 of the
-  // requested nodes came back with delay <= 0. The floor of 5 avoids
-  // false positives on tiny groups (e.g. a 2-proxy DIRECT/REJECT setup
+  // Treat a group-test result as "all timed out" when at least 3 of the
+  // requested nodes came back with delay <= 0. The floor of 3 avoids
+  // false positives on truly tiny groups (a 2-proxy DIRECT/REJECT setup
   // where 0 is legitimate) while still catching the real failure mode
-  // where every proxy in a 20-node group reports 0.
+  // where every proxy in a group reports 0. Dropped from 5 so that
+  // user-curated groups (e.g. 3-4 hand-picked nodes) also get the
+  // auto-recovery path after a reconnect.
   bool _isAllTimeout(Map<String, dynamic> results, List<String> proxyNames) {
-    if (proxyNames.length < 5) return false;
+    if (proxyNames.length < 3) return false;
     var checked = 0;
     var timedOut = 0;
     for (final name in proxyNames) {
@@ -547,7 +564,7 @@ class DelayTestActions {
       checked++;
       if (delay <= 0) timedOut++;
     }
-    if (checked < 5) return false;
+    if (checked < 3) return false;
     return timedOut / checked >= 0.9;
   }
 }
