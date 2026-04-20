@@ -3,12 +3,13 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../domain/store/payment_method.dart';
+import '../../domain/store/payment_outcome.dart';
 import '../../domain/store/store_error.dart';
 import '../../domain/store/store_order.dart';
 import '../../domain/store/store_plan.dart';
+import '../../infrastructure/store/payment_launcher.dart';
 import '../../infrastructure/store/store_repository.dart';
 import '../../modules/yue_auth/providers/yue_auth_providers.dart';
 import 'state/purchase_state.dart';
@@ -25,6 +26,14 @@ final storeRepositoryProvider = Provider<StoreRepository?>((ref) {
   if (token == null) return null;
   return StoreRepository(api, token);
 });
+
+// ------------------------------------------------------------------
+// Payment launcher (url_launcher adapter, injectable for tests)
+// ------------------------------------------------------------------
+
+final paymentLauncherProvider = Provider<PaymentLauncher>(
+  (_) => const UrlLauncherPaymentLauncher(),
+);
 
 // ------------------------------------------------------------------
 // Plans
@@ -133,39 +142,34 @@ class PurchaseNotifier extends Notifier<PurchaseState> {
         couponCode: couponCode,
       );
 
-      // 3. Checkout → payment URL
+      // 3. Checkout → payment outcome (magic numbers translated by repository)
       state = const PurchaseLoading('获取支付链接...');
-      final checkout = await repo.checkoutOrder(tradeNo, methodId: methodId);
+      final outcome = await repo.checkoutOrder(tradeNo, methodId: methodId);
 
-      // 4. No payment URL — free plan or instant activation path.
-      //    Attempt to confirm the order before surfacing any payment UI.
-      //    Never land on an empty AwaitingPayment screen without trying first.
-      if (checkout.paymentUrl.isEmpty) {
-        final order = await repo.fetchOrderDetail(tradeNo);
-        if (order.status.isSuccess) {
-          state = PurchaseSuccess(order);
-          _refreshUserSubscription();
+      switch (outcome) {
+        case FreeActivated():
+          // Free/instant path — attempt to confirm before showing any payment UI.
+          // Backend may need a moment (eventual consistency); short poll covers it.
+          final order = await repo.fetchOrderDetail(tradeNo);
+          if (order.status.isSuccess) {
+            state = PurchaseSuccess(order);
+            _refreshUserSubscription();
+            return;
+          }
+          await pollOrderResult(
+            tradeNo,
+            maxAttempts: 3,
+            interval: const Duration(seconds: 2),
+          );
           return;
-        }
-        // Backend hasn't activated yet (eventual consistency).
-        // Run a short poll (3 × 2 s) before exposing the awaiting UI.
-        // pollOrderResult sets the final state; we return here to avoid
-        // the normal AwaitingPayment path below.
-        await pollOrderResult(
-          tradeNo,
-          maxAttempts: 3,
-          interval: const Duration(seconds: 2),
-        );
-        return;
+        case AwaitingExternalPayment(:final url):
+          state = PurchaseAwaitingPayment(tradeNo: tradeNo, paymentUrl: url);
+          // Fix 1: surface failure instead of silent drop
+          await _openPaymentUrl(url, tradeNo);
+        case PaymentDeclined(:final error):
+          state = PurchaseFailed(error.message, tradeNo: tradeNo);
+          return;
       }
-
-      state = PurchaseAwaitingPayment(
-        tradeNo: tradeNo,
-        paymentUrl: checkout.paymentUrl,
-      );
-
-      // 5. Open payment URL (Fix 1: surface failure instead of silent drop)
-      await _openPaymentUrl(checkout.paymentUrl, tradeNo);
     } on Exception catch (e) {
       state = PurchaseFailed(_extractMessage(e), tradeNo: tradeNo);
     }
@@ -248,28 +252,29 @@ class PurchaseNotifier extends Notifier<PurchaseState> {
     }
     try {
       state = const PurchaseLoading('获取支付链接...');
-      final checkout = await repo.checkoutOrder(tradeNo, methodId: methodId);
+      final outcome = await repo.checkoutOrder(tradeNo, methodId: methodId);
 
-      if (checkout.paymentUrl.isEmpty) {
-        final order = await repo.fetchOrderDetail(tradeNo);
-        if (order.status.isSuccess) {
-          state = PurchaseSuccess(order);
-          _refreshUserSubscription();
+      switch (outcome) {
+        case FreeActivated():
+          final order = await repo.fetchOrderDetail(tradeNo);
+          if (order.status.isSuccess) {
+            state = PurchaseSuccess(order);
+            _refreshUserSubscription();
+            return;
+          }
+          await pollOrderResult(
+            tradeNo,
+            maxAttempts: 3,
+            interval: const Duration(seconds: 2),
+          );
           return;
-        }
-        await pollOrderResult(
-          tradeNo,
-          maxAttempts: 3,
-          interval: const Duration(seconds: 2),
-        );
-        return;
+        case AwaitingExternalPayment(:final url):
+          state = PurchaseAwaitingPayment(tradeNo: tradeNo, paymentUrl: url);
+          await _openPaymentUrl(url, tradeNo);
+        case PaymentDeclined(:final error):
+          state = PurchaseFailed(error.message, tradeNo: tradeNo);
+          return;
       }
-
-      state = PurchaseAwaitingPayment(
-        tradeNo: tradeNo,
-        paymentUrl: checkout.paymentUrl,
-      );
-      await _openPaymentUrl(checkout.paymentUrl, tradeNo);
     } on Exception catch (e) {
       state = PurchaseFailed(_extractMessage(e), tradeNo: tradeNo);
     }
@@ -303,15 +308,10 @@ class PurchaseNotifier extends Notifier<PurchaseState> {
 
   Future<void> _openPaymentUrl(String url, String tradeNo) async {
     if (url.isEmpty) return;
-    final uri = Uri.tryParse(url);
-    // Fix 1: surface a visible error instead of silent failure.
-    // State is already PurchaseAwaitingPayment; if the browser can't open,
-    // transition to PurchaseFailed so the user sees what happened.
-    if (uri == null || !await canLaunchUrl(uri)) {
+    final ok = await ref.read(paymentLauncherProvider).launch(url);
+    if (!ok) {
       state = PurchaseFailed('无法打开支付页面，请稍后重试', tradeNo: tradeNo);
-      return;
     }
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
   void _refreshUserSubscription() {
