@@ -36,6 +36,12 @@ class CoreHeartbeatManager {
   Timer? _timer;
   int _failures = 0;
   int _proxyCheckTick = 0;
+  // Consecutive "set(port) returned false" count in the ProxyGuard path.
+  // Reset on any successful restore. Cleared on stop(). Used below to
+  // tolerate v2rayN / other clients that momentarily overwrite the
+  // system proxy (a single round-trip) before letting go — without
+  // forcing a core reset on the very first missed write.
+  int _proxyRestoreFailures = 0;
   // One-shot retry gate: the first time we hit the "3 failures" threshold we
   // try a silent restart before giving up. This survives things like cell
   // tower flap / brief Wi-Fi lapse / transient DNS failure — cases where a
@@ -58,6 +64,7 @@ class CoreHeartbeatManager {
     _timer = null;
     _failures = 0;
     _proxyCheckTick = 0;
+    _proxyRestoreFailures = 0;
     _retriedThisOutage = false;
     _restartInFlight = false;
   }
@@ -145,35 +152,71 @@ class CoreHeartbeatManager {
     }
   }
 
-  /// Re-verify the system proxy at most every 5 minutes (foreground only).
-  /// Battery-conservative: subprocess fan-out only when the user can see it.
+  /// Re-verify the system proxy every ~30 seconds (foreground only) and
+  /// re-assert it if another proxy client (v2rayN, Clash Verge, etc.) has
+  /// overwritten it. Previously this ran only every 5 minutes — opening
+  /// v2rayN even without connecting it would overwrite the registry /
+  /// `networksetup` / gsettings state, and YueLink's users would lose
+  /// network for up to 5 minutes before noticing. A single write-failure
+  /// would also immediately `resetCoreToStopped`, forcing a manual
+  /// reconnect.
+  ///
+  /// Changes:
+  /// - check cadence 5 min → 30 s (3 × 10 s foreground heartbeat ticks).
+  /// - tolerate up to 3 consecutive `set()` failures before declaring
+  ///   a sticky conflict. A transient overwrite by another client that
+  ///   lets go after a single write (v2rayN's common pattern) gets
+  ///   silently recovered on the next tick; only persistent stealing
+  ///   (another client re-writing continuously) trips the reset path.
   Future<void> _maybeProxyGuard({required bool inBackground}) async {
     if (inBackground) return;
     if (!(Platform.isMacOS || Platform.isWindows || Platform.isLinux)) return;
 
     _proxyCheckTick++;
-    if (_proxyCheckTick < 30) return;
+    if (_proxyCheckTick < 3) return; // 3 × 10s = ~30s cadence
     _proxyCheckTick = 0;
 
     final connMode = ref.read(connectionModeProvider);
-    if (connMode != 'systemProxy') return;
-    if (!ref.read(systemProxyOnConnectProvider)) return;
+    if (connMode != 'systemProxy') {
+      _proxyRestoreFailures = 0;
+      return;
+    }
+    if (!ref.read(systemProxyOnConnectProvider)) {
+      _proxyRestoreFailures = 0;
+      return;
+    }
 
     final port = CoreManager.instance.mixedPort;
     final proxyOk = await SystemProxyManager.verify(port);
-    if (proxyOk) return;
+    if (proxyOk) {
+      _proxyRestoreFailures = 0;
+      return;
+    }
 
     debugPrint('[ProxyGuard] system proxy tampered — attempting restore');
     final restored = await SystemProxyManager.set(port);
     if (restored) {
       debugPrint('[ProxyGuard] system proxy restored successfully');
+      _proxyRestoreFailures = 0;
       return;
     }
-    debugPrint('[ProxyGuard] restore failed — another client took over');
+
+    _proxyRestoreFailures++;
+    debugPrint(
+      '[ProxyGuard] restore attempt $_proxyRestoreFailures/3 failed',
+    );
+    if (_proxyRestoreFailures < 3) {
+      // Another client is briefly holding the system proxy setting (typical
+      // v2rayN startup pattern) — give it another 30s before giving up.
+      return;
+    }
+
+    debugPrint('[ProxyGuard] restore failed 3× — another client took over');
     AppNotifier.warning(S.current.msgSystemProxyConflict);
     resetCoreToStopped(ref, clearDesktopProxy: false);
     // delay-state wipe is handled by _delayResetSub in main.dart (listens
     // for coreStatusProvider → stopped transition).
     _failures = 0;
+    _proxyRestoreFailures = 0;
   }
 }
