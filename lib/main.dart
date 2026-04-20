@@ -1330,7 +1330,23 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
     // tray listener + single-instance server + background timers keep the
     // Dart isolate alive otherwise, so the user sees the window close but
     // the process never terminates.
-    Future.delayed(const Duration(seconds: 3), () => exit(0));
+    //
+    // Windows-specific: `exit(0)` itself can be starved if the Dart event
+    // loop is jammed waiting on a native callback (windowManager.destroy /
+    // trayManager.destroy / coreActions.stop via service-helper IPC have
+    // all been seen to sit in a blocking call under Win11). User-reported
+    // symptom: core running, tray → Quit, window closes but process stays
+    // resident. `Process.killPid(pid, sigkill)` translates to
+    // TerminateProcess on Windows, which ends the process immediately
+    // regardless of Dart scheduler state.
+    Future.delayed(const Duration(seconds: 3), () {
+      if (Platform.isWindows) {
+        try {
+          Process.killPid(pid, ProcessSignal.sigkill);
+        } catch (_) {}
+      }
+      exit(0);
+    });
 
     try {
       final status = ref.read(coreStatusProvider);
