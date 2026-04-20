@@ -29,7 +29,7 @@ dependencies:
   tray_manager: ^0.2.3
   launch_at_startup: ^0.5.1
   yaml_writer: ^2.0.0
-  window_manager: ^0.4.0
+  window_manager: ^0.5.1
   package_info_plus: ^9.0.1
   file_picker: ^8.3.7
   app_links: ^6.3.4
