@@ -6,6 +6,9 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
+import '../../shared/error_logger.dart';
+import '../../shared/event_log.dart';
+
 /// Ensures GeoIP/GeoSite data files exist in the mihomo home directory.
 ///
 /// Strategy:
@@ -97,6 +100,7 @@ class GeoDataService {
       return true;
     } catch (e) {
       debugPrint('[GeoData] copyFromAsset failed: $e');
+      EventLog.write('[Geodata] asset_copy_miss path=$assetPath err=$e');
       return false;
     }
   }
@@ -130,8 +134,10 @@ class GeoDataService {
         const Duration(seconds: 60),
         onTimeout: () => false,
       );
-    } catch (e) {
+    } catch (e, st) {
       debugPrint('[GeoData] downloadFromMirrors failed: $e');
+      ErrorLogger.captureException(e, st,
+          source: 'GeodataService._downloadFromMirrors');
       return false;
     }
   }
@@ -155,6 +161,7 @@ class GeoDataService {
           await tmpFile.rename(destFile.path);
         } catch (e) {
           debugPrint('[GeoData] rename failed, falling back to copy+delete: $e');
+          EventLog.write('[Geodata] rename_fallback file=${entry.key} err=$e');
           // rename may fail cross-device; fallback to copy+delete
           await tmpFile.copy(destFile.path);
           await tmpFile.delete();
@@ -162,7 +169,7 @@ class GeoDataService {
         downloaded++;
       } else {
         // Clean up failed temp file
-        try { if (tmpFile.existsSync()) await tmpFile.delete(); } catch (e) { debugPrint('[GeoData] tmp cleanup failed: $e'); }
+        try { if (tmpFile.existsSync()) await tmpFile.delete(); } catch (e) { debugPrint('[GeoData] tmp cleanup failed: $e'); EventLog.write('[Geodata] tmp_cleanup_failed file=${entry.key} err=$e'); }
       }
     }
     return downloaded == _remoteNames.length;
@@ -175,8 +182,10 @@ class GeoDataService {
       final file = File('${appDir.path}/GeoIP.dat');
       if (!file.existsSync()) return null;
       return file.lastModifiedSync();
-    } catch (e) {
+    } catch (e, st) {
       debugPrint('[GeoData] lastUpdated failed: $e');
+      ErrorLogger.captureException(e, st,
+          source: 'GeodataService.lastUpdated');
       return null;
     }
   }
@@ -203,6 +212,7 @@ class GeoDataService {
       }
     } catch (e) {
       debugPrint('[GeoData] download failed ($url): $e');
+      EventLog.write('[Geodata] mirror_download_failed url=$url err=$e');
     }
     return false;
   }

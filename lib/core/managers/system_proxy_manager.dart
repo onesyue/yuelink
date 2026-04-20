@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
+import '../../shared/error_logger.dart';
+import '../../shared/event_log.dart';
 import '../storage/settings_service.dart';
 
 /// Manages OS-level system proxy on macOS / Windows / Linux.
@@ -133,6 +135,7 @@ class SystemProxyManager {
         if (allOk) anySuccess = true;
       } catch (e) {
         debugPrint('[SystemProxy] Failed to set proxy for $svc: $e');
+        EventLog.write('[SysProxy] setMacOS svc=$svc err=$e');
       }
     }
     if (anySuccess) {
@@ -205,6 +208,7 @@ class SystemProxyManager {
       }
     } catch (e) {
       debugPrint('[SystemProxy] gsettings not available: $e');
+      EventLog.write('[SysProxy] setLinux gsettings_unavailable err=$e');
     }
 
     // Fallback: KDE kwriteconfig5/6
@@ -241,11 +245,14 @@ class SystemProxyManager {
               'org.kde.KIO.Scheduler.reparseSlaveConfiguration',
               'string:',
             ]);
-          } catch (_) {}
+          } catch (e) {
+            EventLog.write('[SysProxy] setLinux dbus_notify err=$e');
+          }
           debugPrint('[SystemProxy] Linux KDE proxy set via $cmd');
           return true;
         }
-      } catch (_) {
+      } catch (e) {
+        EventLog.write('[SysProxy] setLinux kde_cmd=$cmd err=$e');
         continue;
       }
     }
@@ -281,6 +288,7 @@ class SystemProxyManager {
           ]);
         } catch (e) {
           debugPrint('[SystemProxy] Failed to clear proxy for $svc: $e');
+          EventLog.write('[SysProxy] clearMacOS svc=$svc err=$e');
         }
       }
     } else if (Platform.isWindows) {
@@ -299,7 +307,9 @@ class SystemProxyManager {
         await Process.run('gsettings', [
           'set', 'org.gnome.system.proxy', 'mode', "'none'",
         ]);
-      } catch (_) {}
+      } catch (e) {
+        EventLog.write('[SysProxy] clearLinux gsettings_unavailable err=$e');
+      }
       for (final cmd in ['kwriteconfig6', 'kwriteconfig5']) {
         try {
           await Process.run(cmd, [
@@ -307,7 +317,8 @@ class SystemProxyManager {
             '--group', 'Proxy Settings',
             '--key', 'ProxyType', '0',
           ]);
-        } catch (_) {
+        } catch (e) {
+          EventLog.write('[SysProxy] clearLinux kde_cmd=$cmd err=$e');
           continue;
         }
         break;
@@ -366,8 +377,11 @@ class SystemProxyManager {
         return false;
       }
       return true;
-    } catch (e) {
+    } catch (e, st) {
       debugPrint('[SystemProxy] scutil error: $e');
+      EventLog.write('[SysProxy] verifyMacOS scutil_error err=$e');
+      ErrorLogger.captureException(e, st,
+          source: 'SystemProxyManager._verifyMacOSScutil');
       return false;
     }
   }
@@ -389,8 +403,11 @@ class SystemProxyManager {
         return false;
       }
       return true;
-    } catch (e) {
+    } catch (e, st) {
       debugPrint('[SystemProxy] Windows verify error: $e');
+      EventLog.write('[SysProxy] verifyWindows reg_query_error err=$e');
+      ErrorLogger.captureException(e, st,
+          source: 'SystemProxyManager._verifyWindowsRegistry');
       return false;
     }
   }
@@ -409,7 +426,8 @@ class SystemProxyManager {
       );
       final port = int.tryParse((r2.stdout as String).trim()) ?? 0;
       return port == mixedPort;
-    } catch (_) {
+    } catch (e) {
+      EventLog.write('[SysProxy] verifyLinux gsettings_unavailable err=$e');
       return true; // gsettings not available — can't verify
     }
   }
@@ -444,6 +462,7 @@ class SystemProxyManager {
             '[TunDns] set DNS for $svc (was: ${output.split('\n').first})');
       } catch (e) {
         debugPrint('[TunDns] failed to set DNS for $svc: $e');
+        EventLog.write('[SysProxy] setTunDns svc=$svc err=$e');
       }
     }
   }
@@ -469,6 +488,7 @@ class SystemProxyManager {
         debugPrint('[TunDns] restored DNS for $svc');
       } catch (e) {
         debugPrint('[TunDns] failed to restore DNS for ${entry.key}: $e');
+        EventLog.write('[SysProxy] restoreTunDns svc=${entry.key} err=$e');
       }
     }
     _savedDnsServers.clear();
@@ -490,7 +510,9 @@ class SystemProxyManager {
         '\n[WinINet]::InternetSetOption([IntPtr]::Zero,37,[IntPtr]::Zero,0)';
     try {
       await Process.run('powershell', ['-NoProfile', '-Command', ps]);
-    } catch (_) {}
+    } catch (e) {
+      EventLog.write('[SysProxy] notifyWindowsProxyChanged err=$e');
+    }
   }
 
   /// Enumerate active network services on macOS, with a 5-minute cache.
@@ -513,7 +535,7 @@ class SystemProxyManager {
       _cachedNetworkServices = services;
       _networkServicesCachedAt = DateTime.now();
       return services;
-    } catch (e) {
+    } catch (e, st) {
       // `networksetup` ships with macOS — reaching this branch means the
       // user's system is broken in an unusual way. Falling back to
       // ['Wi-Fi'] means Ethernet/VPN interfaces will silently miss the
@@ -521,6 +543,9 @@ class SystemProxyManager {
       // bypasses" is debuggable.
       debugPrint('[SystemProxy] networksetup -listallnetworkservices failed: '
           '$e — falling back to [Wi-Fi]');
+      EventLog.write('[SysProxy] listNetworkServices fallback_to_wifi err=$e');
+      ErrorLogger.captureException(e, st,
+          source: 'SystemProxyManager._listNetworkServices');
       return ['Wi-Fi'];
     }
   }

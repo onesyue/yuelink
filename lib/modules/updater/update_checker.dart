@@ -10,6 +10,8 @@ import 'package:path_provider/path_provider.dart';
 
 import '../../core/env_config.dart';
 import '../../core/storage/settings_service.dart';
+import '../../shared/error_logger.dart';
+import '../../shared/event_log.dart';
 
 /// Checks for a newer version of YueLink, fetching an `update.json` manifest
 /// from one of several mirror endpoints (CDN → ghproxy → github raw → github
@@ -154,6 +156,7 @@ class UpdateChecker {
         }
       } catch (e) {
         debugPrint('[UpdateChecker] manifest failed at $url: $e');
+        EventLog.write('[Updater] manifest_fetch_failed url=$url err=$e');
       }
     }
     // Fallback to stable if pre-release manifest is missing entirely.
@@ -208,8 +211,9 @@ class UpdateChecker {
         publishedAt:
             publishedAt != null ? DateTime.tryParse(publishedAt) : null,
       );
-    } catch (e) {
+    } catch (e, st) {
       debugPrint('[UpdateChecker] legacy check failed: $e');
+      ErrorLogger.captureException(e, st, source: 'UpdateChecker._legacyCheck');
       return null;
     }
   }
@@ -379,11 +383,13 @@ class UpdateChecker {
         await sink?.close();
       } catch (e) {
         debugPrint('[UpdateChecker] sink close error: $e');
+        EventLog.write('[Updater] sink_close_failed err=$e');
       }
       try {
         if (file != null && file.existsSync()) file.deleteSync();
       } catch (e) {
         debugPrint('[UpdateChecker] partial file cleanup error: $e');
+        EventLog.write('[Updater] partial_cleanup_failed err=$e');
       }
       rethrow;
     } finally {

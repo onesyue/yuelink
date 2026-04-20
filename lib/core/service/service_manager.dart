@@ -6,6 +6,7 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:path_provider/path_provider.dart';
 
 import '../../constants.dart';
+import '../../shared/error_logger.dart';
 import '../../shared/event_log.dart';
 import '../storage/settings_service.dart';
 import 'service_client.dart';
@@ -53,7 +54,8 @@ class ServiceManager {
         serviceVersion: remoteVersion,
         needsReinstall: versionMismatch,
       );
-    } catch (e) {
+    } catch (e, st) {
+      ErrorLogger.captureException(e, st, source: 'ServiceManager.getInfo');
       return const DesktopServiceInfo(
         installed: true,
         reachable: false,
@@ -273,7 +275,9 @@ class ServiceManager {
     } finally {
       try {
         await tempDir.delete(recursive: true);
-      } catch (_) {}
+      } catch (e) {
+        EventLog.write('[Service] install tempDir cleanup err=$e');
+      }
     }
   }
 
@@ -309,7 +313,11 @@ launchctl kickstart -k system/${AppConstants.desktopServiceLabel}
         await Process.run('chmod', ['700', scriptFile.path]);
         await _runMacElevated(scriptFile.path);
       } finally {
-        try { await tempDir.delete(recursive: true); } catch (_) {}
+        try {
+          await tempDir.delete(recursive: true);
+        } catch (e) {
+          EventLog.write('[Service] update(mac) tempDir cleanup err=$e');
+        }
       }
     } else if (Platform.isLinux) {
       final script = '''
@@ -328,7 +336,11 @@ systemctl restart ${AppConstants.desktopServiceLabel}
         await Process.run('chmod', ['700', scriptFile.path]);
         await _runLinuxElevated(scriptFile.path);
       } finally {
-        try { await tempDir.delete(recursive: true); } catch (_) {}
+        try {
+          await tempDir.delete(recursive: true);
+        } catch (e) {
+          EventLog.write('[Service] update(linux) tempDir cleanup err=$e');
+        }
       }
     } else if (Platform.isWindows) {
       final script = r'''
@@ -351,7 +363,11 @@ Start-Service -Name $serviceName
         await scriptFile.writeAsString(script);
         await _runWindowsElevated(scriptFile.path);
       } finally {
-        try { await tempDir.delete(recursive: true); } catch (_) {}
+        try {
+          await tempDir.delete(recursive: true);
+        } catch (e) {
+          EventLog.write('[Service] update(windows) tempDir cleanup err=$e');
+        }
       }
     }
 
@@ -389,7 +405,9 @@ Start-Service -Name $serviceName
       await SettingsService.setServiceSocketPath(null);
       try {
         await tempDir.delete(recursive: true);
-      } catch (_) {}
+      } catch (e) {
+        EventLog.write('[Service] uninstall tempDir cleanup err=$e');
+      }
     }
   }
 
@@ -986,7 +1004,11 @@ rm -rf ${_shellQuote(_linuxServiceDir)}
       final f = File(path);
       if (!f.existsSync()) return '';
       final content = f.readAsStringSync();
-      try { f.deleteSync(); } catch (_) {}
+      try {
+        f.deleteSync();
+      } catch (e) {
+        EventLog.write('[Service] readAndDelete unlink err=$e path=$path');
+      }
       return content;
     } catch (e) {
       // Caller can't distinguish "script produced empty output" from
@@ -1026,7 +1048,10 @@ rm -rf ${_shellQuote(_linuxServiceDir)}
           result.exitCode,
         );
       } catch (e) {
-        if (elevator == 'pkexec') continue;
+        if (elevator == 'pkexec') {
+          EventLog.write('[Service] pkexec unavailable, falling back to sudo err=$e');
+          continue;
+        }
         rethrow;
       }
     }
