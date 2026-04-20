@@ -1,5 +1,4 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/legacy.dart';
 
 import '../../../core/kernel/core_manager.dart';
 import '../../../core/storage/settings_service.dart';
@@ -67,10 +66,9 @@ class SmartSelectState {
 // Notifier
 // ---------------------------------------------------------------------------
 
-class SmartSelectNotifier extends StateNotifier<SmartSelectState> {
-  final Ref _ref;
-
-  SmartSelectNotifier(this._ref) : super(const SmartSelectState());
+class SmartSelectNotifier extends Notifier<SmartSelectState> {
+  @override
+  SmartSelectState build() => const SmartSelectState();
 
   // ── Initialise on sheet open ──────────────────────────────────────────────
 
@@ -83,7 +81,7 @@ class SmartSelectNotifier extends StateNotifier<SmartSelectState> {
 
     final cached = await _loadCache();
     final currentScene =
-        _ref.read(sceneModeProvider).value?.name ?? SceneMode.daily.name;
+        ref.read(sceneModeProvider).value?.name ?? SceneMode.daily.name;
 
     if (cached != null && cached.sceneMode == currentScene) {
       // Show cached result immediately regardless of freshness.
@@ -115,7 +113,7 @@ class SmartSelectNotifier extends StateNotifier<SmartSelectState> {
 
   Future<void> _saveCache(SmartSelectResult result) async {
     final sceneMode =
-        _ref.read(sceneModeProvider).value?.name ?? SceneMode.daily.name;
+        ref.read(sceneModeProvider).value?.name ?? SceneMode.daily.name;
     final cache = SmartSelectCache(
       top: result.top,
       totalTested: result.totalTested,
@@ -133,7 +131,7 @@ class SmartSelectNotifier extends StateNotifier<SmartSelectState> {
   // ── Main selector group ───────────────────────────────────────────────────
 
   String _findMainGroupName() {
-    final groups = _ref.read(proxyGroupsProvider);
+    final groups = ref.read(proxyGroupsProvider);
     if (groups.isEmpty) return '';
     try {
       return groups
@@ -172,8 +170,8 @@ class SmartSelectNotifier extends StateNotifier<SmartSelectState> {
         return;
       }
 
-      final groups = _ref.read(proxyGroupsProvider);
-      final nodeTypes = _ref.read(nodeTypeMapProvider);
+      final groups = ref.read(proxyGroupsProvider);
+      final nodeTypes = ref.read(nodeTypeMapProvider);
       final mainGroupName = _findMainGroupName();
 
       if (mainGroupName.isEmpty || groups.isEmpty) {
@@ -211,8 +209,8 @@ class SmartSelectNotifier extends StateNotifier<SmartSelectState> {
         (byGroup[c.primaryGroup] ??= []).add(c);
       }
 
-      final delayActions = _ref.read(delayTestProvider);
-      final sceneConfig = _ref.read(sceneModeConfigProvider);
+      final delayActions = ref.read(delayTestProvider);
+      final sceneConfig = ref.read(sceneModeConfigProvider);
       var testedSoFar = 0;
 
       await Future.wait(
@@ -226,7 +224,7 @@ class SmartSelectNotifier extends StateNotifier<SmartSelectState> {
           } on Exception catch (_) {
             // Per-group timeout or API error — nodes remain at -1.
           }
-          if (!mounted) return;
+          if (!ref.mounted) return;
 
           testedSoFar += nodeNames.length;
 
@@ -234,14 +232,14 @@ class SmartSelectNotifier extends StateNotifier<SmartSelectState> {
           // preliminary rankings as region groups complete one by one.
           // testedCount > 0 signals the sheet that this is a live partial,
           // not the initial cached result.
-          final delays = _ref.read(delayResultsProvider);
+          final delays = ref.read(delayResultsProvider);
           final partial = SmartSelectService.buildResult(
             candidates: candidates,
             delays: delays,
             nodeTypes: nodeTypes,
             sceneConfig: sceneConfig,
           );
-          if (mounted) {
+          if (ref.mounted) {
             state = SmartSelectState(
               isTesting: true,
               totalCount: candidates.length,
@@ -253,10 +251,10 @@ class SmartSelectNotifier extends StateNotifier<SmartSelectState> {
         }).toList(),
       );
 
-      if (!mounted) return;
+      if (!ref.mounted) return;
 
       // Final ranking with all results collected.
-      final delays = _ref.read(delayResultsProvider);
+      final delays = ref.read(delayResultsProvider);
       final result = SmartSelectService.buildResult(
         candidates: candidates,
         delays: delays,
@@ -267,11 +265,11 @@ class SmartSelectNotifier extends StateNotifier<SmartSelectState> {
       // Persist before updating state so isFresh is true immediately.
       await _saveCache(result);
 
-      if (!mounted) return;
+      if (!ref.mounted) return;
 
       // Build the fresh cache object to show the correct age label.
       final sceneMode =
-          _ref.read(sceneModeProvider).value?.name ?? SceneMode.daily.name;
+          ref.read(sceneModeProvider).value?.name ?? SceneMode.daily.name;
       final newCache = SmartSelectCache(
         top: result.top,
         totalTested: result.totalTested,
@@ -281,7 +279,7 @@ class SmartSelectNotifier extends StateNotifier<SmartSelectState> {
       );
       state = SmartSelectState(result: result, cache: newCache);
     } catch (e) {
-      if (mounted) state = SmartSelectState(error: '测速失败: $e');
+      if (ref.mounted) state = SmartSelectState(error: '测速失败: $e');
     }
   }
 
@@ -290,7 +288,7 @@ class SmartSelectNotifier extends StateNotifier<SmartSelectState> {
   /// Apply a recommended node (calls changeProxy up to 2 times).
   Future<void> applyNode(ScoredNode node) async {
     try {
-      final notifier = _ref.read(proxyGroupsProvider.notifier);
+      final notifier = ref.read(proxyGroupsProvider.notifier);
 
       // Step 1: switch node's direct parent group to the node
       final ok = await notifier.changeProxy(
@@ -327,6 +325,6 @@ class SmartSelectNotifier extends StateNotifier<SmartSelectState> {
 // ---------------------------------------------------------------------------
 
 final smartSelectProvider =
-    StateNotifierProvider<SmartSelectNotifier, SmartSelectState>(
-  (ref) => SmartSelectNotifier(ref),
+    NotifierProvider<SmartSelectNotifier, SmartSelectState>(
+  SmartSelectNotifier.new,
 );

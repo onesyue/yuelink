@@ -95,7 +95,15 @@ class SceneModeSheet extends ConsumerWidget {
                   final api = ref.read(mihomoApiProvider);
                   try {
                     await api.setRoutingMode(config.routingMode);
-                  } catch (_) {}
+                  } catch (e) {
+                    // Scene switched but routing mode didn't follow — user
+                    // sees the chip flip but traffic keeps old routing. Log
+                    // so support can map "scene doesn't take effect" to an
+                    // API failure instead of guessing.
+                    debugPrint(
+                        '[SceneMode] setRoutingMode(${config.routingMode}) '
+                        'failed after switching to $mode: $e');
+                  }
 
                   // 3. VPN 在跑 → 自动触发智能选线
                   final isRunning = ref.read(coreStatusProvider) == CoreStatus.running;

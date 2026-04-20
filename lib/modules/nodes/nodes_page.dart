@@ -221,8 +221,7 @@ class _NodesPageState extends ConsumerState<NodesPage> {
                   // ── Favorites filter chip ─────────────────────────────
                   GestureDetector(
                     onTap: () {
-                      ref.read(showFavoritesOnlyProvider.notifier).state =
-                          !showFavOnly;
+                      ref.read(showFavoritesOnlyProvider.notifier).toggle();
                     },
                     child: Container(
                       padding: const EdgeInsets.symmetric(
@@ -557,7 +556,14 @@ class _FullWidthRoutingMode extends ConsumerWidget {
                           try {
                             await CoreManager.instance.api
                                 .closeAllConnections();
-                          } catch (_) {}
+                          } catch (e) {
+                            // Best-effort cleanup when switching to direct:
+                            // log so leaked proxy connections after a failed
+                            // close are diagnosable.
+                            debugPrint(
+                                '[RoutingMode] closeAllConnections on direct '
+                                'switch failed: $e');
+                          }
                         }
                         ref.read(proxyGroupsProvider.notifier).refresh();
                         final actual = await CoreManager.instance.api

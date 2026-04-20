@@ -109,23 +109,20 @@ class _LiveStatusCardState extends ConsumerState<LiveStatusCard> {
                     label: '1m',
                     value: 60,
                     range: range,
-                    onTap: () => ref
-                        .read(trafficChartRangeProvider.notifier)
-                        .state = 60),
+                    onTap: () =>
+                        ref.read(trafficChartRangeProvider.notifier).set(60)),
                 _RangeButton(
                     label: '5m',
                     value: 300,
                     range: range,
-                    onTap: () => ref
-                        .read(trafficChartRangeProvider.notifier)
-                        .state = 300),
+                    onTap: () =>
+                        ref.read(trafficChartRangeProvider.notifier).set(300)),
                 _RangeButton(
                     label: '30m',
                     value: 1800,
                     range: range,
-                    onTap: () => ref
-                        .read(trafficChartRangeProvider.notifier)
-                        .state = 1800),
+                    onTap: () =>
+                        ref.read(trafficChartRangeProvider.notifier).set(1800)),
                 _LockButton(
                   locked: locked,
                   tooltip: locked ? s.chartUnlock : s.chartLock,
@@ -144,7 +141,7 @@ class _LiveStatusCardState extends ConsumerState<LiveStatusCard> {
                     }
                     ref
                         .read(trafficChartLockedProvider.notifier)
-                        .state = !nowLocked;
+                        .set(!nowLocked);
                   },
                 ),
               ],

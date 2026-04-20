@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/legacy.dart';
 
 import '../../../core/kernel/core_manager.dart';
 import '../../../core/storage/settings_service.dart';
@@ -81,10 +80,28 @@ class DailyTrafficNotifier extends Notifier<(int, int)> {
 // ------------------------------------------------------------------
 
 /// Selected time range for the traffic chart in seconds: 60 / 300 / 1800.
-final trafficChartRangeProvider = StateProvider<int>((ref) => 60);
+final trafficChartRangeProvider =
+    NotifierProvider<TrafficChartRangeNotifier, int>(
+        TrafficChartRangeNotifier.new);
+
+class TrafficChartRangeNotifier extends Notifier<int> {
+  @override
+  int build() => 60;
+
+  void set(int seconds) => state = seconds;
+}
 
 /// Whether the traffic chart is locked (frozen at snapshot).
-final trafficChartLockedProvider = StateProvider<bool>((ref) => false);
+final trafficChartLockedProvider =
+    NotifierProvider<TrafficChartLockedNotifier, bool>(
+        TrafficChartLockedNotifier.new);
+
+class TrafficChartLockedNotifier extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  void set(bool locked) => state = locked;
+}
 
 // ------------------------------------------------------------------
 // Traffic streaming

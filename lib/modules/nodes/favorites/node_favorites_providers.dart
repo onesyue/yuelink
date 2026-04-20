@@ -1,5 +1,4 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/legacy.dart';
 
 import 'node_favorites_service.dart';
 
@@ -7,7 +6,16 @@ export 'node_favorites_service.dart' show RecentNode;
 
 // ── Toggle: show only favorited nodes ────────────────────────────────────────
 
-final showFavoritesOnlyProvider = StateProvider<bool>((ref) => false);
+final showFavoritesOnlyProvider =
+    NotifierProvider<ShowFavoritesOnlyNotifier, bool>(
+        ShowFavoritesOnlyNotifier.new);
+
+class ShowFavoritesOnlyNotifier extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  void toggle() => state = !state;
+}
 
 // ── Favorites ─────────────────────────────────────────────────────────────────
 
