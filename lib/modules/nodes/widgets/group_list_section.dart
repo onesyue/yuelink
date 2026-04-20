@@ -72,7 +72,13 @@ class GroupListSection extends ConsumerWidget {
                   ),
                 ),
                 const SizedBox(width: YLSpacing.sm),
-                Flexible(
+                // See GroupCard for the rationale on ConstrainedBox vs
+                // Flexible here: Flexible + Expanded both claim flex=1 and
+                // split the residual Row width, opening a visible gap when
+                // the selection label is short. ConstrainedBox keeps the
+                // badge + count + lightning flush-right without that gap.
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 180),
                   child: _Badge(
                     label: groupSelectionLabel(context, group),
                     isDark: isDark,
@@ -88,7 +94,7 @@ class GroupListSection extends ConsumerWidget {
                     accent: true,
                   ),
                 ],
-                const SizedBox(width: YLSpacing.sm),
+                const SizedBox(width: 4),
                 _Badge(
                   label: isFiltered
                       ? '${nodeList.length}/${group.all.length}'

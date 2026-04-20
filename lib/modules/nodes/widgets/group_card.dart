@@ -156,7 +156,21 @@ class _GroupCardState extends ConsumerState<GroupCard>
                   const SizedBox(width: YLSpacing.sm),
                   // Selection badge — shows the currently selected node for
                   // manual groups, or the type label for auto groups.
-                  Flexible(
+                  //
+                  // Width-bound via ConstrainedBox rather than Flexible: with
+                  // `Expanded(name) + Flexible(selection)` both claim flex=1
+                  // and split the remaining Row budget evenly. When selection
+                  // is short (e.g. "自动"), Flexible's loose fit kept the
+                  // `_Badge` at its intrinsic width but still consumed the
+                  // allocated flex share, opening a visible gap between the
+                  // selection pill and the count/lightning icons on the
+                  // right — users (rightly) read it as "not right-aligned".
+                  // ConstrainedBox participates in Row layout as an inline
+                  // child, so count + lightning slide flush against the
+                  // selection pill regardless of its label length (up to
+                  // 180px, then ellipsis).
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 180),
                     child: _Badge(
                       label: groupSelectionLabel(context, group),
                       isDark: isDark,
@@ -172,7 +186,7 @@ class _GroupCardState extends ConsumerState<GroupCard>
                       accent: true,
                     ),
                   ],
-                  const SizedBox(width: YLSpacing.sm),
+                  const SizedBox(width: 4),
                   // Count badge — far right before lightning
                   _Badge(
                     label: isFiltered
