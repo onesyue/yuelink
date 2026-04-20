@@ -7,7 +7,6 @@ import 'package:launch_at_startup/launch_at_startup.dart';
 
 import '../../../core/kernel/config_template.dart';
 import '../../../core/kernel/core_manager.dart';
-import '../../../core/service/service_mode_provider.dart';
 import '../../../core/storage/settings_service.dart';
 import '../../../i18n/app_strings.dart';
 import '../../../i18n/strings_g.dart';
@@ -22,9 +21,9 @@ import 'widgets/appearance_section.dart';
 import 'widgets/close_behavior_row.dart';
 import 'widgets/hotkey_row.dart';
 import 'widgets/privacy_section.dart';
+import 'widgets/service_mode_row.dart';
 import 'widgets/split_tunnel_section.dart';
 import 'widgets/updates_section.dart';
-import 'service_mode_actions.dart';
 
 /// Standalone settings sub-page — displays all general settings
 /// (theme, language, auto-connect, routing, connection mode, etc.)
@@ -39,7 +38,6 @@ class GeneralSettingsPage extends ConsumerStatefulWidget {
 
 class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
   bool _launchAtStartup = false;
-  bool _serviceBusy = false;
 
   @override
   void initState() {
@@ -68,63 +66,7 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
     }
   }
 
-  Future<void> _installDesktopService() async {
-    if (_serviceBusy) return;
-    final s = S.of(context);
-    setState(() => _serviceBusy = true);
-    try {
-      final warning = await ServiceModeActions(ref).install();
-      if (!mounted) return;
-      AppNotifier.success(s.serviceModeInstallOk);
-      if (warning != null) AppNotifier.warning(warning);
-    } catch (e) {
-      if (!mounted) return;
-      AppNotifier.error(
-        s.serviceModeInstallFailed(e.toString().split('\n').first),
-      );
-    } finally {
-      if (mounted) setState(() => _serviceBusy = false);
-    }
-  }
-
-  Future<void> _uninstallDesktopService(CoreStatus status) async {
-    if (_serviceBusy) return;
-    final s = S.of(context);
-    setState(() => _serviceBusy = true);
-    try {
-      await ServiceModeActions(ref).uninstall(status);
-      if (!mounted) return;
-      AppNotifier.success(s.serviceModeUninstallOk);
-    } catch (e) {
-      if (!mounted) return;
-      AppNotifier.error(
-        s.serviceModeUninstallFailed(e.toString().split('\n').first),
-      );
-    } finally {
-      if (mounted) setState(() => _serviceBusy = false);
-    }
-  }
-
-  Future<void> _updateDesktopService() async {
-    if (_serviceBusy) return;
-    final s = S.of(context);
-    setState(() => _serviceBusy = true);
-    try {
-      final warning = await ServiceModeActions(ref).update();
-      if (!mounted) return;
-      AppNotifier.success(s.serviceModeUpdateOk);
-      if (warning != null) AppNotifier.warning(warning);
-    } catch (e) {
-      if (!mounted) return;
-      AppNotifier.error(
-        s.serviceModeUpdateFailed(e.toString().split('\n').first),
-      );
-    } finally {
-      if (mounted) setState(() => _serviceBusy = false);
-    }
-  }
-
-  Future<void> _showTunBypassEditor(BuildContext context) async {
+Future<void> _showTunBypassEditor(BuildContext context) async {
     final s = S.of(context);
     final addrs = await SettingsService.getTunBypassAddresses();
     final procs = await SettingsService.getTunBypassProcesses();
@@ -224,7 +166,6 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
     final desktopTunStack = ref.watch(desktopTunStackProvider);
     final systemProxyOnConnect = ref.watch(systemProxyOnConnectProvider);
     final status = ref.watch(coreStatusProvider);
-    final serviceInfo = ref.watch(desktopServiceInfoProvider);
     final routingMode = ref.watch(routingModeProvider);
     final isDesktop =
         Platform.isMacOS || Platform.isWindows || Platform.isLinux;
@@ -405,87 +346,7 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
                       ),
                       if (connectionMode == 'tun') ...[
                         Divider(height: 1, thickness: 0.5, color: dividerColor),
-                        YLSettingsRow(
-                          title: s.serviceModeLabel,
-                          description:
-                              ServiceModeActions.describe(s, serviceInfo),
-                          trailing: _serviceBusy
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    TextButton(
-                                      onPressed: () =>
-                                          ServiceModeActions(ref).refresh(),
-                                      style: TextButton.styleFrom(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                        ),
-                                      ),
-                                      child: Text(
-                                        s.serviceModeRefresh,
-                                        style: const TextStyle(fontSize: 12),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 4),
-                                    if (serviceInfo.valueOrNull?.installed ==
-                                        true) ...[
-                                      if (serviceInfo
-                                              .valueOrNull?.needsReinstall ==
-                                          true)
-                                        FilledButton(
-                                          onPressed: _updateDesktopService,
-                                          style: FilledButton.styleFrom(
-                                            visualDensity:
-                                                VisualDensity.compact,
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 12,
-                                              vertical: 8,
-                                            ),
-                                          ),
-                                          child: Text(
-                                            s.serviceModeUpdate,
-                                            style:
-                                                const TextStyle(fontSize: 12),
-                                          ),
-                                        ),
-                                      TextButton(
-                                        onPressed: () =>
-                                            _uninstallDesktopService(status),
-                                        style: TextButton.styleFrom(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 8,
-                                          ),
-                                        ),
-                                        child: Text(
-                                          s.serviceModeUninstall,
-                                          style: const TextStyle(fontSize: 12),
-                                        ),
-                                      ),
-                                    ] else
-                                      FilledButton(
-                                        onPressed: _installDesktopService,
-                                        style: FilledButton.styleFrom(
-                                          visualDensity: VisualDensity.compact,
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 12,
-                                            vertical: 8,
-                                          ),
-                                        ),
-                                        child: Text(
-                                          s.serviceModeInstall,
-                                          style: const TextStyle(fontSize: 12),
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                        ),
+                        const ServiceModeRow(),
                         Divider(height: 1, thickness: 0.5, color: dividerColor),
                         YLInfoRow(
                           label: s.tunStackLabel,
