@@ -267,12 +267,29 @@ class HeroCard extends ConsumerWidget {
     }
   }
 
-  /// Toggle TUN ↔ systemProxy. Delegates to the lifecycle manager, which
-  /// handles the `PATCH /configs` + per-platform system-proxy cleanup and
-  /// emits its own success / error AppNotifier.
+  /// Toggle TUN ↔ systemProxy. Mirrors the three-step contract used by
+  /// `general_settings_page.dart`'s mode dropdown — `hotSwitchConnectionMode`
+  /// only handles the runtime flip (PATCH /configs + per-platform proxy
+  /// cleanup); callers are responsible for bumping [connectionModeProvider]
+  /// so the UI reflects the change, and for persisting the new preference
+  /// so it survives relaunch.
+  ///
+  /// Skipping those two steps was the cause of the v1.0.20-pre
+  /// Windows-reported "click TUN pill → nothing happens" bug: the PATCH
+  /// succeeded but the pill kept reading the unchanged provider value.
   Future<void> _toggleConnectionMode(WidgetRef ref, bool isTun) async {
     final next = isTun ? 'systemProxy' : 'tun';
-    await ref.read(coreActionsProvider).hotSwitchConnectionMode(next);
+    final prev = isTun ? 'tun' : 'systemProxy';
+    ref.read(connectionModeProvider.notifier).state = next;
+    await SettingsService.setConnectionMode(next);
+    try {
+      await ref.read(coreActionsProvider).hotSwitchConnectionMode(next);
+    } catch (e) {
+      debugPrint('[HeroCard] hotSwitchConnectionMode error: $e');
+      // Revert optimistic state so the UI doesn't lie about the runtime.
+      ref.read(connectionModeProvider.notifier).state = prev;
+      await SettingsService.setConnectionMode(prev);
+    }
   }
 }
 
