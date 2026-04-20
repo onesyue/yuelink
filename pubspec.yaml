@@ -8,7 +8,7 @@ environment:
   # path_provider_foundation 2.6.0 requires dart ^3.10.3 / flutter >=3.38.4
   # (it switched from a Flutter plugin to direct Foundation FFI calls).
   # google_fonts 6.3.3 and a few others sit above the old ^3.6 / 3.27 floor
-  # too. CI runs 3.41.5 / 3.11.3 — both above this floor.
+  # too. CI runs 3.41.7 / 3.11.3 — both above this floor.
   sdk: ^3.10.3
   flutter: ">=3.38.4"
 

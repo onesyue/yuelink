@@ -23,7 +23,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  FLUTTER_VERSION: '3.41.5'
+  FLUTTER_VERSION: '3.41.7'
   # Aligned to the mihomo upstream release toolchain (v1.19.23 builds with
   # Go 1.26.2). Bumped from 1.23 without changing mihomo's tag or touching
   # core/go.mod / service/go.mod's `go 1.22` directive (that stays at the
