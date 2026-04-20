@@ -127,7 +127,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p assets/geodata
-          BASE="https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release"
+          BASE="https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/release"
           # Map: local-filename → upstream-remote-filename
           # Upstream publishes lowercase geoip.dat/geosite.dat; we rename on
           # save to preserve the capitalised names expected by mihomo assets.
