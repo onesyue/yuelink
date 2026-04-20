@@ -796,6 +796,29 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
     //    the status listener from firing "unexpected disconnect" during the
     //    brief stopped→running transition.
     if (status != CoreStatus.running) {
+      // Respect the user's explicit stop. userStoppedProvider is set to
+      // true by CoreLifecycleManager.stop() and only cleared on a fresh
+      // start(). When it's true, the user tapped disconnect — state must
+      // stay stopped until the next user-initiated connect.
+      //
+      // Bug this guards against: after user stop, the Go core / service
+      // helper / PacketTunnel extension can still respond "alive" on the
+      // mihomo API for a short window (shutdown sequence in flight, or
+      // Service Mode helper's mihomo subprocess still winding down).
+      // The old recovery path saw `health.alive && health.apiOk == true`,
+      // bumped status → running and wiped userStoppedProvider, so the UI
+      // showed "connected" while the TUN fd / system proxy were actually
+      // gone — the user had a "connected" indicator and dead network.
+      //
+      // Engine-recreate on Android (the case this recovery path was
+      // written for) is unaffected: Riverpod rebuilds ProviderScope from
+      // defaults, so userStoppedProvider reverts to false and we go
+      // through the normal health check.
+      if (ref.read(userStoppedProvider)) {
+        debugPrint('[AppLifecycle] resumed in user-stopped state — '
+            'skipping health recovery (respecting explicit stop)');
+        return;
+      }
       ref.read(recoveryInProgressProvider.notifier).state = true;
       try {
         final health = await RecoveryManager.checkCoreHealth();
