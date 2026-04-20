@@ -2,12 +2,15 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/kernel/core_manager.dart';
+import '../../../core/providers/core_provider.dart';
+import '../../../core/storage/settings_service.dart';
 import '../../../i18n/app_strings.dart';
 import '../../../main.dart';
-import '../../../core/providers/core_provider.dart';
-import '../../profiles/providers/profiles_providers.dart';
+import '../../../shared/app_notifier.dart';
 import '../../../theme.dart';
 import '../../nodes/providers/nodes_providers.dart';
+import '../../profiles/providers/profiles_providers.dart';
 import 'overview_card.dart';
 
 class HeroCard extends ConsumerWidget {
@@ -170,15 +173,33 @@ class HeroCard extends ConsumerWidget {
           ),
 
           // Row 4: Pills (routing mode + profile name)
+          //
+          // Routing-mode and connection-mode Pills are tappable quick
+          // switches so the user doesn't have to leave the dashboard:
+          //   - Tap routeLabel  → cycle rule → global → direct → rule
+          //   - Tap modePill    → toggle TUN ↔ systemProxy (desktop only)
+          // The underlying plumbing mirrors _FullWidthRoutingMode in
+          // nodes_page.dart and ServiceModeActions in settings, routed
+          // through CoreManager.api / lifecycle.
           if (isRunning) ...[
             const SizedBox(height: 14),
             Wrap(
               spacing: 8,
               runSpacing: 6,
               children: [
-                Pill(routeLabel, primary: true, accent: runningAccent),
+                Pill(
+                  routeLabel,
+                  primary: true,
+                  accent: runningAccent,
+                  onTap: () => _cycleRoutingMode(ref, s, routingMode),
+                ),
                 if (showModePill)
-                  Pill(modePillLabel, primary: isTun, accent: runningAccent),
+                  Pill(
+                    modePillLabel,
+                    primary: isTun,
+                    accent: runningAccent,
+                    onTap: () => _toggleConnectionMode(ref, isTun),
+                  ),
                 if (profileName != null) Pill(profileName),
               ],
             ),
@@ -195,6 +216,63 @@ class HeroCard extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  /// Rotate routing mode rule → global → direct → rule.
+  ///
+  /// Mirrors _FullWidthRoutingMode in nodes_page.dart:
+  /// optimistic local state → persist → mihomo PATCH → verify actual →
+  /// close connections on direct → revert on error.
+  Future<void> _cycleRoutingMode(
+      WidgetRef ref, S s, String currentMode) async {
+    const order = ['rule', 'global', 'direct'];
+    final next = order[(order.indexOf(currentMode) + 1) % order.length];
+    final nextLabel = next == 'rule'
+        ? s.routeModeRule
+        : next == 'global'
+            ? s.routeModeGlobal
+            : s.routeModeDirect;
+
+    ref.read(routingModeProvider.notifier).state = next;
+    await SettingsService.setRoutingMode(next);
+
+    if (ref.read(coreStatusProvider) != CoreStatus.running) return;
+
+    try {
+      final ok = await CoreManager.instance.api.setRoutingMode(next);
+      if (!ok) {
+        AppNotifier.error(s.switchModeFailed);
+        ref.read(routingModeProvider.notifier).state = currentMode;
+        return;
+      }
+      if (next == 'direct') {
+        try {
+          await CoreManager.instance.api.closeAllConnections();
+        } catch (e) {
+          debugPrint(
+              '[RoutingMode] closeAllConnections on direct failed: $e');
+        }
+      }
+      ref.read(proxyGroupsProvider.notifier).refresh();
+      final actual = await CoreManager.instance.api.getRoutingMode();
+      if (actual != next) {
+        AppNotifier.warning('${s.routeModeRule}: $actual ≠ $next');
+      } else {
+        AppNotifier.success('${s.modeSwitched}: $nextLabel');
+      }
+    } catch (e) {
+      debugPrint('[RoutingMode] error: $e');
+      AppNotifier.error('${s.switchModeFailed}: $e');
+      ref.read(routingModeProvider.notifier).state = currentMode;
+    }
+  }
+
+  /// Toggle TUN ↔ systemProxy. Delegates to the lifecycle manager, which
+  /// handles the `PATCH /configs` + per-platform system-proxy cleanup and
+  /// emits its own success / error AppNotifier.
+  Future<void> _toggleConnectionMode(WidgetRef ref, bool isTun) async {
+    final next = isTun ? 'systemProxy' : 'tun';
+    await ref.read(coreActionsProvider).hotSwitchConnectionMode(next);
   }
 }
 
@@ -323,13 +401,20 @@ class Pill extends StatelessWidget {
   final String label;
   final bool primary;
   final Color? accent;
-  const Pill(this.label, {super.key, this.primary = false, this.accent});
+  final VoidCallback? onTap;
+  const Pill(
+    this.label, {
+    super.key,
+    this.primary = false,
+    this.accent,
+    this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final tint = accent ?? YLColors.connected;
-    return Container(
+    final container = Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
@@ -350,6 +435,19 @@ class Pill extends StatelessWidget {
                 ? tint
                 : (isDark ? YLColors.zinc400 : YLColors.zinc600),
           )),
+    );
+    if (onTap == null) return container;
+    // Wrap in Material + InkWell for ripple feedback so tappable Pills
+    // are visually distinguishable from the profile-name decorative Pill.
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(20),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: container,
+      ),
     );
   }
 }
