@@ -82,13 +82,24 @@ class YueLinkHttpClient {
 
   /// GET returning decoded `data` Map (or whole body if `data` is absent).
   /// Throws [XBoardApiException] on non-2xx or `status:"fail"`.
+  ///
+  /// NOTE on timeouts: `HttpClient.connectionTimeout` only covers TCP
+  /// handshake. Once the connection is open, `request.close()` and the
+  /// body read can hang indefinitely if the server accepts the request
+  /// but stops writing (seen in the wild on yue.yuebao.website during
+  /// slow back-end moments — the `accountOverviewProvider` in settings
+  /// would sit in `AsyncLoading` forever, freezing the "我的" card's
+  /// "加载中" placeholder). Per-await `.timeout(timeout)` guards make
+  /// every stuck call fail loudly after [timeout], letting the catch
+  /// in [AccountRepository] / [CheckinRepository] degrade gracefully.
   Future<Map<String, dynamic>> get(String path, {String? token}) async {
     return _withRouting((client) async {
       final request = await client.getUrl(Uri.parse('$baseUrl$path'));
       if (token != null) request.headers.set('Authorization', token);
       request.headers.set('Accept', 'application/json');
-      final response = await request.close();
-      final body = await response.transform(utf8.decoder).join();
+      final response = await request.close().timeout(timeout);
+      final body =
+          await response.transform(utf8.decoder).join().timeout(timeout);
       final json = jsonDecode(body) as Map<String, dynamic>;
       _assertSuccess(json, response.statusCode);
       return json['data'] as Map<String, dynamic>? ?? json;
@@ -107,8 +118,9 @@ class YueLinkHttpClient {
       request.headers.set('Accept', 'application/json');
       request.headers.set('Content-Type', 'application/json');
       request.add(utf8.encode(jsonEncode(body ?? {})));
-      final response = await request.close();
-      final respBody = await response.transform(utf8.decoder).join();
+      final response = await request.close().timeout(timeout);
+      final respBody =
+          await response.transform(utf8.decoder).join().timeout(timeout);
       final json = jsonDecode(respBody) as Map<String, dynamic>;
       _assertSuccess(json, response.statusCode);
       return json['data'] as Map<String, dynamic>? ?? json;
@@ -126,8 +138,9 @@ class YueLinkHttpClient {
       final request = await client.getUrl(Uri.parse('$baseUrl$path'));
       if (token != null) request.headers.set('Authorization', token);
       request.headers.set('Accept', 'application/json');
-      final response = await request.close();
-      final body = await response.transform(utf8.decoder).join();
+      final response = await request.close().timeout(timeout);
+      final body =
+          await response.transform(utf8.decoder).join().timeout(timeout);
       if (response.statusCode == 502 ||
           response.statusCode == 503 ||
           response.statusCode == 504) {
@@ -151,14 +164,15 @@ class YueLinkHttpClient {
         final request = await client.getUrl(Uri.parse('$baseUrl$path'));
         if (token != null) request.headers.set('Authorization', token);
         request.headers.set('Accept', 'application/json');
-        final response = await request.close();
+        final response = await request.close().timeout(timeout);
         if (response.statusCode == 502 ||
             response.statusCode == 503 ||
             response.statusCode == 504) {
           throw XBoardApiException(response.statusCode, 'Server error');
         }
         if (response.statusCode != 200) return null;
-        final body = await response.transform(utf8.decoder).join();
+        final body =
+            await response.transform(utf8.decoder).join().timeout(timeout);
         final json = jsonDecode(body) as Map<String, dynamic>;
         return json['data'] as Map<String, dynamic>? ?? json;
       });
