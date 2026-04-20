@@ -110,7 +110,7 @@ lib/domain/store/                                  ~400
 
 **应该删**：
 - [`store_repository.dart:10`](../lib/infrastructure/store/store_repository.dart) 的 re-export `show XBoardApiException, UserProfile`——删了之后 UI 无法直接 catch infra 异常，被迫经 Repository。
-- Repository 方法统一改成 `Result<T, StoreError>` 或直接 throw 一个 domain 层的 `StoreError`（新建，见下）。
+- Repository 方法统一 **throw `StoreError`**（domain 层新建 sealed union，见下）。不引入 `Result<T, E>` 类型——throw 与现有 `catch on Exception` 调用形态兼容，Result 会把 S1 的改动面从"4 个文件改 catch 类型"变成"全链路改返回签名"。
 
 **应该加**：
 - `StoreError` sealed union（住 `domain/store/`）：`StoreErrorNetwork` / `StoreErrorUnauthorized` / `StoreErrorInvalidCoupon` / `StoreErrorPaymentDeclined` / `StoreErrorUnknown(raw)`。Repository 内部 catch `XBoardApiException` 映射成这些；UI 只 catch `StoreError`。
@@ -125,11 +125,11 @@ lib/domain/store/                                  ~400
 - `store_providers.dart` 拆成 3 个文件：
   - `store_providers.dart`（保留，~100 行）：只含 `storeRepositoryProvider` + `storePlansProvider` + `paymentMethodsProvider` + `orderHistoryProvider` 这种纯读 provider。
   - `purchase_notifier.dart`（新，~200 行）：`PurchaseNotifier` + 状态机。只 depend on `StoreRepository` 接口 + `PaymentLauncher` 端口。
-  - `purchase_launcher.dart`（新，~30 行）：`PaymentLauncher` 抽象接口（`Future<bool> open(url)`）+ 一个默认 `UrlLauncherImpl`，让 PurchaseNotifier 不直接 import url_launcher。
+  - `PaymentLauncher` 端口**不在 modules 层定义**——接口 + 默认实现都放 `lib/infrastructure/store/payment_launcher.dart`（§3 S2 新建）。modules/store 只经 `paymentLauncherProvider` 注入，本身不 import url_launcher。
 
 - `order_history_page.dart` 的 `_OrderDetailSheet`（531 行）拆出独立文件 `widgets/order_detail_sheet.dart`。
 - cancel order 逻辑从 `_OrderDetailSheet` 迁到 `PurchaseNotifier.cancelFromHistory(tradeNo)`，UI 只调 notifier。
-- `purchase_confirm_sheet.dart` 删掉 `import store_repository`——券码校验改成调 notifier。
+- `purchase_confirm_sheet.dart` 删掉 `import store_repository` —— **券码校验改成调 notifier**。具体批次见 §3 S4（与 `order_history_page` 的 cancel 一起做掉，保住"UI 直接碰 repo 的两个入口一起清掉"的批次语义）。
 
 ### 2.4 保留桥接（过渡期）
 
@@ -175,14 +175,15 @@ lib/domain/store/                                  ~400
 **commit msg**：`refactor(store): move CheckoutResult to infra, expose PaymentOutcome to notifier`  
 **验收**：analyze + test；grep `type == -1` / `type == 0` 在 `lib/modules/` 应为 0；手工跑一次免费订单路径确认短轮询仍触发。
 
-### S4 — `order_history_page` 拆分 + cancel 改 notifier
+### S4 — `order_history_page` 拆分 + cancel / coupon 改 notifier
 
 - `_OrderDetailSheet`（531 行）迁到 `lib/modules/store/widgets/order_detail_sheet.dart`。
-- cancel order 的 UI 回调改成 `ref.read(purchaseProvider.notifier).cancelOrderFromHistory(tradeNo)`。新方法内部：`repo.cancelOrder(tradeNo)` + `ref.invalidate(orderHistoryProvider)` + 返回 bool。UI 只负责关 sheet + toast。
-- 删掉 `order_history_page.dart:5` 的 `import store_repository`。
+- **cancel order**：UI 回调改成 `ref.read(purchaseProvider.notifier).cancelOrderFromHistory(tradeNo)`。新方法内部：`repo.cancelOrder(tradeNo)` + `ref.invalidate(orderHistoryProvider)` + 返回 bool。UI 只负责关 sheet + toast。
+- **coupon validation**（`purchase_confirm_sheet.dart:336` 的 `ref.read(storeRepositoryProvider).checkCoupon(...)` ）：在 `PurchaseNotifier` 新增 `validateCoupon(code, planId) → Future<CouponResult>`，UI 改为调 notifier；`purchase_confirm_sheet.dart` 删 `import store_repository`。合并到 S4 的原因：把"UI 直接碰 repo 的两个入口"（cancel + coupon）在同一个批次里一起清掉，让 S4 末的硬断言真实可跑。
+- 删掉 `order_history_page.dart:5` 和 `purchase_confirm_sheet.dart:4` 的 `import store_repository`。
 
-**commit msg**：`refactor(store): extract OrderDetailSheet and route cancel through notifier`  
-**验收**：analyze + test；grep `storeRepositoryProvider` 在 `lib/modules/store/` 应该只剩 `store_providers.dart`（定义点本身）+ purchase_notifier 内部；手工跑取消订单路径。
+**commit msg**：`refactor(store): extract OrderDetailSheet and route cancel/coupon through notifier`  
+**验收**：analyze + test；`git grep "storeRepositoryProvider" lib/modules/store/` 应该只剩 `store_providers.dart`（定义点本身）+ `purchase_notifier.dart` 内部；`git grep "checkCoupon\|cancelOrder" lib/modules/store/widgets/` 应该只剩 notifier 调用，不再有 `ref.read(storeRepositoryProvider).xxx(...)`；手工跑 R3（cancel）+ 在确认 sheet 里输入券码的路径。
 
 ### S5 — 遥测补齐
 
@@ -205,7 +206,7 @@ store 模块当前**零 Telemetry.event**（agent C 确认）。auth 有 `loginS
 
 - 删掉 `modules/store/state/purchase_state.dart` 的 re-export 兼容层。
 - 删掉 `modules/store/store_providers.dart` 的过渡 re-export（PurchaseState 已经走 domain 直接导入了）。
-- `modules/store/store_providers.dart` 和新拆的 `purchase_notifier.dart` / `payment_launcher_provider.dart` 都可以缩到 <150 行。
+- `modules/store/store_providers.dart` 和新拆的 `purchase_notifier.dart` 都可以缩到 <150 行。`PaymentLauncher` 按 §2.3 已整体落在 infrastructure，modules 不新建 launcher 文件。
 - `PlanPeriod.apiKey` 从 `domain/store/store_plan.dart` 迁到 `infrastructure/store/plan_period_mapping.dart`。Repository 在调 API 时查这个 mapping，不再访问 domain 的硬编码。
 
 **commit msg**：`refactor(store): finalize module layout and drop transitional bridges`  
