@@ -104,7 +104,12 @@ class UpdateChecker {
       DateTime.now().toIso8601String(),
     );
 
-    if (manifest == null) return _legacyCheck(ignoreSkipped: ignoreSkipped);
+    if (manifest == null) {
+      return _legacyCheck(
+        ignoreSkipped: ignoreSkipped,
+        reportErrors: !auto,
+      );
+    }
 
     final latestVersion =
         (manifest['version'] as String? ?? '').replaceFirst(RegExp(r'^v'), '');
@@ -171,7 +176,16 @@ class UpdateChecker {
   /// Last-resort: hit the GitHub Releases API directly. Used when the manifest
   /// is unavailable from every mirror (e.g. before the first manifest is
   /// published, or during a CI hiccup).
-  Future<UpdateInfo?> _legacyCheck({required bool ignoreSkipped}) async {
+  ///
+  /// [reportErrors] controls whether the exception-catch forwards to
+  /// ErrorLogger. True only on user-initiated checks where the user is
+  /// waiting for a result — on startup auto-check, GitHub API
+  /// unreachability is both expected (GFW) and invisible to the user,
+  /// so we downgrade to EventLog to avoid remote telemetry noise.
+  Future<UpdateInfo?> _legacyCheck({
+    required bool ignoreSkipped,
+    required bool reportErrors,
+  }) async {
     try {
       final response = await http
           .get(
@@ -213,7 +227,12 @@ class UpdateChecker {
       );
     } catch (e, st) {
       debugPrint('[UpdateChecker] legacy check failed: $e');
-      ErrorLogger.captureException(e, st, source: 'UpdateChecker._legacyCheck');
+      if (reportErrors) {
+        ErrorLogger.captureException(e, st,
+            source: 'UpdateChecker._legacyCheck');
+      } else {
+        EventLog.write('[Updater] legacy_check_failed_auto err=$e');
+      }
       return null;
     }
   }
