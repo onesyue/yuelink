@@ -62,7 +62,7 @@ dev_dependencies:
     sdk: flutter
   integration_test:
     sdk: flutter
-  flutter_lints: ^5.0.0
+  flutter_lints: ^6.0.0
   flutter_launcher_icons: ^0.14.4
   build_runner: ^2.4.13
   slang_build_runner: ^4.14.0
