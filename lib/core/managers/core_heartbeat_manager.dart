@@ -12,6 +12,7 @@ import '../../core/storage/settings_service.dart';
 import '../../i18n/app_strings.dart';
 import '../providers/core_provider.dart';
 import '../../shared/app_notifier.dart';
+import '../../shared/event_log.dart';
 import 'system_proxy_manager.dart';
 
 /// Periodic core heartbeat with battery-aware throttling and ProxyGuard.
@@ -115,7 +116,13 @@ class CoreHeartbeatManager {
     }
 
     // Second round of 3 failures after a restart attempt — give up.
+    // v1.0.21 hotfix P2-7: surface this to the user. Before, silent
+    // restart + silent give-up both ran invisibly; the user saw
+    // "disconnected" appear and had no clue auto-recovery was tried
+    // and failed. Audit issue #7.
     debugPrint('[Heartbeat] core dead after retry, cleaning up');
+    EventLog.write('[Heartbeat] auto_recovery give_up');
+    AppNotifier.error('自动恢复失败，连接已断开');
     resetCoreToStopped(ref);
     // delay-state wipe is handled by _delayResetSub in main.dart (listens
     // for coreStatusProvider → stopped transition).
@@ -126,6 +133,18 @@ class CoreHeartbeatManager {
   /// Last-chance silent restart before declaring the core dead. Matches CVR
   /// `restart_core` behaviour — avoids dropping the user's session for a
   /// one-off hiccup (e.g. cell tower flap, transient DNS failure).
+  ///
+  /// v1.0.21 hotfix P2-7: no longer silent at the UX level. Users were
+  /// experiencing "disconnect then reconnect within seconds" with no
+  /// explanation — the behaviour was intentional but invisible, making
+  /// it look like random state flapping. We keep the recovery action
+  /// itself automatic (it works more than half the time, and asking the
+  /// user to re-tap connect for a cell-tower flap is worse than just
+  /// fixing it) but make each transition observable: a start toast, a
+  /// success toast, and structured event_log entries for diagnostic
+  /// export. A final-failure toast fires from the caller's give-up
+  /// branch, not here, so both "restart ok" and "restart ok=false"
+  /// paths reach the heartbeat's own logic.
   Future<void> _silentRestart() async {
     _restartInFlight = true;
     try {
@@ -135,18 +154,32 @@ class CoreHeartbeatManager {
       final activeId = await SettingsService.getActiveProfileId();
       if (activeId == null) {
         debugPrint('[Heartbeat] silent restart skipped — no active profile');
+        EventLog.write('[Heartbeat] auto_recovery skipped reason=no_profile');
         return;
       }
       final config = await ProfileService.loadConfig(activeId);
       if (config == null) {
         debugPrint('[Heartbeat] silent restart skipped — config not found');
+        EventLog.write('[Heartbeat] auto_recovery skipped reason=no_config');
         return;
       }
       debugPrint('[Heartbeat] attempting silent core restart');
+      EventLog.write('[Heartbeat] auto_recovery start');
+      AppNotifier.info('正在自动恢复连接...');
       final ok = await ref.read(coreActionsProvider).restart(config);
       debugPrint('[Heartbeat] silent restart ok=$ok');
+      EventLog.write('[Heartbeat] auto_recovery done ok=$ok');
+      if (ok) {
+        AppNotifier.success('已自动恢复连接');
+      }
+      // ok==false intentionally NOT surfaced here — the next heartbeat
+      // round will hit the "second 3 failures" branch above, which emits
+      // the proper give-up toast. Emitting a failure toast here too
+      // would double-fire on the same outage.
     } catch (e) {
       debugPrint('[Heartbeat] silent restart threw: $e');
+      EventLog.write(
+          '[Heartbeat] auto_recovery err=${e.toString().split("\n").first}');
     } finally {
       _restartInFlight = false;
     }
