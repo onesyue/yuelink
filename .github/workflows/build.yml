@@ -623,16 +623,38 @@ jobs:
       - name: List release assets
         run: ls -lh dist/
 
-      - name: Generate .sha256 sidecars
+      - name: Generate .sha256 sidecars + consolidated SHA256SUMS
         run: |
           cd dist
+          # Per-binary sidecars: kept because the updater-manifest step
+          # downstream reads `dist/$file.sha256` to embed hashes in
+          # update.json / update-pre.json. NOT uploaded to the Release
+          # page (excluded by the `files:` pattern in the Create Release
+          # step) — they used to clutter the page with N extra rows.
           for f in *; do
             [ -f "$f" ] || continue
             case "$f" in
-              *.sha256) ;;
+              *.sha256|*-SHA256SUMS) ;;
               *) sha256sum "$f" | awk '{print $1}' > "$f.sha256" ;;
             esac
           done
+          # Consolidated checksum file in standard `sha256sum -c` format,
+          # uploaded as the only checksum asset on the Release page.
+          # Users verify everything with `sha256sum -c YueLink-*-SHA256SUMS`.
+          # Standard pattern matched by mihomo / sing-box / Hashicorp /
+          # Linux kernel releases.
+          VERSION=$(grep '^version:' ../pubspec.yaml | sed 's/version: //' | cut -d'+' -f1)
+          SUMS_FILE="YueLink-${VERSION}-SHA256SUMS"
+          : > "$SUMS_FILE"
+          for f in YueLink-*; do
+            [ -f "$f" ] || continue
+            case "$f" in
+              *.sha256|*-SHA256SUMS) ;;
+              *) sha256sum "$f" >> "$SUMS_FILE" ;;
+            esac
+          done
+          echo "=== Generated $SUMS_FILE ==="
+          cat "$SUMS_FILE"
 
       - name: Delete previous pre-release (if updating)
         if: github.ref == 'refs/tags/pre'
@@ -682,7 +704,7 @@ jobs:
               printf -- '- `YueLink-%s-windows-amd64-setup.exe`: Windows 安装包。\n' "$VERSION"
               printf -- '- `YueLink-%s-windows-amd64-portable.zip`: Windows 免安装便携包。\n' "$VERSION"
               printf -- '- `YueLink-%s-linux-amd64.AppImage`: Linux x86_64 AppImage。\n' "$VERSION"
-              printf -- '- 每个产物都附带同名 `.sha256` 校验文件。\n'
+              printf -- '- `YueLink-%s-SHA256SUMS`：所有产物的 SHA-256 哈希，使用 `sha256sum -c YueLink-%s-SHA256SUMS` 一键校验。\n' "$VERSION" "$VERSION"
             } > release_notes.md
           fi
           printf '\n\n---\n*Build: %s | Version: %s*\n' "$TAG" "$VERSION" >> release_notes.md
@@ -694,7 +716,14 @@ jobs:
         with:
           name: ${{ env.RELEASE_TITLE }}
           body_path: release_notes.md
-          files: dist/*
+          # Per-binary `.sha256` sidecars are intentionally excluded — they
+          # exist on disk for the downstream update.json hash lookup but
+          # would otherwise double the asset list on the Release page.
+          # Users verify everything via the consolidated
+          # YueLink-*-SHA256SUMS file (sha256sum -c compatible).
+          files: |
+            dist/*
+            !dist/*.sha256
           # Prerelease rule: the floating `pre` tag and any `vX.Y.Z-pre`
           # variant are pre-releases. Plain `vX.Y.Z` tags publish as full
           # releases. Previously only `refs/tags/pre` matched, so a tag like

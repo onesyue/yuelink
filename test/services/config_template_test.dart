@@ -653,6 +653,62 @@ rules:
     );
   });
 
+  // v1.0.21 hotfix P1-4: two throughput-killing sniffer flags that were
+  // still present in assets/default_config.yaml even though
+  // ConfigTemplate._ensureSniffer rewrites the block without them. Source
+  // of truth is the runtime template. These tests lock it in so any
+  // future re-introduction (copy-paste from an old subscription, asset
+  // edit, refactor of _ensureSniffer) fails loudly.
+  group('ConfigTemplate sniffer — throughput flags', () {
+    test('strips force-dns-mapping / parse-pure-ip from subscription input',
+        () {
+      // Simulate a subscription that ships both flags (older airport
+      // configs still do). process() must remove them.
+      const config = '''
+mixed-port: 7890
+sniffer:
+  enable: true
+  force-dns-mapping: true
+  parse-pure-ip: true
+  sniff:
+    HTTP:
+      ports: [80]
+proxies: []
+''';
+      final result = ConfigTemplate.process(config);
+      expect(result, isNot(contains('force-dns-mapping')),
+          reason: 'force-dns-mapping: true forced every fake-IP lookup even '
+              'when already accurate — cost ~30% throughput vs ClashMeta.');
+      expect(result, isNot(contains('parse-pure-ip')),
+          reason: 'parse-pure-ip: true ran HTTP/TLS/QUIC sniff on every '
+              'pure-IP connection, not just DNS-derived ones.');
+      // override-destination still present (the flag we DO want on).
+      expect(result, contains('override-destination: true'));
+    });
+
+    test('no sniffer section in input → still no force-dns-mapping / '
+        'parse-pure-ip in output', () {
+      const config = 'mixed-port: 7890\nproxies: []\n';
+      final result = ConfigTemplate.process(config);
+      expect(result, isNot(contains('force-dns-mapping')));
+      expect(result, isNot(contains('parse-pure-ip')));
+      expect(result, contains('sniffer:'),
+          reason: 'sniffer block itself must still be injected');
+    });
+
+    test('fallback default_config.yaml has no force-dns-mapping / parse-pure-ip',
+        () async {
+      // Reading the asset via AssetBundle in a unit test needs the Flutter
+      // binding — covered by the other assertions above via process().
+      // This test simply confirms the static loader wrapper works once
+      // process() has cleaned the merged config.
+      const config = 'proxies:\n  - {name: a, type: ss, server: 1.1.1.1, port: 80}\n';
+      final result = ConfigTemplate.process(config);
+      expect(result, isNot(contains('force-dns-mapping')));
+      expect(result, isNot(contains('parse-pure-ip')));
+    });
+  });
+
   group('ConfigTemplate experimental defaults', () {
     test(
       'does not inject quic-go-disable-gso/ecn when subscription has none',

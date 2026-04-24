@@ -9,6 +9,7 @@ import '../../core/kernel/core_manager.dart';
 import '../../core/providers/core_provider.dart';
 import '../../domain/models/proxy.dart';
 import '../../i18n/app_strings.dart';
+import '../../modules/dashboard/mode_actions.dart';
 import '../../modules/nodes/favorites/node_favorites_providers.dart';
 import '../../modules/nodes/providers/nodes_providers.dart';
 import '../../modules/yue_auth/providers/yue_auth_providers.dart';
@@ -179,6 +180,54 @@ class AppTrayController with TrayListener {
       }
     }
 
+    // 4b. Mode quick-switch (v1.0.21 hotfix P2-6).
+    // Was missing entirely in v1.0.20 — users asked for tray-level
+    // routing (rule/global/direct) and transport (systemProxy/TUN)
+    // switches so they don't have to open the main window for what
+    // should be a one-click change. Logic goes through ModeActions
+    // so the HeroCard pill and this menu can never drift apart.
+    final currentRoutingMode = ref.read(routingModeProvider);
+    final routingItems = <MenuItem>[
+      MenuItem(
+        key: 'mode_route_rule',
+        label:
+            '${currentRoutingMode == 'rule' ? '✓ ' : '  '}${s.routeModeRule}',
+      ),
+      MenuItem(
+        key: 'mode_route_global',
+        label:
+            '${currentRoutingMode == 'global' ? '✓ ' : '  '}${s.routeModeGlobal}',
+      ),
+      MenuItem(
+        key: 'mode_route_direct',
+        label:
+            '${currentRoutingMode == 'direct' ? '✓ ' : '  '}${s.routeModeDirect}',
+      ),
+    ];
+    // Transport (systemProxy/TUN) — desktop only; mobile is always VPN/TUN
+    // regardless of this setting so the menu would be misleading there.
+    final transportItems = <MenuItem>[];
+    if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
+      final currentConnMode = ref.read(connectionModeProvider);
+      transportItems.addAll([
+        MenuItem.separator(),
+        MenuItem(
+          key: 'mode_conn_systemProxy',
+          label: '${currentConnMode == 'systemProxy' ? '✓ ' : '  '}系统代理',
+        ),
+        MenuItem(
+          key: 'mode_conn_tun',
+          label: '${currentConnMode == 'tun' ? '✓ ' : '  '}TUN',
+        ),
+      ]);
+    }
+    items.add(
+      MenuItem.submenu(
+        label: '模式',
+        submenu: Menu(items: [...routingItems, ...transportItems]),
+      ),
+    );
+
     // 5. Basic status info (when running)
     if (isRunning) {
       items.add(MenuItem.separator());
@@ -317,6 +366,22 @@ class AppTrayController with TrayListener {
     if (key.startsWith('recent_')) {
       final idx = int.tryParse(key.substring(7));
       if (idx != null) await _handleRecentNodeSwitch(idx);
+      return;
+    }
+
+    // v1.0.21 hotfix P2-6: tray mode quick-switch. Key shape:
+    //   mode_route_{rule|global|direct}
+    //   mode_conn_{systemProxy|tun}
+    // Dispatch to the shared ModeActions so behaviour matches the
+    // HeroCard pill exactly.
+    if (key.startsWith('mode_route_')) {
+      final mode = key.substring('mode_route_'.length);
+      await ModeActions.setRoutingMode(ref, mode);
+      return;
+    }
+    if (key.startsWith('mode_conn_')) {
+      final mode = key.substring('mode_conn_'.length);
+      await ModeActions.setConnectionMode(ref, mode);
       return;
     }
 

@@ -5,6 +5,7 @@ import '../../../core/providers/core_provider.dart';
 import '../../../core/service/service_manager.dart';
 import '../../../core/service/service_mode_provider.dart';
 import '../../../core/service/service_models.dart';
+import '../../../core/storage/settings_service.dart';
 import '../../../i18n/app_strings.dart';
 import '../../../shared/event_log.dart';
 import '../../profiles/providers/profiles_providers.dart';
@@ -28,11 +29,12 @@ class ServiceModeActions {
     _ref.read(desktopServiceRefreshProvider.notifier).state++;
   }
 
-  /// Installs the privileged helper, refreshes status, then brings the
-  /// core up (respecting userStoppedProvider). Throws on install failure.
+  /// Installs the privileged helper, marks TUN as the active user intent,
+  /// refreshes status, then brings the core up. Throws on install failure.
   /// Returns the post-apply warning (null = OK).
   Future<String?> install() async {
     await ServiceManager.install();
+    await _markTunInstallIntent();
     refresh();
     return applyImmediately();
   }
@@ -51,15 +53,27 @@ class ServiceModeActions {
   /// `install`. Throws on update failure.
   Future<String?> update() async {
     await ServiceManager.update();
+    await _markTunInstallIntent();
     refresh();
     return applyImmediately();
+  }
+
+  /// Installing/updating the desktop helper from the TUN row is an explicit
+  /// user intent to use TUN now. Do not let an earlier manual disconnect
+  /// (`userStopped=true`) from P0-1 block the post-install auto-start.
+  Future<void> _markTunInstallIntent() async {
+    _ref.read(connectionModeProvider.notifier).state = 'tun';
+    await SettingsService.setConnectionMode('tun');
+    _ref.read(userStoppedProvider.notifier).state = false;
+    await SettingsService.setManualStopped(false, immediate: true);
   }
 
   /// After a successful install/update, put the core into the right
   /// state without forcing the user back to the dashboard:
   ///   - running  → restart (so service mode takes effect)
   ///   - stopped  → start (the install itself is an implicit "I want TUN")
-  /// Respects an explicit user-stop in this session.
+  /// A service install/update is treated as an explicit connect intent; this
+  /// deliberately ignores a stale manual-stop flag from a previous session.
   ///
   /// 1.5 s grace lets the freshly-elevated helper bind `127.0.0.1:9090`,
   /// then retries once after 2 s. Any failure writes EventLog and returns
@@ -68,14 +82,19 @@ class ServiceModeActions {
     try {
       final activeId = _ref.read(activeProfileIdProvider);
       if (activeId == null) return null;
-      final initialStatus = _ref.read(coreStatusProvider);
-      final userStopped = _ref.read(userStoppedProvider);
-      if (initialStatus == CoreStatus.stopped && userStopped) return null;
 
       final config = await ProfileService.loadConfig(activeId);
       if (config == null) return null;
 
-      await Future.delayed(const Duration(milliseconds: 1500));
+      // install() already waits for IPC once, but the first TUN start can still
+      // race Defender/launchd/systemd warmup. Give the helper a second bounded
+      // readiness window before attempting to start mihomo through it.
+      final ready = await ServiceManager.isReady(
+        deadline: const Duration(seconds: 12),
+      );
+      if (!ready) {
+        EventLog.write('[Service] post-install helper not ready before start');
+      }
 
       final actions = _ref.read(coreActionsProvider);
       Future<bool> attempt() {
@@ -85,15 +104,25 @@ class ServiceModeActions {
             : actions.start(config);
       }
 
-      bool ok = await attempt();
-      if (!ok) {
-        EventLog.write(
-            '[Service] post-install start failed once, retrying after 2 s');
-        await Future.delayed(const Duration(seconds: 2));
+      var ok = false;
+      final retryDelays = <Duration>[
+        Duration.zero,
+        const Duration(seconds: 2),
+        const Duration(seconds: 4),
+      ];
+      for (var i = 0; i < retryDelays.length; i++) {
+        final delay = retryDelays[i];
+        if (delay > Duration.zero) {
+          EventLog.write(
+            '[Service] post-install start retry=${i + 1} after=${delay.inSeconds}s',
+          );
+          await Future.delayed(delay);
+        }
         ok = await attempt();
+        if (ok) break;
       }
       if (!ok) {
-        EventLog.write('[Service] post-install start failed after retry');
+        EventLog.write('[Service] post-install start failed after retries');
         return '服务已安装，但内核启动失败。请在主页点击"开始连接"重试。';
       }
       return null;
@@ -104,10 +133,7 @@ class ServiceModeActions {
   }
 
   /// Pure description — no `ref` access, safe to call from any widget.
-  static String describe(
-    S s,
-    AsyncValue<DesktopServiceInfo> serviceInfo,
-  ) {
+  static String describe(S s, AsyncValue<DesktopServiceInfo> serviceInfo) {
     final info = serviceInfo.value;
     if (serviceInfo.isLoading && info == null) return '...';
     if (info == null || info.installed == false) {

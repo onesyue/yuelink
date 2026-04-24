@@ -98,8 +98,10 @@ class CoreActions {
   Future<void> stop() => _lifecycle.stop();
   Future<void> toggle(String configYaml) => _lifecycle.toggle(configYaml);
   Future<bool> restart(String configYaml) => _lifecycle.restart(configYaml);
-  Future<void> hotSwitchConnectionMode(String newMode) =>
-      _lifecycle.hotSwitchConnectionMode(newMode);
+  Future<bool> hotSwitchConnectionMode(
+    String newMode, {
+    String? fallbackMode,
+  }) => _lifecycle.hotSwitchConnectionMode(newMode, fallbackMode: fallbackMode);
   Future<bool> applySystemProxy() => _lifecycle.applySystemProxy();
   Future<void> clearSystemProxy() => SystemProxyManager.clear();
 

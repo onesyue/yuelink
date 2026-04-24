@@ -37,6 +37,7 @@ import 'modules/profiles/providers/profiles_providers.dart';
 import 'shared/app_notifier.dart';
 import 'core/kernel/core_manager.dart';
 import 'core/kernel/recovery_manager.dart';
+import 'core/platform/quit_watchdog.dart';
 import 'core/platform/tile_service.dart';
 import 'core/platform/vpn_service.dart';
 import 'core/storage/auth_token_service.dart';
@@ -226,6 +227,11 @@ Future<void> _bootstrap() async {
   final savedDesktopTunStack = await SettingsService.getDesktopTunStack();
   final savedLogLevel = await SettingsService.getLogLevel();
   final savedAutoConnect = await SettingsService.getAutoConnect();
+  // v1.0.21 hotfix: hydrate userStoppedProvider from disk so
+  // _maybeAutoConnect() sees the manual-stop intent even on engine
+  // recreate / cold start. Without this, the provider's default (false)
+  // lets auto-connect fire after a user had explicitly disconnected.
+  final savedManualStopped = await SettingsService.getManualStopped();
   final savedSystemProxy = await SettingsService.getSystemProxyOnConnect();
   final savedLanguage = await SettingsService.getLanguage();
   final savedTestUrl = await SettingsService.getTestUrl();
@@ -363,6 +369,7 @@ Future<void> _bootstrap() async {
         desktopTunStackProvider.overrideWith((ref) => savedDesktopTunStack),
         logLevelProvider.overrideWith((ref) => savedLogLevel),
         autoConnectProvider.overrideWith((ref) => savedAutoConnect),
+        userStoppedProvider.overrideWith((ref) => savedManualStopped),
         systemProxyOnConnectProvider.overrideWith((ref) => savedSystemProxy),
         testUrlProvider.overrideWith((ref) => savedTestUrl),
         closeBehaviorProvider.overrideWith((ref) => savedCloseBehavior),
@@ -854,10 +861,27 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
       // written for) is unaffected: Riverpod rebuilds ProviderScope from
       // defaults, so userStoppedProvider reverts to false and we go
       // through the normal health check.
-      if (ref.read(userStoppedProvider)) {
+      // v1.0.21 hotfix: also consult the persisted manual-stop flag.
+      // The in-memory userStoppedProvider is wiped to its default (false)
+      // whenever Riverpod's ProviderScope rebuilds — which happens on
+      // every Android engine recreate (background-kill of the Flutter
+      // engine while the VPN service + Go core continue running). Without
+      // the persisted check, the recovery branch below would see the
+      // still-alive mihomo API and pull the UI back to "running" even
+      // though the user had explicitly disconnected, leaving them with a
+      // "connected" indicator and a dead network.
+      final persistedManualStopped = await SettingsService.getManualStopped();
+      if (persistedManualStopped && !ref.read(userStoppedProvider)) {
+        // Hydrate the in-memory provider from persistence so subsequent
+        // listeners (heartbeat, VPN revocation callback) also respect it.
+        ref.read(userStoppedProvider.notifier).state = true;
+      }
+      if (ref.read(userStoppedProvider) || persistedManualStopped) {
         debugPrint(
           '[AppLifecycle] resumed in user-stopped state — '
-          'skipping health recovery (respecting explicit stop)',
+          'skipping health recovery '
+          '(persisted=$persistedManualStopped, '
+          'provider=${ref.read(userStoppedProvider)})',
         );
         return;
       }
@@ -913,9 +937,49 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
         ref.invalidate(exitIpInfoProvider);
         // Refresh proxy groups in case core reloaded config
         ref.read(proxyGroupsProvider.notifier).refresh();
+        // v1.0.21 hotfix P0-2: system-proxy tamper detection on resume.
+        // If the user flipped over to v2rayN / vr2 / any other proxy tool
+        // while YueLink was backgrounded, the 60 s verify cache would
+        // leave the heartbeat unable to notice for up to that TTL —
+        // resulting in the "connected but no network" UX. force:true
+        // bypasses the cache, and a tampered result immediately triggers
+        // restore instead of waiting for the 30 s heartbeat round.
+        unawaited(_resumeProxyTamperCheck());
       }
     } catch (e) {
       debugPrint('[AppLifecycle] resume check failed: $e');
+    }
+  }
+
+  /// v1.0.21 hotfix P0-2: best-effort force-verify + restore on resume.
+  /// Runs only when the user has systemProxy mode selected and core is
+  /// running. Fire-and-forget: caller doesn't await; any exception is
+  /// swallowed and logged so the rest of the resume path is unaffected.
+  Future<void> _resumeProxyTamperCheck() async {
+    if (!(Platform.isMacOS || Platform.isWindows || Platform.isLinux)) {
+      return;
+    }
+    if (ref.read(connectionModeProvider) != 'systemProxy') return;
+    if (!ref.read(systemProxyOnConnectProvider)) return;
+    try {
+      final port = CoreManager.instance.mixedPort;
+      final ok = await SystemProxyManager.verify(port, force: true);
+      if (ok == false) {
+        debugPrint(
+          '[AppLifecycle] systemProxy tampered on resume '
+          '(expected 127.0.0.1:$port) — restoring',
+        );
+        EventLog.write(
+          '[AppLifecycle] systemProxy tamper detected on '
+          'resume port=$port',
+        );
+        final restored = await SystemProxyManager.set(port);
+        if (!restored) {
+          AppNotifier.warning(S.current.errSystemProxyFailed);
+        }
+      }
+    } catch (e) {
+      debugPrint('[AppLifecycle] resume tamper check failed: $e');
     }
   }
 
@@ -1024,34 +1088,42 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
   Future<void> _handleQuit() async {
     _isQuitting = true;
 
-    // Hard cap on cleanup. If anything (system proxy revert, tray destroy,
-    // window destroy) hangs, we still exit. On both macOS and Windows the
-    // tray listener + single-instance server + background timers keep the
-    // Dart isolate alive otherwise, so the user sees the window close but
-    // the process never terminates.
-    //
-    // Windows-specific: `exit(0)` itself can be starved if the Dart event
-    // loop is jammed waiting on a native callback (windowManager.destroy /
-    // trayManager.destroy / coreActions.stop via service-helper IPC have
-    // all been seen to sit in a blocking call under Win11). User-reported
-    // symptom: core running, tray → Quit, window closes but process stays
-    // resident. `Process.killPid(pid, sigkill)` translates to
-    // TerminateProcess on Windows, which ends the process immediately
-    // regardless of Dart scheduler state.
-    Future.delayed(const Duration(seconds: 3), () {
-      if (Platform.isWindows) {
-        try {
-          Process.killPid(pid, ProcessSignal.sigkill);
-        } catch (e) {
-          EventLog.writeTagged(
-            'Quit',
-            'quit_kill_fallback_failed',
-            context: {'error': e},
-          );
-        }
+    // v1.0.21 hotfix P1-5: hard-cap the quit sequence with a watchdog
+    // that runs in a SEPARATE isolate. Previously this was a
+    // Future.delayed(3s) scheduled on the main isolate's event loop —
+    // which is exactly the loop being starved when platform channel
+    // awaits (windowManager.destroy / trayManager.destroy /
+    // ServiceClient.stop) sit in blocking native calls under Win11.
+    // User-reported symptom: tray → Quit, window closes, process stays
+    // resident. The watchdog isolate has its own event loop so its
+    // Future.delayed fires regardless of main-isolate jam; on fire it
+    // SIGKILLs our pid which OS-level terminates the whole process.
+    // Desktop only — mobile doesn't hit _handleQuit.
+    if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
+      try {
+        await spawnQuitWatchdog(delay: const Duration(seconds: 3));
+      } catch (e) {
+        // Isolate spawn itself failed — fall back to a Dart Timer.
+        // Worse safety net than the isolate (same jam risk) but better
+        // than nothing; at least on a healthy event loop it still fires.
+        debugPrint(
+          '[Quit] watchdog isolate spawn failed: $e — '
+          'falling back to Dart Timer',
+        );
+        Future.delayed(const Duration(seconds: 3), () {
+          try {
+            Process.killPid(pid, ProcessSignal.sigkill);
+          } catch (e) {
+            EventLog.writeTagged(
+              'Quit',
+              'quit_kill_fallback_failed',
+              context: {'error': e},
+            );
+          }
+          exit(0);
+        });
       }
-      exit(0);
-    });
+    }
 
     try {
       final status = ref.read(coreStatusProvider);

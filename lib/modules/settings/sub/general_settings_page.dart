@@ -338,6 +338,7 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
                           ],
                           onChanged: (v) async {
                             if (v == null || v == connectionMode) return;
+                            final previous = connectionMode;
                             ref.read(connectionModeProvider.notifier).state = v;
                             await SettingsService.setConnectionMode(v);
                             Telemetry.event(
@@ -350,7 +351,19 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
                             final status = ref.read(coreStatusProvider);
                             if (status == CoreStatus.running) {
                               final actions = ref.read(coreActionsProvider);
-                              await actions.hotSwitchConnectionMode(v);
+                              final ok = await actions.hotSwitchConnectionMode(
+                                v,
+                                fallbackMode: previous,
+                              );
+                              if (!ok) {
+                                ref
+                                        .read(connectionModeProvider.notifier)
+                                        .state =
+                                    previous;
+                                await SettingsService.setConnectionMode(
+                                  previous,
+                                );
+                              }
                             }
                           },
                         ),

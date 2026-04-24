@@ -14,6 +14,7 @@ import '../../../infrastructure/repositories/profile_repository.dart';
 import '../../../infrastructure/repositories/proxy_repository.dart';
 import '../../../shared/node_telemetry.dart';
 import '../../../shared/telemetry.dart';
+import 'delay_test_recovery.dart';
 
 // ------------------------------------------------------------------
 // Node sort / view mode
@@ -461,77 +462,87 @@ class DelayTestActions {
 
       final testUrl = ref.read(testUrlProvider);
       try {
-        var results = await _repo.testGroupDelay(groupName, url: testUrl);
-
-        if (_isAllTimeout(results, proxyNames)) {
-          Telemetry.event(
-            TelemetryEvents.delayTestAllTimeout,
-            props: {'group': groupName, 'count': proxyNames.length},
-          );
-          // Silent recovery: up to 2 rounds of (close connections +
-          // flush fake-IP cache + wait + retry). 1.5 s per round gives
-          // mihomo enough time to rebuild its DNS resolver and
-          // proxy-chain pools; 800 ms wasn't enough for first-test-
-          // after-reconnect on slow networks.
-          for (var attempt = 1; attempt <= 2; attempt++) {
+        // v1.0.21 hotfix P0-3: both "all timed out" AND "HTTP call threw"
+        // must go through the same flush+retry recovery path. Previously
+        // the catch branch below marked every node red immediately,
+        // producing the "test speed after reconnect is solid red" UX
+        // the user hit. Now the helper handles both cases uniformly.
+        final outcome = await runGroupDelayWithRecovery(
+          runTest: () => _repo.testGroupDelay(groupName, url: testUrl),
+          flushConnections: () async {
             try {
               await manager.api.closeAllConnections();
             } catch (_) {}
+          },
+          flushFakeIp: () async {
             try {
               await manager.api.flushFakeIpCache();
             } catch (_) {}
-            await Future.delayed(const Duration(milliseconds: 1500));
-            final retried =
-                await _repo.testGroupDelay(groupName, url: testUrl);
-            if (!_isAllTimeout(retried, proxyNames)) {
-              Telemetry.event(TelemetryEvents.delayTestAutoRecovered);
-              results = retried;
-              break;
+          },
+          isAllTimeout: (r) => _isAllTimeout(r, proxyNames),
+        );
+
+        if (outcome.failureReason != null) {
+          Telemetry.event(
+            TelemetryEvents.delayTestAllTimeout,
+            props: {
+              'group': groupName,
+              'count': proxyNames.length,
+              // 'all_timeout' vs 'exception' — the dashboard can now
+              // distinguish stale-core-state failures from HTTP errors.
+              'reason': outcome.failureReason,
+            },
+          );
+        }
+        if (outcome.recovered) {
+          Telemetry.event(TelemetryEvents.delayTestAutoRecovered);
+        }
+
+        final results = outcome.results;
+        if (results != null) {
+          // Results shape: {proxyName: {delay: int}} or {proxyName: int}
+          final current =
+              Map<String, int>.from(ref.read(delayResultsProvider));
+          for (final entry in results.entries) {
+            final value = entry.value;
+            if (value is int) {
+              current[entry.key] = value;
+            } else if (value is Map) {
+              current[entry.key] = (value['delay'] as num?)?.toInt() ?? -1;
             }
           }
-        }
+          ref.read(delayResultsProvider.notifier).state = current;
+          SettingsService.setDelayResults(current);
 
-        // Results: {proxyName: {delay: int}, ...} or {proxyName: int}
-        final current = Map<String, int>.from(ref.read(delayResultsProvider));
-        for (final entry in results.entries) {
-          final value = entry.value;
-          if (value is int) {
-            current[entry.key] = value;
-          } else if (value is Map) {
-            current[entry.key] = (value['delay'] as num?)?.toInt() ?? -1;
+          // Opt-in telemetry — one event per tested node.
+          for (final entry in current.entries) {
+            if (proxyNames.contains(entry.key)) {
+              NodeTelemetry.recordUrlTestByName(
+                name: entry.key,
+                delayMs: entry.value,
+              );
+            }
           }
-        }
-        ref.read(delayResultsProvider.notifier).state = current;
-        SettingsService.setDelayResults(current);
-
-        // Opt-in telemetry — one event per tested node.
-        for (final entry in current.entries) {
-          if (proxyNames.contains(entry.key)) {
-            NodeTelemetry.recordUrlTestByName(
-              name: entry.key,
-              delayMs: entry.value,
-            );
+        } else {
+          // Every recovery round also failed — mark all red as last resort.
+          debugPrint('[DelayTest] group "$groupName" '
+              '(${proxyNames.length} nodes) failed after recovery '
+              '(reason=${outcome.failureReason})');
+          final current =
+              Map<String, int>.from(ref.read(delayResultsProvider));
+          for (final name in proxyNames) {
+            current[name] = -1;
           }
+          ref.read(delayResultsProvider.notifier).state = current;
         }
-      } catch (e) {
-        // Group test failure surfaces to the user as every node showing
-        // a timeout dot — without a log line, the actual cause (HTTP
-        // 4xx/5xx from mihomo, network drop, auth token rejection) is
-        // invisible. Log once with context before marking nodes failed.
-        debugPrint(
-            '[DelayTest] group "$groupName" (${proxyNames.length} nodes) '
-            'failed: $e');
-        final current = Map<String, int>.from(ref.read(delayResultsProvider));
-        for (final name in proxyNames) {
-          current[name] = -1;
-        }
-        ref.read(delayResultsProvider.notifier).state = current;
+      } finally {
+        // Unmark all — always runs, even if the unexpected happens
+        // (StateError during state write, etc.). Without this users see
+        // perpetual "testing…" dots.
+        final doneSet = Set<String>.from(ref.read(delayTestingProvider));
+        doneSet.removeAll(proxyNames);
+        ref.read(delayTestingProvider.notifier).state = doneSet;
       }
-
-      // Unmark all
-      final doneSet = Set<String>.from(ref.read(delayTestingProvider));
-      doneSet.removeAll(proxyNames);
-      ref.read(delayTestingProvider.notifier).state = doneSet;
     } else {
       // Mock: test sequentially
       for (final name in proxyNames) {
