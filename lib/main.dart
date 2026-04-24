@@ -39,6 +39,7 @@ import 'shared/app_notifier.dart';
 import 'core/kernel/config_template.dart';
 import 'core/kernel/core_manager.dart';
 import 'core/kernel/recovery_manager.dart';
+import 'core/platform/quit_watchdog.dart';
 import 'core/platform/tile_service.dart';
 import 'core/platform/vpn_service.dart';
 import 'core/storage/auth_token_service.dart';
@@ -1385,28 +1386,34 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
   Future<void> _handleQuit() async {
     _isQuitting = true;
 
-    // Hard cap on cleanup. If anything (system proxy revert, tray destroy,
-    // window destroy) hangs, we still exit. On both macOS and Windows the
-    // tray listener + single-instance server + background timers keep the
-    // Dart isolate alive otherwise, so the user sees the window close but
-    // the process never terminates.
-    //
-    // Windows-specific: `exit(0)` itself can be starved if the Dart event
-    // loop is jammed waiting on a native callback (windowManager.destroy /
-    // trayManager.destroy / coreActions.stop via service-helper IPC have
-    // all been seen to sit in a blocking call under Win11). User-reported
-    // symptom: core running, tray → Quit, window closes but process stays
-    // resident. `Process.killPid(pid, sigkill)` translates to
-    // TerminateProcess on Windows, which ends the process immediately
-    // regardless of Dart scheduler state.
-    Future.delayed(const Duration(seconds: 3), () {
-      if (Platform.isWindows) {
-        try {
-          Process.killPid(pid, ProcessSignal.sigkill);
-        } catch (_) {}
+    // v1.0.21 hotfix P1-5: hard-cap the quit sequence with a watchdog
+    // that runs in a SEPARATE isolate. Previously this was a
+    // Future.delayed(3s) scheduled on the main isolate's event loop —
+    // which is exactly the loop being starved when platform channel
+    // awaits (windowManager.destroy / trayManager.destroy /
+    // ServiceClient.stop) sit in blocking native calls under Win11.
+    // User-reported symptom: tray → Quit, window closes, process stays
+    // resident. The watchdog isolate has its own event loop so its
+    // Future.delayed fires regardless of main-isolate jam; on fire it
+    // SIGKILLs our pid which OS-level terminates the whole process.
+    // Desktop only — mobile doesn't hit _handleQuit.
+    if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
+      try {
+        await spawnQuitWatchdog(delay: const Duration(seconds: 3));
+      } catch (e) {
+        // Isolate spawn itself failed — fall back to a Dart Timer.
+        // Worse safety net than the isolate (same jam risk) but better
+        // than nothing; at least on a healthy event loop it still fires.
+        debugPrint('[Quit] watchdog isolate spawn failed: $e — '
+            'falling back to Dart Timer');
+        Future.delayed(const Duration(seconds: 3), () {
+          try {
+            Process.killPid(pid, ProcessSignal.sigkill);
+          } catch (_) {}
+          exit(0);
+        });
       }
-      exit(0);
-    });
+    }
 
     try {
       final status = ref.read(coreStatusProvider);
