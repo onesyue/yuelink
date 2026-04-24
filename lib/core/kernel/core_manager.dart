@@ -17,6 +17,8 @@ import 'config_template.dart';
 import 'geodata_service.dart';
 import '../../infrastructure/datasources/mihomo_api.dart';
 import '../../infrastructure/datasources/mihomo_stream.dart';
+import '../relay/network_profile.dart';
+import '../relay/network_profile_service.dart';
 import '../relay/relay_candidate.dart';
 import '../relay/relay_metrics.dart';
 import '../relay/relay_probe_service.dart';
@@ -59,6 +61,9 @@ class CoreManager {
     _instance?.lastSelectedKind = null;
     _instance?.lastSelectedReason = null;
     _instance?._relayMetrics.clear();
+    _instance?._cachedNetworkProfile = null;
+    _instance?._networkProfileCacheLoaded = false;
+    _instance?._networkProfileService = null;
     // Clear cached secret + API clients so tests can observe a clean
     // cold-start resolution path (persisted-read → generate → persist).
     _instance?._apiSecret = null;
@@ -120,6 +125,20 @@ class CoreManager {
 
   @visibleForTesting
   RelayMetrics get relayMetricsForTest => _relayMetrics;
+
+  /// Cached most-recent [NetworkProfile] sample. Lazy-loaded from
+  /// SettingsService on first sample call; refreshed in the background
+  /// after every successful start when older than [_kNetworkProfileTtl].
+  /// Decisions never branch on this — it's pure telemetry input for the
+  /// Super-Peer feasibility study.
+  NetworkProfile? _cachedNetworkProfile;
+  bool _networkProfileCacheLoaded = false;
+  NetworkProfileService? _networkProfileService;
+  static const _kNetworkProfileTtl = Duration(hours: 6);
+  static const _kNetworkProfileCacheKey = 'networkProfileCache';
+
+  @visibleForTesting
+  NetworkProfile? get cachedNetworkProfileForTest => _cachedNetworkProfile;
 
   MihomoApi get api => _api ??= MihomoApi(
         host: '127.0.0.1',
@@ -525,6 +544,11 @@ class CoreManager {
       // design — probe results land in metrics for the NEXT start, not
       // this one.
       unawaited(_backgroundProbe());
+      // A5c-2: sample the client-side network profile (IPv6/NAT/medium)
+      // — also fire-and-forget. No-ops when the cached sample is younger
+      // than 6h, so users restarting frequently don't get sampled
+      // repeatedly.
+      unawaited(_backgroundNetworkSample());
       _pendingOperation?.complete();
       _pendingOperation = null;
       return true;
@@ -674,6 +698,11 @@ class CoreManager {
       // design — probe results land in metrics for the NEXT start, not
       // this one.
       unawaited(_backgroundProbe());
+      // A5c-2: sample the client-side network profile (IPv6/NAT/medium)
+      // — also fire-and-forget. No-ops when the cached sample is younger
+      // than 6h, so users restarting frequently don't get sampled
+      // repeatedly.
+      unawaited(_backgroundNetworkSample());
       _pendingOperation?.complete();
       _pendingOperation = null;
       return true;
@@ -857,6 +886,11 @@ class CoreManager {
       // design — probe results land in metrics for the NEXT start, not
       // this one.
       unawaited(_backgroundProbe());
+      // A5c-2: sample the client-side network profile (IPv6/NAT/medium)
+      // — also fire-and-forget. No-ops when the cached sample is younger
+      // than 6h, so users restarting frequently don't get sampled
+      // repeatedly.
+      unawaited(_backgroundNetworkSample());
       _pendingOperation?.complete();
       _pendingOperation = null;
       return true;
@@ -1058,6 +1092,55 @@ class CoreManager {
       );
     } catch (e) {
       debugPrint('[CoreManager] background probe failed: $e');
+    }
+  }
+
+  /// A5c-2: samples client-side network profile once per [_kNetworkProfileTtl]
+  /// window, persists to SettingsService, emits a network_profile_sample
+  /// event. Lazy-loads the cache on first call so cold-start latency
+  /// isn't impacted; subsequent starts within the TTL do nothing.
+  Future<void> _backgroundNetworkSample() async {
+    try {
+      // Lazy-load cache on first call this session.
+      if (!_networkProfileCacheLoaded) {
+        _networkProfileCacheLoaded = true;
+        try {
+          final settings = await SettingsService.load();
+          final raw = settings[_kNetworkProfileCacheKey];
+          if (raw is Map) {
+            _cachedNetworkProfile = NetworkProfile.fromJson(
+                Map<String, dynamic>.from(raw));
+          }
+        } catch (_) {
+          // Cache corruption isn't fatal — just resample.
+        }
+      }
+
+      // Skip if cache is fresh.
+      final cached = _cachedNetworkProfile;
+      if (cached != null) {
+        final age = DateTime.now().difference(cached.sampledAt);
+        if (age < _kNetworkProfileTtl) return;
+      }
+
+      _networkProfileService ??= NetworkProfileService.production();
+      final profile = await _networkProfileService!.sample();
+      _cachedNetworkProfile = profile;
+
+      Telemetry.event(
+        TelemetryEvents.networkProfileSample,
+        props: RelayTelemetry.networkProfileSample(profile),
+      );
+
+      // Persist for cross-restart cache hits within the TTL.
+      try {
+        await SettingsService.set(_kNetworkProfileCacheKey, profile.toJson());
+      } catch (_) {
+        // Persistence failure is non-fatal — telemetry already fired,
+        // and the next start will just sample again.
+      }
+    } catch (e) {
+      debugPrint('[CoreManager] background network sample failed: $e');
     }
   }
 

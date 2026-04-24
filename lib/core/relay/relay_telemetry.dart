@@ -1,3 +1,4 @@
+import 'network_profile.dart';
 import 'protocol_ranker.dart';
 import 'relay_candidate.dart';
 import 'relay_metrics.dart';
@@ -15,9 +16,11 @@ import 'relay_probe_service.dart';
 /// values.
 ///
 /// Allowed keys:
-///   relay_probe      → candidate_kind, reachable, latency_bucket,
-///                      error_class, protocol_rank_tier
-///   relay_selected   → kind, reason
+///   relay_probe             → candidate_kind, reachable, latency_bucket,
+///                             error_class, protocol_rank_tier
+///   relay_selected          → kind, reason
+///   network_profile_sample  → has_ipv6_outbound, has_public_ipv6,
+///                             nat_kind, network_kind
 ///
 /// Anything else is an addition that needs a deliberate review.
 class RelayTelemetry {
@@ -49,6 +52,21 @@ class RelayTelemetry {
     return {
       'kind': kind.name,
       'reason': ?reason,
+    };
+  }
+
+  /// Build props for [TelemetryEvents.networkProfileSample].
+  /// All four fields are bool / closed-set enum strings — no IP, port,
+  /// hostname, or precise timestamp leaks here. The sample wall-clock
+  /// time is intentionally NOT included; the Telemetry envelope's `ts`
+  /// field already records when the event was emitted, which is within
+  /// milliseconds of the sample.
+  static Map<String, dynamic> networkProfileSample(NetworkProfile p) {
+    return {
+      'has_ipv6_outbound': p.hasIpv6Outbound,
+      'has_public_ipv6': p.hasPublicIpv6,
+      'nat_kind': p.natKind.name,
+      'network_kind': p.networkKind.name,
     };
   }
 

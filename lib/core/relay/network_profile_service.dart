@@ -1,4 +1,5 @@
 import 'network_profile.dart';
+import 'network_profile_adapters.dart';
 
 /// Returns whether the device currently has at least one global-unicast
 /// IPv6 address on any non-loopback interface.
@@ -56,6 +57,18 @@ class NetworkProfileService {
         _ipv6Reachable = ipv6Reachable,
         _stunQuery = stunQuery,
         _networkKind = networkKind;
+
+  /// Production wiring: forwards to [NetworkProfileAdapters]. Use this
+  /// from CoreManager. Tests construct with explicit fakes via the main
+  /// constructor.
+  factory NetworkProfileService.production() {
+    return NetworkProfileService(
+      hasPublicIpv6: NetworkProfileAdapters.hasPublicIpv6,
+      ipv6Reachable: NetworkProfileAdapters.ipv6Reachable,
+      stunQuery: NetworkProfileAdapters.stunQuery,
+      networkKind: NetworkProfileAdapters.networkKind,
+    );
+  }
 
   /// Runs all four probes and returns the composite profile. Never
   /// throws: an adapter that fails contributes a conservative default

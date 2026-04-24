@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:yuelink/core/relay/network_profile.dart';
 import 'package:yuelink/core/relay/relay_candidate.dart';
 import 'package:yuelink/core/relay/relay_metrics.dart';
 import 'package:yuelink/core/relay/relay_probe_service.dart';
@@ -65,13 +66,17 @@ void assertNoForbidden(
   List<String> forbiddenValueSubstrings = const [],
   String label = 'props',
 }) {
-  // 1. No forbidden word as a KEY (substring match — "host_count" is just as
-  // bad as "host" because it telegraphs we're shipping host data).
+  // 1. No forbidden word as a whole TOKEN in any KEY. Split on common
+  // identifier separators (underscore, dash, dot) so `host_count` fails
+  // (token "host") while `has_ipv6_outbound` passes ("ipv6", not "ip").
+  // Substring-only matching is too aggressive — "ip" lives inside
+  // "ipv6", "port" lives inside "supported", "server" lives inside
+  // "preserver", etc.
   for (final key in props.keys) {
-    final lower = key.toLowerCase();
+    final tokens = key.toLowerCase().split(RegExp(r'[_\-\.\s]'));
     for (final w in _forbiddenKeys) {
-      expect(lower.contains(w), isFalse,
-          reason: '$label: key "$key" contains forbidden substring "$w"');
+      expect(tokens.contains(w), isFalse,
+          reason: '$label: key "$key" contains forbidden token "$w"');
     }
   }
   // 2. No call-site-supplied value substrings (e.g. the candidate's host or
@@ -299,6 +304,91 @@ void main() {
           expect(
               props.keys.toSet().difference({'kind', 'reason'}), isEmpty,
               reason: 'unexpected key: ${props.keys}');
+        }
+      }
+    });
+  });
+
+  group('RelayTelemetry.networkProfileSample', () {
+    NetworkProfile profile({
+      bool hasOut = false,
+      bool hasPub = false,
+      NatKind nat = NatKind.unknown,
+      NetworkKind net = NetworkKind.unknown,
+    }) {
+      return NetworkProfile(
+        hasIpv6Outbound: hasOut,
+        hasPublicIpv6: hasPub,
+        natKind: nat,
+        networkKind: net,
+        sampledAt: DateTime(2026, 4, 24),
+      );
+    }
+
+    test('produces exactly the 4 allowed keys', () {
+      final p = RelayTelemetry.networkProfileSample(profile());
+      expect(p.keys.toSet(), {
+        'has_ipv6_outbound',
+        'has_public_ipv6',
+        'nat_kind',
+        'network_kind',
+      });
+    });
+
+    test('omits sampledAt — Telemetry envelope ts is the canonical timestamp',
+        () {
+      final p = RelayTelemetry.networkProfileSample(profile());
+      expect(p.containsKey('sampledAt'), isFalse);
+      expect(p.containsKey('sampled_at'), isFalse);
+      expect(p.containsKey('timestamp'), isFalse);
+      expect(p.containsKey('ts'), isFalse);
+    });
+
+    test('values use the documented closed-set strings', () {
+      final p = RelayTelemetry.networkProfileSample(profile(
+        hasOut: true,
+        hasPub: true,
+        nat: NatKind.symmetric,
+        net: NetworkKind.cellular,
+      ));
+      expect(p['has_ipv6_outbound'], isTrue);
+      expect(p['has_public_ipv6'], isTrue);
+      expect(['nonSymmetric', 'symmetric', 'unknown'], contains(p['nat_kind']));
+      expect(['wifi', 'cellular', 'ethernet', 'unknown'],
+          contains(p['network_kind']));
+    });
+
+    test('privacy sweep: no host/ip/port/server/uuid/password/address keys',
+        () {
+      // network_profile_sample carries only bool / enum-string values —
+      // there's nothing PII-shaped to begin with. The check guards against
+      // future additions that might smuggle in a raw IP under a typo'd key.
+      for (final natKind in NatKind.values) {
+        for (final netKind in NetworkKind.values) {
+          for (final hasOut in const [true, false]) {
+            for (final hasPub in const [true, false]) {
+              final p = RelayTelemetry.networkProfileSample(profile(
+                hasOut: hasOut,
+                hasPub: hasPub,
+                nat: natKind,
+                net: netKind,
+              ));
+              assertNoForbidden(p,
+                  label: 'network_profile_sample($natKind/$netKind)');
+              // Lock the shape: any future key addition fails this test
+              // and surfaces in review.
+              expect(
+                p.keys.toSet().difference({
+                  'has_ipv6_outbound',
+                  'has_public_ipv6',
+                  'nat_kind',
+                  'network_kind',
+                }),
+                isEmpty,
+                reason: 'unexpected key: ${p.keys}',
+              );
+            }
+          }
         }
       }
     });

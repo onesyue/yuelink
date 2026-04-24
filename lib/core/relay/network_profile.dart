@@ -43,4 +43,38 @@ class NetworkProfile {
     required this.networkKind,
     required this.sampledAt,
   });
+
+  /// Serialise to a JSON-safe map for SettingsService cache. Field
+  /// names match the Dart property names — they're internal cache keys,
+  /// not telemetry. Telemetry uses the snake_case schema in
+  /// `RelayTelemetry.networkProfileSample`.
+  Map<String, dynamic> toJson() => {
+        'hasIpv6Outbound': hasIpv6Outbound,
+        'hasPublicIpv6': hasPublicIpv6,
+        'natKind': natKind.name,
+        'networkKind': networkKind.name,
+        'sampledAt': sampledAt.toIso8601String(),
+      };
+
+  /// Round-trip from a SettingsService cache entry. Defensive against
+  /// missing / malformed fields — returns sensible fallbacks rather than
+  /// throwing, so a cache written by a future schema doesn't crash an
+  /// older client trying to read it.
+  factory NetworkProfile.fromJson(Map<String, dynamic> json) {
+    return NetworkProfile(
+      hasIpv6Outbound: json['hasIpv6Outbound'] as bool? ?? false,
+      hasPublicIpv6: json['hasPublicIpv6'] as bool? ?? false,
+      natKind: NatKind.values.firstWhere(
+        (k) => k.name == json['natKind'],
+        orElse: () => NatKind.unknown,
+      ),
+      networkKind: NetworkKind.values.firstWhere(
+        (k) => k.name == json['networkKind'],
+        orElse: () => NetworkKind.unknown,
+      ),
+      sampledAt:
+          DateTime.tryParse(json['sampledAt'] as String? ?? '') ??
+              DateTime.now(),
+    );
+  }
 }

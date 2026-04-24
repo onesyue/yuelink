@@ -248,6 +248,45 @@ void main() {
     });
   });
 
+  group('NetworkProfile — JSON round-trip (cache persistence)', () {
+    test('toJson + fromJson preserves all fields', () {
+      final original = NetworkProfile(
+        hasIpv6Outbound: true,
+        hasPublicIpv6: false,
+        natKind: NatKind.symmetric,
+        networkKind: NetworkKind.cellular,
+        sampledAt: DateTime.utc(2026, 4, 24, 14, 30),
+      );
+      final json = original.toJson();
+      final round = NetworkProfile.fromJson(json);
+      expect(round.hasIpv6Outbound, original.hasIpv6Outbound);
+      expect(round.hasPublicIpv6, original.hasPublicIpv6);
+      expect(round.natKind, original.natKind);
+      expect(round.networkKind, original.networkKind);
+      expect(round.sampledAt.toUtc(), original.sampledAt.toUtc());
+    });
+
+    test('fromJson tolerates missing/invalid fields with sane defaults', () {
+      final round = NetworkProfile.fromJson(const {});
+      expect(round.hasIpv6Outbound, isFalse);
+      expect(round.hasPublicIpv6, isFalse);
+      expect(round.natKind, NatKind.unknown);
+      expect(round.networkKind, NetworkKind.unknown);
+      // sampledAt falls back to "now" — just verify it parsed without throwing.
+      expect(round.sampledAt, isA<DateTime>());
+    });
+
+    test('fromJson handles unknown enum values via fallback', () {
+      final round = NetworkProfile.fromJson({
+        'natKind': 'invented',
+        'networkKind': 'satellite',
+        'sampledAt': '2026-04-24T00:00:00Z',
+      });
+      expect(round.natKind, NatKind.unknown);
+      expect(round.networkKind, NetworkKind.unknown);
+    });
+  });
+
   group('NetworkProfileService.sample — all-adapters-fail fallback', () {
     test('every adapter throws → conservative defaults, no throw', () async {
       final svc = NetworkProfileService(
