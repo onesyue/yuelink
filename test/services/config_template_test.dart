@@ -569,6 +569,80 @@ experimental:
     });
   });
 
+  group('ConfigTemplate.relayHostWhitelist', () {
+    test('empty whitelist is a no-op (regression guard)', () {
+      const config = 'mixed-port: 7890\nproxies: []\n';
+      final without = ConfigTemplate.process(config);
+      final withEmpty =
+          ConfigTemplate.process(config, relayHostWhitelist: const []);
+      expect(withEmpty, equals(without));
+    });
+
+    test('populates fake-ip-filter in inline-injected dns section (branch A)',
+        () {
+      // No `dns:` key present → _ensureDns takes branch A (inline injection)
+      const config = 'mixed-port: 7890\nproxies: []\n';
+      final result = ConfigTemplate.process(
+        config,
+        relayHostWhitelist: const ['relay.example.com'],
+      );
+      expect(result, contains('fake-ip-filter:'));
+      expect(result, contains('"relay.example.com"'));
+    });
+
+    test('populates fake-ip-filter in existing dns section (branch B)', () {
+      const config = '''
+mixed-port: 7890
+dns:
+  enable: true
+  enhanced-mode: fake-ip
+  nameserver:
+    - 8.8.8.8
+proxies: []
+''';
+      final result = ConfigTemplate.process(
+        config,
+        relayHostWhitelist: const ['relay2.example.com'],
+      );
+      expect(result, contains('"relay2.example.com"'));
+      // The injected relay entry should be inside the fake-ip-filter list,
+      // not somewhere random — sanity check: it's below the fake-ip-filter:
+      // line and above the next top-level key.
+      final filterIdx = result.indexOf('fake-ip-filter:');
+      final hostIdx = result.indexOf('"relay2.example.com"');
+      expect(filterIdx, greaterThanOrEqualTo(0));
+      expect(hostIdx, greaterThan(filterIdx));
+    });
+
+    test('does not duplicate when host already in fake-ip-filter', () {
+      const config = '''
+mixed-port: 7890
+dns:
+  enable: true
+  fake-ip-filter:
+    - "relay.example.com"
+proxies: []
+''';
+      final result = ConfigTemplate.process(
+        config,
+        relayHostWhitelist: const ['relay.example.com'],
+      );
+      final count =
+          RegExp(r'"relay\.example\.com"').allMatches(result).length;
+      expect(count, 1);
+    });
+
+    test('multi-host whitelist injects each once', () {
+      const config = 'mixed-port: 7890\nproxies: []\n';
+      final result = ConfigTemplate.process(
+        config,
+        relayHostWhitelist: const ['a.relay.com', 'b.relay.com'],
+      );
+      expect(result, contains('"a.relay.com"'));
+      expect(result, contains('"b.relay.com"'));
+    });
+  });
+
   group('ConfigTemplate TUN MTU', () {
     test(
         'desktop tun uses AppConstants.defaultTunMtu (matches hot-switch PATCH)',

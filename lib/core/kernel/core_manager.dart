@@ -11,6 +11,7 @@ import '../clash_core.dart';
 import '../clash_core_mock.dart';
 import '../clash_core_real.dart';
 import '../ffi/core_controller.dart';
+import '../../domain/models/relay_profile.dart';
 import '../../domain/models/startup_report.dart';
 import 'config_template.dart';
 import 'geodata_service.dart';
@@ -21,6 +22,8 @@ import '../service/service_manager.dart';
 import '../service/service_models.dart';
 import 'overwrite_service.dart';
 import 'process_manager.dart';
+import 'relay_injector.dart';
+import '../storage/relay_profile_service.dart';
 import '../storage/settings_service.dart';
 import '../platform/vpn_service.dart' as vpn;
 import '../../infrastructure/surge_modules/module_rule_injector.dart';
@@ -47,6 +50,7 @@ class CoreManager {
     _instance?._serviceModeActive = false;
     _instance?._pendingOperation = null;
     _instance?.lastReport = null;
+    _instance?.lastRelayResult = null;
     // Clear cached secret + API clients so tests can observe a clean
     // cold-start resolution path (persisted-read → generate → persist).
     _instance?._apiSecret = null;
@@ -80,6 +84,12 @@ class CoreManager {
 
   /// The most recent startup report (kept in memory for UI).
   StartupReport? lastReport;
+
+  /// Structured outcome of the most recent `RelayInjector.apply` call.
+  /// Null until the first `start()`. Surfaced on StartupReport.relay so
+  /// dashboards can distinguish "configured but skipped" from "actually
+  /// injected", without logging any PII.
+  RelayApplyResult? lastRelayResult;
 
   MihomoApi get api => _api ??= MihomoApi(
         host: '127.0.0.1',
@@ -287,8 +297,17 @@ class CoreManager {
       int? tunFd;
       String processed = '';
 
+      // Relay profile is loaded once and reused for both injection (inside
+      // _prepareConfig) and fake-ip-filter whitelist (via processInIsolate).
+      // Absent/invalid profile → bypassHosts is empty → every downstream
+      // call remains a no-op. The actual injection outcome is recorded on
+      // `lastRelayResult` by _prepareConfig, not derived from the profile.
+      final relayProfile = await RelayProfileService.load();
+      final relayBypassHosts = relayProfile?.bypassHosts ?? const <String>[];
+
       // Pre-compute config overwrite layer while VPN fd is being obtained.
-      Future<String> prepareConfig() => _prepareConfig(configYaml);
+      Future<String> prepareConfig() =>
+          _prepareConfig(configYaml, relayProfile: relayProfile);
 
       if (Platform.isAndroid && !isMockMode) {
         // Run VPN fd + config prep in parallel
@@ -315,6 +334,7 @@ class CoreManager {
             tunBypassAddresses: tunBypassAddresses,
             tunBypassProcesses: tunBypassProcesses,
             tunFd: tunFd,
+            relayHostWhitelist: relayBypassHosts,
           );
           _apiPort = ConfigTemplate.getApiPort(processed);
           _mixedPort = ConfigTemplate.getMixedPort(processed);
@@ -341,6 +361,7 @@ class CoreManager {
             tunBypassAddresses: tunBypassAddresses,
             tunBypassProcesses: tunBypassProcesses,
             tunFd: tunFd,
+            relayHostWhitelist: relayBypassHosts,
           );
           _apiPort = ConfigTemplate.getApiPort(processed);
           _mixedPort = ConfigTemplate.getMixedPort(processed);
@@ -543,6 +564,14 @@ class CoreManager {
           );
         }
 
+        // Commercial dialer-proxy (Phase 1A). bypassHosts is iOS-critical:
+        // fake-ip would otherwise hand the relay host a 198.18.x.x, routed
+        // back into the packet tunnel — classic self-loop.
+        final relayProfile = await RelayProfileService.load();
+        final relayResult = RelayInjector.apply(withOverwrite, relayProfile);
+        lastRelayResult = relayResult;
+        withOverwrite = relayResult.config;
+
         processed = await ConfigTemplate.processInIsolate(
           withOverwrite,
           apiPort: _apiPort,
@@ -551,6 +580,7 @@ class CoreManager {
           desktopTunStack: desktopTunStack,
           tunBypassAddresses: tunBypassAddresses,
           tunBypassProcesses: tunBypassProcesses,
+          relayHostWhitelist: relayProfile?.bypassHosts ?? const <String>[],
         );
         _apiPort = ConfigTemplate.getApiPort(processed);
         _mixedPort = ConfigTemplate.getMixedPort(processed);
@@ -649,7 +679,9 @@ class CoreManager {
         final appDir = await getApplicationSupportDirectory();
         homeDir = appDir.path;
 
-        final withOverwrite = await _prepareConfig(configYaml);
+        final relayProfile = await RelayProfileService.load();
+        final withOverwrite =
+            await _prepareConfig(configYaml, relayProfile: relayProfile);
         processed = await ConfigTemplate.processInIsolate(
           withOverwrite,
           apiPort: _apiPort,
@@ -658,6 +690,7 @@ class CoreManager {
           desktopTunStack: desktopTunStack,
           tunBypassAddresses: tunBypassAddresses,
           tunBypassProcesses: tunBypassProcesses,
+          relayHostWhitelist: relayProfile?.bypassHosts ?? const <String>[],
         );
         _apiPort = ConfigTemplate.getApiPort(processed);
         _mixedPort = ConfigTemplate.getMixedPort(processed);
@@ -919,7 +952,8 @@ class CoreManager {
     return ServiceManager.isInstalled();
   }
 
-  Future<String> _prepareConfig(String configYaml) async {
+  Future<String> _prepareConfig(String configYaml,
+      {RelayProfile? relayProfile}) async {
     final overwrite = await OverwriteService.load();
     var withOverwrite = OverwriteService.apply(configYaml, overwrite);
 
@@ -936,6 +970,15 @@ class CoreManager {
         upstream['port'] as int,
       );
     }
+
+    // Commercial dialer-proxy (Phase 1A). Pure additive: no-op when the
+    // profile is absent or invalid. Applied after upstream proxy so a user
+    // who sets both gets the relay wrapping their chosen exit nodes while
+    // the soft-router `_upstream` still fronts everything else. The result
+    // is captured for StartupReport / telemetry regardless of outcome.
+    final relayResult = RelayInjector.apply(withOverwrite, relayProfile);
+    lastRelayResult = relayResult;
+    withOverwrite = relayResult.config;
 
     // Port-conflict check applies to all desktop platforms — Linux is now
     // a first-class desktop target via .deb / .rpm / AppImage releases.
@@ -1052,6 +1095,7 @@ class CoreManager {
       steps: steps,
       failedStep: failedStep,
       coreLogs: coreLogs,
+      relay: _relayReportFields(),
     );
 
     lastReport = report;
@@ -1077,6 +1121,23 @@ class CoreManager {
 
     // Save to disk (fire-and-forget)
     StartupReport.save(report);
+  }
+
+  /// Build the relay block for StartupReport.
+  /// Returns null when no relay was ever attempted (null profile case is
+  /// the one we suppress — everything else, including skipped attempts,
+  /// is worth recording so telemetry can see the skip reason distribution).
+  Map<String, dynamic>? _relayReportFields() {
+    final r = lastRelayResult;
+    if (r == null) return null;
+    if (!r.injected && r.skipReason == RelayApplyResult.skipNoProfile) {
+      return null;
+    }
+    return {
+      'injected': r.injected,
+      if (r.targetCount > 0) 'targetCount': r.targetCount,
+      if (r.skipReason != null) 'skipReason': r.skipReason,
+    };
   }
 
   /// Stable error codes for dashboard grouping. Mirrors the E002–E009

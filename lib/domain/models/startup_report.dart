@@ -70,6 +70,14 @@ class StartupReport {
   final String? failedStep;
   final List<String> coreLogs;
 
+  /// Phase 1A relay block:
+  ///   `{'injected': bool, 'targetCount': int?, 'skipReason': String?}`
+  /// Null when no relay path was attempted (no persisted profile at all).
+  /// `skipReason` values are the closed set in [RelayApplyResult] —
+  /// callers must not invent new strings. Future phases (officialAccess /
+  /// superPeer) will add source/region/latencyMs here without schema churn.
+  final Map<String, dynamic>? relay;
+
   const StartupReport({
     required this.timestamp,
     required this.platform,
@@ -77,6 +85,7 @@ class StartupReport {
     required this.steps,
     this.failedStep,
     this.coreLogs = const [],
+    this.relay,
   });
 
   /// Human-readable summary: "[errorCode] step: message"
@@ -127,6 +136,7 @@ class StartupReport {
         'failedStep': failedStep,
         'steps': steps.map((s) => s.toJson()).toList(),
         'coreLogs': coreLogs,
+        if (relay != null) 'relay': relay,
       };
 
   factory StartupReport.fromJson(Map<String, dynamic> json) => StartupReport(
@@ -141,6 +151,9 @@ class StartupReport {
                 ?.map((e) => e as String)
                 .toList() ??
             const [],
+        relay: json['relay'] is Map
+            ? Map<String, dynamic>.from(json['relay'] as Map)
+            : null,
       );
 
   /// Save report to disk.

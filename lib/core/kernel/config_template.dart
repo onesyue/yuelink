@@ -103,6 +103,7 @@ class ConfigTemplate {
     List<String> tunBypassProcesses = const [],
     int? tunFd,
     String? quicRejectPolicy,
+    List<String> relayHostWhitelist = const [],
   }) {
     final effectiveQuicRejectPolicy = normalizeQuicRejectPolicy(
       quicRejectPolicy ?? _runtimeQuicRejectPolicy,
@@ -119,6 +120,7 @@ class ConfigTemplate {
         tunBypassProcesses: tunBypassProcesses,
         tunFd: tunFd,
         quicRejectPolicy: effectiveQuicRejectPolicy,
+        relayHostWhitelist: relayHostWhitelist,
       ));
     }
     // All closure captures are immutable value types — safe to send to a
@@ -134,6 +136,7 @@ class ConfigTemplate {
           tunBypassProcesses: tunBypassProcesses,
           tunFd: tunFd,
           quicRejectPolicy: effectiveQuicRejectPolicy,
+          relayHostWhitelist: relayHostWhitelist,
         ));
   }
 
@@ -148,6 +151,7 @@ class ConfigTemplate {
     List<String> tunBypassProcesses = const [],
     int? tunFd,
     String? quicRejectPolicy,
+    List<String> relayHostWhitelist = const [],
   }) {
     final effectiveQuicRejectPolicy = normalizeQuicRejectPolicy(
       quicRejectPolicy ?? _runtimeQuicRejectPolicy,
@@ -177,7 +181,7 @@ class ConfigTemplate {
     config = _ensureExternalController(config, apiPort, secret);
     debugPrint('[Config] 3 externalController done');
 
-    config = _ensureDns(config);
+    config = _ensureDns(config, relayHostWhitelist: relayHostWhitelist);
     debugPrint('[Config] 4 dns done');
 
     config = _ensureSniffer(config);
@@ -663,9 +667,16 @@ class ConfigTemplate {
   /// and inject nameserver-policy for Apple/iCloud so DIRECT-routed Apple
   /// system services (mesu.apple.com, etc.) resolve via domestic DoH instead
   /// of UDP DNS that may return 0.0.0.0 on some networks.
-  static String _ensureDns(String config) {
+  ///
+  /// [relayHostWhitelist] — hosts that MUST NOT be fake-ip'd. Used by
+  /// RelayInjector on iOS / TUN to keep the commercial dialer-proxy
+  /// reachable via real DNS resolution. Empty list is a no-op.
+  static String _ensureDns(
+    String config, {
+    List<String> relayHostWhitelist = const [],
+  }) {
     if (!_hasKey(config, 'dns')) {
-      return '$config\ndns:\n'
+      config = '$config\ndns:\n'
           '  enable: true\n'
           '  prefer-h3: true\n'
           '  enhanced-mode: fake-ip\n'
@@ -799,6 +810,7 @@ class ConfigTemplate {
           '      - "+.youtube.com"\n'
           '      - "+.github.com"\n'
           '      - "+.googleapis.com"\n';
+      return _appendRelayFakeIpFilter(config, relayHostWhitelist);
     }
 
     // Subscription has DNS section — use string operations to patch it
@@ -1031,7 +1043,54 @@ class ConfigTemplate {
       }
     }
 
-    return config;
+    return _appendRelayFakeIpFilter(config, relayHostWhitelist);
+  }
+
+  /// Append each host in [hosts] to the `fake-ip-filter` list inside the
+  /// existing `dns:` section so commercial dialer-proxy targets resolve via
+  /// real DNS instead of fake-ip. No-op when the list is empty or a host is
+  /// already present. The relay dial itself uses `proxy-server-nameserver`,
+  /// so this is the narrow bypass iOS / TUN needs to avoid self-loops.
+  static String _appendRelayFakeIpFilter(String config, List<String> hosts) {
+    if (hosts.isEmpty) return config;
+    if (!_hasKey(config, 'dns')) return config;
+
+    final dnsMatch = _reDnsKey.firstMatch(config);
+    if (dnsMatch == null) return config;
+    final afterDnsLine = config.indexOf('\n', dnsMatch.start);
+    final afterDns = afterDnsLine >= 0 ? afterDnsLine + 1 : config.length;
+    final nextTopLevel = _reTopLevel.firstMatch(config.substring(afterDns));
+    final dnsEnd =
+        nextTopLevel != null ? afterDns + nextTopLevel.start : config.length;
+    final dnsSection = config.substring(dnsMatch.start, dnsEnd);
+
+    final filterMatch = RegExp(r'fake-ip-filter:\s*\n').firstMatch(dnsSection);
+    if (filterMatch == null) return config;
+
+    final listMatch = RegExp(r'\n( +)- ').firstMatch(dnsSection);
+    final entryIndent = listMatch?.group(1) ?? '    ';
+
+    var injection = '';
+    for (final h in hosts) {
+      final trimmed = h.trim();
+      if (trimmed.isEmpty) continue;
+      if (dnsSection.contains('"$trimmed"') ||
+          dnsSection.contains('- $trimmed\n')) {
+        continue;
+      }
+      injection += '$entryIndent- "$trimmed"\n';
+    }
+    if (injection.isEmpty) return config;
+
+    var insertOffset = dnsMatch.start + filterMatch.end;
+    final afterFilter = config.substring(insertOffset);
+    final listEnd =
+        RegExp(r'^(?![ \t]+- )', multiLine: true).firstMatch(afterFilter);
+    if (listEnd != null) insertOffset += listEnd.start;
+
+    return config.substring(0, insertOffset) +
+        injection +
+        config.substring(insertOffset);
   }
 
   /// Force sniffer with override-destination: true for TLS/HTTP/QUIC.
