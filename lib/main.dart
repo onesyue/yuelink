@@ -23,7 +23,6 @@ import 'modules/nodes/nodes_page.dart';
 import 'modules/settings/settings_page.dart';
 import 'modules/settings/providers/settings_providers.dart';
 import 'modules/settings/hotkey_codec.dart';
-import 'domain/models/proxy.dart';
 import 'modules/onboarding/onboarding_page.dart';
 import 'modules/onboarding/persona_prompt_page.dart';
 import 'modules/carrier/carrier_provider.dart';
@@ -31,12 +30,11 @@ import 'modules/yue_auth/presentation/yue_auth_page.dart';
 import 'modules/yue_auth/providers/yue_auth_providers.dart';
 import 'modules/connections/providers/connections_providers.dart';
 import 'modules/dashboard/providers/dashboard_providers.dart';
-import 'modules/nodes/favorites/node_favorites_providers.dart';
+import 'modules/dashboard/providers/traffic_providers.dart';
 import 'core/managers/system_proxy_manager.dart';
 import 'core/providers/core_provider.dart';
 import 'modules/profiles/providers/profiles_providers.dart';
 import 'shared/app_notifier.dart';
-import 'core/kernel/config_template.dart';
 import 'core/kernel/core_manager.dart';
 import 'core/kernel/recovery_manager.dart';
 import 'core/platform/tile_service.dart';
@@ -52,6 +50,7 @@ import 'core/profile/profile_service.dart';
 import 'core/profile/subscription_sync_service.dart';
 import 'modules/updater/update_checker.dart';
 import 'core/storage/settings_service.dart';
+import 'shared/desktop/app_tray_controller.dart';
 import 'modules/emby/emby_media_page.dart';
 import 'modules/emby/emby_providers.dart';
 import 'modules/emby/emby_web_page.dart';
@@ -71,8 +70,10 @@ Future<bool> _ensureSingleInstance() async {
   const port = 47866;
   try {
     _singleInstanceServer = await ServerSocket.bind(
-        InternetAddress.loopbackIPv4, port,
-        shared: false);
+      InternetAddress.loopbackIPv4,
+      port,
+      shared: false,
+    );
     _singleInstanceServer!.listen((socket) {
       socket.listen((data) {
         final msg = String.fromCharCodes(data).trim();
@@ -87,12 +88,21 @@ Future<bool> _ensureSingleInstance() async {
   } on SocketException {
     // Another instance is running — ask it to show itself
     try {
-      final socket = await Socket.connect(InternetAddress.loopbackIPv4, port,
-          timeout: const Duration(seconds: 1));
+      final socket = await Socket.connect(
+        InternetAddress.loopbackIPv4,
+        port,
+        timeout: const Duration(seconds: 1),
+      );
       socket.write('show\n');
       await socket.flush();
       await socket.close();
-    } catch (_) {}
+    } catch (e) {
+      EventLog.writeTagged(
+        'App',
+        'single_instance_show_failed',
+        context: {'error': e},
+      );
+    }
     return false;
   }
 }
@@ -145,12 +155,14 @@ Future<void> _bootstrap() async {
   // make the bars transparent with the correct icon brightness.
   if (Platform.isAndroid) {
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-    SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      systemNavigationBarColor: Colors.transparent,
-      systemNavigationBarDividerColor: Colors.transparent,
-      systemNavigationBarContrastEnforced: false,
-    ));
+    SystemChrome.setSystemUIOverlayStyle(
+      const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        systemNavigationBarColor: Colors.transparent,
+        systemNavigationBarDividerColor: Colors.transparent,
+        systemNavigationBarContrastEnforced: false,
+      ),
+    );
   }
 
   // ── Image cache limit (prevent 1GB+ memory from decoded bitmaps) ──
@@ -168,17 +180,19 @@ Future<void> _bootstrap() async {
   }
 
   // ── Anonymous telemetry (opt-in, default OFF) ──
-  unawaited(Telemetry.init().then((_) async {
-    // Daily heartbeat — emit at most once per calendar day (UTC) so retention
-    // curves count users who launched the app even when no feature event
-    // happened. Persisted as a YYYY-MM-DD string; cheap string compare.
-    final today = DateTime.now().toUtc().toIso8601String().substring(0, 10);
-    final last = await SettingsService.get<String>('telemetryDailyPingDay');
-    if (last != today) {
-      Telemetry.event('daily_ping');
-      await SettingsService.set('telemetryDailyPingDay', today);
-    }
-  }));
+  unawaited(
+    Telemetry.init().then((_) async {
+      // Daily heartbeat — emit at most once per calendar day (UTC) so retention
+      // curves count users who launched the app even when no feature event
+      // happened. Persisted as a YYYY-MM-DD string; cheap string compare.
+      final today = DateTime.now().toUtc().toIso8601String().substring(0, 10);
+      final last = await SettingsService.get<String>('telemetryDailyPingDay');
+      if (last != today) {
+        Telemetry.event('daily_ping');
+        await SettingsService.set('telemetryDailyPingDay', today);
+      }
+    }),
+  );
 
   // ── Remote feature flags — fire-and-forget, safe defaults apply on offline ──
   unawaited(FeatureFlags.I.init());
@@ -263,9 +277,21 @@ Future<void> _bootstrap() async {
     for (final sig in [ProcessSignal.sigterm, ProcessSignal.sigint]) {
       sig.watch().listen((_) async {
         try {
-          await CoreActions.clearSystemProxyStatic()
-              .timeout(const Duration(seconds: 2));
-        } catch (_) {}
+          await CoreActions.clearSystemProxyStatic().timeout(
+            const Duration(seconds: 2),
+          );
+        } catch (e) {
+          // Fire-and-forget — writeTagged does not await the file write,
+          // so exit(0) below is never blocked by logging. If the buffered
+          // write loses its race with process termination, that is fine:
+          // the proxy-clear failure we care about is also logged by the
+          // OS-side networksetup stderr.
+          EventLog.writeTagged(
+            'App',
+            'signal_proxy_clear_failed',
+            context: {'error': e},
+          );
+        }
         exit(0);
       });
     }
@@ -308,13 +334,14 @@ Future<void> _bootstrap() async {
   // the user triggers a subscription sync. Fire-and-forget — never blocks
   // cold start, never throws.
   if (savedProfileId != null && savedProfileId.isNotEmpty) {
-    unawaited(NodeTelemetry.ensureInventoryLoaded(
-      loadActiveConfig: () => ProfileService.loadConfig(savedProfileId),
-    ));
+    unawaited(
+      NodeTelemetry.ensureInventoryLoaded(
+        loadActiveConfig: () => ProfileService.loadConfig(savedProfileId),
+      ),
+    );
   }
 
   // Initialize core manager
-  ConfigTemplate.setDefaultQuicRejectPolicy(savedQuicPolicy);
   CoreManager.instance;
 
   // ── Global hotkeys (desktop) ─────────────────────────────────────────────
@@ -322,47 +349,49 @@ Future<void> _bootstrap() async {
     await hotKeyManager.unregisterAll();
   }
 
-  runApp(ProviderScope(
-    overrides: [
-      themeProvider.overrideWith((ref) => savedTheme),
-      languageProvider.overrideWith((ref) => savedLanguage),
-      accentColorProvider.overrideWith((ref) => savedAccentColor),
-      subSyncIntervalProvider.overrideWith((ref) => savedSubSyncInterval),
-      preloadedProfileIdProvider.overrideWithValue(savedProfileId),
-      routingModeProvider.overrideWith((ref) => savedRoutingMode),
-      connectionModeProvider.overrideWith((ref) => savedConnectionMode),
-      quicPolicyProvider.overrideWith((ref) => savedQuicPolicy),
-      desktopTunStackProvider.overrideWith((ref) => savedDesktopTunStack),
-      logLevelProvider.overrideWith((ref) => savedLogLevel),
-      autoConnectProvider.overrideWith((ref) => savedAutoConnect),
-      systemProxyOnConnectProvider.overrideWith((ref) => savedSystemProxy),
-      testUrlProvider.overrideWith((ref) => savedTestUrl),
-      closeBehaviorProvider.overrideWith((ref) => savedCloseBehavior),
-      toggleHotkeyProvider.overrideWith((ref) => savedToggleHotkey),
-      delayResultsProvider.overrideWith((ref) => savedDelayResults),
-      expandedGroupNamesProvider.overrideWith((ref) => <String>{}),
-      initialTabIndexProvider.overrideWithValue(savedTabIndex),
-      hasSeenOnboardingProvider.overrideWith((ref) => savedOnboarding),
-      onboardingPersonaProvider.overrideWith((ref) => savedPersona),
-      initialBuiltTabsProvider.overrideWithValue(savedBuiltTabs),
-      tileShowNodeInfoProvider.overrideWith((ref) => savedTileShowNodeInfo),
-      // Pre-loaded auth state: eliminates blank screen from async AuthNotifier._init()
-      preloadedAuthStateProvider.overrideWithValue(
-        (savedToken != null && savedToken.isNotEmpty)
-            ? AuthState(
-                status: AuthStatus.loggedIn,
-                token: savedToken,
-                userProfile: savedProfile,
-              )
-            : const AuthState(status: AuthStatus.loggedOut),
-      ),
-    ],
-    // TranslationProvider feeds slang's `Translations.of(context)` —
-    // required for the new `S.of(context)` adapter (which forwards to
-    // slang's `t`). Sits inside ProviderScope so Riverpod's languageProvider
-    // can still drive the locale change via S.setLanguage().
-    child: TranslationProvider(child: const YueLinkApp()),
-  ));
+  runApp(
+    ProviderScope(
+      overrides: [
+        themeProvider.overrideWith((ref) => savedTheme),
+        languageProvider.overrideWith((ref) => savedLanguage),
+        accentColorProvider.overrideWith((ref) => savedAccentColor),
+        subSyncIntervalProvider.overrideWith((ref) => savedSubSyncInterval),
+        preloadedProfileIdProvider.overrideWithValue(savedProfileId),
+        routingModeProvider.overrideWith((ref) => savedRoutingMode),
+        connectionModeProvider.overrideWith((ref) => savedConnectionMode),
+        quicPolicyProvider.overrideWith((ref) => savedQuicPolicy),
+        desktopTunStackProvider.overrideWith((ref) => savedDesktopTunStack),
+        logLevelProvider.overrideWith((ref) => savedLogLevel),
+        autoConnectProvider.overrideWith((ref) => savedAutoConnect),
+        systemProxyOnConnectProvider.overrideWith((ref) => savedSystemProxy),
+        testUrlProvider.overrideWith((ref) => savedTestUrl),
+        closeBehaviorProvider.overrideWith((ref) => savedCloseBehavior),
+        toggleHotkeyProvider.overrideWith((ref) => savedToggleHotkey),
+        delayResultsProvider.overrideWith((ref) => savedDelayResults),
+        expandedGroupNamesProvider.overrideWith((ref) => <String>{}),
+        initialTabIndexProvider.overrideWithValue(savedTabIndex),
+        hasSeenOnboardingProvider.overrideWith((ref) => savedOnboarding),
+        onboardingPersonaProvider.overrideWith((ref) => savedPersona),
+        initialBuiltTabsProvider.overrideWithValue(savedBuiltTabs),
+        tileShowNodeInfoProvider.overrideWith((ref) => savedTileShowNodeInfo),
+        // Pre-loaded auth state: eliminates blank screen from async AuthNotifier._init()
+        preloadedAuthStateProvider.overrideWithValue(
+          (savedToken != null && savedToken.isNotEmpty)
+              ? AuthState(
+                  status: AuthStatus.loggedIn,
+                  token: savedToken,
+                  userProfile: savedProfile,
+                )
+              : const AuthState(status: AuthStatus.loggedOut),
+        ),
+      ],
+      // TranslationProvider feeds slang's `Translations.of(context)` —
+      // required for the new `S.of(context)` adapter (which forwards to
+      // slang's `t`). Sits inside ProviderScope so Riverpod's languageProvider
+      // can still drive the locale change via S.setLanguage().
+      child: TranslationProvider(child: const YueLinkApp()),
+    ),
+  );
 }
 
 class YueLinkApp extends ConsumerStatefulWidget {
@@ -373,8 +402,8 @@ class YueLinkApp extends ConsumerStatefulWidget {
 }
 
 class _YueLinkAppState extends ConsumerState<YueLinkApp>
-    with TrayListener, WindowListener, WidgetsBindingObserver {
-  bool _trayInitialized = false;
+    with WindowListener, WidgetsBindingObserver {
+  late final AppTrayController _tray;
   final _appLinks = AppLinks();
   StreamSubscription<Uri>? _appLinksSub;
 
@@ -407,6 +436,19 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
   @override
   void initState() {
     super.initState();
+    _tray = AppTrayController(
+      ref: ref,
+      showMainWindow: _showMainWindow,
+      loadSelectedProfileConfig: () async {
+        // Mirrors the old _handleTrayConnect lookup: return null when
+        // there's no active profile OR when loading it fails; the
+        // controller treats null as "show main window".
+        final activeId = ref.read(activeProfileIdProvider);
+        if (activeId == null) return null;
+        return ProfileService.loadConfig(activeId);
+      },
+      onQuit: _handleQuit,
+    );
     WidgetsBinding.instance.addObserver(this);
     if (Platform.isAndroid || Platform.isIOS) {
       _setupVpnRevocationListener();
@@ -419,7 +461,7 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
       windowManager.setPreventClose(true);
     }
     if (Platform.isMacOS || Platform.isWindows) {
-      _initTray();
+      _tray.init();
     }
     // Auto-connect and expiry check after first frame is rendered
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -465,7 +507,7 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
     // Keep S.current in sync with language provider
     _langSub = ref.listenManual(languageProvider, (_, lang) {
       S.setLanguage(lang);
-      _updateTrayMenu(
+      _tray.updateMenu(
         status: ref.read(coreStatusProvider),
         groups: ref.read(proxyGroupsProvider),
       );
@@ -473,10 +515,7 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
 
     // Sync tray menu with connection state; notify on unexpected disconnect
     _statusSub = ref.listenManual(coreStatusProvider, (prev, next) {
-      _updateTrayMenu(
-        status: next,
-        groups: ref.read(proxyGroupsProvider),
-      );
+      _tray.updateMenu(status: next, groups: ref.read(proxyGroupsProvider));
       // Update Android Quick Settings tile state (includes transition
       // flag for "连接中..." / "断开中..." intermediate UX).
       if (Platform.isAndroid) {
@@ -492,10 +531,7 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
 
     // Sync tray proxy submenu when proxy groups change
     _groupsSub = ref.listenManual(proxyGroupsProvider, (_, groups) {
-      _updateTrayMenu(
-        status: ref.read(coreStatusProvider),
-        groups: groups,
-      );
+      _tray.updateMenu(status: ref.read(coreStatusProvider), groups: groups);
     });
 
     // Re-check subscription expiry after profiles are updated
@@ -525,17 +561,17 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
     // proxy conflict) and core/managers/core_lifecycle_manager (stop
     // finally). Those call sites now rely on this one listener so the
     // two core/managers files can drop their modules/nodes imports.
-    _delayResetSub = ref.listenManual<CoreStatus>(
-      coreStatusProvider,
-      (prev, next) {
-        if (prev != null &&
-            prev != CoreStatus.stopped &&
-            next == CoreStatus.stopped) {
-          ref.read(delayResultsProvider.notifier).state = {};
-          ref.read(delayTestingProvider.notifier).state = {};
-        }
-      },
-    );
+    _delayResetSub = ref.listenManual<CoreStatus>(coreStatusProvider, (
+      prev,
+      next,
+    ) {
+      if (prev != null &&
+          prev != CoreStatus.stopped &&
+          next == CoreStatus.stopped) {
+        ref.read(delayResultsProvider.notifier).state = {};
+        ref.read(delayTestingProvider.notifier).state = {};
+      }
+    });
 
     // Android tile subtitle refresh on exit-IP resolution and on the
     // show-node-info toggle. Both are cheap and idempotent.
@@ -579,8 +615,10 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
         try {
           final api = CoreManager.instance.api;
           if (!await api.isAvailable()) return;
-          debugPrint('[App] transport $prev→$now — flushing fake-ip + '
-              'closing connections');
+          debugPrint(
+            '[App] transport $prev→$now — flushing fake-ip + '
+            'closing connections',
+          );
           // Fire both in parallel; either one failing isn't fatal.
           await Future.wait<void>([
             api.flushFakeIpCache().then((_) {}).catchError((_) {}),
@@ -709,7 +747,7 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
     TileService.onOpenPreferences = null;
     WidgetsBinding.instance.removeObserver(this);
     _appLinksSub?.cancel();
-    if (_trayInitialized) trayManager.removeListener(this);
+    _tray.dispose();
     if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
       windowManager.removeListener(this);
     }
@@ -748,7 +786,8 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
       // duplicate stream invalidations, state flip-flop).
       if (Platform.isAndroid && !_initialRecoveryDone) {
         debugPrint(
-            '[AppLifecycle] skipping resumed — initial recovery pending');
+          '[AppLifecycle] skipping resumed — initial recovery pending',
+        );
         return;
       }
       // Second-level guard: coalesce overlapping resume events. If a handler
@@ -816,8 +855,10 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
       // defaults, so userStoppedProvider reverts to false and we go
       // through the normal health check.
       if (ref.read(userStoppedProvider)) {
-        debugPrint('[AppLifecycle] resumed in user-stopped state — '
-            'skipping health recovery (respecting explicit stop)');
+        debugPrint(
+          '[AppLifecycle] resumed in user-stopped state — '
+          'skipping health recovery (respecting explicit stop)',
+        );
         return;
       }
       ref.read(recoveryInProgressProvider.notifier).state = true;
@@ -825,7 +866,8 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
         final health = await RecoveryManager.checkCoreHealth();
         if (health.alive && health.apiOk) {
           debugPrint(
-              '[AppLifecycle] core alive but Dart state was $status — recovering');
+            '[AppLifecycle] core alive but Dart state was $status — recovering',
+          );
           // Restore Dart state + ports to match reality
           await manager.markRunning();
           // Invalidate streams BEFORE setting status to running.
@@ -908,15 +950,19 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
     // Linux: global hotkeys unreliable under Wayland — skip silently
     if (Platform.isLinux) {
       debugPrint(
-          '[Hotkey] Skipping global hotkey on Linux (Wayland not supported)');
+        '[Hotkey] Skipping global hotkey on Linux (Wayland not supported)',
+      );
       return;
     }
     try {
       final stored = ref.read(toggleHotkeyProvider);
       final toggleKey = parseStoredHotkey(stored);
-      await hotKeyManager.register(toggleKey, keyDownHandler: (_) {
-        _handleTrayToggle();
-      });
+      await hotKeyManager.register(
+        toggleKey,
+        keyDownHandler: (_) {
+          _tray.handleToggle();
+        },
+      );
     } catch (e) {
       // Hotkey registration can fail if another app holds the shortcut
       debugPrint('[App] hotkey registration: $e');
@@ -928,9 +974,12 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
     try {
       await hotKeyManager.unregisterAll();
       final toggleKey = parseStoredHotkey(newHotkeyStr);
-      await hotKeyManager.register(toggleKey, keyDownHandler: (_) {
-        _handleTrayToggle();
-      });
+      await hotKeyManager.register(
+        toggleKey,
+        keyDownHandler: (_) {
+          _tray.handleToggle();
+        },
+      );
     } catch (e) {
       debugPrint('[App] hotkey re-registration: $e');
     }
@@ -958,285 +1007,10 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
 
   // ── Tray (Desktop Quick Control) ─────────────────────────────────
   //
-  // Provides a unified menu bar (macOS) / system tray (Windows) control
-  // center with: status display, connect/disconnect, best node, recent
-  // nodes quick switch, basic stats, subscription update, and quit.
-  //
-  // All actions route through existing CoreManager / CoreActions /
-  // ProxyGroupsNotifier — no independent connection logic here.
-
-  Future<void> _initTray() async {
-    try {
-      await trayManager.setIcon(
-        Platform.isWindows
-            // Squircle-rounded brand icon (indigo). A white-on-transparent
-            // variant disappears on light Windows tray themes — use the
-            // colored brand icon. Multi-size .ico generated by
-            // scripts/round_appicon.py.
-            ? 'assets/app_icon_tray.ico'
-            : 'assets/tray_icon_macos.png',
-      );
-      _trayInitialized = true;
-      await _updateTrayMenu(
-        status: CoreStatus.stopped,
-        groups: const [],
-      );
-      trayManager.addListener(this);
-    } catch (e) {
-      debugPrint('[Tray] init failed: $e');
-    }
-  }
-
-  Future<void> _updateTrayMenu({
-    required CoreStatus status,
-    List<ProxyGroup>? groups,
-  }) async {
-    if (!_trayInitialized) return;
-    final s = S.current;
-    final isRunning = status == CoreStatus.running;
-    final isConnecting = status == CoreStatus.starting;
-    final auth = ref.read(authProvider);
-    final isLoggedIn = auth.isLoggedIn;
-
-    // ── Status line ──
-    String statusLine;
-    if (!isLoggedIn) {
-      statusLine = 'YueLink · 未登录';
-    } else if (isConnecting) {
-      statusLine = 'YueLink · 连接中...';
-    } else if (isRunning) {
-      final currentNode = _getCurrentNodeName(groups);
-      statusLine = currentNode != null
-          ? 'YueLink · 已连接 · ${_truncate(currentNode, 16)}'
-          : 'YueLink · 已连接';
-    } else {
-      statusLine = 'YueLink · 未连接';
-    }
-
-    // Update tooltip
-    trayManager.setToolTip(statusLine).ignore();
-
-    // ── Build menu items ──
-    final items = <MenuItem>[];
-
-    // 1. Status header (disabled label)
-    items.add(MenuItem(key: '_status', label: statusLine));
-    items.add(MenuItem.separator());
-
-    // 2. Connect / Disconnect
-    if (isConnecting) {
-      items.add(MenuItem(key: '_connecting', label: '连接中，请稍候...'));
-    } else if (isRunning) {
-      items.add(MenuItem(key: 'disconnect', label: s.trayDisconnect));
-      items.add(MenuItem(key: 'best_node', label: '连接最佳节点'));
-    } else {
-      items.add(MenuItem(key: 'connect', label: s.trayConnect));
-      items.add(MenuItem(key: 'best_node', label: '连接最佳节点'));
-    }
-    items.add(MenuItem.separator());
-
-    // 3. Recent nodes (max 5)
-    final recentNodes = ref.read(recentNodesProvider);
-    if (recentNodes.isNotEmpty) {
-      final recentItems = <MenuItem>[];
-      for (var i = 0; i < recentNodes.length; i++) {
-        final node = recentNodes[i];
-        recentItems.add(MenuItem(
-          key: 'recent_$i',
-          label: _truncate(node.name, 20),
-        ));
-      }
-      items.add(MenuItem.submenu(
-        label: '最近节点',
-        submenu: Menu(items: recentItems),
-      ));
-    }
-
-    // 4. Proxy groups quick switch (when running)
-    if (isRunning && groups != null && groups.isNotEmpty) {
-      final proxySubMenus = <MenuItem>[];
-      final selectors = groups
-          .where((g) => g.type.toLowerCase() == 'selector')
-          .take(3)
-          .toList();
-      for (var gi = 0; gi < selectors.length; gi++) {
-        final group = selectors[gi];
-        final nodeItems = <MenuItem>[];
-        final nodes = group.all.take(10).toList();
-        for (var ni = 0; ni < nodes.length; ni++) {
-          final node = nodes[ni];
-          nodeItems.add(MenuItem(
-            key: 'proxy_${gi}_$ni',
-            label: node == group.now ? '✓ $node' : '  $node',
-          ));
-        }
-        if (nodeItems.isNotEmpty) {
-          proxySubMenus.add(MenuItem.submenu(
-            label: group.name,
-            submenu: Menu(items: nodeItems),
-          ));
-        }
-      }
-      if (proxySubMenus.isNotEmpty) {
-        items.add(MenuItem.submenu(
-          label: s.trayProxies,
-          submenu: Menu(items: proxySubMenus),
-        ));
-      }
-    }
-
-    // 5. Basic status info (when running)
-    if (isRunning) {
-      items.add(MenuItem.separator());
-      final mode = ref.read(connectionModeProvider);
-      final modeName = mode == 'tun' ? 'TUN' : '系统代理';
-      final profile = auth.userProfile;
-      final statusItems = <MenuItem>[
-        MenuItem(key: '_mode', label: '模式：$modeName'),
-      ];
-      if (profile != null && profile.transferEnable != null) {
-        final used = (profile.uploadUsed ?? 0) + (profile.downloadUsed ?? 0);
-        final total = profile.transferEnable!;
-        final usedGb = (used / 1073741824).toStringAsFixed(1);
-        final totalGb = (total / 1073741824).toStringAsFixed(0);
-        statusItems.add(MenuItem(
-          key: '_traffic',
-          label: '流量：$usedGb GB / $totalGb GB',
-        ));
-      }
-      items.add(MenuItem.submenu(
-        label: '基础状态',
-        submenu: Menu(items: statusItems),
-      ));
-    }
-
-    items.add(MenuItem.separator());
-
-    // 6. Actions
-    items.add(MenuItem(key: 'show', label: s.trayShowWindow));
-    items.add(MenuItem(key: 'sync', label: '更新订阅'));
-    items.add(MenuItem.separator());
-    items.add(MenuItem(key: 'quit', label: s.trayQuit));
-
-    try {
-      await trayManager.setContextMenu(Menu(items: items));
-    } catch (e) {
-      debugPrint('[Tray] menu update: $e');
-    }
-  }
-
-  /// Get the currently selected node name from the first selector group.
-  String? _getCurrentNodeName(List<ProxyGroup>? groups) {
-    if (groups == null || groups.isEmpty) return null;
-    final selector =
-        groups.where((g) => g.type.toLowerCase() == 'selector').firstOrNull;
-    return selector?.now;
-  }
-
-  /// Truncate a string for tray display.
-  static String _truncate(String s, int max) =>
-      s.length <= max ? s : '${s.substring(0, max)}…';
-
-  // Resolves a proxy_gi_ni key to (groupName, nodeName) using current groups.
-  (String, String)? _resolveProxyKey(String key) {
-    final parts = key.split('_');
-    if (parts.length != 3) return null;
-    final gi = int.tryParse(parts[1]);
-    final ni = int.tryParse(parts[2]);
-    if (gi == null || ni == null) return null;
-    final groups = ref
-        .read(proxyGroupsProvider)
-        .where((g) => g.type.toLowerCase() == 'selector')
-        .take(3)
-        .toList();
-    if (gi >= groups.length) return null;
-    final group = groups[gi];
-    final nodes = group.all.take(10).toList();
-    if (ni >= nodes.length) return null;
-    return (group.name, nodes[ni]);
-  }
-
-  @override
-  void onTrayIconMouseDown() {
-    if (Platform.isMacOS) {
-      // macOS: left-click shows menu (standard menu bar behavior)
-      trayManager.popUpContextMenu();
-    } else {
-      // Windows: left-click toggles window
-      _showMainWindow();
-    }
-  }
-
-  @override
-  void onTrayIconRightMouseDown() {
-    trayManager.popUpContextMenu();
-  }
-
-  @override
-  void onTrayMenuItemClick(MenuItem menuItem) {
-    final key = menuItem.key ?? '';
-    // Write every tray click to event.log so if a user reports "Quit
-    // doesn't exit" we can confirm from the log file whether the
-    // callback actually fired (and with what key).
-    debugPrint('[Tray] menu click: key="$key" label="${menuItem.label}"');
-    try {
-      EventLog.write('[Tray] click key=$key label=${menuItem.label}');
-    } catch (_) {}
-
-    // Unified quit path — _handleQuit awaits the system-proxy clear (critical
-    // on macOS, where fire-and-forget would have exit(0) race past the
-    // networksetup subprocesses), and carries its own 3s hard-cap safety
-    // timer so this can't hang. Previous fire-and-forget implementation
-    // was dropping the clear entirely on fast machines.
-    if (key == 'quit' || menuItem.label == S.current.trayQuit) {
-      unawaited(_handleQuit());
-      return;
-    }
-
-    // All other tray items continue async.
-    _dispatchTrayMenuItemAsync(key);
-  }
-
-  Future<void> _dispatchTrayMenuItemAsync(String key) async {
-    // Status header: the top "YueLink · 已连接 · <node>" line. Treat a click
-    // on it as a shortcut to the main window so users don't have to scroll
-    // down to the explicit "显示窗口" item.
-    if (key == '_status') {
-      await _showMainWindow();
-      return;
-    }
-    // Ignore other disabled status labels (mode / traffic submenu entries).
-    if (key.startsWith('_')) return;
-
-    if (key.startsWith('proxy_')) {
-      final resolved = _resolveProxyKey(key);
-      if (resolved != null) {
-        ref
-            .read(proxyGroupsProvider.notifier)
-            .changeProxy(resolved.$1, resolved.$2);
-      }
-      return;
-    }
-
-    if (key.startsWith('recent_')) {
-      final idx = int.tryParse(key.substring(7));
-      if (idx != null) await _handleRecentNodeSwitch(idx);
-      return;
-    }
-
-    switch (key) {
-      case 'connect':
-        await _handleTrayConnect();
-      case 'disconnect':
-        await _handleTrayDisconnect();
-      case 'best_node':
-        await _handleBestNode();
-      case 'show':
-        await _showMainWindow();
-      case 'sync':
-        await _handleSyncSubscription();
-    }
-  }
+  // All tray icon / menu / dispatch logic lives in
+  // lib/shared/desktop/app_tray_controller.dart. Connect/disconnect routes
+  // through the same CoreManager / CoreActions / ProxyGroupsNotifier paths
+  // the main UI uses — no independent connection logic.
 
   Future<void> _showMainWindow() async {
     try {
@@ -1244,81 +1018,6 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
       await windowManager.focus();
     } catch (e) {
       debugPrint('[Tray] show window: $e');
-    }
-  }
-
-  Future<void> _handleTrayConnect() async {
-    final status = ref.read(coreStatusProvider);
-    if (status != CoreStatus.stopped) return; // debounce
-    final actions = ref.read(coreActionsProvider);
-    final isMock = ref.read(isMockModeProvider);
-
-    if (isMock) {
-      await actions.start('');
-    } else {
-      final activeId = ref.read(activeProfileIdProvider);
-      if (activeId == null) {
-        await _showMainWindow();
-        return;
-      }
-      final config = await ProfileService.loadConfig(activeId);
-      if (config == null) return;
-      await actions.start(config);
-    }
-  }
-
-  Future<void> _handleTrayDisconnect() async {
-    final status = ref.read(coreStatusProvider);
-    if (status != CoreStatus.running) return; // debounce
-    await ref.read(coreActionsProvider).stop();
-  }
-
-  Future<void> _handleTrayToggle() async {
-    final status = ref.read(coreStatusProvider);
-    if (status == CoreStatus.running) {
-      await _handleTrayDisconnect();
-    } else if (status == CoreStatus.stopped) {
-      await _handleTrayConnect();
-    }
-  }
-
-  Future<void> _handleBestNode() async {
-    // Open main window so the user can see the result; smart select
-    // requires the full UI context and running core.
-    await _showMainWindow();
-  }
-
-  Future<void> _handleRecentNodeSwitch(int index) async {
-    final recentNodes = ref.read(recentNodesProvider);
-    if (index >= recentNodes.length) return;
-    final node = recentNodes[index];
-
-    // If running, switch node in the group
-    if (ref.read(coreStatusProvider) == CoreStatus.running) {
-      try {
-        await CoreManager.instance.api.changeProxy(node.group, node.name);
-        ref.read(proxyGroupsProvider.notifier).refresh();
-        AppNotifier.success('已切换到 ${node.name}');
-      } catch (e) {
-        debugPrint('[Tray] switch recent node: $e');
-      }
-    } else {
-      // Not running — start with current profile then the node will be used
-      await _handleTrayConnect();
-    }
-  }
-
-  Future<void> _handleSyncSubscription() async {
-    final auth = ref.read(authProvider);
-    if (!auth.isLoggedIn) {
-      await _showMainWindow();
-      return;
-    }
-    try {
-      await ref.read(authProvider.notifier).syncSubscription();
-      AppNotifier.success('订阅更新成功');
-    } catch (e) {
-      AppNotifier.error('订阅更新失败');
     }
   }
 
@@ -1343,7 +1042,13 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
       if (Platform.isWindows) {
         try {
           Process.killPid(pid, ProcessSignal.sigkill);
-        } catch (_) {}
+        } catch (e) {
+          EventLog.writeTagged(
+            'Quit',
+            'quit_kill_fallback_failed',
+            context: {'error': e},
+          );
+        }
       }
       exit(0);
     });
@@ -1351,33 +1056,70 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
     try {
       final status = ref.read(coreStatusProvider);
       if (status == CoreStatus.running) {
-        await ref.read(coreActionsProvider).stop().timeout(
-              const Duration(seconds: 2),
-              onTimeout: () {},
-            );
+        await ref
+            .read(coreActionsProvider)
+            .stop()
+            .timeout(const Duration(seconds: 2), onTimeout: () {});
       }
       try {
         _singleInstanceServer?.close();
-      } catch (_) {}
+      } catch (e) {
+        EventLog.writeTagged(
+          'Quit',
+          'quit_server_close_failed',
+          context: {'error': e},
+        );
+      }
       // System proxy clear is the user-visible correctness requirement —
       // must complete before exit, or the OS keeps routing traffic through
       // a dead mixed-port. 2s cap covers the slow macOS path (N network
       // services × 3 networksetup calls); the global 3s timer above is the
       // hard safety net if this itself hangs.
       try {
-        await CoreActions.clearSystemProxyStatic()
-            .timeout(const Duration(seconds: 2));
-      } catch (_) {}
+        await CoreActions.clearSystemProxyStatic().timeout(
+          const Duration(seconds: 2),
+        );
+      } catch (e) {
+        EventLog.writeTagged(
+          'Quit',
+          'quit_proxy_clear_failed',
+          context: {'error': e},
+        );
+      }
       try {
         trayManager.destroy();
-      } catch (_) {}
+      } catch (e) {
+        EventLog.writeTagged(
+          'Quit',
+          'quit_tray_destroy_failed',
+          context: {'error': e},
+        );
+      }
       try {
         windowManager.setPreventClose(false);
-      } catch (_) {}
+      } catch (e) {
+        EventLog.writeTagged(
+          'Quit',
+          'quit_prevent_close_failed',
+          context: {'error': e},
+        );
+      }
       try {
         windowManager.destroy();
-      } catch (_) {}
-    } catch (_) {}
+      } catch (e) {
+        EventLog.writeTagged(
+          'Quit',
+          'quit_window_destroy_failed',
+          context: {'error': e},
+        );
+      }
+    } catch (e) {
+      EventLog.writeTagged(
+        'Quit',
+        'quit_cleanup_failed',
+        context: {'error': e},
+      );
+    }
     exit(0);
   }
 
@@ -1415,12 +1157,14 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
       final config = await ProfileService.loadConfig(activeId);
       if (config == null) {
         debugPrint(
-            '[AutoConnect] config file not found for profile: $activeId');
+          '[AutoConnect] config file not found for profile: $activeId',
+        );
         return;
       }
 
       debugPrint(
-          '[AutoConnect] starting with profile: $activeId (${config.length} bytes)');
+        '[AutoConnect] starting with profile: $activeId (${config.length} bytes)',
+      );
       final ok = await ref.read(coreActionsProvider).start(config);
       debugPrint('[AutoConnect] result: $ok');
     } catch (e) {
@@ -1486,7 +1230,8 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
     // so the app doesn't spontaneously change palette under them.
     return DynamicColorBuilder(
       builder: (lightDynamic, darkDynamic) {
-        final useDynamic = accentColor == YLColors.primary &&
+        final useDynamic =
+            accentColor == YLColors.primary &&
             lightDynamic != null &&
             darkDynamic != null;
         return MaterialApp(
@@ -1620,8 +1365,9 @@ class _MainShellState extends ConsumerState<MainShell> {
   @override
   void initState() {
     super.initState();
-    _currentIndex =
-        ref.read(initialTabIndexProvider).clamp(0, _pages.length - 1);
+    _currentIndex = ref
+        .read(initialTabIndexProvider)
+        .clamp(0, _pages.length - 1);
     // Restore previously visited tabs from persistence (Android process restore)
     final savedTabs = ref.read(initialBuiltTabsProvider);
     _builtTabs = <int, bool>{
@@ -1638,7 +1384,8 @@ class _MainShellState extends ConsumerState<MainShell> {
       if (next >= 0 && next < _pages.length) switchTab(next);
       // Use microtask so the notifier isn't mutated during the notification.
       Future.microtask(
-          () => ref.read(tileNavRequestProvider.notifier).state = null);
+        () => ref.read(tileNavRequestProvider.notifier).state = null,
+      );
     });
   }
 
@@ -1698,22 +1445,22 @@ class _MainShellState extends ConsumerState<MainShell> {
       (
         const Icon(Icons.home_outlined, size: 20),
         const Icon(Icons.home_filled, size: 20),
-        s.navHome
+        s.navHome,
       ),
       (
         const Icon(Icons.public_outlined, size: 20),
         const Icon(Icons.public, size: 20),
-        s.navProxies
+        s.navProxies,
       ),
       (
         const Icon(Icons.play_circle_outline, size: 20),
         const Icon(Icons.play_circle_filled, size: 20),
-        s.navEmby
+        s.navEmby,
       ),
       (
         const Icon(Icons.person_outline_rounded, size: 20),
         const Icon(Icons.person_rounded, size: 20),
-        s.navMine
+        s.navMine,
       ),
     ];
 
@@ -1732,8 +1479,9 @@ class _MainShellState extends ConsumerState<MainShell> {
       bottomNavigationBar: CupertinoTabBar(
         currentIndex: _currentIndex,
         onTap: (i) => switchTab(i),
-        backgroundColor:
-            Theme.of(context).colorScheme.surface.withValues(alpha: 0.85),
+        backgroundColor: Theme.of(
+          context,
+        ).colorScheme.surface.withValues(alpha: 0.85),
         border: Border(
           top: BorderSide(
             color: Theme.of(context).brightness == Brightness.dark
@@ -1798,22 +1546,27 @@ class _Sidebar extends StatelessWidget {
                     color: YLColors.primary,
                     borderRadius: BorderRadius.circular(YLRadius.xl),
                   ),
-                  child: const Icon(Icons.link_rounded,
-                      size: 20, color: Colors.white),
+                  child: const Icon(
+                    Icons.link_rounded,
+                    size: 20,
+                    color: Colors.white,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text('悦通',
-                        style: YLText.titleMedium.copyWith(
-                          fontWeight: FontWeight.w700,
-                        )),
-                    Text('AI · 全球加速',
-                        style: YLText.caption.copyWith(
-                          color: YLColors.zinc400,
-                        )),
+                    Text(
+                      '悦通',
+                      style: YLText.titleMedium.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    Text(
+                      'AI · 全球加速',
+                      style: YLText.caption.copyWith(color: YLColors.zinc400),
+                    ),
                   ],
                 ),
               ],
@@ -1898,19 +1651,23 @@ class _SidebarItem extends StatelessWidget {
                 : null,
             child: Row(
               children: [
-                Icon(icon,
-                    size: 16,
+                Icon(
+                  icon,
+                  size: 16,
+                  color: isActive
+                      ? (isDark ? Colors.white : YLColors.zinc900)
+                      : YLColors.zinc500,
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  label,
+                  style: YLText.body.copyWith(
+                    fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
                     color: isActive
                         ? (isDark ? Colors.white : YLColors.zinc900)
-                        : YLColors.zinc500),
-                const SizedBox(width: 10),
-                Text(label,
-                    style: YLText.body.copyWith(
-                      fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
-                      color: isActive
-                          ? (isDark ? Colors.white : YLColors.zinc900)
-                          : YLColors.zinc500,
-                    )),
+                        : YLColors.zinc500,
+                  ),
+                ),
               ],
             ),
           ),
@@ -1933,9 +1690,8 @@ class _EmbyTabPage extends ConsumerWidget {
     final s = S.of(context);
     final emby = ref.watch(embyProvider);
     return emby.when(
-      loading: () => const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      ),
+      loading: () =>
+          const Scaffold(body: Center(child: CircularProgressIndicator())),
       error: (e, __) => Scaffold(
         body: Center(
           child: Column(
@@ -1954,9 +1710,7 @@ class _EmbyTabPage extends ConsumerWidget {
       ),
       data: (info) {
         if (info == null || !info.hasAccess) {
-          return Scaffold(
-            body: Center(child: Text(s.mineEmbyNoAccess)),
-          );
+          return Scaffold(body: Center(child: Text(s.mineEmbyNoAccess)));
         }
         if (info.hasNativeAccess) {
           return EmbyMediaPage(

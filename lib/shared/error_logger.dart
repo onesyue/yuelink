@@ -50,8 +50,11 @@ class ErrorLogger {
   }
 
   /// Manually report a caught exception (e.g., in try-catch blocks).
-  static void captureException(Object error, StackTrace stack,
-      {String? source}) {
+  static void captureException(
+    Object error,
+    StackTrace stack, {
+    String? source,
+  }) {
     _capture(error.toString(), stack, source: source);
   }
 
@@ -129,16 +132,62 @@ class ErrorLogger {
       multiLine: true,
     );
     for (final m in re.allMatches(content)) {
-      out.add(_AndroidCrashEntry(
-        timestamp: m.group(1)!,
-        thread: m.group(2)!,
-        exceptionType: m.group(3)!,
-      ));
+      out.add(
+        _AndroidCrashEntry(
+          timestamp: m.group(1)!,
+          thread: m.group(2)!,
+          exceptionType: m.group(3)!,
+        ),
+      );
     }
     return out;
   }
 
   // ── Internal ────────────────────────────────────────────────────────
+
+  // ── Telemetry dedup ──────────────────────────────────────────────────
+  //
+  // A single original exception can reach [_capture] through more than one
+  // entry point: FlutterError.onError + PlatformDispatcher.onError for a
+  // framework-level error that also escapes async; Zone handler in main()
+  // + a manual captureException in the same frame; or a tight async loop
+  // that retries a fire-and-forget op until it fails N times. The local
+  // crash.log / EventLog / remote reporter keep every write (timestamps
+  // have forensic value), but telemetry dashboards just see a noisy spike
+  // that masks the per-session crash rate. Gate ONLY Telemetry.event so
+  // a fingerprint fires at most once per [_dedupTtl] window.
+  //
+  // Fingerprint intentionally excludes `source` so two handlers observing
+  // the same exception collapse to one entry. The top 3 stack lines are
+  // enough to distinguish call sites while tolerating rethrow-wrapping
+  // variations above that frame.
+  static const _dedupTtl = Duration(seconds: 2);
+  static final Map<String, DateTime> _recentFingerprints = {};
+
+  static String _fingerprint(String firstLine, StackTrace stack) {
+    final stackLines = stack.toString().split('\n');
+    final top3 = stackLines.take(3).join('\n');
+    return '$firstLine|$top3';
+  }
+
+  static bool _shouldEmitTelemetry(String fingerprint) {
+    final now = DateTime.now();
+    final last = _recentFingerprints[fingerprint];
+    if (last != null && now.difference(last) < _dedupTtl) {
+      return false;
+    }
+    _recentFingerprints[fingerprint] = now;
+    // Opportunistic cleanup — no timer, map stays small between starts.
+    _recentFingerprints.removeWhere((_, ts) => now.difference(ts) > _dedupTtl);
+    return true;
+  }
+
+  /// Reset the telemetry dedup window. Test-only hook so cases can assert
+  /// fingerprint behaviour from a known-clean state.
+  @visibleForTesting
+  static void debugResetDedup() {
+    _recentFingerprints.clear();
+  }
 
   static void _capture(String error, StackTrace stack, {String? source}) {
     // 1. Always write to local crash.log
@@ -156,18 +205,23 @@ class ErrorLogger {
     //                        already handles (retry / reconnect logic). These
     //                        used to mask real crashes at ~98:1 ratio; we
     //                        keep them as non-priority telemetry for signal.
+    //
+    // Both buckets go through [_shouldEmitTelemetry] so one exception hitting
+    // multiple handlers only shows up once — local crash.log above stays
+    // unconditional.
     final firstLine = error.split('\n').first;
-    final typeHint = firstLine.length > 80 ? firstLine.substring(0, 80) : firstLine;
-    final typeName = _typeFromError(typeHint);
-    final isNetwork = _isNetworkError(typeName);
-    Telemetry.event(
-      isNetwork ? TelemetryEvents.networkError : TelemetryEvents.crash,
-      priority: !isNetwork,
-      props: {
-        'src': source ?? 'unknown',
-        'type': typeName,
-      },
-    );
+    if (_shouldEmitTelemetry(_fingerprint(firstLine, stack))) {
+      final typeHint = firstLine.length > 80
+          ? firstLine.substring(0, 80)
+          : firstLine;
+      final typeName = _typeFromError(typeHint);
+      final isNetwork = _isNetworkError(typeName);
+      Telemetry.event(
+        isNetwork ? TelemetryEvents.networkError : TelemetryEvents.crash,
+        priority: !isNetwork,
+        props: {'src': source ?? 'unknown', 'type': typeName},
+      );
+    }
 
     // 3. Forward to remote reporter (release only)
     if (!kReleaseMode || _reporter == null) return;

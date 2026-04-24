@@ -42,6 +42,8 @@ jobs:
 
       - run: flutter pub get
       - run: flutter analyze --no-fatal-infos --no-fatal-warnings
+      - name: Architecture import guard
+        run: bash scripts/check_imports.sh
       - run: flutter test --coverage
 
       - name: Upload coverage to Codecov

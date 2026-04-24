@@ -33,7 +33,8 @@ class CoreLifecycleManager {
 
   Future<bool> start(String configYaml) async {
     debugPrint(
-        '[CoreLifecycle] start() called, config length: ${configYaml.length}');
+      '[CoreLifecycle] start() called, config length: ${configYaml.length}',
+    );
     Telemetry.event(TelemetryEvents.connectStart);
     ref.read(userStoppedProvider.notifier).state = false;
     ref.read(coreStatusProvider.notifier).state = CoreStatus.starting;
@@ -57,7 +58,8 @@ class CoreLifecycleManager {
       final installed = await ServiceManager.isInstalled();
       if (!installed) {
         ref.read(coreStatusProvider.notifier).state = CoreStatus.stopped;
-        const detail = 'TUN 模式需要安装"服务模式"辅助程序。\n'
+        const detail =
+            'TUN 模式需要安装"服务模式"辅助程序。\n'
             '请前往设置 → 连接修复 → 安装服务模式，然后再连接。';
         ref.read(coreStartupErrorProvider.notifier).state = detail;
         AppNotifier.error(detail);
@@ -84,6 +86,7 @@ class CoreLifecycleManager {
         desktopTunStack: ref.read(desktopTunStackProvider),
         tunBypassAddresses: bypassAddrs,
         tunBypassProcesses: bypassProcs,
+        quicRejectPolicy: ref.read(quicPolicyProvider),
       );
       if (!ok) {
         ref.read(coreStatusProvider.notifier).state = CoreStatus.stopped;
@@ -91,7 +94,8 @@ class CoreLifecycleManager {
         final detail = report?.failureSummary ?? S.current.errCoreStartFailed;
         ref.read(coreStartupErrorProvider.notifier).state = detail;
         EventLog.write(
-            '[Core] connect_fail detail=${detail.split('\n').first}');
+          '[Core] connect_fail detail=${detail.split('\n').first}',
+        );
         Telemetry.event(
           TelemetryEvents.connectFailed,
           priority: true,
@@ -169,7 +173,8 @@ class CoreLifecycleManager {
       }
       final actual = await manager.api.getRoutingMode();
       debugPrint(
-          '[CoreLifecycle] routingMode: saved=$savedMode, actual=$actual');
+        '[CoreLifecycle] routingMode: saved=$savedMode, actual=$actual',
+      );
       if (actual != savedMode) {
         ref.read(routingModeProvider.notifier).state = actual;
       }

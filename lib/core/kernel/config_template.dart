@@ -27,13 +27,10 @@ class ConfigTemplate {
   static const quicRejectPolicyAll = 'all';
   static const defaultQuicRejectPolicy = quicRejectPolicyGooglevideo;
 
-  static String _runtimeQuicRejectPolicy = defaultQuicRejectPolicy;
   ConfigTemplate._();
 
   /// Template variables and their replacement values.
-  static const _variables = {
-    r'$app_name': AppConstants.appName,
-  };
+  static const _variables = {r'$app_name': AppConstants.appName};
 
   // Cached RegExp patterns
   static final _reTunKey = RegExp(r'^tun:', multiLine: true);
@@ -44,13 +41,19 @@ class ConfigTemplate {
   static final _reTopLevel = RegExp(r'^[^\s#]', multiLine: true);
   static final _reEnableTrue = RegExp(r'\benable:\s*true');
   static final _reEnableFalse = RegExp(r'\benable:\s*false');
-  static final _reExtController =
-      RegExp(r'^(external-controller:\s*).*$', multiLine: true);
+  static final _reExtController = RegExp(
+    r'^(external-controller:\s*).*$',
+    multiLine: true,
+  );
   static final _reMixedPort = RegExp(r'^mixed-port:\s*(\d+)', multiLine: true);
-  static final _reApiPort =
-      RegExp(r'^external-controller:\s*[\w.]*:(\d+)', multiLine: true);
-  static final _reSecret =
-      RegExp(r'^secret:\s*["\x27]?(.+?)["\x27]?\s*$', multiLine: true);
+  static final _reApiPort = RegExp(
+    r'^external-controller:\s*[\w.]*:(\d+)',
+    multiLine: true,
+  );
+  static final _reSecret = RegExp(
+    r'^secret:\s*["\x27]?(.+?)["\x27]?\s*$',
+    multiLine: true,
+  );
   static final _reProxiesSection = RegExp(r'^proxies:\s*\n', multiLine: true);
 
   static String normalizeQuicRejectPolicy(String? policy) {
@@ -62,10 +65,6 @@ class ConfigTemplate {
       default:
         return defaultQuicRejectPolicy;
     }
-  }
-
-  static void setDefaultQuicRejectPolicy(String? policy) {
-    _runtimeQuicRejectPolicy = normalizeQuicRejectPolicy(policy);
   }
 
   /// Process a raw config from a subscription.
@@ -106,26 +105,11 @@ class ConfigTemplate {
     List<String> relayHostWhitelist = const [],
   }) {
     final effectiveQuicRejectPolicy = normalizeQuicRejectPolicy(
-      quicRejectPolicy ?? _runtimeQuicRejectPolicy,
+      quicRejectPolicy,
     );
     if (rawConfig.length < 200 * 1024) {
-      return Future.value(process(
-        rawConfig,
-        apiPort: apiPort,
-        mixedPort: mixedPort,
-        secret: secret,
-        connectionMode: connectionMode,
-        desktopTunStack: desktopTunStack,
-        tunBypassAddresses: tunBypassAddresses,
-        tunBypassProcesses: tunBypassProcesses,
-        tunFd: tunFd,
-        quicRejectPolicy: effectiveQuicRejectPolicy,
-        relayHostWhitelist: relayHostWhitelist,
-      ));
-    }
-    // All closure captures are immutable value types — safe to send to a
-    // new isolate. tunFd staying null is fine; process handles that.
-    return Isolate.run(() => process(
+      return Future.value(
+        process(
           rawConfig,
           apiPort: apiPort,
           mixedPort: mixedPort,
@@ -137,7 +121,26 @@ class ConfigTemplate {
           tunFd: tunFd,
           quicRejectPolicy: effectiveQuicRejectPolicy,
           relayHostWhitelist: relayHostWhitelist,
-        ));
+        ),
+      );
+    }
+    // All closure captures are immutable value types — safe to send to a
+    // new isolate. tunFd staying null is fine; process handles that.
+    return Isolate.run(
+      () => process(
+        rawConfig,
+        apiPort: apiPort,
+        mixedPort: mixedPort,
+        secret: secret,
+        connectionMode: connectionMode,
+        desktopTunStack: desktopTunStack,
+        tunBypassAddresses: tunBypassAddresses,
+        tunBypassProcesses: tunBypassProcesses,
+        tunFd: tunFd,
+        quicRejectPolicy: effectiveQuicRejectPolicy,
+        relayHostWhitelist: relayHostWhitelist,
+      ),
+    );
   }
 
   static String process(
@@ -154,7 +157,7 @@ class ConfigTemplate {
     List<String> relayHostWhitelist = const [],
   }) {
     final effectiveQuicRejectPolicy = normalizeQuicRejectPolicy(
-      quicRejectPolicy ?? _runtimeQuicRejectPolicy,
+      quicRejectPolicy,
     );
     var config = rawConfig;
 
@@ -248,13 +251,18 @@ class ConfigTemplate {
   /// connections through it. Adds a `_upstream` proxy entry and sets
   /// `dialer-proxy: _upstream` on all user-defined proxies.
   static String injectUpstreamProxy(
-      String config, String type, String server, int port) {
+    String config,
+    String type,
+    String server,
+    int port,
+  ) {
     try {
       final yaml = loadYaml(config);
       if (yaml is! YamlMap) return config;
       final mutable = _toMutable(yaml) as Map<String, dynamic>;
 
-      final proxies = (mutable['proxies'] as List<dynamic>?)?.cast<dynamic>() ??
+      final proxies =
+          (mutable['proxies'] as List<dynamic>?)?.cast<dynamic>() ??
           <dynamic>[];
       proxies.removeWhere((p) => p is Map && p['name'] == '_upstream');
       proxies.insert(0, <String, dynamic>{
@@ -288,19 +296,23 @@ class ConfigTemplate {
   /// After calling this, the caller should select the exit node (chainNames.last)
   /// in the active proxy group via the REST API.
   static String injectProxyChain(
-      String config, List<String> chainNames, String activeGroup,
-      {List<Map<String, dynamic>>? externalProxies}) {
+    String config,
+    List<String> chainNames,
+    String activeGroup, {
+    List<Map<String, dynamic>>? externalProxies,
+  }) {
     if (chainNames.length < 2) return config;
     try {
       final yaml = loadYaml(config);
       if (yaml is! YamlMap) return config;
       final mutable = _toMutable(yaml) as Map<String, dynamic>;
 
-      final proxies = (mutable['proxies'] as List<dynamic>?)?.cast<dynamic>() ??
+      final proxies =
+          (mutable['proxies'] as List<dynamic>?)?.cast<dynamic>() ??
           <dynamic>[];
       final proxyGroups =
           (mutable['proxy-groups'] as List<dynamic>?)?.cast<dynamic>() ??
-              <dynamic>[];
+          <dynamic>[];
 
       // Strip any existing chain dialer-proxy on nodes (idempotent re-inject).
       // Preserve _upstream dialer-proxy (soft-router pass-through feature).
@@ -313,7 +325,8 @@ class ConfigTemplate {
       // Remove stale _YueLink_Chain_* wrapper groups (backward compat with
       // the old proxy-group-based implementation).
       proxyGroups.removeWhere(
-          (g) => g is Map && _isChainGroup(g['name'] as String? ?? ''));
+        (g) => g is Map && _isChainGroup(g['name'] as String? ?? ''),
+      );
       for (final g in proxyGroups) {
         if (g is Map<String, dynamic>) {
           final gp = (g['proxies'] as List<dynamic>?)?.toList();
@@ -340,8 +353,9 @@ class ConfigTemplate {
       }
 
       // Verify that the active group exists in this config.
-      final hasGroup = proxyGroups
-          .any((g) => g is Map<String, dynamic> && g['name'] == activeGroup);
+      final hasGroup = proxyGroups.any(
+        (g) => g is Map<String, dynamic> && g['name'] == activeGroup,
+      );
       if (!hasGroup) return config;
 
       // Set dialer-proxy on nodes[1..N-1]: each node dials through the previous.
@@ -371,11 +385,12 @@ class ConfigTemplate {
       if (yaml is! YamlMap) return config;
       final mutable = _toMutable(yaml) as Map<String, dynamic>;
 
-      final proxies = (mutable['proxies'] as List<dynamic>?)?.cast<dynamic>() ??
+      final proxies =
+          (mutable['proxies'] as List<dynamic>?)?.cast<dynamic>() ??
           <dynamic>[];
       final proxyGroups =
           (mutable['proxy-groups'] as List<dynamic>?)?.cast<dynamic>() ??
-              <dynamic>[];
+          <dynamic>[];
 
       // Strip legacy dialer-proxy on raw proxy nodes (backward compat)
       for (final p in proxies) {
@@ -398,7 +413,8 @@ class ConfigTemplate {
 
       // Remove all chain wrapper groups
       proxyGroups.removeWhere(
-          (g) => g is Map && _isChainGroup(g['name'] as String? ?? ''));
+        (g) => g is Map && _isChainGroup(g['name'] as String? ?? ''),
+      );
 
       mutable['proxies'] = proxies;
       if (proxyGroups.isNotEmpty) mutable['proxy-groups'] = proxyGroups;
@@ -457,8 +473,9 @@ class ConfigTemplate {
   static dynamic _toMutable(dynamic value) {
     if (value is YamlMap) {
       return Map<String, dynamic>.fromEntries(
-        value.entries
-            .map((e) => MapEntry(e.key.toString(), _toMutable(e.value))),
+        value.entries.map(
+          (e) => MapEntry(e.key.toString(), _toMutable(e.value)),
+        ),
       );
     } else if (value is YamlList) {
       return value.map(_toMutable).toList();
@@ -477,8 +494,9 @@ class ConfigTemplate {
     final afterTunLine = config.indexOf('\n', tunMatch.start);
     final afterTun = afterTunLine >= 0 ? afterTunLine + 1 : config.length;
     final nextTopLevel = _reTopLevel.firstMatch(config.substring(afterTun));
-    final tunEnd =
-        nextTopLevel != null ? afterTun + nextTopLevel.start : config.length;
+    final tunEnd = nextTopLevel != null
+        ? afterTun + nextTopLevel.start
+        : config.length;
 
     final tunSection = config.substring(tunMatch.start, tunEnd);
     if (!_reEnableTrue.hasMatch(tunSection)) return config;
@@ -575,16 +593,19 @@ class ConfigTemplate {
     final afterDnsLine = config.indexOf('\n', dnsMatch.start);
     final afterDns = afterDnsLine >= 0 ? afterDnsLine + 1 : config.length;
     final nextTopLevel = _reTopLevel.firstMatch(config.substring(afterDns));
-    final dnsEnd =
-        nextTopLevel != null ? afterDns + nextTopLevel.start : config.length;
+    final dnsEnd = nextTopLevel != null
+        ? afterDns + nextTopLevel.start
+        : config.length;
 
     var dnsSection = config.substring(dnsMatch.start, dnsEnd);
 
     // Force enhanced-mode: fake-ip
     final enhancedRe = RegExp(r'enhanced-mode:\s*\S+');
     if (enhancedRe.hasMatch(dnsSection)) {
-      dnsSection =
-          dnsSection.replaceFirst(enhancedRe, 'enhanced-mode: fake-ip');
+      dnsSection = dnsSection.replaceFirst(
+        enhancedRe,
+        'enhanced-mode: fake-ip',
+      );
     } else {
       // Inject after dns: line
       final indentMatch = RegExp(r'\n( +)\S').firstMatch(dnsSection);
@@ -676,7 +697,8 @@ class ConfigTemplate {
     List<String> relayHostWhitelist = const [],
   }) {
     if (!_hasKey(config, 'dns')) {
-      config = '$config\ndns:\n'
+      config =
+          '$config\ndns:\n'
           '  enable: true\n'
           '  prefer-h3: true\n'
           '  enhanced-mode: fake-ip\n'
@@ -823,16 +845,20 @@ class ConfigTemplate {
     final afterDnsLine = config.indexOf('\n', dnsMatch.start);
     var afterDns = afterDnsLine >= 0 ? afterDnsLine + 1 : config.length;
     final nextTopLevel = _reTopLevel.firstMatch(config.substring(afterDns));
-    var dnsEnd =
-        nextTopLevel != null ? afterDns + nextTopLevel.start : config.length;
+    var dnsEnd = nextTopLevel != null
+        ? afterDns + nextTopLevel.start
+        : config.length;
 
     var dnsSection = config.substring(dnsMatch.start, dnsEnd);
 
     // Fix 1: ensure enable: true
     if (_reEnableFalse.hasMatch(dnsSection)) {
-      final newSection =
-          dnsSection.replaceFirst(_reEnableFalse, 'enable: true');
-      config = config.substring(0, dnsMatch.start) +
+      final newSection = dnsSection.replaceFirst(
+        _reEnableFalse,
+        'enable: true',
+      );
+      config =
+          config.substring(0, dnsMatch.start) +
           newSection +
           config.substring(dnsEnd);
       // Adjust dnsEnd to account for length change
@@ -841,7 +867,8 @@ class ConfigTemplate {
     } else if (!_reEnableTrue.hasMatch(dnsSection)) {
       // DNS section exists but has no 'enable' key — inject after dns: line
       const injection = '  enable: true\n';
-      config = config.substring(0, afterDns) +
+      config =
+          config.substring(0, afterDns) +
           injection +
           config.substring(afterDns);
       dnsEnd += injection.length;
@@ -876,7 +903,8 @@ class ConfigTemplate {
       // avoids TCP DNS blocking on some networks.
       if (!dnsSection.contains('prefer-h3')) {
         final injection = '${indent}prefer-h3: true\n';
-        config = config.substring(0, afterDns) +
+        config =
+            config.substring(0, afterDns) +
             injection +
             config.substring(afterDns);
         dnsEnd += injection.length;
@@ -885,7 +913,8 @@ class ConfigTemplate {
       }
 
       if (!dnsSection.contains('nameserver-policy:')) {
-        final policy = '$indent'
+        final policy =
+            '$indent'
             'nameserver-policy:\n'
             '$entryIndent'
             '"+.apple.com": ["https://dns.alidns.com/dns-query", "https://doh.pub/dns-query"]\n'
@@ -899,7 +928,8 @@ class ConfigTemplate {
       // AliDNS first: it negotiates HTTP/3 properly against `prefer-h3: true`.
       // doh.pub is H2-only in 2025 and falls back silently if H3-preferred.
       if (!dnsSection.contains('direct-nameserver:')) {
-        final directNs = '$indent'
+        final directNs =
+            '$indent'
             'direct-nameserver:\n'
             '$entryIndent'
             '- https://dns.alidns.com/dns-query\n'
@@ -918,7 +948,8 @@ class ConfigTemplate {
       // Plain UDP DNS (223.5.5.5 / 119.29.29.29) bypass the proxy and
       // bootstrap resolution so the proxy can start in the first place.
       if (!dnsSection.contains('proxy-server-nameserver:')) {
-        final proxyNs = '${indent}proxy-server-nameserver:\n'
+        final proxyNs =
+            '${indent}proxy-server-nameserver:\n'
             '$entryIndent- 223.5.5.5\n'
             '$entryIndent- 119.29.29.29\n'
             '$entryIndent- 1.12.12.12\n'
@@ -1010,14 +1041,17 @@ class ConfigTemplate {
       ];
       if (dnsSection.contains('fake-ip-filter:')) {
         // Append missing domains to existing fake-ip-filter
-        final filterMatch =
-            RegExp(r'fake-ip-filter:\s*\n').firstMatch(dnsSection);
+        final filterMatch = RegExp(
+          r'fake-ip-filter:\s*\n',
+        ).firstMatch(dnsSection);
         if (filterMatch != null) {
           var insertOffset = dnsMatch.start + filterMatch.end;
           // Find end of list items (lines starting with entryIndent + "- ")
           final afterFilter = config.substring(insertOffset);
-          final listEnd =
-              RegExp(r'^(?![ \t]+- )', multiLine: true).firstMatch(afterFilter);
+          final listEnd = RegExp(
+            r'^(?![ \t]+- )',
+            multiLine: true,
+          ).firstMatch(afterFilter);
           if (listEnd != null) insertOffset += listEnd.start;
           final existingFilter = dnsSection;
           var injection = '';
@@ -1027,7 +1061,8 @@ class ConfigTemplate {
             }
           }
           if (injection.isNotEmpty) {
-            config = config.substring(0, insertOffset) +
+            config =
+                config.substring(0, insertOffset) +
                 injection +
                 config.substring(insertOffset);
             dnsEnd += injection.length;
@@ -1035,9 +1070,11 @@ class ConfigTemplate {
         }
       } else {
         // No fake-ip-filter at all — inject one with connectivity domains
-        final filterBlock = '${indent}fake-ip-filter:\n'
+        final filterBlock =
+            '${indent}fake-ip-filter:\n'
             '${connectivityDomains.map((d) => '$entryIndent- "$d"').join('\n')}\n';
-        config = config.substring(0, dnsEnd) +
+        config =
+            config.substring(0, dnsEnd) +
             filterBlock +
             config.substring(dnsEnd);
       }
@@ -1060,8 +1097,9 @@ class ConfigTemplate {
     final afterDnsLine = config.indexOf('\n', dnsMatch.start);
     final afterDns = afterDnsLine >= 0 ? afterDnsLine + 1 : config.length;
     final nextTopLevel = _reTopLevel.firstMatch(config.substring(afterDns));
-    final dnsEnd =
-        nextTopLevel != null ? afterDns + nextTopLevel.start : config.length;
+    final dnsEnd = nextTopLevel != null
+        ? afterDns + nextTopLevel.start
+        : config.length;
     final dnsSection = config.substring(dnsMatch.start, dnsEnd);
 
     final filterMatch = RegExp(r'fake-ip-filter:\s*\n').firstMatch(dnsSection);
@@ -1084,8 +1122,10 @@ class ConfigTemplate {
 
     var insertOffset = dnsMatch.start + filterMatch.end;
     final afterFilter = config.substring(insertOffset);
-    final listEnd =
-        RegExp(r'^(?![ \t]+- )', multiLine: true).firstMatch(afterFilter);
+    final listEnd = RegExp(
+      r'^(?![ \t]+- )',
+      multiLine: true,
+    ).firstMatch(afterFilter);
     if (listEnd != null) insertOffset += listEnd.start;
 
     return config.substring(0, insertOffset) +
@@ -1155,7 +1195,8 @@ class ConfigTemplate {
       config += 'geo-update-interval: 24\n';
     }
     if (!_hasKey(config, 'geox-url')) {
-      config += 'geox-url:\n'
+      config +=
+          'geox-url:\n'
           '  geoip: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.dat"\n'
           '  geosite: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geosite.dat"\n'
           '  mmdb: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/country.mmdb"\n';
@@ -1250,8 +1291,9 @@ class ConfigTemplate {
     }
     final afterKey = afterKeyLine + 1;
     final nextTopLevel = _reTopLevel.firstMatch(config.substring(afterKey));
-    final sectionEnd =
-        nextTopLevel != null ? afterKey + nextTopLevel.start : config.length;
+    final sectionEnd = nextTopLevel != null
+        ? afterKey + nextTopLevel.start
+        : config.length;
     return config.substring(0, match.start) + config.substring(sectionEnd);
   }
 
@@ -1293,7 +1335,10 @@ class ConfigTemplate {
   /// with external tooling like yacd / metacubexd that persists the secret
   /// in browser localStorage.
   static String _ensureExternalController(
-      String config, int port, String? secret) {
+    String config,
+    int port,
+    String? secret,
+  ) {
     if (_hasKey(config, 'external-controller')) {
       config = config.replaceAllMapped(
         _reExtController,
@@ -1347,8 +1392,9 @@ class ConfigTemplate {
   /// complete configs. This is only for the rare case where a subscription
   /// returns raw proxy nodes without any proxy-groups or rules.
   static Future<String> loadFallbackTemplate() {
-    return _fallbackTemplateFuture ??=
-        rootBundle.loadString('assets/default_config.yaml');
+    return _fallbackTemplateFuture ??= rootBundle.loadString(
+      'assets/default_config.yaml',
+    );
   }
 
   /// Ensure connectivity-check domains are routed DIRECT in rules.
@@ -1356,8 +1402,10 @@ class ConfigTemplate {
   /// may still go through the proxy and fail (blocked, slow, or wrong response),
   /// causing WiFi exclamation mark on various Android brands.
   static String _ensureConnectivityRules(String config) {
-    final rulesMatch =
-        RegExp(r'^rules:\s*\n', multiLine: true).firstMatch(config);
+    final rulesMatch = RegExp(
+      r'^rules:\s*\n',
+      multiLine: true,
+    ).firstMatch(config);
     if (rulesMatch == null) return config; // no rules section
 
     const domains = [
@@ -1379,8 +1427,10 @@ class ConfigTemplate {
 
     // Only inject rules not already present.
     // Detect indentation from existing rules (e.g. "  - " or "- ").
-    final firstRule = RegExp(r'^([ \t]*)-\s', multiLine: true)
-        .firstMatch(config.substring(rulesMatch.end));
+    final firstRule = RegExp(
+      r'^([ \t]*)-\s',
+      multiLine: true,
+    ).firstMatch(config.substring(rulesMatch.end));
     final ruleIndent = firstRule?.group(1) ?? '  ';
     var injection = '';
     for (final d in domains) {
@@ -1420,8 +1470,10 @@ class ConfigTemplate {
   /// This keeps the previous narrow fix for `*.googlevideo.com` without
   /// breaking other HTTP/3-capable streaming apps that rely on QUIC.
   static String _ensureGooglevideoQuicReject(String config) {
-    final rulesMatch =
-        RegExp(r'^rules:\s*\n', multiLine: true).firstMatch(config);
+    final rulesMatch = RegExp(
+      r'^rules:\s*\n',
+      multiLine: true,
+    ).firstMatch(config);
     if (rulesMatch == null) return config;
 
     final rulesBody = config.substring(rulesMatch.end);
@@ -1431,8 +1483,10 @@ class ConfigTemplate {
     ).hasMatch(rulesBody);
     if (alreadyHandled || _hasGlobalUdp443Reject(rulesBody)) return config;
 
-    final firstRule =
-        RegExp(r'^([ \t]*)-\s', multiLine: true).firstMatch(rulesBody);
+    final firstRule = RegExp(
+      r'^([ \t]*)-\s',
+      multiLine: true,
+    ).firstMatch(rulesBody);
     final ruleIndent = firstRule?.group(1) ?? '  ';
 
     final injection =
@@ -1448,15 +1502,19 @@ class ConfigTemplate {
   /// This is intentionally reserved for manual diagnostics because it impacts
   /// all HTTP/3-capable services, including region-unlock streaming apps.
   static String _ensureGlobalQuicReject(String config) {
-    final rulesMatch =
-        RegExp(r'^rules:\s*\n', multiLine: true).firstMatch(config);
+    final rulesMatch = RegExp(
+      r'^rules:\s*\n',
+      multiLine: true,
+    ).firstMatch(config);
     if (rulesMatch == null) return config;
 
     final rulesBody = config.substring(rulesMatch.end);
     if (_hasGlobalUdp443Reject(rulesBody)) return config;
 
-    final firstRule =
-        RegExp(r'^([ \t]*)-\s', multiLine: true).firstMatch(rulesBody);
+    final firstRule = RegExp(
+      r'^([ \t]*)-\s',
+      multiLine: true,
+    ).firstMatch(rulesBody);
     final ruleIndent = firstRule?.group(1) ?? '  ';
 
     final injection =

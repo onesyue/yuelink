@@ -19,8 +19,6 @@
 import 'package:flutter/material.dart' show ThemeMode;
 import 'package:flutter_riverpod/legacy.dart';
 
-import '../../../core/storage/settings_service.dart';
-
 // Re-export core settings state providers (defined in core_provider.dart to
 // avoid circular imports with CoreActions).
 export '../../../core/providers/core_provider.dart'
@@ -29,7 +27,8 @@ export '../../../core/providers/core_provider.dart'
         connectionModeProvider,
         logLevelProvider,
         systemProxyOnConnectProvider,
-        autoConnectProvider;
+        autoConnectProvider,
+        quicPolicyProvider;
 
 // Re-export subscription-sync interval (now defined under core/providers/
 // so that core/profile/subscription_sync_service doesn't have to import
@@ -50,10 +49,6 @@ final languageProvider = StateProvider<String>((ref) => 'zh');
 
 /// Accent color stored as hex string (without '#'), e.g. '3B82F6'.
 final accentColorProvider = StateProvider<String>((ref) => '3B82F6');
-
-/// QUIC reject policy: off | googlevideo | all.
-final quicPolicyProvider =
-    StateProvider<String>((ref) => SettingsService.defaultQuicPolicy);
 
 /// Desktop: close window behavior. Values: 'tray' (default) | 'exit'.
 final closeBehaviorProvider = StateProvider<String>((ref) => 'tray');

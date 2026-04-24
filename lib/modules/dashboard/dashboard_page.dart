@@ -8,6 +8,7 @@ import '../../core/storage/settings_service.dart';
 import '../../i18n/app_strings.dart';
 import '../../modules/yue_auth/providers/yue_auth_providers.dart';
 import '../../core/providers/core_provider.dart';
+import 'providers/traffic_providers.dart';
 import '../profiles/providers/profiles_providers.dart';
 import '../../shared/app_notifier.dart';
 import '../../core/kernel/core_manager.dart';
@@ -114,8 +115,9 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                         // ── 1.5 订阅过期提示 ─────────────────────────
                         const _StaggeredIn(
                           index: 1,
-                          child:
-                              RepaintBoundary(child: StaleSubscriptionBanner()),
+                          child: RepaintBoundary(
+                            child: StaleSubscriptionBanner(),
+                          ),
                         ),
 
                         const SizedBox(height: 12),
@@ -185,8 +187,9 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
           FilledButton(
             onPressed: () async {
               Navigator.pop(ctx);
-              final ok =
-                  await ref.read(coreActionsProvider).start(lastGoodConfig);
+              final ok = await ref
+                  .read(coreActionsProvider)
+                  .start(lastGoodConfig);
               if (ok) {
                 AppNotifier.success(s.rollbackSuccess);
               } else {
@@ -228,8 +231,9 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
         return;
       }
 
-      final config =
-          await ref.read(profileRepositoryProvider).loadConfig(activeId);
+      final config = await ref
+          .read(profileRepositoryProvider)
+          .loadConfig(activeId);
       if (config == null) {
         AppNotifier.warning(s.snackConfigMissing);
         return;

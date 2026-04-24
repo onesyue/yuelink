@@ -28,15 +28,15 @@ void main() {
     tempDir = Directory.systemTemp.createTempSync('yuelink_test_');
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
-      const MethodChannel('plugins.flutter.io/path_provider'),
-      (MethodCall methodCall) async {
-        if (methodCall.method == 'getApplicationSupportDirectory' ||
-            methodCall.method == 'getApplicationDocumentsDirectory') {
-          return tempDir.path;
-        }
-        return null;
-      },
-    );
+          const MethodChannel('plugins.flutter.io/path_provider'),
+          (MethodCall methodCall) async {
+            if (methodCall.method == 'getApplicationSupportDirectory' ||
+                methodCall.method == 'getApplicationDocumentsDirectory') {
+              return tempDir.path;
+            }
+            return null;
+          },
+        );
   });
 
   tearDownAll(() {
@@ -47,8 +47,11 @@ void main() {
     CoreManager.resetForTesting();
     cm = CoreManager.instance;
     // Ensure mock mode (no native lib in test environment)
-    expect(cm.isMockMode, isTrue,
-        reason: 'Tests must run in mock mode (no native library)');
+    expect(
+      cm.isMockMode,
+      isTrue,
+      reason: 'Tests must run in mock mode (no native library)',
+    );
   });
 
   tearDown(() async {
@@ -176,8 +179,11 @@ void main() {
       await cm.start(_minimalConfig());
 
       for (final step in cm.lastReport!.steps) {
-        expect(step.success, true,
-            reason: '${step.name} should succeed in mock mode');
+        expect(
+          step.success,
+          true,
+          reason: '${step.name} should succeed in mock mode',
+        );
       }
     });
 
@@ -240,9 +246,9 @@ rules:
 
       await cm.start(config, connectionMode: 'tun');
 
-      final written =
-          await File('${tempDir.path}/${AppConstants.configFileName}')
-              .readAsString();
+      final written = await File(
+        '${tempDir.path}/${AppConstants.configFileName}',
+      ).readAsString();
 
       if (Platform.isMacOS || Platform.isWindows) {
         expect(written, contains('stack: mixed'));
@@ -251,6 +257,41 @@ rules:
       } else {
         expect(written, contains('file-descriptor: 42'));
       }
+    });
+  });
+
+  // ════════════════════════════════════════════════════════════════════
+  // QUIC reject policy threading
+  //
+  // Regression guard for the removed ConfigTemplate._runtimeQuicRejectPolicy
+  // global. The policy must be threaded explicitly through start() — there
+  // is no process-wide default state that can leak between calls or across
+  // isolates.
+  // ════════════════════════════════════════════════════════════════════
+
+  group('quic reject policy', () {
+    test(
+      'start(policy: off) writes config without UDP:443 reject rules',
+      () async {
+        await cm.start(_minimalConfig(), quicRejectPolicy: 'off');
+
+        final written = await File(
+          '${tempDir.path}/${AppConstants.configFileName}',
+        ).readAsString();
+
+        expect(written, isNot(contains('(NETWORK,UDP),(DST-PORT,443)')));
+        expect(written, isNot(contains('googlevideo.com),(NETWORK,UDP)')));
+      },
+    );
+
+    test('start() without explicit policy defaults to googlevideo', () async {
+      await cm.start(_minimalConfig());
+
+      final written = await File(
+        '${tempDir.path}/${AppConstants.configFileName}',
+      ).readAsString();
+
+      expect(written, contains('googlevideo.com'));
     });
   });
 
@@ -293,26 +334,34 @@ rules:
       await SettingsService.flush();
     }
 
-    test('cold start without persisted secret generates and persists one',
-        () async {
-      // Simulate "no persisted secret" — resetForTesting clears the
-      // in-memory cache, and empty string on disk forces the null-or-empty
-      // branch inside start().
-      await writePersistedSecret('');
-      CoreManager.resetForTesting();
-      final fresh = CoreManager.instance;
+    test(
+      'cold start without persisted secret generates and persists one',
+      () async {
+        // Simulate "no persisted secret" — resetForTesting clears the
+        // in-memory cache, and empty string on disk forces the null-or-empty
+        // branch inside start().
+        await writePersistedSecret('');
+        CoreManager.resetForTesting();
+        final fresh = CoreManager.instance;
 
-      await fresh.start(_minimalConfig());
+        await fresh.start(_minimalConfig());
 
-      final runtime = fresh.api.secret;
-      expect(runtime, isNotNull);
-      expect(runtime!.isNotEmpty, isTrue,
-          reason: 'start() must have generated a secret');
+        final runtime = fresh.api.secret;
+        expect(runtime, isNotNull);
+        expect(
+          runtime!.isNotEmpty,
+          isTrue,
+          reason: 'start() must have generated a secret',
+        );
 
-      final onDisk = await SettingsService.getClashApiSecret();
-      expect(onDisk, equals(runtime),
-          reason: 'generated secret must be persisted for next launch');
-    });
+        final onDisk = await SettingsService.getClashApiSecret();
+        expect(
+          onDisk,
+          equals(runtime),
+          reason: 'generated secret must be persisted for next launch',
+        );
+      },
+    );
 
     test('cold start with persisted secret reuses it verbatim', () async {
       const stable = 'persisted-secret-abc-def-123';
@@ -322,8 +371,11 @@ rules:
 
       await fresh.start(_minimalConfig());
 
-      expect(fresh.api.secret, equals(stable),
-          reason: 'start() must reuse persisted secret, not regenerate');
+      expect(
+        fresh.api.secret,
+        equals(stable),
+        reason: 'start() must reuse persisted secret, not regenerate',
+      );
     });
 
     test('configure(secret: null) does not wipe cached secret', () async {
@@ -336,8 +388,11 @@ rules:
       // which wiped the cached value when called with null. Fix: no-op on null.
       cm.configure(secret: null);
 
-      expect(cm.api.secret, equals(cached),
-          reason: 'configure(null) must leave cached secret untouched');
+      expect(
+        cm.api.secret,
+        equals(cached),
+        reason: 'configure(null) must leave cached secret untouched',
+      );
     });
   });
 }
@@ -345,7 +400,8 @@ rules:
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 /// Minimal Clash YAML config for mock mode startup.
-String _minimalConfig({int mixedPort = 7890}) => '''
+String _minimalConfig({int mixedPort = 7890}) =>
+    '''
 mixed-port: $mixedPort
 allow-lan: false
 mode: rule

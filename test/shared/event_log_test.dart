@@ -30,6 +30,41 @@ void main() {
       expect(line, isNot(contains('abc123')));
     });
 
+    test(
+      'redacts PII keys (subscribe_url / order_no / email / phone / ip)',
+      () {
+        const sensitive = {
+          'subscribe_url': 'https://sub.example/abc',
+          'order_no': 'ORDER_123',
+          'email': 'user@example.com',
+          'phone': '+8613800000000',
+          'ip': '203.0.113.10',
+        };
+        final line = EventLog.formatTagged(
+          'Sync',
+          'profile_refresh',
+          context: {...sensitive, 'status': 'ok'},
+        );
+
+        // Every sensitive key must end up redacted — raw value must not leak.
+        for (final entry in sensitive.entries) {
+          expect(
+            line,
+            contains('${entry.key}=<redacted>'),
+            reason: '${entry.key} must be redacted',
+          );
+          expect(
+            line,
+            isNot(contains(entry.value)),
+            reason: 'raw value for ${entry.key} must not appear in log',
+          );
+        }
+        // Non-sensitive field must still render verbatim (sanity: redaction
+        // is opt-in per key, not a blanket mask).
+        expect(line, contains('status=ok'));
+      },
+    );
+
     test('normalizes whitespace and truncates long values', () {
       final longValue =
           '${List.filled(80, 'x').join()}\n${List.filled(80, 'y').join()}';
