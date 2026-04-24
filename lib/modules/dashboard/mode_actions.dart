@@ -68,7 +68,22 @@ class ModeActions {
         }
       }
       ref.read(proxyGroupsProvider.notifier).refresh();
-      AppNotifier.success('${s.modeSwitched}: $label');
+      // Post-PATCH verify: read back the actual mode from mihomo to catch
+      // the case where the API accepted our request but the core ended up
+      // in a different mode (subscription with a conflicting profile
+      // patch, for instance). Preserves the warning path the HeroCard had
+      // before the ModeActions extraction — spotted in the P2-6 review.
+      try {
+        final actual = await CoreManager.instance.api.getRoutingMode();
+        if (actual != next) {
+          AppNotifier.warning('${s.routeModeRule}: $actual ≠ $next');
+        } else {
+          AppNotifier.success('${s.modeSwitched}: $label');
+        }
+      } catch (e) {
+        debugPrint('[ModeActions] verify getRoutingMode failed: $e');
+        AppNotifier.success('${s.modeSwitched}: $label');
+      }
     } catch (e) {
       debugPrint('[ModeActions] setRoutingMode error: $e');
       AppNotifier.error('${s.switchModeFailed}: $e');
