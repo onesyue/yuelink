@@ -685,29 +685,48 @@ jobs:
             [ -f "docs/releases/v${VERSION}.md" ] && NOTES_FILE="docs/releases/v${VERSION}.md"
           fi
 
+          # Resolve previous tag for the Full Changelog link (skip the current
+          # one, floating `pre`, and any `*-pre` variant so stable releases
+          # compare to the prior stable tag instead of a prerelease).
+          PREV_TAG=$(git tag --sort=-creatordate \
+            | grep -E '^v[0-9]' \
+            | grep -Fxv "$TAG" \
+            | grep -Ev '(^pre$|-pre$)' \
+            | head -1)
+
           if [ -n "$NOTES_FILE" ]; then
             cp "$NOTES_FILE" release_notes.md
           else
-            PREV_TAG=$(git tag --sort=-creatordate | grep -E '^v[0-9]' | grep -Fxv "$TAG" | head -1)
+            # Fallback when docs/releases/<tag>.md is missing: emit a minimal
+            # 2026-format body (## Changes + ## Downloads + Full Changelog),
+            # no Build footer, no verbose per-file blurbs. Source of truth
+            # for the format is the curated docs/releases/*.md files.
             if [ -n "$PREV_TAG" ]; then
               CHANGES=$(git log --pretty=format:"- %s" "${PREV_TAG}..HEAD" -- | head -50)
             else
               CHANGES=$(git log --pretty=format:"- %s" -20)
             fi
             {
-              printf '### Changes\n'
+              printf '## Changes\n\n'
               printf '%s\n\n' "$CHANGES"
-              printf '### Artifacts\n'
-              printf -- '- `YueLink-%s-android-universal.apk`: Android 通用安装包；另附 3 个分 ABI APK。\n' "$VERSION"
-              printf -- '- `YueLink-%s-ios.ipa`: iOS 侧载包（TrollStore / AltStore / SideStore）。\n' "$VERSION"
-              printf -- '- `YueLink-%s-macos-universal.dmg`: macOS Intel + Apple Silicon 通用 DMG。\n' "$VERSION"
-              printf -- '- `YueLink-%s-windows-amd64-setup.exe`: Windows 安装包。\n' "$VERSION"
-              printf -- '- `YueLink-%s-windows-amd64-portable.zip`: Windows 免安装便携包。\n' "$VERSION"
-              printf -- '- `YueLink-%s-linux-amd64.AppImage`: Linux x86_64 AppImage。\n' "$VERSION"
-              printf -- '- `YueLink-%s-SHA256SUMS`：所有产物的 SHA-256 哈希，使用 `sha256sum -c YueLink-%s-SHA256SUMS` 一键校验。\n' "$VERSION" "$VERSION"
+              printf '## Downloads\n\n'
+              printf '| 平台 | 文件 | 说明 |\n'
+              printf '|---|---|---|\n'
+              printf '| Windows | `YueLink-%s-windows-amd64-setup.exe` | 安装版 |\n' "$VERSION"
+              printf '| Windows | `YueLink-%s-windows-amd64-portable.zip` | 便携版 |\n' "$VERSION"
+              printf '| macOS | `YueLink-%s-macos-universal.dmg` | Universal（Apple Silicon + Intel） |\n' "$VERSION"
+              printf '| Android | `YueLink-%s-android-universal.apk` | 通用 |\n' "$VERSION"
+              printf '| Android | `YueLink-%s-android-arm64-v8a.apk` | arm64 |\n' "$VERSION"
+              printf '| Android | `YueLink-%s-android-armeabi-v7a.apk` | armv7 |\n' "$VERSION"
+              printf '| Android | `YueLink-%s-android-x86_64.apk` | x86_64 |\n' "$VERSION"
+              printf '| iOS | `YueLink-%s-ios.ipa` | 侧载，iOS 15+（TrollStore / AltStore / SideStore） |\n' "$VERSION"
+              printf '| Linux | `YueLink-%s-linux-amd64.AppImage` | x86_64 |\n' "$VERSION"
+              printf '\n每个产物附同名 `.sha256`，汇总见 `YueLink-%s-SHA256SUMS`。\n' "$VERSION"
+              if [ -n "$PREV_TAG" ]; then
+                printf '\n**Full Changelog**: https://github.com/%s/compare/%s...%s\n' "$GITHUB_REPOSITORY" "$PREV_TAG" "$TAG"
+              fi
             } > release_notes.md
           fi
-          printf '\n\n---\n*Build: %s | Version: %s*\n' "$TAG" "$VERSION" >> release_notes.md
           echo "RELEASE_TITLE=${TITLE}" >> $GITHUB_ENV
           echo "APP_VERSION=${VERSION}" >> $GITHUB_ENV
 
