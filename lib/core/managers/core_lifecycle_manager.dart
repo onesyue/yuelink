@@ -36,6 +36,11 @@ class CoreLifecycleManager {
         '[CoreLifecycle] start() called, config length: ${configYaml.length}');
     Telemetry.event(TelemetryEvents.connectStart);
     ref.read(userStoppedProvider.notifier).state = false;
+    // Clear the persisted stop flag (v1.0.21 hotfix). Cheap regular flush
+    // is fine here — start failures don't reinstate the flag, and a
+    // mid-start kill leaves us with persisted=false which is correctly
+    // interpreted as "no recent manual stop" on next resume.
+    await SettingsService.setManualStopped(false, immediate: false);
     ref.read(coreStatusProvider.notifier).state = CoreStatus.starting;
     ref.read(coreStartupErrorProvider.notifier).state = null;
 
@@ -180,6 +185,13 @@ class CoreLifecycleManager {
 
   Future<void> stop() async {
     ref.read(userStoppedProvider.notifier).state = true;
+    // Persist the stop intent BEFORE doing any teardown work — engine
+    // recreate / process kill can happen at any point during a normal
+    // disconnect (Android background-kill is the canonical case), and the
+    // resume path needs to see this flag even if we never got to finally{}.
+    // setImmediate is required: the coalesced flush would lose this write
+    // if the user puts the app away within the flush window.
+    await SettingsService.setManualStopped(true);
     ref.read(coreStatusProvider.notifier).state = CoreStatus.stopping;
 
     try {

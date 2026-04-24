@@ -193,6 +193,35 @@ class SettingsService {
     await set('accentResetV1016', true);
   }
 
+  // ── Manual stop persistence (v1.0.21 hotfix) ────────────────────────────
+  //
+  // The in-memory `userStoppedProvider` survives a normal foreground/back
+  // cycle but is wiped when Riverpod's ProviderScope is rebuilt — which
+  // happens whenever Android kills the Flutter engine while the VPN
+  // service + Go core continue running. On engine recreate the provider
+  // resets to false; the resume health check then sees the still-alive
+  // mihomo API and pulls the UI back to "running" — except the user had
+  // explicitly tapped disconnect, so the system proxy / TUN fd are gone
+  // and the network is dead. The persisted flag is the source of truth
+  // across engine recreate; main.dart consults it on every resume.
+  static const _kManualStopped = 'manualStopped';
+
+  static Future<bool> getManualStopped() async =>
+      (await get<bool>(_kManualStopped)) ?? false;
+
+  /// Defaults to immediate flush — manual stop is exactly the moment the
+  /// OS may kill us next (user putting the app away after disconnect),
+  /// and the coalesced flush would lose the write. Pass `immediate: false`
+  /// only when you've already validated the value will survive (the
+  /// `false` write at start() is the typical case).
+  static Future<void> setManualStopped(bool v, {bool immediate = true}) async {
+    if (immediate) {
+      await setImmediate(_kManualStopped, v);
+    } else {
+      await set(_kManualStopped, v);
+    }
+  }
+
   // ── Subscription sync interval ──────────────────────────────────────────
 
   /// Interval in hours: 0 = disabled, 1, 6, 12, 24, 48.

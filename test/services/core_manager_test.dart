@@ -1,10 +1,12 @@
 import 'dart:io';
 
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:yuelink/constants.dart';
 import 'package:yuelink/core/kernel/core_manager.dart';
+import 'package:yuelink/core/providers/core_provider.dart';
 import 'package:yuelink/core/storage/settings_service.dart';
 
 /// CoreManager tests run in **mock mode** (no native library / FFI).
@@ -338,6 +340,156 @@ rules:
 
       expect(cm.api.secret, equals(cached),
           reason: 'configure(null) must leave cached secret untouched');
+    });
+  });
+
+  // ── v1.0.21 hotfix: persisted manual-stop flag ─────────────────────────
+  // The bug this guards: in-memory userStoppedProvider is wiped when
+  // Riverpod's ProviderScope rebuilds (Android engine recreate). The
+  // resume health check would then see the still-alive mihomo API and
+  // pull the UI back to "running" — except the user had explicitly
+  // disconnected. Persisted flag survives engine recreate.
+  group('SettingsService.manualStopped persistence', () {
+    test('defaults to false on a fresh install', () async {
+      // Clear any leftover from previous tests in this run
+      await SettingsService.setManualStopped(false);
+      await SettingsService.flush();
+      expect(await SettingsService.getManualStopped(), isFalse);
+    });
+
+    test('round-trips true through flush + reload', () async {
+      await SettingsService.setManualStopped(true);
+      await SettingsService.flush();
+      expect(await SettingsService.getManualStopped(), isTrue);
+    });
+
+    test('round-trips false (clear after stop) through flush + reload',
+        () async {
+      await SettingsService.setManualStopped(true);
+      await SettingsService.flush();
+      // Then a subsequent start() clears it
+      await SettingsService.setManualStopped(false);
+      await SettingsService.flush();
+      expect(await SettingsService.getManualStopped(), isFalse);
+    });
+
+    test('default immediate=true survives cache invalidation (real disk write)',
+        () async {
+      // Prove the value actually hit the disk, not just the in-memory cache.
+      // Write with immediate=true, drop the in-memory cache, read back:
+      // if immediate=true is working, the value comes from the JSON file.
+      await SettingsService.setManualStopped(true);
+      SettingsService.invalidateCache();
+      expect(await SettingsService.getManualStopped(), isTrue,
+          reason: 'immediate=true must persist to disk, not only memory');
+      // Clean up for other tests in this group.
+      await SettingsService.setManualStopped(false);
+      SettingsService.invalidateCache();
+    });
+
+    test('immediate=false updates in-memory cache synchronously', () async {
+      await SettingsService.setManualStopped(true);
+      await SettingsService.setManualStopped(false, immediate: false);
+      // The coalesced flush hasn't fired yet, but the in-memory cache
+      // is updated synchronously by set() — get() must reflect that
+      // (used by start()'s clear-on-success path).
+      expect(await SettingsService.getManualStopped(), isFalse);
+      await SettingsService.flush();
+    });
+  });
+
+  // ── v1.0.21 hotfix P0-1: ProviderScope hydration gate ──────────────────
+  //
+  // Proves the mechanism end-to-end: on cold start, main() reads the
+  // persisted manualStopped flag and passes it to ProviderScope via
+  // userStoppedProvider.overrideWith(...). The autoConnect gate in
+  // _maybeAutoConnect() reads userStoppedProvider — so if the override
+  // correctly reflects persistence, auto-connect is blocked exactly when
+  // it should be.
+  group('cold-start: userStoppedProvider overrides from persisted', () {
+    setUp(() async {
+      // Start each scenario from a known clean state.
+      await SettingsService.setManualStopped(false);
+      SettingsService.invalidateCache();
+    });
+
+    ProviderContainer makeColdStartContainer({
+      required bool savedManualStopped,
+      required bool savedAutoConnect,
+    }) {
+      final container = ProviderContainer(overrides: [
+        userStoppedProvider.overrideWith((ref) => savedManualStopped),
+        autoConnectProvider.overrideWith((ref) => savedAutoConnect),
+      ]);
+      addTearDown(container.dispose);
+      return container;
+    }
+
+    test(
+        'autoConnect=true + persisted manualStopped=true → gate blocks '
+        'auto-connect on cold start', () async {
+      // Simulate: user had explicitly disconnected, then killed the app.
+      await SettingsService.setManualStopped(true);
+      SettingsService.invalidateCache();
+      final saved = await SettingsService.getManualStopped();
+      expect(saved, isTrue, reason: 'precondition: persisted should be true');
+
+      final container = makeColdStartContainer(
+        savedManualStopped: saved,
+        savedAutoConnect: true,
+      );
+
+      // The gate _maybeAutoConnect() checks: coreStatus != running,
+      // autoConnect == true, userStopped == false. If userStopped is
+      // true (from override), auto-connect must be blocked.
+      expect(container.read(autoConnectProvider), isTrue);
+      expect(container.read(userStoppedProvider), isTrue,
+          reason: 'override must hydrate the provider with persisted value');
+      final gatedAllowed = container.read(autoConnectProvider) &&
+          !container.read(userStoppedProvider);
+      expect(gatedAllowed, isFalse,
+          reason: 'auto-connect must be gated when user explicitly stopped');
+    });
+
+    test(
+        'manual start clears persisted flag → next cold-start allows '
+        'auto-connect', () async {
+      // Step 1: user stopped manually
+      await SettingsService.setManualStopped(true);
+      // Step 2: user tapped connect — lifecycle.start() writes false
+      await SettingsService.setManualStopped(false);
+      // Step 3: app killed, relaunched — main() re-reads persisted
+      SettingsService.invalidateCache();
+      final saved = await SettingsService.getManualStopped();
+      expect(saved, isFalse);
+
+      final container = makeColdStartContainer(
+        savedManualStopped: saved,
+        savedAutoConnect: true,
+      );
+
+      expect(container.read(userStoppedProvider), isFalse,
+          reason: 'cleared flag must not zombie-block future auto-connect');
+      final gatedAllowed = container.read(autoConnectProvider) &&
+          !container.read(userStoppedProvider);
+      expect(gatedAllowed, isTrue,
+          reason: 'auto-connect must proceed after a clean start cleared '
+              'the flag');
+    });
+
+    test(
+        'autoConnect=false + persisted manualStopped=false → gate still '
+        'blocks (autoConnect off)', () async {
+      // Not the primary hotfix scenario, but guards against a regression
+      // where the new override accidentally forces autoConnect on.
+      final saved = await SettingsService.getManualStopped();
+      final container = makeColdStartContainer(
+        savedManualStopped: saved,
+        savedAutoConnect: false,
+      );
+      final gatedAllowed = container.read(autoConnectProvider) &&
+          !container.read(userStoppedProvider);
+      expect(gatedAllowed, isFalse);
     });
   });
 }

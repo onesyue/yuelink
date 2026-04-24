@@ -212,6 +212,11 @@ Future<void> _bootstrap() async {
   final savedDesktopTunStack = await SettingsService.getDesktopTunStack();
   final savedLogLevel = await SettingsService.getLogLevel();
   final savedAutoConnect = await SettingsService.getAutoConnect();
+  // v1.0.21 hotfix: hydrate userStoppedProvider from disk so
+  // _maybeAutoConnect() sees the manual-stop intent even on engine
+  // recreate / cold start. Without this, the provider's default (false)
+  // lets auto-connect fire after a user had explicitly disconnected.
+  final savedManualStopped = await SettingsService.getManualStopped();
   final savedSystemProxy = await SettingsService.getSystemProxyOnConnect();
   final savedLanguage = await SettingsService.getLanguage();
   final savedTestUrl = await SettingsService.getTestUrl();
@@ -335,6 +340,7 @@ Future<void> _bootstrap() async {
       desktopTunStackProvider.overrideWith((ref) => savedDesktopTunStack),
       logLevelProvider.overrideWith((ref) => savedLogLevel),
       autoConnectProvider.overrideWith((ref) => savedAutoConnect),
+      userStoppedProvider.overrideWith((ref) => savedManualStopped),
       systemProxyOnConnectProvider.overrideWith((ref) => savedSystemProxy),
       testUrlProvider.overrideWith((ref) => savedTestUrl),
       closeBehaviorProvider.overrideWith((ref) => savedCloseBehavior),
@@ -815,9 +821,27 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
       // written for) is unaffected: Riverpod rebuilds ProviderScope from
       // defaults, so userStoppedProvider reverts to false and we go
       // through the normal health check.
-      if (ref.read(userStoppedProvider)) {
+      // v1.0.21 hotfix: also consult the persisted manual-stop flag.
+      // The in-memory userStoppedProvider is wiped to its default (false)
+      // whenever Riverpod's ProviderScope rebuilds — which happens on
+      // every Android engine recreate (background-kill of the Flutter
+      // engine while the VPN service + Go core continue running). Without
+      // the persisted check, the recovery branch below would see the
+      // still-alive mihomo API and pull the UI back to "running" even
+      // though the user had explicitly disconnected, leaving them with a
+      // "connected" indicator and a dead network.
+      final persistedManualStopped =
+          await SettingsService.getManualStopped();
+      if (persistedManualStopped && !ref.read(userStoppedProvider)) {
+        // Hydrate the in-memory provider from persistence so subsequent
+        // listeners (heartbeat, VPN revocation callback) also respect it.
+        ref.read(userStoppedProvider.notifier).state = true;
+      }
+      if (ref.read(userStoppedProvider) || persistedManualStopped) {
         debugPrint('[AppLifecycle] resumed in user-stopped state — '
-            'skipping health recovery (respecting explicit stop)');
+            'skipping health recovery '
+            '(persisted=$persistedManualStopped, '
+            'provider=${ref.read(userStoppedProvider)})');
         return;
       }
       ref.read(recoveryInProgressProvider.notifier).state = true;
