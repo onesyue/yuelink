@@ -21,6 +21,7 @@ import '../relay/relay_candidate.dart';
 import '../relay/relay_metrics.dart';
 import '../relay/relay_probe_service.dart';
 import '../relay/relay_selection.dart';
+import '../relay/relay_telemetry.dart';
 import '../service/service_client.dart';
 import '../service/service_manager.dart';
 import '../service/service_models.dart';
@@ -1018,6 +1019,14 @@ class CoreManager {
     );
     lastSelectedKind = outcome.selectedKind;
     lastSelectedReason = outcome.selectedReason;
+    // A5c-1: emit one selected event per start path. Always fires —
+    // direct selection still produces a row so the dashboard sees the
+    // baseline distribution, not a sampling skewed toward relay picks.
+    Telemetry.event(
+      TelemetryEvents.relaySelected,
+      props: RelayTelemetry.selected(
+          outcome.selectedKind, outcome.selectedReason),
+    );
     return (
       profile: outcome.profile,
       bypassHosts: outcome.profile?.bypassHosts ?? const <String>[],
@@ -1040,6 +1049,13 @@ class CoreManager {
       final svc = DefaultRelayProbeService();
       final result = await svc.probe(candidate);
       _relayMetrics.record(candidate.id, result);
+      // A5c-1: emit one probe event per actual probe run. Skipped probes
+      // (no persisted profile) deliberately produce no event — silence
+      // means "nothing to measure", which the dashboard reads correctly.
+      Telemetry.event(
+        TelemetryEvents.relayProbe,
+        props: RelayTelemetry.probe(candidate, result),
+      );
     } catch (e) {
       debugPrint('[CoreManager] background probe failed: $e');
     }
