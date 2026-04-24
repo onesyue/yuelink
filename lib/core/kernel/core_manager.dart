@@ -17,6 +17,8 @@ import 'config_template.dart';
 import 'geodata_service.dart';
 import '../../infrastructure/datasources/mihomo_api.dart';
 import '../../infrastructure/datasources/mihomo_stream.dart';
+import '../relay/relay_candidate.dart';
+import '../relay/relay_selection.dart';
 import '../service/service_client.dart';
 import '../service/service_manager.dart';
 import '../service/service_models.dart';
@@ -51,6 +53,8 @@ class CoreManager {
     _instance?._pendingOperation = null;
     _instance?.lastReport = null;
     _instance?.lastRelayResult = null;
+    _instance?.lastSelectedKind = null;
+    _instance?.lastSelectedReason = null;
     // Clear cached secret + API clients so tests can observe a clean
     // cold-start resolution path (persisted-read → generate → persist).
     _instance?._apiSecret = null;
@@ -90,6 +94,18 @@ class CoreManager {
   /// dashboards can distinguish "configured but skipped" from "actually
   /// injected", without logging any PII.
   RelayApplyResult? lastRelayResult;
+
+  /// Which candidate kind the relay selector picked for the most recent
+  /// start. Always set after a start runs (selector always returns a
+  /// candidate). Null only before the first start. Phase 1B A5a: this is
+  /// almost always [RelayCandidateKind.direct] because metrics are empty
+  /// (probes land in A5b).
+  RelayCandidateKind? lastSelectedKind;
+
+  /// Why the selector picked what it picked — sourced from
+  /// [LowestLatencySelector.lastReason]. Null when the selector
+  /// implementation doesn't expose a reason (only happens in tests).
+  String? lastSelectedReason;
 
   MihomoApi get api => _api ??= MihomoApi(
         host: '127.0.0.1',
@@ -297,17 +313,16 @@ class CoreManager {
       int? tunFd;
       String processed = '';
 
-      // Relay profile is loaded once and reused for both injection (inside
-      // _prepareConfig) and fake-ip-filter whitelist (via processInIsolate).
-      // Absent/invalid profile → bypassHosts is empty → every downstream
-      // call remains a no-op. The actual injection outcome is recorded on
-      // `lastRelayResult` by _prepareConfig, not derived from the profile.
-      final relayProfile = await RelayProfileService.load();
-      final relayBypassHosts = relayProfile?.bypassHosts ?? const <String>[];
+      // A5a relay wiring: cold-start selector decides per-start whether
+      // we inject the persisted relay profile or run direct. Empty
+      // metrics today → selector returns direct, profile passed through
+      // is null, RelayInjector becomes a no-op, persisted profile stays
+      // intact for the next start (no clear() — see _resolveRelay docs).
+      final relay = await _resolveRelay();
 
       // Pre-compute config overwrite layer while VPN fd is being obtained.
       Future<String> prepareConfig() =>
-          _prepareConfig(configYaml, relayProfile: relayProfile);
+          _prepareConfig(configYaml, relayProfile: relay.profile);
 
       if (Platform.isAndroid && !isMockMode) {
         // Run VPN fd + config prep in parallel
@@ -334,7 +349,7 @@ class CoreManager {
             tunBypassAddresses: tunBypassAddresses,
             tunBypassProcesses: tunBypassProcesses,
             tunFd: tunFd,
-            relayHostWhitelist: relayBypassHosts,
+            relayHostWhitelist: relay.bypassHosts,
           );
           _apiPort = ConfigTemplate.getApiPort(processed);
           _mixedPort = ConfigTemplate.getMixedPort(processed);
@@ -361,7 +376,7 @@ class CoreManager {
             tunBypassAddresses: tunBypassAddresses,
             tunBypassProcesses: tunBypassProcesses,
             tunFd: tunFd,
-            relayHostWhitelist: relayBypassHosts,
+            relayHostWhitelist: relay.bypassHosts,
           );
           _apiPort = ConfigTemplate.getApiPort(processed);
           _mixedPort = ConfigTemplate.getMixedPort(processed);
@@ -564,11 +579,12 @@ class CoreManager {
           );
         }
 
-        // Commercial dialer-proxy (Phase 1A). bypassHosts is iOS-critical:
-        // fake-ip would otherwise hand the relay host a 198.18.x.x, routed
-        // back into the packet tunnel — classic self-loop.
-        final relayProfile = await RelayProfileService.load();
-        final relayResult = RelayInjector.apply(withOverwrite, relayProfile);
+        // A5a relay wiring on iOS path. Same semantics as main start:
+        // selector decides per-start; bypassHosts is iOS-critical because
+        // fake-ip would otherwise hand the relay host a 198.18.x.x and
+        // route it back into the packet tunnel (classic self-loop).
+        final relay = await _resolveRelay();
+        final relayResult = RelayInjector.apply(withOverwrite, relay.profile);
         lastRelayResult = relayResult;
         withOverwrite = relayResult.config;
 
@@ -580,7 +596,7 @@ class CoreManager {
           desktopTunStack: desktopTunStack,
           tunBypassAddresses: tunBypassAddresses,
           tunBypassProcesses: tunBypassProcesses,
-          relayHostWhitelist: relayProfile?.bypassHosts ?? const <String>[],
+          relayHostWhitelist: relay.bypassHosts,
         );
         _apiPort = ConfigTemplate.getApiPort(processed);
         _mixedPort = ConfigTemplate.getMixedPort(processed);
@@ -679,9 +695,10 @@ class CoreManager {
         final appDir = await getApplicationSupportDirectory();
         homeDir = appDir.path;
 
-        final relayProfile = await RelayProfileService.load();
+        // A5a relay wiring on desktop service-mode path.
+        final relay = await _resolveRelay();
         final withOverwrite =
-            await _prepareConfig(configYaml, relayProfile: relayProfile);
+            await _prepareConfig(configYaml, relayProfile: relay.profile);
         processed = await ConfigTemplate.processInIsolate(
           withOverwrite,
           apiPort: _apiPort,
@@ -690,7 +707,7 @@ class CoreManager {
           desktopTunStack: desktopTunStack,
           tunBypassAddresses: tunBypassAddresses,
           tunBypassProcesses: tunBypassProcesses,
-          relayHostWhitelist: relayProfile?.bypassHosts ?? const <String>[],
+          relayHostWhitelist: relay.bypassHosts,
         );
         _apiPort = ConfigTemplate.getApiPort(processed);
         _mixedPort = ConfigTemplate.getMixedPort(processed);
@@ -952,6 +969,28 @@ class CoreManager {
     return ServiceManager.isInstalled();
   }
 
+  /// Phase 1B A5a: load persisted relay profile, run the cold-start
+  /// selector, record what was picked. Returns the profile to actually
+  /// inject for THIS start (null when direct was chosen) plus the
+  /// fake-ip-filter bypass hosts the DNS template needs.
+  ///
+  /// Critically does NOT call [RelayProfileService.clear] when direct is
+  /// selected — empty metrics (the default in 1B before probes land in
+  /// A5b) makes the selector return direct unconditionally, so clearing
+  /// would silently wipe the user's saved relay every cold-start.
+  Future<({RelayProfile? profile, List<String> bypassHosts})>
+      _resolveRelay() async {
+    final outcome = await selectRelayForColdStart(
+      persistedProfile: await RelayProfileService.load(),
+    );
+    lastSelectedKind = outcome.selectedKind;
+    lastSelectedReason = outcome.selectedReason;
+    return (
+      profile: outcome.profile,
+      bypassHosts: outcome.profile?.bypassHosts ?? const <String>[],
+    );
+  }
+
   Future<String> _prepareConfig(String configYaml,
       {RelayProfile? relayProfile}) async {
     final overwrite = await OverwriteService.load();
@@ -1124,19 +1163,20 @@ class CoreManager {
   }
 
   /// Build the relay block for StartupReport.
-  /// Returns null when no relay was ever attempted (null profile case is
-  /// the one we suppress — everything else, including skipped attempts,
-  /// is worth recording so telemetry can see the skip reason distribution).
+  /// Returns null only when the selector has never run (e.g. before the
+  /// first start). Once A5a wired the selector into every start path,
+  /// every successful or failed start records its selectedKind /
+  /// selectedReason here — telemetry sees the consistent shape.
   Map<String, dynamic>? _relayReportFields() {
     final r = lastRelayResult;
-    if (r == null) return null;
-    if (!r.injected && r.skipReason == RelayApplyResult.skipNoProfile) {
-      return null;
-    }
+    final kind = lastSelectedKind;
+    if (r == null && kind == null) return null;
     return {
-      'injected': r.injected,
-      if (r.targetCount > 0) 'targetCount': r.targetCount,
-      if (r.skipReason != null) 'skipReason': r.skipReason,
+      if (r != null) 'injected': r.injected,
+      if (r != null && r.targetCount > 0) 'targetCount': r.targetCount,
+      if (r != null && r.skipReason != null) 'skipReason': r.skipReason,
+      if (kind != null) 'selectedKind': kind.name,
+      if (lastSelectedReason != null) 'selectedReason': lastSelectedReason,
     };
   }
 

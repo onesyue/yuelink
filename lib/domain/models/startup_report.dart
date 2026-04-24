@@ -70,12 +70,19 @@ class StartupReport {
   final String? failedStep;
   final List<String> coreLogs;
 
-  /// Phase 1A relay block:
-  ///   `{'injected': bool, 'targetCount': int?, 'skipReason': String?}`
-  /// Null when no relay path was attempted (no persisted profile at all).
-  /// `skipReason` values are the closed set in [RelayApplyResult] —
-  /// callers must not invent new strings. Future phases (officialAccess /
-  /// superPeer) will add source/region/latencyMs here without schema churn.
+  /// Phase 1B relay block (extends the 1A shape):
+  ///   `{
+  ///     'injected':        bool,            // RelayInjector.apply outcome
+  ///     'targetCount':     int?,            // # of nodes wrapped
+  ///     'skipReason':      String?,         // closed set in [RelayApplyResult]
+  ///     'selectedKind':    String?,         // direct|officialCommercial|officialAccess
+  ///     'selectedReason':  String?,         // closed set in [RelaySelectReason]
+  ///   }`
+  ///
+  /// Null only before the first start. After A5a wired the selector into
+  /// every start path the block is always populated, even on cold runs
+  /// where direct was selected and no relay was injected — telemetry
+  /// downstream relies on the consistent shape.
   final Map<String, dynamic>? relay;
 
   const StartupReport({
