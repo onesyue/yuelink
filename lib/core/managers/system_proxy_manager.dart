@@ -35,6 +35,41 @@ class SystemProxyManager {
     _verifyCachedPort = null;
   }
 
+  /// Pure cache-hit predicate, extracted so unit tests can exercise the
+  /// TTL / port / force-bypass matrix without running the platform
+  /// verifiers. Public for `@visibleForTesting`-style access; production
+  /// code should go through [verify].
+  static bool canServeFromCache({
+    required int requestedPort,
+    required bool force,
+    required DateTime now,
+  }) {
+    if (force) return false;
+    if (_verifyCachedAt == null) return false;
+    if (_verifyCachedPort != requestedPort) return false;
+    return now.difference(_verifyCachedAt!) < _verifyCacheTtl;
+  }
+
+  @visibleForTesting
+  static bool? get verifyCacheValueForTest => _verifyCached;
+
+  @visibleForTesting
+  static DateTime? get verifyCacheAtForTest => _verifyCachedAt;
+
+  @visibleForTesting
+  static int? get verifyCachePortForTest => _verifyCachedPort;
+
+  @visibleForTesting
+  static void primeVerifyCacheForTest({
+    required int port,
+    required bool? value,
+    DateTime? at,
+  }) {
+    _verifyCached = value;
+    _verifyCachedPort = port;
+    _verifyCachedAt = at ?? DateTime.now();
+  }
+
   // ── Network services list cache (macOS) ─────────────────────────────────
   static List<String>? _cachedNetworkServices;
   static DateTime? _networkServicesCachedAt;
@@ -85,6 +120,12 @@ class SystemProxyManager {
   /// Configure the OS system proxy to point at 127.0.0.1:[mixedPort].
   /// Returns true on success. On macOS verifies via `scutil --proxy` after
   /// setting; on Windows updates the registry; on Linux uses gsettings/kde.
+  ///
+  /// Always drops the verification cache before returning (regardless of
+  /// success/failure or platform) — a stale "no" from the previous cycle
+  /// must not outlive a mutation, and a stale "yes" would mask a failed
+  /// set. Was previously only invalidated inside [_setMacOS]; Windows /
+  /// Linux were missing the call.
   static Future<bool> set(int mixedPort) async {
     bool ok;
     if (Platform.isMacOS) {
@@ -96,6 +137,11 @@ class SystemProxyManager {
     } else {
       return false;
     }
+    // Invalidate AFTER the platform write. _setMacOS already calls
+    // invalidateVerifyCache() mid-flight (so the post-set verify inside
+    // that function hits the OS); this second call is idempotent and
+    // ensures every platform path leaves the cache cleared on return.
+    invalidateVerifyCache();
     if (ok) await _markDirty();
     return ok;
   }
@@ -270,11 +316,15 @@ class SystemProxyManager {
 
   /// Disable system proxy on macOS / Windows / Linux. Idempotent.
   /// Always clears the dirty flag even if the underlying commands fail —
-  /// retry loops on a broken machine aren't useful here.
+  /// retry loops on a broken machine aren't useful here. Also invalidates
+  /// the verify cache unconditionally: a prior `true` verdict must not
+  /// outlive a mutation, or the heartbeat would skip the restore step
+  /// the next time something external flips the proxy away.
   static Future<void> clear() async {
     try {
       await _doClear();
     } finally {
+      invalidateVerifyCache();
       await _markClean();
     }
   }
@@ -336,6 +386,13 @@ class SystemProxyManager {
   /// Verify the OS system proxy is actually pointing to our [mixedPort].
   /// Cached for [_verifyCacheTtl] to keep heartbeat overhead minimal.
   ///
+  /// Pass `force: true` to bypass the cache — used by resume / window-focus
+  /// hooks where the user may have just flipped a competing proxy tool
+  /// (v2rayN, vr2, …) in the ~60 s since the last verify. Waiting for
+  /// the cache to expire before noticing leaves the user with a
+  /// "connected" UI and a dead network; `force: true` skips straight to
+  /// the OS read.
+  ///
   /// Tri-state return:
   ///   * `true`  — verified, proxy points at our port.
   ///   * `false` — verified, proxy is tampered / pointing elsewhere.
@@ -348,13 +405,12 @@ class SystemProxyManager {
   /// macOS: parses `scutil --proxy` (one subprocess instead of N+1).
   /// Windows: reads two registry values.
   /// Linux: reads gsettings.
-  static Future<bool?> verify(int mixedPort) async {
-    // Cache presence keyed on the timestamp, not the value, because
-    // `null` is now a valid cached verdict (unknown) distinct from
-    // "cache cold".
-    if (_verifyCachedAt != null &&
-        _verifyCachedPort == mixedPort &&
-        DateTime.now().difference(_verifyCachedAt!) < _verifyCacheTtl) {
+  static Future<bool?> verify(int mixedPort, {bool force = false}) async {
+    if (canServeFromCache(
+      requestedPort: mixedPort,
+      force: force,
+      now: DateTime.now(),
+    )) {
       return _verifyCached;
     }
 

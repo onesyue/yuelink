@@ -895,9 +895,45 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
         ref.invalidate(exitIpInfoProvider);
         // Refresh proxy groups in case core reloaded config
         ref.read(proxyGroupsProvider.notifier).refresh();
+        // v1.0.21 hotfix P0-2: system-proxy tamper detection on resume.
+        // If the user flipped over to v2rayN / vr2 / any other proxy tool
+        // while YueLink was backgrounded, the 60 s verify cache would
+        // leave the heartbeat unable to notice for up to that TTL —
+        // resulting in the "connected but no network" UX. force:true
+        // bypasses the cache, and a tampered result immediately triggers
+        // restore instead of waiting for the 30 s heartbeat round.
+        unawaited(_resumeProxyTamperCheck());
       }
     } catch (e) {
       debugPrint('[AppLifecycle] resume check failed: $e');
+    }
+  }
+
+  /// v1.0.21 hotfix P0-2: best-effort force-verify + restore on resume.
+  /// Runs only when the user has systemProxy mode selected and core is
+  /// running. Fire-and-forget: caller doesn't await; any exception is
+  /// swallowed and logged so the rest of the resume path is unaffected.
+  Future<void> _resumeProxyTamperCheck() async {
+    if (!(Platform.isMacOS || Platform.isWindows || Platform.isLinux)) {
+      return;
+    }
+    if (ref.read(connectionModeProvider) != 'systemProxy') return;
+    if (!ref.read(systemProxyOnConnectProvider)) return;
+    try {
+      final port = CoreManager.instance.mixedPort;
+      final ok = await SystemProxyManager.verify(port, force: true);
+      if (ok == false) {
+        debugPrint('[AppLifecycle] systemProxy tampered on resume '
+            '(expected 127.0.0.1:$port) — restoring');
+        EventLog.write('[AppLifecycle] systemProxy tamper detected on '
+            'resume port=$port');
+        final restored = await SystemProxyManager.set(port);
+        if (!restored) {
+          AppNotifier.warning(S.current.errSystemProxyFailed);
+        }
+      }
+    } catch (e) {
+      debugPrint('[AppLifecycle] resume tamper check failed: $e');
     }
   }
 
