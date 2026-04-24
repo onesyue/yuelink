@@ -63,8 +63,7 @@ class ModeActions {
         try {
           await CoreManager.instance.api.closeAllConnections();
         } catch (e) {
-          debugPrint(
-              '[ModeActions] closeAllConnections on direct failed: $e');
+          debugPrint('[ModeActions] closeAllConnections on direct failed: $e');
         }
       }
       ref.read(proxyGroupsProvider.notifier).refresh();
@@ -109,7 +108,13 @@ class ModeActions {
     ref.read(connectionModeProvider.notifier).state = next;
     await SettingsService.setConnectionMode(next);
     try {
-      await ref.read(coreActionsProvider).hotSwitchConnectionMode(next);
+      final ok = await ref
+          .read(coreActionsProvider)
+          .hotSwitchConnectionMode(next, fallbackMode: current);
+      if (!ok) {
+        ref.read(connectionModeProvider.notifier).state = current;
+        await SettingsService.setConnectionMode(current);
+      }
     } catch (e) {
       debugPrint('[ModeActions] hotSwitchConnectionMode error: $e');
       // Revert optimistic state so the UI doesn't lie about the runtime.

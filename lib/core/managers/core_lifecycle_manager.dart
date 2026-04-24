@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../constants.dart';
 import '../../core/kernel/core_manager.dart';
+import '../../core/profile/profile_service.dart';
 import '../../core/storage/settings_service.dart';
 import '../../domain/models/traffic.dart';
 import '../../domain/models/traffic_history.dart';
@@ -33,7 +34,8 @@ class CoreLifecycleManager {
 
   Future<bool> start(String configYaml) async {
     debugPrint(
-        '[CoreLifecycle] start() called, config length: ${configYaml.length}');
+      '[CoreLifecycle] start() called, config length: ${configYaml.length}',
+    );
     Telemetry.event(TelemetryEvents.connectStart);
     ref.read(userStoppedProvider.notifier).state = false;
     // Clear the persisted stop flag (v1.0.21 hotfix). Cheap regular flush
@@ -62,7 +64,8 @@ class CoreLifecycleManager {
       final installed = await ServiceManager.isInstalled();
       if (!installed) {
         ref.read(coreStatusProvider.notifier).state = CoreStatus.stopped;
-        const detail = 'TUN 模式需要安装"服务模式"辅助程序。\n'
+        const detail =
+            'TUN 模式需要安装"服务模式"辅助程序。\n'
             '请前往设置 → 连接修复 → 安装服务模式，然后再连接。';
         ref.read(coreStartupErrorProvider.notifier).state = detail;
         AppNotifier.error(detail);
@@ -96,7 +99,8 @@ class CoreLifecycleManager {
         final detail = report?.failureSummary ?? S.current.errCoreStartFailed;
         ref.read(coreStartupErrorProvider.notifier).state = detail;
         EventLog.write(
-            '[Core] connect_fail detail=${detail.split('\n').first}');
+          '[Core] connect_fail detail=${detail.split('\n').first}',
+        );
         Telemetry.event(
           TelemetryEvents.connectFailed,
           priority: true,
@@ -174,7 +178,8 @@ class CoreLifecycleManager {
       }
       final actual = await manager.api.getRoutingMode();
       debugPrint(
-          '[CoreLifecycle] routingMode: saved=$savedMode, actual=$actual');
+        '[CoreLifecycle] routingMode: saved=$savedMode, actual=$actual',
+      );
       if (actual != savedMode) {
         ref.read(routingModeProvider.notifier).state = actual;
       }
@@ -224,12 +229,32 @@ class CoreLifecycleManager {
   }
 
   /// Hot-switch connection mode (TUN ↔ systemProxy) while core is running.
-  /// Uses mihomo PATCH /configs to toggle TUN without stop+start.
-  Future<void> hotSwitchConnectionMode(String newMode) async {
+  ///
+  /// Mobile/non-desktop can safely PATCH mihomo's `tun.enable` in place.
+  /// Desktop cannot: TUN must run through the privileged helper while
+  /// systemProxy can run in the app process. Crossing that boundary with a
+  /// plain PATCH leaves the UI saying "TUN" while the runtime is still the
+  /// old in-process core. For desktop, restart with the saved profile so the
+  /// normal CoreManager.start() path chooses the right data plane.
+  ///
+  /// Returns whether the runtime switch actually took effect. Callers use this
+  /// to revert optimistic provider/settings changes when TUN setup fails.
+  Future<bool> hotSwitchConnectionMode(
+    String newMode, {
+    String? fallbackMode,
+  }) async {
     final manager = CoreManager.instance;
-    if (!manager.isRunning || manager.isMockMode) return;
+    if (newMode != 'systemProxy' && newMode != 'tun') return false;
+    if (!manager.isRunning || manager.isMockMode) return true;
 
     try {
+      if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
+        return _restartDesktopConnectionMode(
+          newMode,
+          fallbackMode: fallbackMode,
+        );
+      }
+
       if (newMode == 'tun') {
         final stack = ref.read(desktopTunStackProvider);
         final ok = await manager.api.patchConfig({
@@ -244,7 +269,7 @@ class CoreLifecycleManager {
         });
         if (!ok) {
           AppNotifier.error(S.current.errTunSwitchFailed);
-          return;
+          return false;
         }
         if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
           await SystemProxyManager.clear();
@@ -253,13 +278,14 @@ class CoreLifecycleManager {
           await SystemProxyManager.setTunDns();
         }
         AppNotifier.success(S.current.msgSwitchedToTun);
+        return true;
       } else {
         final ok = await manager.api.patchConfig({
           'tun': {'enable': false},
         });
         if (!ok) {
           AppNotifier.error(S.current.errTunSwitchFailed);
-          return;
+          return false;
         }
         if (Platform.isMacOS) {
           await SystemProxyManager.restoreTunDns();
@@ -269,11 +295,73 @@ class CoreLifecycleManager {
           await applySystemProxy();
         }
         AppNotifier.success(S.current.msgSwitchedToSystemProxy);
+        return true;
       }
     } catch (e) {
       debugPrint('[CoreLifecycle] hotSwitchConnectionMode error: $e');
       AppNotifier.error(S.current.errTunSwitchFailed);
+      return false;
     }
+  }
+
+  Future<bool> _restartDesktopConnectionMode(
+    String newMode, {
+    String? fallbackMode,
+  }) async {
+    if (newMode == 'tun' && !await ServiceManager.isInstalled()) {
+      const detail = 'TUN 模式需要先安装"服务模式"辅助程序。';
+      AppNotifier.error(detail);
+      EventLog.write('[Core] tun_switch_failed reason=service_not_installed');
+      return false;
+    }
+
+    final activeId = await SettingsService.getActiveProfileId();
+    if (activeId == null) {
+      AppNotifier.error(S.current.errCoreStartFailed);
+      EventLog.write('[Core] tun_switch_failed reason=no_active_profile');
+      return false;
+    }
+    final config = await ProfileService.loadConfig(activeId);
+    if (config == null) {
+      AppNotifier.error(S.current.errCoreStartFailed);
+      EventLog.write('[Core] tun_switch_failed reason=no_config');
+      return false;
+    }
+
+    EventLog.write('[Core] connection_mode_restart mode=$newMode');
+    final ok = await restart(config);
+    if (!ok) {
+      EventLog.write('[Core] connection_mode_restart_failed mode=$newMode');
+      AppNotifier.error(S.current.errTunSwitchFailed);
+      await _rollbackDesktopConnectionMode(
+        config,
+        newMode: newMode,
+        fallbackMode: fallbackMode,
+      );
+    }
+    return ok;
+  }
+
+  Future<void> _rollbackDesktopConnectionMode(
+    String config, {
+    required String newMode,
+    required String? fallbackMode,
+  }) async {
+    if (fallbackMode == null ||
+        fallbackMode == newMode ||
+        (fallbackMode != 'systemProxy' && fallbackMode != 'tun')) {
+      return;
+    }
+
+    EventLog.write(
+      '[Core] connection_mode_rollback from=$newMode to=$fallbackMode',
+    );
+    ref.read(connectionModeProvider.notifier).state = fallbackMode;
+    await SettingsService.setConnectionMode(fallbackMode);
+    final restored = await start(config);
+    EventLog.write(
+      '[Core] connection_mode_rollback_done ok=$restored to=$fallbackMode',
+    );
   }
 
   Future<void> toggle(String configYaml) async {

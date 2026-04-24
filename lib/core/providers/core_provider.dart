@@ -28,8 +28,9 @@ final appInBackgroundProvider = StateProvider<bool>((ref) => false);
 
 enum CoreStatus { stopped, starting, running, stopping }
 
-final coreStatusProvider =
-    StateProvider<CoreStatus>((ref) => CoreStatus.stopped);
+final coreStatusProvider = StateProvider<CoreStatus>(
+  (ref) => CoreStatus.stopped,
+);
 
 /// Last startup error message — shown on dashboard when core fails to start.
 final coreStartupErrorProvider = StateProvider<String?>((ref) => null);
@@ -85,8 +86,9 @@ final recoveryInProgressProvider = StateProvider<bool>((ref) => false);
 
 final trafficProvider = StateProvider<Traffic>((ref) => const Traffic());
 
-final trafficHistoryProvider =
-    StateProvider<TrafficHistory>((ref) => TrafficHistory());
+final trafficHistoryProvider = StateProvider<TrafficHistory>(
+  (ref) => TrafficHistory(),
+);
 
 /// Monotonically increasing version counter for [trafficHistoryProvider].
 /// Bumped on every sample add — ChartCard watches this instead of a full
@@ -125,8 +127,10 @@ class CoreActions {
   Future<void> stop() => _lifecycle.stop();
   Future<void> toggle(String configYaml) => _lifecycle.toggle(configYaml);
   Future<bool> restart(String configYaml) => _lifecycle.restart(configYaml);
-  Future<void> hotSwitchConnectionMode(String newMode) =>
-      _lifecycle.hotSwitchConnectionMode(newMode);
+  Future<bool> hotSwitchConnectionMode(
+    String newMode, {
+    String? fallbackMode,
+  }) => _lifecycle.hotSwitchConnectionMode(newMode, fallbackMode: fallbackMode);
   Future<bool> applySystemProxy() => _lifecycle.applySystemProxy();
   Future<void> clearSystemProxy() => SystemProxyManager.clear();
 
