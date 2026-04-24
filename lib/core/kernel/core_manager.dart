@@ -18,6 +18,8 @@ import 'geodata_service.dart';
 import '../../infrastructure/datasources/mihomo_api.dart';
 import '../../infrastructure/datasources/mihomo_stream.dart';
 import '../relay/relay_candidate.dart';
+import '../relay/relay_metrics.dart';
+import '../relay/relay_probe_service.dart';
 import '../relay/relay_selection.dart';
 import '../service/service_client.dart';
 import '../service/service_manager.dart';
@@ -55,6 +57,7 @@ class CoreManager {
     _instance?.lastRelayResult = null;
     _instance?.lastSelectedKind = null;
     _instance?.lastSelectedReason = null;
+    _instance?._relayMetrics.clear();
     // Clear cached secret + API clients so tests can observe a clean
     // cold-start resolution path (persisted-read → generate → persist).
     _instance?._apiSecret = null;
@@ -106,6 +109,16 @@ class CoreManager {
   /// [LowestLatencySelector.lastReason]. Null when the selector
   /// implementation doesn't expose a reason (only happens in tests).
   String? lastSelectedReason;
+
+  /// Singleton metrics buffer shared across every start in this process
+  /// session. The cold-start selector reads it; the post-start
+  /// background probe writes to it. Memory-only in Phase 1B — the
+  /// SettingsService persistence layer is deferred. Final field cleared
+  /// (not replaced) by [resetForTesting].
+  final RelayMetrics _relayMetrics = RelayMetrics();
+
+  @visibleForTesting
+  RelayMetrics get relayMetricsForTest => _relayMetrics;
 
   MihomoApi get api => _api ??= MihomoApi(
         host: '127.0.0.1',
@@ -506,6 +519,11 @@ class CoreManager {
       // ── Success ────────────────────────────────────────────────────
       await _persistPorts();
       await _finishReport(steps, true, null);
+      // A5b: kick off the background probe AFTER finishReport so the
+      // current start's report is finalised first. Fire-and-forget by
+      // design — probe results land in metrics for the NEXT start, not
+      // this one.
+      unawaited(_backgroundProbe());
       _pendingOperation?.complete();
       _pendingOperation = null;
       return true;
@@ -650,6 +668,11 @@ class CoreManager {
 
       await _persistPorts();
       await _finishReport(steps, true, null);
+      // A5b: kick off the background probe AFTER finishReport so the
+      // current start's report is finalised first. Fire-and-forget by
+      // design — probe results land in metrics for the NEXT start, not
+      // this one.
+      unawaited(_backgroundProbe());
       _pendingOperation?.complete();
       _pendingOperation = null;
       return true;
@@ -828,6 +851,11 @@ class CoreManager {
 
       await _persistPorts();
       await _finishReport(steps, true, null);
+      // A5b: kick off the background probe AFTER finishReport so the
+      // current start's report is finalised first. Fire-and-forget by
+      // design — probe results land in metrics for the NEXT start, not
+      // this one.
+      unawaited(_backgroundProbe());
       _pendingOperation?.complete();
       _pendingOperation = null;
       return true;
@@ -982,6 +1010,11 @@ class CoreManager {
       _resolveRelay() async {
     final outcome = await selectRelayForColdStart(
       persistedProfile: await RelayProfileService.load(),
+      // A5b: pass the singleton metrics so probe results from prior
+      // starts actually influence the current selection. Empty on first
+      // start of the session → selector falls back to direct, same as
+      // A5a behaviour.
+      metrics: _relayMetrics,
     );
     lastSelectedKind = outcome.selectedKind;
     lastSelectedReason = outcome.selectedReason;
@@ -989,6 +1022,27 @@ class CoreManager {
       profile: outcome.profile,
       bypassHosts: outcome.profile?.bypassHosts ?? const <String>[],
     );
+  }
+
+  /// A5b: probes the persisted commercial relay (if any) and writes the
+  /// outcome to [_relayMetrics] so the NEXT cold-start can see it.
+  /// Fire-and-forget from a successful start — never blocks return,
+  /// never affects this start. Only persisted commercial profiles get
+  /// probed; direct candidates use placeholder host/port that would
+  /// produce garbage data, so they stay unprobed (their absence from
+  /// metrics keeps the selector's conservative bias on direct, which is
+  /// the right default when there's nothing real to compare against).
+  Future<void> _backgroundProbe() async {
+    try {
+      final persisted = await RelayProfileService.load();
+      if (persisted == null || !persisted.isValid) return;
+      final candidate = RelayCandidate.commercial(persisted);
+      final svc = DefaultRelayProbeService();
+      final result = await svc.probe(candidate);
+      _relayMetrics.record(candidate.id, result);
+    } catch (e) {
+      debugPrint('[CoreManager] background probe failed: $e');
+    }
   }
 
   Future<String> _prepareConfig(String configYaml,

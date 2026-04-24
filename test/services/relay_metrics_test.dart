@@ -224,6 +224,36 @@ void main() {
     });
   });
 
+  group('RelayMetrics.clear', () {
+    test('erases history and cumulative usage for all candidateIds', () {
+      final m = RelayMetrics();
+      m.record('a', _ok(10));
+      m.record('a', _ok(20));
+      m.record('b', _fail('timeout'));
+      m.addUsage('a', const Duration(hours: 3));
+      m.addUsage('b', const Duration(hours: 9));
+
+      m.clear();
+
+      expect(m.recent('a'), isEmpty);
+      expect(m.recent('b'), isEmpty);
+      expect(m.p50Latency('a'), isNull);
+      expect(m.failureRate('a'), 0.0);
+      expect(m.cumulativeUsage('a'), Duration.zero);
+      expect(m.cumulativeUsage('b'), Duration.zero);
+      expect(m.cumulativeUsageBucket('a'), '<1h');
+    });
+
+    test('after clear, the same instance accepts new records normally', () {
+      final m = RelayMetrics();
+      m.record('a', _ok(10));
+      m.clear();
+      m.record('a', _ok(50));
+      expect(m.p50Latency('a'), 50);
+      expect(m.recent('a').single.latencyMs, 50);
+    });
+  });
+
   group('integration: LowestLatencySelector × real RelayMetrics', () {
     test('records probes and selects the lowest-latency healthy relay',
         () async {

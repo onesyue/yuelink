@@ -228,28 +228,50 @@ void main() {
       expect(calls.tcp, 0);
     });
 
-    test('vless + reality-opts → TLS path even without tls flag', () async {
+    test('vless + reality-opts → TCP path (A5b: Reality is L1-only)',
+        () async {
+      // SecureSocket.connect cannot represent Reality steering; a
+      // successful TLS dial doesn't prove the candidate works for real
+      // VLESS-Reality traffic, and a failure can be misleading. L1 (TCP)
+      // confirms IP/port reachability; mihomo exercises the real
+      // protocol handshake at connect time.
       await svc.probe(_c(type: 'vless', extras: {
+        'reality-opts': {'public-key': 'abc'},
+      }));
+      expect(calls.tcp, 1);
+      expect(calls.tls, 0);
+    });
+
+    test('vless + alt reality key → TCP path (Reality L1-only, any spelling)',
+        () async {
+      await svc.probe(_c(type: 'vless', extras: {
+        'reality': {'public-key': 'abc'},
+      }));
+      expect(calls.tcp, 1);
+      expect(calls.tls, 0);
+    });
+
+    test('vless with empty reality-opts map → TCP path', () async {
+      // Same outcome as the populated-reality case after A5b — the
+      // detection no longer branches on reality at all. Kept as a
+      // regression guard against any future code that re-introduces
+      // reality-detection in this code path.
+      await svc.probe(_c(type: 'vless', extras: {'reality-opts': {}}));
+      expect(calls.tcp, 1);
+      expect(calls.tls, 0);
+    });
+
+    test('vless + reality + tls:true → TLS path (explicit flag wins)',
+        () async {
+      // Real configs almost never set both, but the rule is unambiguous:
+      // an explicit standard-TLS flag means the user is asking for a
+      // standard TLS handshake. We honour the flag.
+      await svc.probe(_c(type: 'vless', extras: {
+        'tls': true,
         'reality-opts': {'public-key': 'abc'},
       }));
       expect(calls.tls, 1);
       expect(calls.tcp, 0);
-    });
-
-    test('vless + alt reality key → TLS path', () async {
-      await svc.probe(_c(type: 'vless', extras: {
-        'reality': {'public-key': 'abc'},
-      }));
-      expect(calls.tls, 1);
-    });
-
-    test('vless with empty reality-opts map → NOT treated as reality',
-        () async {
-      // Guard against accidental `reality-opts: {}` in a subscription: an
-      // empty map does not mean "reality configured".
-      await svc.probe(_c(type: 'vless', extras: {'reality-opts': {}}));
-      expect(calls.tcp, 1);
-      expect(calls.tls, 0);
     });
 
     test('trojan (no extras) → TLS path (protocol requires TLS)', () async {
@@ -257,9 +279,19 @@ void main() {
       expect(calls.tls, 1);
     });
 
-    test('anytls (no extras) → TLS path', () async {
+    test('anytls (no extras) → TCP path (A5b: AnyTLS is L1-only)', () async {
+      // AnyTLS has its own padding / multiplexing layer on top of TLS.
+      // SecureSocket.connect can validate the TLS shell but not the
+      // AnyTLS protocol semantics; same reasoning as Reality.
       await svc.probe(_c(type: 'anytls'));
+      expect(calls.tcp, 1);
+      expect(calls.tls, 0);
+    });
+
+    test('anytls + tls:true → TLS path (explicit flag still wins)', () async {
+      await svc.probe(_c(type: 'anytls', extras: {'tls': true}));
       expect(calls.tls, 1);
+      expect(calls.tcp, 0);
     });
 
     test('vmess + tls:true → TLS path (tls flag generalises across types)',

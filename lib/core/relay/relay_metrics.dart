@@ -133,4 +133,15 @@ class RelayMetrics implements RelayMetricsView {
     if (d < const Duration(days: 7)) return '1-7d';
     return '>7d';
   }
+
+  /// Erase all per-candidate history and cumulative-usage state.
+  /// Added in A5b so [CoreManager.resetForTesting] can reset the singleton
+  /// metrics instance without replacing the field (`_relayMetrics` is
+  /// final on CoreManager). Production code should not call this; Phase
+  /// 1B keeps everything memory-only, so "clear" really does erase
+  /// everything.
+  void clear() {
+    _history.clear();
+    _cumulativeUsage.clear();
+  }
 }
