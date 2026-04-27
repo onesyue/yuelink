@@ -86,11 +86,18 @@ class RecoveryManager {
   ///
   /// On iOS the Go core runs in a separate process so FFI `IsRunning`
   /// always returns false in the main app. Only the REST API check works.
-  static Future<({bool alive, bool apiOk})> checkCoreHealth() async {
+  static Future<({bool alive, bool apiOk, String apiReason})>
+      checkCoreHealth() async {
     final manager = CoreManager.instance;
-    final apiOk = await manager.api
-        .isAvailable()
-        .timeout(const Duration(seconds: 2), onTimeout: () => false);
+    // Snapshot returns a classified reason (`'ok'` / `'socket'` /
+    // `'timeout'` / `'http_<N>'` / `'other'`) so heartbeat can write
+    // it to EventLog instead of just "down" — useful for
+    // distinguishing transient network flap from a wedged mihomo
+    // when triaging user reports.
+    final snap = await manager.api
+        .healthSnapshot()
+        .timeout(const Duration(seconds: 2),
+            onTimeout: () => (ok: false, reason: 'timeout'));
     var isDesktopTunService = false;
     if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
       final connectionMode = await SettingsService.getConnectionMode();
@@ -98,13 +105,14 @@ class RecoveryManager {
     }
     return (
       alive: isAliveForMode(
-        apiOk: apiOk,
+        apiOk: snap.ok,
         ffiRunning: manager.isCoreActuallyRunning,
         isAndroid: Platform.isAndroid,
         isIOS: Platform.isIOS,
         isDesktopTunService: isDesktopTunService,
       ),
-      apiOk: apiOk,
+      apiOk: snap.ok,
+      apiReason: snap.reason,
     );
   }
 }

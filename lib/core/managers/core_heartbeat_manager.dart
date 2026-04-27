@@ -114,7 +114,15 @@ class CoreHeartbeatManager {
     }
 
     _failures++;
-    debugPrint('[Heartbeat] failure #$_failures — apiOk=${health.apiOk}');
+    debugPrint(
+        '[Heartbeat] failure #$_failures — apiOk=${health.apiOk} '
+        'reason=${health.apiReason}');
+    // v1.0.22 P1-1: per-failure structured event so user-export
+    // diagnostics can distinguish a true core hang from a one-off
+    // network flap (cell-tower hand-off vs WiFi suspend vs mihomo
+    // wedged). Closed reason set comes from MihomoApi.healthSnapshot.
+    EventLog.write(
+        '[Heartbeat] failure n=$_failures reason=${health.apiReason}');
     if (_failures < failureThreshold) return;
 
     if (!_retriedThisOutage) {
