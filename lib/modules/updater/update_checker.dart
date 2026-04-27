@@ -47,8 +47,10 @@ class UpdateChecker {
   // ── Settings keys ─────────────────────────────────────────────────────────
   /// 'stable' (default) → only v* releases. 'pre' → also pick up `pre` tags.
   static const kUpdateChannel = 'updateChannel';
+
   /// Whether to auto-check for updates on app startup. Default true.
   static const kAutoCheckUpdates = 'autoCheckUpdates';
+
   /// ISO-8601 timestamp of the last successful manifest fetch (success OR
   /// "no update available"). Set on every check.
   static const kLastUpdateCheck = 'lastUpdateCheck';
@@ -105,14 +107,13 @@ class UpdateChecker {
     );
 
     if (manifest == null) {
-      return _legacyCheck(
-        ignoreSkipped: ignoreSkipped,
-        reportErrors: !auto,
-      );
+      return _legacyCheck(ignoreSkipped: ignoreSkipped, reportErrors: !auto);
     }
 
-    final latestVersion =
-        (manifest['version'] as String? ?? '').replaceFirst(RegExp(r'^v'), '');
+    final latestVersion = (manifest['version'] as String? ?? '').replaceFirst(
+      RegExp(r'^v'),
+      '',
+    );
     if (latestVersion.isEmpty) return null;
 
     final info = await PackageInfo.fromPlatform();
@@ -154,8 +155,8 @@ class UpdateChecker {
             .get(Uri.parse(url))
             .timeout(const Duration(seconds: 6));
         if (r.statusCode != 200) continue;
-        final data = json.decode(r.body);
-        if (data is Map<String, dynamic> && data['version'] is String) {
+        final data = _decodeManifestBytes(r.bodyBytes);
+        if (data != null) {
           debugPrint('[UpdateChecker] manifest OK from $url');
           return data;
         }
@@ -166,9 +167,23 @@ class UpdateChecker {
     }
     // Fallback to stable if pre-release manifest is missing entirely.
     if (channel == 'pre') {
-      debugPrint('[UpdateChecker] pre-release manifest unavailable, '
-          'falling back to stable');
+      debugPrint(
+        '[UpdateChecker] pre-release manifest unavailable, '
+        'falling back to stable',
+      );
       return _fetchManifest(channel: 'stable');
+    }
+    return null;
+  }
+
+  @visibleForTesting
+  static Map<String, dynamic>? decodeManifestForTest(List<int> bodyBytes) =>
+      _decodeManifestBytes(bodyBytes);
+
+  static Map<String, dynamic>? _decodeManifestBytes(List<int> bodyBytes) {
+    final data = json.decode(utf8.decode(bodyBytes));
+    if (data is Map<String, dynamic> && data['version'] is String) {
+      return data;
     }
     return null;
   }
@@ -222,14 +237,18 @@ class UpdateChecker {
         releaseNotes: body,
         releaseUrl: htmlUrl,
         downloadUrl: downloadUrl,
-        publishedAt:
-            publishedAt != null ? DateTime.tryParse(publishedAt) : null,
+        publishedAt: publishedAt != null
+            ? DateTime.tryParse(publishedAt)
+            : null,
       );
     } catch (e, st) {
       debugPrint('[UpdateChecker] legacy check failed: $e');
       if (reportErrors) {
-        ErrorLogger.captureException(e, st,
-            source: 'UpdateChecker._legacyCheck');
+        ErrorLogger.captureException(
+          e,
+          st,
+          source: 'UpdateChecker._legacyCheck',
+        );
       } else {
         EventLog.write('[Updater] legacy_check_failed_auto err=$e');
       }

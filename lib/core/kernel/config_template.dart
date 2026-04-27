@@ -1232,6 +1232,7 @@ class ConfigTemplate {
 
   /// Ensure performance tuning defaults.
   static String _ensurePerformance(String config) {
+    config = _normalizeGlobalClientFingerprint(config);
     if (!_hasKey(config, 'tcp-concurrent')) {
       config += '\ntcp-concurrent: true\n';
     }
@@ -1249,6 +1250,16 @@ class ConfigTemplate {
       config += 'keep-alive-interval: 30\n';
     }
     return config;
+  }
+
+  static String _normalizeGlobalClientFingerprint(String config) {
+    return config.replaceFirstMapped(
+      RegExp(
+        r'''^(\s*global-client-fingerprint\s*:\s*)(?:"random"|'random'|random)(\s*(?:#.*)?)$''',
+        multiLine: true,
+      ),
+      (m) => '${m[1]}chrome${m[2] ?? ''}',
+    );
   }
 
   /// `experimental` policy: do NOT inject defaults. Aligned with mihomo

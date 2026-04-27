@@ -83,57 +83,58 @@ tun:
       }
     });
 
-    test(
-      'find-process-mode default is platform-aware (P1-2 Win=strict, '
-      'mac/linux=always, mobile=off)',
-      () {
-        // Subscription with NO find-process-mode key → injection path
-        // (line 1268 in config_template.dart) decides the value.
-        const config = 'mixed-port: 7890\ndns:\n  enable: true\n';
-        final result = ConfigTemplate.process(
-          config,
-          connectionMode: 'systemProxy',
+    test('find-process-mode default is platform-aware (P1-2 Win=strict, '
+        'mac/linux=always, mobile=off)', () {
+      // Subscription with NO find-process-mode key → injection path
+      // (line 1268 in config_template.dart) decides the value.
+      const config = 'mixed-port: 7890\ndns:\n  enable: true\n';
+      final result = ConfigTemplate.process(
+        config,
+        connectionMode: 'systemProxy',
+      );
+
+      if (Platform.isAndroid || Platform.isIOS) {
+        expect(result, contains('find-process-mode: off'));
+      } else if (Platform.isWindows) {
+        expect(
+          result,
+          contains('find-process-mode: strict'),
+          reason:
+              'Win default flipped strict to fix download-tool '
+              'churn from per-flow process lookup',
         );
+      } else {
+        expect(
+          result,
+          contains('find-process-mode: always'),
+          reason: 'macOS / Linux retain always until similar reports',
+        );
+      }
+    });
 
-        if (Platform.isAndroid || Platform.isIOS) {
-          expect(result, contains('find-process-mode: off'));
-        } else if (Platform.isWindows) {
-          expect(result, contains('find-process-mode: strict'),
-              reason: 'Win default flipped strict to fix download-tool '
-                  'churn from per-flow process lookup');
-        } else {
-          expect(result, contains('find-process-mode: always'),
-              reason: 'macOS / Linux retain always until similar reports');
-        }
-      },
-    );
-
-    test(
-      'find-process-mode existing value is preserved on desktop, forced off '
-      'on mobile',
-      () {
-        const config = '''
+    test('find-process-mode existing value is preserved on desktop, forced off '
+        'on mobile', () {
+      const config = '''
 mixed-port: 7890
 find-process-mode: always
 dns:
   enable: true
 ''';
-        final result = ConfigTemplate.process(
-          config,
-          connectionMode: 'systemProxy',
-        );
+      final result = ConfigTemplate.process(
+        config,
+        connectionMode: 'systemProxy',
+      );
 
-        if (Platform.isAndroid || Platform.isIOS) {
-          expect(result, contains('find-process-mode: off'));
-        } else {
-          // Desktop: subscription wins. Both Windows and macOS keep
-          // the user-supplied 'always' instead of clobbering to the
-          // platform default. (TUN mode is the special case that
-          // does override — covered separately above.)
-          expect(result, contains('find-process-mode: always'));
-        }
-      },
-    );
+      if (Platform.isAndroid || Platform.isIOS) {
+        expect(result, contains('find-process-mode: off'));
+      } else {
+        // Desktop: subscription wins. Both Windows and macOS keep
+        // the user-supplied 'always' instead of clobbering to the
+        // platform default. (TUN mode is the special case that
+        // does override — covered separately above.)
+        expect(result, contains('find-process-mode: always'));
+      }
+    });
   });
 
   group('ConfigTemplate extraction', () {
@@ -298,6 +299,41 @@ proxy-groups:
         result,
         isNot(anyOf(contains('type: relay'), contains('type: "relay"'))),
       );
+    });
+
+    test(
+      'normalizes top-level global-client-fingerprint: random to chrome',
+      () {
+        const config = '''
+mixed-port: 7890
+global-client-fingerprint: random
+proxies:
+  - {name: node1, type: ss, server: 1.2.3.4, port: 443}
+proxy-groups:
+  - {name: Proxy, type: select, proxies: [node1]}
+rules:
+  - MATCH,Proxy
+''';
+        final result = ConfigTemplate.process(config);
+        expect(result, contains('global-client-fingerprint: chrome'));
+        expect(result, isNot(contains('global-client-fingerprint: random')));
+      },
+    );
+
+    test('preserves explicit non-random global-client-fingerprint', () {
+      const config = '''
+mixed-port: 7890
+global-client-fingerprint: safari
+proxies:
+  - {name: node1, type: ss, server: 1.2.3.4, port: 443}
+proxy-groups:
+  - {name: Proxy, type: select, proxies: [node1]}
+rules:
+  - MATCH,Proxy
+''';
+      final result = ConfigTemplate.process(config);
+      expect(result, contains('global-client-fingerprint: safari'));
+      expect(result, isNot(contains('global-client-fingerprint: chrome')));
     });
 
     test('3-node chain sets correct dialer-proxy links on nodes', () {
@@ -718,11 +754,12 @@ rules:
   // future re-introduction (copy-paste from an old subscription, asset
   // edit, refactor of _ensureSniffer) fails loudly.
   group('ConfigTemplate sniffer — throughput flags', () {
-    test('strips force-dns-mapping / parse-pure-ip from subscription input',
-        () {
-      // Simulate a subscription that ships both flags (older airport
-      // configs still do). process() must remove them.
-      const config = '''
+    test(
+      'strips force-dns-mapping / parse-pure-ip from subscription input',
+      () {
+        // Simulate a subscription that ships both flags (older airport
+        // configs still do). process() must remove them.
+        const config = '''
 mixed-port: 7890
 sniffer:
   enable: true
@@ -733,16 +770,25 @@ sniffer:
       ports: [80]
 proxies: []
 ''';
-      final result = ConfigTemplate.process(config);
-      expect(result, isNot(contains('force-dns-mapping')),
-          reason: 'force-dns-mapping: true forced every fake-IP lookup even '
-              'when already accurate — cost ~30% throughput vs ClashMeta.');
-      expect(result, isNot(contains('parse-pure-ip')),
-          reason: 'parse-pure-ip: true ran HTTP/TLS/QUIC sniff on every '
-              'pure-IP connection, not just DNS-derived ones.');
-      // override-destination still present (the flag we DO want on).
-      expect(result, contains('override-destination: true'));
-    });
+        final result = ConfigTemplate.process(config);
+        expect(
+          result,
+          isNot(contains('force-dns-mapping')),
+          reason:
+              'force-dns-mapping: true forced every fake-IP lookup even '
+              'when already accurate — cost ~30% throughput vs ClashMeta.',
+        );
+        expect(
+          result,
+          isNot(contains('parse-pure-ip')),
+          reason:
+              'parse-pure-ip: true ran HTTP/TLS/QUIC sniff on every '
+              'pure-IP connection, not just DNS-derived ones.',
+        );
+        // override-destination still present (the flag we DO want on).
+        expect(result, contains('override-destination: true'));
+      },
+    );
 
     test('no sniffer section in input → still no force-dns-mapping / '
         'parse-pure-ip in output', () {
@@ -750,21 +796,27 @@ proxies: []
       final result = ConfigTemplate.process(config);
       expect(result, isNot(contains('force-dns-mapping')));
       expect(result, isNot(contains('parse-pure-ip')));
-      expect(result, contains('sniffer:'),
-          reason: 'sniffer block itself must still be injected');
+      expect(
+        result,
+        contains('sniffer:'),
+        reason: 'sniffer block itself must still be injected',
+      );
     });
 
-    test('fallback default_config.yaml has no force-dns-mapping / parse-pure-ip',
-        () async {
-      // Reading the asset via AssetBundle in a unit test needs the Flutter
-      // binding — covered by the other assertions above via process().
-      // This test simply confirms the static loader wrapper works once
-      // process() has cleaned the merged config.
-      const config = 'proxies:\n  - {name: a, type: ss, server: 1.1.1.1, port: 80}\n';
-      final result = ConfigTemplate.process(config);
-      expect(result, isNot(contains('force-dns-mapping')));
-      expect(result, isNot(contains('parse-pure-ip')));
-    });
+    test(
+      'fallback default_config.yaml has no force-dns-mapping / parse-pure-ip',
+      () async {
+        // Reading the asset via AssetBundle in a unit test needs the Flutter
+        // binding — covered by the other assertions above via process().
+        // This test simply confirms the static loader wrapper works once
+        // process() has cleaned the merged config.
+        const config =
+            'proxies:\n  - {name: a, type: ss, server: 1.1.1.1, port: 80}\n';
+        final result = ConfigTemplate.process(config);
+        expect(result, isNot(contains('force-dns-mapping')));
+        expect(result, isNot(contains('parse-pure-ip')));
+      },
+    );
   });
 
   group('ConfigTemplate experimental defaults', () {

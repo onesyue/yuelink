@@ -18,6 +18,8 @@
 - **心跳事件日志更可诊断**：心跳失败现在按失败原因分类写入事件日志，便于区分 API 不通、服务状态异常、代理恢复失败等路径。(`2acce55`)
 - **诊断导出补全 rotated core.log**：导出诊断包时会包含轮转后的 core 日志 sidecar，不再只带当前 `core.log`。(`4592002`)
 - **crash.log 控制体积并去重上报**：本地 crash 日志增加容量上限，远端 reporter 对重复错误做去重，避免同一问题刷屏。(`0beb6f4`)
+- **订阅指纹配置更稳**：订阅顶层 `global-client-fingerprint: random` 会在客户端归一为 `chrome`，避免随机 TLS 指纹带来的兼容性与排查不确定性。
+- **更新弹窗中文不再乱码**：更新 manifest 固定按 UTF-8 字节解码，避免 CDN / GitHub asset 未声明 charset 时把 release notes 解成乱码。
 
 ### 内部工程改进
 
