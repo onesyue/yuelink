@@ -479,6 +479,34 @@ class DelayTestActions {
               await manager.api.flushFakeIpCache();
             } catch (_) {}
           },
+          // v1.0.22 P0-2: clear the stale URL-test cache that selector
+          // groups otherwise reuse across a stop→start cycle. Without
+          // this, the first delay-test after a reconnect sees the
+          // previous run's timeout values and renders the whole group
+          // red even when the underlying proxies are healthy.
+          // GET /providers/proxies/{name}/healthcheck refreshes the
+          // selector's per-node delay cache. Per-call swallowed because
+          // healthcheck on a Compatible-vehicleType provider (mihomo's
+          // synthetic wrapper for inline proxies) returns 4xx — that's
+          // expected, not a failure of recovery.
+          healthCheckProviders: () async {
+            try {
+              final providers = await manager.api.getProxyProviders();
+              final names =
+                  (providers['providers'] as Map?)?.keys.cast<String>() ??
+                      const <String>[];
+              for (final name in names) {
+                try {
+                  await manager.api.healthCheckProvider(name);
+                } catch (_) {
+                  // ignore per-provider failures
+                }
+              }
+            } catch (_) {
+              // /providers/proxies itself may 404/5xx during early init
+              // — the runTest() retry will surface the real state.
+            }
+          },
           isAllTimeout: (r) => _isAllTimeout(r, proxyNames),
         );
 

@@ -535,6 +535,17 @@ class CoreManager {
         );
       });
 
+      // ── Step 7.5: waitProxies (v1.0.22 P0-2) ───────────────────────
+      // /version answering is not enough — mihomo binds the REST
+      // listener before parsing the config and stitching the proxy
+      // graph. testGroupDelay landing in this window saw an empty
+      // /proxies and painted everything red. See _waitProxiesReady.
+      await _step(steps, 'waitProxies', StartupError.apiTimeout, () async {
+        if (isMockMode) return 'skip (mock)';
+        await _waitProxiesReady();
+        return 'ready';
+      });
+
       // ── Step 8: verify ─────────────────────────────────────────────
       await _step(steps, 'verify', StartupError.coreDiedAfterStart, () async {
         if (isMockMode) return 'skip (mock)';
@@ -728,6 +739,14 @@ class CoreManager {
         throw Exception('API not available after 100 attempts (~14s)');
       });
 
+      // ── Step 3.5: waitProxies (v1.0.22 P0-2, iOS) ─────────────────
+      // PacketTunnel-extension mihomo has the same /version-vs-/proxies
+      // gap. See _waitProxiesReady.
+      await _step(steps, 'waitProxies', StartupError.apiTimeout, () async {
+        await _waitProxiesReady();
+        return 'ready';
+      });
+
       await _persistPorts();
       await _finishReport(steps, true, null);
       // A5b: kick off the background probe AFTER finishReport so the
@@ -899,6 +918,14 @@ class CoreManager {
           await Future.delayed(const Duration(milliseconds: 100));
         }
         throw Exception('API not available after 150 attempts (15s)');
+      });
+
+      // ── waitProxies (v1.0.22 P0-2, desktop service mode) ─────────
+      // Service-helper-hosted mihomo binds /version before /proxies
+      // is fully populated, same as the FFI path. See _waitProxiesReady.
+      await _step(steps, 'waitProxies', StartupError.apiTimeout, () async {
+        await _waitProxiesReady();
+        return 'ready';
       });
 
       await _step(steps, 'verify', StartupError.coreDiedAfterStart, () async {
@@ -1304,6 +1331,33 @@ class CoreManager {
     }
   }
 
+  /// Poll `/proxies` until the proxy graph is materialised (not just
+  /// `/version` answering). v1.0.22 P0-2 root fix for "测速全红": the
+  /// previous startup gated only on `/version`, but mihomo binds the
+  /// REST listener before it finishes parsing the config and building
+  /// the selector groups. A `testGroupDelay` call landing in that
+  /// window saw an empty `/proxies` and returned every node as
+  /// timed-out, painting the whole group red.
+  ///
+  /// Polls 100 ms × 50 attempts = 5 s cap. Larger than `/version`'s
+  /// readiness window because parse-and-graph-build dominates on huge
+  /// subscriptions; smaller than the user-perceived "didn't start"
+  /// budget. On mock mode, the caller skips this step entirely.
+  Future<void> _waitProxiesReady() async {
+    for (var i = 1; i <= 50; i++) {
+      try {
+        final payload = await api.getProxies();
+        if (isProxiesPayloadReady(payload)) {
+          return;
+        }
+      } catch (_) {
+        // /proxies may 404/5xx during early init — keep polling.
+      }
+      await Future.delayed(const Duration(milliseconds: 100));
+    }
+    throw Exception('proxies not ready after 50 attempts (~5s)');
+  }
+
   /// Find a free TCP port starting from [preferred], trying up to 20 ports.
   /// Returns [preferred] if all attempts fail (let mihomo surface the error).
   static Future<int> _findAvailablePort(int preferred) async {
@@ -1414,6 +1468,13 @@ class CoreManager {
         return 'E006';
       case 'waitApi':
         return 'E007';
+      case 'waitProxies':
+        // Same family as waitApi — REST is up but the proxy graph is
+        // not yet usable. Re-uses E007 so dashboard grouping and
+        // telemetry counters stay consistent with the commit body
+        // contract; the distinct step name preserves diagnostic
+        // detail in the StartupReport.
+        return 'E007';
       case 'verify':
         return 'E008';
       case 'ensureGeo':
@@ -1422,4 +1483,48 @@ class CoreManager {
         return 'Exx';
     }
   }
+}
+
+/// True iff the `/proxies` payload represents a fully-built proxy graph,
+/// not just an empty shell mihomo returns while the config is still
+/// being parsed. Top-level pure function so the readiness rule can be
+/// unit-tested without spinning up a real CoreManager.
+///
+/// "Ready" means:
+///   - `proxies` map exists and is non-empty
+///   - AND either:
+///       * `GLOBAL` group exists with a non-empty `all` list (the
+///         primary signal — mihomo materialises GLOBAL last, so a
+///         populated GLOBAL is the strongest "graph done" indicator), OR
+///       * at least one non-GLOBAL entry has a non-empty `all` list
+///         (the fallback — some configs strip GLOBAL outright).
+///
+/// Just `containsKey('GLOBAL')` is NOT enough: mihomo briefly emits
+/// `'GLOBAL': {}` or `'GLOBAL': {'all': []}` early in the build window,
+/// and the original predicate's existence-only check let a `/proxies`
+/// payload through before the graph was actually populated.
+bool isProxiesPayloadReady(Map<String, dynamic>? payload) {
+  if (payload == null) return false;
+  final proxies = payload['proxies'];
+  if (proxies is! Map || proxies.isEmpty) return false;
+
+  final global = proxies['GLOBAL'];
+  if (global is Map) {
+    final all = global['all'];
+    if (all is List && all.isNotEmpty) return true;
+    // GLOBAL exists but `all` is empty / missing / wrong-type — fall
+    // through to the fallback rather than declaring ready. The
+    // GLOBAL-empty window is exactly when the rest of the graph is
+    // still being stitched.
+  }
+
+  for (final entry in proxies.entries) {
+    if (entry.key == 'GLOBAL') continue; // already considered above
+    final v = entry.value;
+    if (v is Map) {
+      final all = v['all'];
+      if (all is List && all.isNotEmpty) return true;
+    }
+  }
+  return false;
 }
