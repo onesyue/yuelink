@@ -82,6 +82,8 @@ class TranslationsZhCn extends Translations with BaseTranslations<AppLocale, Tra
 	@override String get routeModeGlobal => '全局';
 	@override String get routeModeDirect => '直连';
 	@override String get routingModeSetting => '路由模式';
+	@override String get tipTapToSwitchRouting => '点击切换路由模式';
+	@override String get tipTapToSwitchConnection => '点击切换连接模式';
 	@override String get modeSwitched => '模式已切换';
 	@override String get directModeDesc => '所有流量直接连接，不经过代理节点';
 	@override String get globalModeDesc => '所有流量通过下方选择的节点转发';
@@ -814,6 +816,8 @@ extension on TranslationsZhCn {
 			'routeModeGlobal' => '全局',
 			'routeModeDirect' => '直连',
 			'routingModeSetting' => '路由模式',
+			'tipTapToSwitchRouting' => '点击切换路由模式',
+			'tipTapToSwitchConnection' => '点击切换连接模式',
 			'modeSwitched' => '模式已切换',
 			'directModeDesc' => '所有流量直接连接，不经过代理节点',
 			'globalModeDesc' => '所有流量通过下方选择的节点转发',
@@ -1281,10 +1285,10 @@ extension on TranslationsZhCn {
 			'noNetworkConnection' => '网络连接不可用',
 			'dashGreeting' => '你好',
 			'dashGreetingReturning' => '欢迎回来',
-			'dashNoAnnouncements' => '暂无公告',
-			'dashViewAll' => '查看全部',
 			_ => null,
 		} ?? switch (path) {
+			'dashNoAnnouncements' => '暂无公告',
+			'dashViewAll' => '查看全部',
 			'dashNoPlan' => '暂无套餐信息',
 			'oldPassword' => '旧密码',
 			'newPassword' => '新密码',

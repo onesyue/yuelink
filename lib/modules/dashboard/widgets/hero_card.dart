@@ -190,6 +190,7 @@ class HeroCard extends ConsumerWidget {
                   primary: true,
                   accent: runningAccent,
                   onTap: () => _cycleRoutingMode(ref, routingMode),
+                  tooltip: s.tipTapToSwitchRouting,
                 ),
                 if (showModePill)
                   Pill(
@@ -197,6 +198,7 @@ class HeroCard extends ConsumerWidget {
                     primary: isTun,
                     accent: runningAccent,
                     onTap: () => _toggleConnectionMode(ref, isTun),
+                    tooltip: s.tipTapToSwitchConnection,
                   ),
                 if (profileName != null) Pill(profileName),
               ],
@@ -360,12 +362,18 @@ class Pill extends StatelessWidget {
   final bool primary;
   final Color? accent;
   final VoidCallback? onTap;
+  /// Optional hover/long-press hint. v1.0.22 P2-1 — exists so the
+  /// "Pills are tappable" affordance is discoverable without
+  /// dedicated onboarding UI; users on multiple platforms reported
+  /// not realising the routing/connection pills could be clicked.
+  final String? tooltip;
   const Pill(
     this.label, {
     super.key,
     this.primary = false,
     this.accent,
     this.onTap,
+    this.tooltip,
   });
 
   @override
@@ -397,7 +405,7 @@ class Pill extends StatelessWidget {
     if (onTap == null) return container;
     // Wrap in Material + InkWell for ripple feedback so tappable Pills
     // are visually distinguishable from the profile-name decorative Pill.
-    return Material(
+    final tappable = Material(
       color: Colors.transparent,
       borderRadius: BorderRadius.circular(20),
       clipBehavior: Clip.antiAlias,
@@ -407,5 +415,11 @@ class Pill extends StatelessWidget {
         child: container,
       ),
     );
+    // Tooltip wraps the tappable surface so hover (desktop) and
+    // long-press (mobile) both surface the hint without forcing an
+    // onboarding flow. Only attaches when a hint is provided —
+    // decorative Pills (e.g. profile name) stay untooltipped.
+    if (tooltip == null) return tappable;
+    return Tooltip(message: tooltip!, child: tappable);
   }
 }
