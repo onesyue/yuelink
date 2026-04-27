@@ -146,6 +146,15 @@ class AuthNotifier extends Notifier<AuthState> {
   late final AuthTokenService _authService;
   bool _disposed = false;
 
+  /// Per-storage-call timeout for [_init]. Default 5 s — tuned to be
+  /// noticeably longer than a healthy macOS Keychain unlock (~65 ms cold)
+  /// or a Windows DPAPI read (~20 ms) but short enough that a stuck
+  /// SecureStorage call still bottoms out into a usable login screen
+  /// within the user-perceived "is it broken?" budget. Mutable for
+  /// tests so the storage-hang regression case can run in <1 s.
+  @visibleForTesting
+  static Duration initStorageTimeout = const Duration(seconds: 5);
+
   static bool _isBootstrapNetworkError(Object e) {
     if (e is TimeoutException) return true;
     if (e is SocketException) return true;
@@ -220,27 +229,53 @@ class AuthNotifier extends Notifier<AuthState> {
   /// (or any other provider's state). Also covers the `_apiHostProvider`
   /// write so a dispose-after-token doesn't reach through into unrelated
   /// providers.
+  ///
+  /// v1.0.22 P0-4b: every SecureStorage read has its own timeout, and
+  /// the entire body is wrapped in try/catch. On timeout / throw, fall
+  /// to AuthStatus.loggedOut (only when not disposed) instead of
+  /// leaving state at AuthStatus.unknown forever — that left the
+  /// `_AuthGate` showing a blank screen because `unknown` rendered
+  /// `SizedBox.shrink()` (P0-4c addresses the AuthGate side). Pairs
+  /// with the bootstrap "auth uncertain" signal in `main()`: when
+  /// bootstrap couldn't read the token in time it passes
+  /// `preloadedAuthStateProvider == null`, which routes through
+  /// `build()` to `_init()` here for a fresh attempt — whatever the
+  /// outcome, state must end at loggedIn or loggedOut, never unknown.
   Future<void> _init() async {
-    final token = await _authService.getToken();
-    if (_disposed) return;
-    if (token != null && token.isNotEmpty) {
-      // Restore saved API host so all providers use the correct endpoint
-      final savedHost = await _authService.getApiHost();
+    final timeout = initStorageTimeout;
+    try {
+      final token = await _authService.getToken().timeout(timeout);
       if (_disposed) return;
-      if (savedHost != null && savedHost.isNotEmpty) {
-        ref.read(_apiHostProvider.notifier).state = savedHost;
+      if (token != null && token.isNotEmpty) {
+        // Restore saved API host so all providers use the correct endpoint
+        final savedHost = await _authService
+            .getApiHost()
+            .timeout(timeout, onTimeout: () => null);
+        if (_disposed) return;
+        if (savedHost != null && savedHost.isNotEmpty) {
+          ref.read(_apiHostProvider.notifier).state = savedHost;
+        }
+        final cachedProfile = await _authService
+            .getCachedProfile()
+            .timeout(timeout, onTimeout: () => null);
+        if (_disposed) return;
+        state = AuthState(
+          status: AuthStatus.loggedIn,
+          token: token,
+          userProfile: cachedProfile,
+        );
+        // Refresh user info in background
+        _refreshUserInfo(token);
+      } else {
+        state = const AuthState(status: AuthStatus.loggedOut);
       }
-      final cachedProfile = await _authService.getCachedProfile();
-      if (_disposed) return;
-      state = AuthState(
-        status: AuthStatus.loggedIn,
-        token: token,
-        userProfile: cachedProfile,
-      );
-      // Refresh user info in background
-      _refreshUserInfo(token);
-    } else {
-      state = const AuthState(status: AuthStatus.loggedOut);
+    } catch (e) {
+      debugPrint('[Auth] _init error: $e');
+      EventLog.write(
+          '[Auth] auth_init_timeout err=${e.toString().split("\n").first}');
+      if (!_disposed) {
+        state = const AuthState(status: AuthStatus.loggedOut);
+      }
     }
   }
 

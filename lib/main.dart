@@ -224,6 +224,21 @@ Future<void> _bootstrap() async {
   // Pre-declare every override target with a default that mirrors the
   // SettingsService getter fallback. If the cascade below throws, runApp
   // still fires with these in place — degraded but functional.
+  //
+  // `authBootstrapUncertain` is the v1.0.22 P0-4b half of the white-screen
+  // fix: a `null` savedToken can mean two very different things, and we
+  // must distinguish them downstream.
+  //   - savedToken == null AND uncertain == false → user really has no
+  //     token. Pass `loggedOut` to preloadedAuthStateProvider; AuthNotifier
+  //     skips _init() (existing fast path).
+  //   - savedToken == null AND uncertain == true → SecureStorage timed
+  //     out or threw. We don't actually know the token state. Pass
+  //     `null` to preloadedAuthStateProvider so AuthNotifier.build()
+  //     falls into _init() and re-attempts the read (with its own
+  //     timeout). Without this signal, a transient cold-start hang
+  //     would permanently demote a logged-in user to the login page
+  //     until the next cold restart.
+  bool authBootstrapUncertain = false;
   String? savedToken;
   String savedAccentColor = '3B82F6';
   int savedSubSyncInterval = 6;
@@ -250,9 +265,20 @@ Future<void> _bootstrap() async {
   UserProfile? savedProfile;
 
   try {
-    savedToken = await authService
-        .getToken()
-        .timeout(bootstrapStorageTimeout, onTimeout: () => null);
+    // Distinguish "no token" from "storage hung" so AuthNotifier._init()
+    // knows whether to re-attempt the SecureStorage read. A bare
+    // `onTimeout: () => null` would conflate the two and permanently
+    // demote a logged-in user to the login screen on a transient hang.
+    try {
+      savedToken =
+          await authService.getToken().timeout(bootstrapStorageTimeout);
+    } on TimeoutException {
+      authBootstrapUncertain = true;
+      debugPrint('[Bootstrap] getToken timed out — auth marked uncertain');
+    } catch (e) {
+      authBootstrapUncertain = true;
+      debugPrint('[Bootstrap] getToken threw, auth marked uncertain: $e');
+    }
 
     // One-time accent reset (v1.0.16): force Blue-500 default for existing installs
     await SettingsService.migrateAccentToBlueIfNeeded();
@@ -294,6 +320,9 @@ Future<void> _bootstrap() async {
     debugPrint(
       '[Bootstrap] data gather threw — runApp will use safe defaults: $e\n$st',
     );
+    // We don't know how far the cascade got before throwing; assume the
+    // auth read is unreliable so AuthNotifier._init() retries it.
+    authBootstrapUncertain = true;
     // The pre-declared defaults above are already populated. Continue
     // straight to runApp() rather than letting the exception escape and
     // white-screen the user.
@@ -434,15 +463,23 @@ Future<void> _bootstrap() async {
         onboardingPersonaProvider.overrideWith((ref) => savedPersona),
         initialBuiltTabsProvider.overrideWithValue(savedBuiltTabs),
         tileShowNodeInfoProvider.overrideWith((ref) => savedTileShowNodeInfo),
-        // Pre-loaded auth state: eliminates blank screen from async AuthNotifier._init()
+        // Pre-loaded auth state: eliminates blank screen from async
+        // AuthNotifier._init() in the common case. v1.0.22 P0-4b: when
+        // bootstrap couldn't read auth state confidently (timeout or
+        // throw), pass `null` so AuthNotifier.build() falls into _init()
+        // for a fresh attempt — without this, a transient SecureStorage
+        // hang at cold start would cache a permanent "loggedOut" view of
+        // a user who actually has a token on disk.
         preloadedAuthStateProvider.overrideWithValue(
-          (savedToken != null && savedToken.isNotEmpty)
-              ? AuthState(
-                  status: AuthStatus.loggedIn,
-                  token: savedToken,
-                  userProfile: savedProfile,
-                )
-              : const AuthState(status: AuthStatus.loggedOut),
+          authBootstrapUncertain
+              ? null
+              : (savedToken != null && savedToken.isNotEmpty)
+                  ? AuthState(
+                      status: AuthStatus.loggedIn,
+                      token: savedToken,
+                      userProfile: savedProfile,
+                    )
+                  : const AuthState(status: AuthStatus.loggedOut),
         ),
       ],
       // TranslationProvider feeds slang's `Translations.of(context)` —
