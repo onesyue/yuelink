@@ -60,7 +60,11 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
 
   @override
   Widget build(BuildContext context) {
-    final status = ref.watch(coreStatusProvider);
+    // UI reads the derived display status so a manual-stop that races a
+    // resume recovery cannot leave HeroCard showing "connected" for one
+    // frame. Internals (lifecycle, heartbeat, tray) keep using
+    // `coreStatusProvider` for ground truth.
+    final status = ref.watch(displayCoreStatusProvider);
     final isRunning = status == CoreStatus.running;
 
     // Activate stream providers without triggering Dashboard rebuilds.
@@ -299,7 +303,8 @@ class _TrafficSectionState extends ConsumerState<_TrafficSection> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final isRunning = ref.watch(coreStatusProvider) == CoreStatus.running;
+    final isRunning =
+        ref.watch(displayCoreStatusProvider) == CoreStatus.running;
 
     final headerColor = isDark ? YLColors.zinc200 : YLColors.zinc700;
     final borderColor = isDark

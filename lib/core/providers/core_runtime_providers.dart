@@ -46,6 +46,27 @@ final mihomoApiProvider = Provider<MihomoApi>((ref) {
 /// Reset on next explicit start.
 final userStoppedProvider = StateProvider<bool>((ref) => false);
 
+/// UI-facing status: collapses to [CoreStatus.stopped] whenever the user
+/// has explicitly stopped, regardless of what [coreStatusProvider] says.
+///
+/// Belt-and-suspenders against the resume race: if the user taps Stop
+/// while `_onAppResumed` is mid-await on `checkCoreHealth()`, the core
+/// can briefly answer "alive" before fully shutting down (mihomo helper
+/// in flight, PacketTunnel extension still tearing down). Without this
+/// derived layer the UI would show "connected" for the last frame
+/// before lifecycle drives `coreStatusProvider` back to stopped — long
+/// enough for the user to see the inconsistency in screenshot reports.
+///
+/// Internal state machines (heartbeat, lifecycle, tray, recovery) MUST
+/// keep reading [coreStatusProvider] — they need ground truth, not the
+/// user-intent overlay.
+final displayCoreStatusProvider = Provider<CoreStatus>((ref) {
+  final status = ref.watch(coreStatusProvider);
+  final userStopped = ref.watch(userStoppedProvider);
+  if (userStopped) return CoreStatus.stopped;
+  return status;
+});
+
 /// True while Android background→foreground recovery is in progress.
 /// Heartbeat and status listeners must check this before resetting state,
 /// otherwise they race with the recovery logic in _onAppResumed().

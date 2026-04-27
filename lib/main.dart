@@ -888,6 +888,28 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
       ref.read(recoveryInProgressProvider.notifier).state = true;
       try {
         final health = await RecoveryManager.checkCoreHealth();
+        // v1.0.22 P0-1: TOCTOU re-check. Between the await above and the
+        // state mutations below, the user may have tapped Stop — the
+        // first guard at the top of this method only covers the pre-await
+        // window. Without this re-check the recovery branch overwrites
+        // `coreStatusProvider` to running and clears `userStoppedProvider`,
+        // resurrecting the very bug v1.0.21 P0-1 was supposed to fix:
+        // UI shows "connected" while TUN fd / system proxy are gone.
+        //
+        // Re-read both the in-memory provider AND the persisted flag —
+        // either becoming true between the two checks means the user
+        // stopped during the await, and we must not promote to running.
+        final userStoppedNow = ref.read(userStoppedProvider);
+        final persistedNow = await SettingsService.getManualStopped();
+        if (userStoppedNow || persistedNow) {
+          debugPrint(
+            '[AppLifecycle] manual stop landed during health-check await — '
+            'aborting recovery (provider=$userStoppedNow, '
+            'persisted=$persistedNow)',
+          );
+          ref.read(recoveryInProgressProvider.notifier).state = false;
+          return;
+        }
         if (health.alive && health.apiOk) {
           debugPrint(
             '[AppLifecycle] core alive but Dart state was $status — recovering',
@@ -909,12 +931,21 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
           ref.read(userStoppedProvider.notifier).state = false;
           ref.read(proxyGroupsProvider.notifier).refresh();
         }
-        // Note: recovery guard stays up — cleared after _maybeAutoConnect
-        // in the post-frame callback, or at the end of this method for
-        // subsequent resume calls (not engine-create).
+        // Note: on Android the recovery guard stays up so the post-frame
+        // `_maybeAutoConnect()` callback can clear it after the cold-start
+        // engine-recreate path completes. Other platforms don't take that
+        // path on resume, so the `finally` below drops the guard
+        // unconditionally — without it, a normal-but-no-mutation resume
+        // (e.g. health check returns alive=false on iOS/desktop, which
+        // skips the recovery branch) would leave the guard stuck and
+        // suppress every subsequent heartbeat tick.
       } catch (e) {
         debugPrint('[AppLifecycle] recovery check failed: $e');
         ref.read(recoveryInProgressProvider.notifier).state = false;
+      } finally {
+        if (!Platform.isAndroid) {
+          ref.read(recoveryInProgressProvider.notifier).state = false;
+        }
       }
       return;
     }
