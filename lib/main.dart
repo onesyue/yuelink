@@ -199,57 +199,105 @@ Future<void> _bootstrap() async {
   // ── Remote feature flags — fire-and-forget, safe defaults apply on offline ──
   unawaited(FeatureFlags.I.init());
 
-  // Restore persisted settings + auth state. Two slow disk reads run in
-  // parallel:
-  //   - SettingsService.load() reads settings.json (one shot, then all
-  //     getX() calls sync from in-memory cache)
-  //   - authService.getToken() walks the encrypted SecureStorage path,
-  //     which on macOS does ioreg → HKDF → AES-GCM decrypt (~65 ms cold)
+  // ── v1.0.22 P0-4a: bootstrap storage hardening ──────────────────────────
   //
-  // Previously they were serial. Parallelising saves ~30 ms on cold start.
-  // After the parallel section, all the SettingsService.getX() calls hit
-  // the populated cache and complete in microtasks.
+  // Pre-fix: a Future.wait([SettingsService.load(), authService.getToken()])
+  // gated `runApp()`. If either future hung (Windows Defender scanning
+  // settings.json, slow Keychain unlock, FUSE/SMB volume stuck), the
+  // Flutter root never instantiated and the user saw "原生白屏" with no
+  // app log to diagnose because the engine wasn't loaded yet.
+  //
+  // Post-fix: each blocking storage call has a hard 4 s wall-clock cap,
+  // and the entire data-gather block is wrapped in a single try/catch
+  // with safe defaults pre-declared so any unexpected throw still lets
+  // `runApp()` fire with a working override list. Cached token/profile
+  // are only "lost" in the timeout/throw paths — AuthNotifier._init()
+  // (P0-4b) re-reads SecureStorage on first run, so a transient hang
+  // resolves into the correct logged-in state automatically once disk
+  // I/O un-sticks.
+  const bootstrapStorageTimeout = Duration(seconds: 4);
   final authService = AuthTokenService.instance;
-  final earlyResults = await Future.wait<Object?>([
-    SettingsService.load(),
-    authService.getToken(),
-  ]);
-  final savedToken = earlyResults[1] as String?;
 
-  // One-time accent reset (v1.0.16): force Blue-500 default for existing installs
-  await SettingsService.migrateAccentToBlueIfNeeded();
-  final savedAccentColor = await SettingsService.getAccentColor();
-  final savedSubSyncInterval = await SettingsService.getSubSyncInterval();
-  final savedTheme = await SettingsService.getThemeMode();
-  final savedProfileId = await SettingsService.getActiveProfileId();
-  final savedRoutingMode = await SettingsService.getRoutingMode();
-  final savedConnectionMode = await SettingsService.getConnectionMode();
-  final savedQuicPolicy = await SettingsService.getQuicPolicy();
-  final savedDesktopTunStack = await SettingsService.getDesktopTunStack();
-  final savedLogLevel = await SettingsService.getLogLevel();
-  final savedAutoConnect = await SettingsService.getAutoConnect();
-  // v1.0.21 hotfix: hydrate userStoppedProvider from disk so
-  // _maybeAutoConnect() sees the manual-stop intent even on engine
-  // recreate / cold start. Without this, the provider's default (false)
-  // lets auto-connect fire after a user had explicitly disconnected.
-  final savedManualStopped = await SettingsService.getManualStopped();
-  final savedSystemProxy = await SettingsService.getSystemProxyOnConnect();
-  final savedLanguage = await SettingsService.getLanguage();
-  final savedTestUrl = await SettingsService.getTestUrl();
-  final savedCloseBehavior = await SettingsService.getCloseBehavior();
-  final savedToggleHotkey = await SettingsService.getToggleHotkey();
-  final savedDelayResults = await SettingsService.getDelayResults();
-  final savedTabIndex = await SettingsService.getLastTabIndex();
-  final savedBuiltTabs = await SettingsService.getBuiltTabs();
-  final savedOnboarding = await SettingsService.getHasSeenOnboarding();
-  final savedPersona = await SettingsService.get<String>('onboardingPersona');
-  final savedTileShowNodeInfo = await SettingsService.getTileShowNodeInfo();
+  // Seed cache (never throws — falls back to {} on hang).
+  await SettingsService.loadWithTimeout(bootstrapStorageTimeout);
 
-  // Profile fetch is gated on token presence — only one secure-storage
-  // read here, and only if we actually need it.
-  final savedProfile = (savedToken != null && savedToken.isNotEmpty)
-      ? await authService.getCachedProfile()
-      : null;
+  // Pre-declare every override target with a default that mirrors the
+  // SettingsService getter fallback. If the cascade below throws, runApp
+  // still fires with these in place — degraded but functional.
+  String? savedToken;
+  String savedAccentColor = '3B82F6';
+  int savedSubSyncInterval = 6;
+  ThemeMode savedTheme = ThemeMode.system;
+  String? savedProfileId;
+  String savedRoutingMode = 'rule';
+  String savedConnectionMode = 'systemProxy';
+  String savedQuicPolicy = SettingsService.defaultQuicPolicy;
+  String savedDesktopTunStack = 'mixed';
+  String savedLogLevel = 'error';
+  bool savedAutoConnect = false;
+  bool savedManualStopped = false;
+  bool savedSystemProxy = true;
+  String savedLanguage = 'zh';
+  String savedTestUrl = 'https://www.gstatic.com/generate_204';
+  String savedCloseBehavior = 'tray';
+  String savedToggleHotkey = 'ctrl+alt+c';
+  Map<String, int> savedDelayResults = const {};
+  int savedTabIndex = 0;
+  List<int> savedBuiltTabs = const [0];
+  bool savedOnboarding = false;
+  String? savedPersona;
+  bool savedTileShowNodeInfo = false;
+  UserProfile? savedProfile;
+
+  try {
+    savedToken = await authService
+        .getToken()
+        .timeout(bootstrapStorageTimeout, onTimeout: () => null);
+
+    // One-time accent reset (v1.0.16): force Blue-500 default for existing installs
+    await SettingsService.migrateAccentToBlueIfNeeded();
+    savedAccentColor = await SettingsService.getAccentColor();
+    savedSubSyncInterval = await SettingsService.getSubSyncInterval();
+    savedTheme = await SettingsService.getThemeMode();
+    savedProfileId = await SettingsService.getActiveProfileId();
+    savedRoutingMode = await SettingsService.getRoutingMode();
+    savedConnectionMode = await SettingsService.getConnectionMode();
+    savedQuicPolicy = await SettingsService.getQuicPolicy();
+    savedDesktopTunStack = await SettingsService.getDesktopTunStack();
+    savedLogLevel = await SettingsService.getLogLevel();
+    savedAutoConnect = await SettingsService.getAutoConnect();
+    // v1.0.21 hotfix: hydrate userStoppedProvider from disk so
+    // _maybeAutoConnect() sees the manual-stop intent even on engine
+    // recreate / cold start. Without this, the provider's default (false)
+    // lets auto-connect fire after a user had explicitly disconnected.
+    savedManualStopped = await SettingsService.getManualStopped();
+    savedSystemProxy = await SettingsService.getSystemProxyOnConnect();
+    savedLanguage = await SettingsService.getLanguage();
+    savedTestUrl = await SettingsService.getTestUrl();
+    savedCloseBehavior = await SettingsService.getCloseBehavior();
+    savedToggleHotkey = await SettingsService.getToggleHotkey();
+    savedDelayResults = await SettingsService.getDelayResults();
+    savedTabIndex = await SettingsService.getLastTabIndex();
+    savedBuiltTabs = await SettingsService.getBuiltTabs();
+    savedOnboarding = await SettingsService.getHasSeenOnboarding();
+    savedPersona = await SettingsService.get<String>('onboardingPersona');
+    savedTileShowNodeInfo = await SettingsService.getTileShowNodeInfo();
+
+    // Profile fetch is gated on token presence — only one secure-storage
+    // read here, and only if we actually need it.
+    if (savedToken != null && savedToken.isNotEmpty) {
+      savedProfile = await authService
+          .getCachedProfile()
+          .timeout(bootstrapStorageTimeout, onTimeout: () => null);
+    }
+  } catch (e, st) {
+    debugPrint(
+      '[Bootstrap] data gather threw — runApp will use safe defaults: $e\n$st',
+    );
+    // The pre-declared defaults above are already populated. Continue
+    // straight to runApp() rather than letting the exception escape and
+    // white-screen the user.
+  }
 
   // Apply global strings language before runApp (for tray etc.)
   S.setLanguage(savedLanguage);
@@ -341,9 +389,13 @@ Future<void> _bootstrap() async {
   // the user triggers a subscription sync. Fire-and-forget — never blocks
   // cold start, never throws.
   if (savedProfileId != null && savedProfileId.isNotEmpty) {
+    // Bind to a final local so the closure captures a non-nullable
+    // value — Dart's flow analysis doesn't promote a mutable outer
+    // var across the closure boundary.
+    final activeProfileId = savedProfileId;
     unawaited(
       NodeTelemetry.ensureInventoryLoaded(
-        loadActiveConfig: () => ProfileService.loadConfig(savedProfileId),
+        loadActiveConfig: () => ProfileService.loadConfig(activeProfileId),
       ),
     );
   }
