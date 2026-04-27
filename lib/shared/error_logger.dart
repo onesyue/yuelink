@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'event_log.dart';
+import 'rotating_log_file.dart';
 import 'telemetry.dart';
 
 /// Unified error reporting — logs locally AND to remote monitoring.
@@ -50,8 +51,11 @@ class ErrorLogger {
   }
 
   /// Manually report a caught exception (e.g., in try-catch blocks).
-  static void captureException(Object error, StackTrace stack,
-      {String? source}) {
+  static void captureException(
+    Object error,
+    StackTrace stack, {
+    String? source,
+  }) {
     _capture(error.toString(), stack, source: source);
   }
 
@@ -129,16 +133,62 @@ class ErrorLogger {
       multiLine: true,
     );
     for (final m in re.allMatches(content)) {
-      out.add(_AndroidCrashEntry(
-        timestamp: m.group(1)!,
-        thread: m.group(2)!,
-        exceptionType: m.group(3)!,
-      ));
+      out.add(
+        _AndroidCrashEntry(
+          timestamp: m.group(1)!,
+          thread: m.group(2)!,
+          exceptionType: m.group(3)!,
+        ),
+      );
     }
     return out;
   }
 
   // ── Internal ────────────────────────────────────────────────────────
+
+  // ── Telemetry dedup ──────────────────────────────────────────────────
+  //
+  // A single original exception can reach [_capture] through more than one
+  // entry point: FlutterError.onError + PlatformDispatcher.onError for a
+  // framework-level error that also escapes async; Zone handler in main()
+  // + a manual captureException in the same frame; or a tight async loop
+  // that retries a fire-and-forget op until it fails N times. The local
+  // crash.log / EventLog / remote reporter keep every write (timestamps
+  // have forensic value), but telemetry dashboards just see a noisy spike
+  // that masks the per-session crash rate. Gate ONLY Telemetry.event so
+  // a fingerprint fires at most once per [_dedupTtl] window.
+  //
+  // Fingerprint intentionally excludes `source` so two handlers observing
+  // the same exception collapse to one entry. The top 3 stack lines are
+  // enough to distinguish call sites while tolerating rethrow-wrapping
+  // variations above that frame.
+  static const _dedupTtl = Duration(seconds: 2);
+  static final Map<String, DateTime> _recentFingerprints = {};
+
+  static String _fingerprint(String firstLine, StackTrace stack) {
+    final stackLines = stack.toString().split('\n');
+    final top3 = stackLines.take(3).join('\n');
+    return '$firstLine|$top3';
+  }
+
+  static bool _shouldEmitTelemetry(String fingerprint) {
+    final now = DateTime.now();
+    final last = _recentFingerprints[fingerprint];
+    if (last != null && now.difference(last) < _dedupTtl) {
+      return false;
+    }
+    _recentFingerprints[fingerprint] = now;
+    // Opportunistic cleanup — no timer, map stays small between starts.
+    _recentFingerprints.removeWhere((_, ts) => now.difference(ts) > _dedupTtl);
+    return true;
+  }
+
+  /// Reset the telemetry dedup window. Test-only hook so cases can assert
+  /// fingerprint behaviour from a known-clean state.
+  @visibleForTesting
+  static void debugResetDedup() {
+    _recentFingerprints.clear();
+  }
 
   static void _capture(String error, StackTrace stack, {String? source}) {
     // 1. Always write to local crash.log
@@ -156,21 +206,39 @@ class ErrorLogger {
     //                        already handles (retry / reconnect logic). These
     //                        used to mask real crashes at ~98:1 ratio; we
     //                        keep them as non-priority telemetry for signal.
+    //
+    // Both buckets go through [_shouldEmitTelemetry] so one exception hitting
+    // multiple handlers only shows up once — local crash.log above stays
+    // unconditional.
     final firstLine = error.split('\n').first;
-    final typeHint = firstLine.length > 80 ? firstLine.substring(0, 80) : firstLine;
-    final typeName = _typeFromError(typeHint);
-    final isNetwork = _isNetworkError(typeName);
-    Telemetry.event(
-      isNetwork ? TelemetryEvents.networkError : TelemetryEvents.crash,
-      priority: !isNetwork,
-      props: {
-        'src': source ?? 'unknown',
-        'type': typeName,
-      },
-    );
+    // v1.0.22 P3-B: compute the dedup decision ONCE so both telemetry
+    // and the remote reporter share the same fingerprint window.
+    // _shouldEmitTelemetry has the side-effect of stamping the
+    // fingerprint into the recent-map; calling it twice would always
+    // return false on the second call and silently drop the remote
+    // report on every legitimate first emission.
+    final shouldEmit = _shouldEmitTelemetry(_fingerprint(firstLine, stack));
+    if (shouldEmit) {
+      final typeHint = firstLine.length > 80
+          ? firstLine.substring(0, 80)
+          : firstLine;
+      final typeName = _typeFromError(typeHint);
+      final isNetwork = _isNetworkError(typeName);
+      Telemetry.event(
+        isNetwork ? TelemetryEvents.networkError : TelemetryEvents.crash,
+        priority: !isNetwork,
+        props: {'src': source ?? 'unknown', 'type': typeName},
+      );
+    }
 
-    // 3. Forward to remote reporter (release only)
+    // 3. Forward to remote reporter (release only). v1.0.22 P3-B:
+    //    gated on the same dedup window as telemetry so a tight crash
+    //    loop doesn't hammer Sentry / Crashlytics with the same
+    //    fingerprint hundreds of times per minute. Local crash.log
+    //    (step 1) and EventLog (step 2) intentionally stay
+    //    unconditional — timestamps in those have forensic value.
     if (!kReleaseMode || _reporter == null) return;
+    if (!shouldEmit) return;
     try {
       _reporter!.report(error, stack);
     } catch (e) {
@@ -215,7 +283,12 @@ class ErrorLogger {
       final logFile = File('${dir.path}/crash.log');
       final timestamp = DateTime.now().toIso8601String();
       final entry = '[$timestamp]\n$error\n$stack\n\n';
-      await logFile.writeAsString(entry, mode: FileMode.append);
+      // v1.0.22 P3-B: cap crash.log at 1 MB with one rotated sidecar
+      // (~2 MB total). Prevents a tight crash loop from ballooning the
+      // file. Rotation is handled inside [appendWithRotation] —
+      // pre-write size check + .1 sidecar shift, fail-soft on any IO
+      // error so the existing swallow-all contract is preserved.
+      await appendWithRotation(logFile, entry);
     } catch (_) {}
   }
 }

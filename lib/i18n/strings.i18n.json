@@ -42,6 +42,8 @@
   "routeModeGlobal": "Global",
   "routeModeDirect": "Direct",
   "routingModeSetting": "Routing Mode",
+  "tipTapToSwitchRouting": "Tap to switch routing mode",
+  "tipTapToSwitchConnection": "Tap to switch connection mode",
   "modeSwitched": "Mode switched",
   "directModeDesc": "All traffic connects directly without proxy",
   "globalModeDesc": "All traffic routes through the selected node below",

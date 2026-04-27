@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../i18n/app_strings.dart';
 import '../../../core/providers/core_provider.dart';
+import '../providers/traffic_providers.dart';
 import '../../../shared/traffic_formatter.dart';
 import '../../../theme.dart';
 import '../providers/dashboard_providers.dart';
@@ -106,23 +107,26 @@ class _LiveStatusCardState extends ConsumerState<LiveStatusCard> {
                 ),
                 const Spacer(),
                 _RangeButton(
-                    label: '1m',
-                    value: 60,
-                    range: range,
-                    onTap: () =>
-                        ref.read(trafficChartRangeProvider.notifier).set(60)),
+                  label: '1m',
+                  value: 60,
+                  range: range,
+                  onTap: () =>
+                      ref.read(trafficChartRangeProvider.notifier).set(60),
+                ),
                 _RangeButton(
-                    label: '5m',
-                    value: 300,
-                    range: range,
-                    onTap: () =>
-                        ref.read(trafficChartRangeProvider.notifier).set(300)),
+                  label: '5m',
+                  value: 300,
+                  range: range,
+                  onTap: () =>
+                      ref.read(trafficChartRangeProvider.notifier).set(300),
+                ),
                 _RangeButton(
-                    label: '30m',
-                    value: 1800,
-                    range: range,
-                    onTap: () =>
-                        ref.read(trafficChartRangeProvider.notifier).set(1800)),
+                  label: '30m',
+                  value: 1800,
+                  range: range,
+                  onTap: () =>
+                      ref.read(trafficChartRangeProvider.notifier).set(1800),
+                ),
                 _LockButton(
                   locked: locked,
                   tooltip: locked ? s.chartUnlock : s.chartLock,
@@ -132,7 +136,9 @@ class _LiveStatusCardState extends ConsumerState<LiveStatusCard> {
                       // Snapshot only the downsampled points (~60 doubles)
                       // instead of copying the full ring buffer (3600 doubles).
                       _frozenDown = List<double>.from(
-                        ref.read(trafficHistoryProvider).downSampled(
+                        ref
+                            .read(trafficHistoryProvider)
+                            .downSampled(
                               seconds: ref.read(trafficChartRangeProvider),
                             ),
                       );
@@ -214,8 +220,10 @@ class _IpHeader extends StatelessWidget {
         children: [
           const Icon(Icons.shield_outlined, size: 13, color: YLColors.zinc400),
           const SizedBox(width: 6),
-          Text(s.exitIpLabel,
-              style: YLText.caption.copyWith(color: YLColors.zinc500)),
+          Text(
+            s.exitIpLabel,
+            style: YLText.caption.copyWith(color: YLColors.zinc500),
+          ),
           const SizedBox(width: 8),
           const SizedBox(
             width: 12,
@@ -255,13 +263,16 @@ class _IpHeader extends StatelessWidget {
         Row(
           children: [
             // Shield icon
-            const Icon(Icons.shield_rounded, size: 13, color: YLColors.connected),
+            const Icon(
+              Icons.shield_rounded,
+              size: 13,
+              color: YLColors.connected,
+            ),
             const SizedBox(width: 6),
 
             // Flag + location (shrinks if needed)
             if (hasGeo && flag.isNotEmpty) ...[
-              Text(flag,
-                  style: const TextStyle(fontSize: 13, height: 1.2)),
+              Text(flag, style: const TextStyle(fontSize: 13, height: 1.2)),
               const SizedBox(width: 4),
               Flexible(
                 flex: 2,
@@ -276,9 +287,10 @@ class _IpHeader extends StatelessWidget {
               ),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 6),
-                child: Text('·',
-                    style: YLText.caption
-                        .copyWith(color: YLColors.zinc400)),
+                child: Text(
+                  '·',
+                  style: YLText.caption.copyWith(color: YLColors.zinc400),
+                ),
               ),
             ],
 
@@ -309,7 +321,8 @@ class _IpHeader extends StatelessWidget {
         ),
 
         // ISP row + AI node name (secondary line)
-        if (info!.isp.isNotEmpty || (aiInfo != null && aiInfo!.nodeName.isNotEmpty))
+        if (info!.isp.isNotEmpty ||
+            (aiInfo != null && aiInfo!.nodeName.isNotEmpty))
           Padding(
             padding: const EdgeInsets.only(top: 3, left: 19),
             child: Row(
@@ -318,8 +331,10 @@ class _IpHeader extends StatelessWidget {
                   Flexible(
                     child: Text(
                       info!.isp,
-                      style: YLText.caption
-                          .copyWith(fontSize: 10, color: YLColors.zinc400),
+                      style: YLText.caption.copyWith(
+                        fontSize: 10,
+                        color: YLColors.zinc400,
+                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -329,9 +344,13 @@ class _IpHeader extends StatelessWidget {
                     info!.isp.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 6),
-                    child: Text('·',
-                        style: YLText.caption
-                            .copyWith(fontSize: 10, color: YLColors.zinc500)),
+                    child: Text(
+                      '·',
+                      style: YLText.caption.copyWith(
+                        fontSize: 10,
+                        color: YLColors.zinc500,
+                      ),
+                    ),
                   ),
                 if (aiInfo != null && aiInfo!.nodeName.isNotEmpty)
                   Flexible(
@@ -361,8 +380,11 @@ class _SpeedChip extends StatelessWidget {
   final String arrow;
   final int bps;
   final Color color;
-  const _SpeedChip(
-      {required this.arrow, required this.bps, required this.color});
+  const _SpeedChip({
+    required this.arrow,
+    required this.bps,
+    required this.color,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -400,11 +422,12 @@ class _RangeButton extends StatelessWidget {
   final int value;
   final int range;
   final VoidCallback onTap;
-  const _RangeButton(
-      {required this.label,
-      required this.value,
-      required this.range,
-      required this.onTap});
+  const _RangeButton({
+    required this.label,
+    required this.value,
+    required this.range,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -438,8 +461,11 @@ class _LockButton extends StatelessWidget {
   final bool locked;
   final String tooltip;
   final VoidCallback onTap;
-  const _LockButton(
-      {required this.locked, required this.tooltip, required this.onTap});
+  const _LockButton({
+    required this.locked,
+    required this.tooltip,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -494,12 +520,15 @@ class _TrafficChart extends StatelessWidget {
         borderData: FlBorderData(show: false),
         titlesData: FlTitlesData(
           show: true,
-          rightTitles:
-              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          topTitles:
-              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          bottomTitles:
-              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
+          topTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
+          bottomTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
@@ -511,22 +540,27 @@ class _TrafficChart extends StatelessWidget {
                     alignment: Alignment.centerRight,
                     child: Padding(
                       padding: const EdgeInsets.only(right: 4),
-                      child: Text('0',
-                          style: YLText.caption.copyWith(
-                              fontSize: 9, color: YLColors.zinc400)),
+                      child: Text(
+                        '0',
+                        style: YLText.caption.copyWith(
+                          fontSize: 9,
+                          color: YLColors.zinc400,
+                        ),
+                      ),
                     ),
                   );
                 }
                 final isTop = value >= meta.max * 0.99;
                 return Align(
-                  alignment:
-                      isTop ? Alignment.topRight : Alignment.centerRight,
+                  alignment: isTop ? Alignment.topRight : Alignment.centerRight,
                   child: Padding(
                     padding: const EdgeInsets.only(right: 4),
                     child: Text(
                       _fmtSpeed(value),
-                      style: YLText.caption
-                          .copyWith(fontSize: 9, color: YLColors.zinc400),
+                      style: YLText.caption.copyWith(
+                        fontSize: 9,
+                        color: YLColors.zinc400,
+                      ),
                     ),
                   ),
                 );

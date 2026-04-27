@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yuelink/core/kernel/core_manager.dart';
 import 'package:yuelink/core/providers/core_provider.dart';
+import 'package:yuelink/modules/dashboard/providers/traffic_providers.dart';
 import 'package:yuelink/domain/models/connection.dart';
 import 'package:yuelink/domain/models/traffic.dart';
 import 'package:yuelink/infrastructure/repositories/connection_repository.dart';
@@ -34,11 +35,9 @@ class _FakeConnectionRepo implements ConnectionRepository {
 }
 
 class _FakeTrafficRepo implements TrafficRepository {
-  _FakeTrafficRepo({
-    required Stream<Traffic> traffic,
-    Stream<int>? memory,
-  })  : _traffic = traffic,
-        _memory = memory;
+  _FakeTrafficRepo({required Stream<Traffic> traffic, Stream<int>? memory})
+    : _traffic = traffic,
+      _memory = memory;
 
   final Stream<Traffic> _traffic;
   final Stream<int>? _memory;
@@ -69,9 +68,9 @@ void main() {
     tempDir = Directory.systemTemp.createTempSync('yuelink_stream_guard_');
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
-      const MethodChannel('plugins.flutter.io/path_provider'),
-      (call) async => tempDir.path,
-    );
+          const MethodChannel('plugins.flutter.io/path_provider'),
+          (call) async => tempDir.path,
+        );
   });
 
   tearDownAll(() {
@@ -97,10 +96,13 @@ void main() {
     final errors = <Object>[];
 
     await runZonedGuarded<Future<void>>(() async {
-      final container = ProviderContainer(overrides: [
-        connectionRepositoryProvider
-            .overrideWithValue(_FakeConnectionRepo(controller.stream)),
-      ]);
+      final container = ProviderContainer(
+        overrides: [
+          connectionRepositoryProvider.overrideWithValue(
+            _FakeConnectionRepo(controller.stream),
+          ),
+        ],
+      );
 
       // coreStatus = running + foreground (default) to take the listener path
       container.read(coreStatusProvider.notifier).state = CoreStatus.running;
@@ -118,11 +120,13 @@ void main() {
       // just-cancelled subscriber's pending microtask on some Dart versions;
       // the closure-local `disposed` guard must short-circuit the state
       // write regardless.
-      controller.add(const ConnectionsSnapshot(
-        connections: [],
-        downloadTotal: 0,
-        uploadTotal: 0,
-      ));
+      controller.add(
+        const ConnectionsSnapshot(
+          connections: [],
+          downloadTotal: 0,
+          uploadTotal: 0,
+        ),
+      );
 
       await Future<void>.delayed(const Duration(milliseconds: 30));
     }, (err, _) => errors.add(err));
@@ -130,8 +134,11 @@ void main() {
     await controller.close();
 
     final bad = errors.where(_isDisposeError).toList();
-    expect(bad, isEmpty,
-        reason: 'connections listener must guard against dispose; got: $bad');
+    expect(
+      bad,
+      isEmpty,
+      reason: 'connections listener must guard against dispose; got: $bad',
+    );
   });
 
   // ── case B: traffic stream listener after dispose ──────────────────
@@ -140,10 +147,13 @@ void main() {
     final errors = <Object>[];
 
     await runZonedGuarded<Future<void>>(() async {
-      final container = ProviderContainer(overrides: [
-        trafficRepositoryProvider
-            .overrideWithValue(_FakeTrafficRepo(traffic: trafficCtl.stream)),
-      ]);
+      final container = ProviderContainer(
+        overrides: [
+          trafficRepositoryProvider.overrideWithValue(
+            _FakeTrafficRepo(traffic: trafficCtl.stream),
+          ),
+        ],
+      );
 
       container.read(coreStatusProvider.notifier).state = CoreStatus.running;
 
@@ -163,8 +173,10 @@ void main() {
     await trafficCtl.close();
 
     final bad = errors.where(_isDisposeError).toList();
-    expect(bad, isEmpty,
-        reason: 'traffic listener must guard against dispose; got: $bad');
+    expect(
+      bad,
+      isEmpty,
+      reason: 'traffic listener must guard against dispose; got: $bad',
+    );
   });
 }
-

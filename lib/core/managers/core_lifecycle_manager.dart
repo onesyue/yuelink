@@ -92,6 +92,7 @@ class CoreLifecycleManager {
         desktopTunStack: ref.read(desktopTunStackProvider),
         tunBypassAddresses: bypassAddrs,
         tunBypassProcesses: bypassProcs,
+        quicRejectPolicy: ref.read(quicPolicyProvider),
       );
       if (!ok) {
         ref.read(coreStatusProvider.notifier).state = CoreStatus.stopped;

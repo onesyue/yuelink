@@ -170,6 +170,12 @@ class Translations with BaseTranslations<AppLocale, Translations> {
 	/// en: 'Routing Mode'
 	String get routingModeSetting => 'Routing Mode';
 
+	/// en: 'Tap to switch routing mode'
+	String get tipTapToSwitchRouting => 'Tap to switch routing mode';
+
+	/// en: 'Tap to switch connection mode'
+	String get tipTapToSwitchConnection => 'Tap to switch connection mode';
+
 	/// en: 'Mode switched'
 	String get modeSwitched => 'Mode switched';
 
@@ -2259,6 +2265,8 @@ extension on Translations {
 			'routeModeGlobal' => 'Global',
 			'routeModeDirect' => 'Direct',
 			'routingModeSetting' => 'Routing Mode',
+			'tipTapToSwitchRouting' => 'Tap to switch routing mode',
+			'tipTapToSwitchConnection' => 'Tap to switch connection mode',
 			'modeSwitched' => 'Mode switched',
 			'directModeDesc' => 'All traffic connects directly without proxy',
 			'globalModeDesc' => 'All traffic routes through the selected node below',
@@ -2726,10 +2734,10 @@ extension on Translations {
 			'noNetworkConnection' => 'No network connection',
 			'dashGreeting' => 'Hello',
 			'dashGreetingReturning' => 'Welcome back',
-			'dashNoAnnouncements' => 'No announcements',
-			'dashViewAll' => 'View all',
 			_ => null,
 		} ?? switch (path) {
+			'dashNoAnnouncements' => 'No announcements',
+			'dashViewAll' => 'View all',
 			'dashNoPlan' => 'No plan info',
 			'oldPassword' => 'Old Password',
 			'newPassword' => 'New Password',

@@ -38,29 +38,39 @@ class MihomoApi {
 
   /// Check if mihomo is reachable.
   /// Bypasses the circuit breaker — this is the health check itself.
-  Future<bool> isAvailable() async {
+  Future<bool> isAvailable() async => (await healthSnapshot()).ok;
+
+  /// Same probe as [isAvailable] but returns a classified failure
+  /// reason for diagnostic logging. Used by the heartbeat manager
+  /// (v1.0.22 P1-1) to distinguish "network down" from "mihomo
+  /// hung" from "secret mismatch" in user-facing event-log exports
+  /// without making every healthcheck site pay the bool→record cost.
+  ///
+  /// Reason values are a closed set:
+  ///   * `'ok'`        — HTTP 200, healthy
+  ///   * `'socket'`    — `SocketException` (port not listening / network gone)
+  ///   * `'timeout'`   — 2 s budget elapsed (mihomo alive but unresponsive)
+  ///   * `'http_<N>'`  — non-200 HTTP response (e.g. `http_401` = secret bad)
+  ///   * `'other'`     — anything else (malformed response, TLS mismatch, …)
+  Future<({bool ok, String reason})> healthSnapshot() async {
     try {
       final resp = await http
           .get(Uri.parse('$_baseUrl/version'), headers: _headers)
           .timeout(const Duration(seconds: 2));
-      final ok = resp.statusCode == 200;
-      if (ok) _breaker.reset();
-      if (!ok) {
-        debugPrint(
-            '[MihomoApi] /version returned HTTP ${resp.statusCode} @ $_baseUrl');
+      if (resp.statusCode == 200) {
+        _breaker.reset();
+        return (ok: true, reason: 'ok');
       }
-      return ok;
+      debugPrint(
+          '[MihomoApi] /version returned HTTP ${resp.statusCode} @ $_baseUrl');
+      return (ok: false, reason: 'http_${resp.statusCode}');
     } on SocketException {
-      // Expected during startup / stopped state — mihomo not listening yet.
-      return false;
+      return (ok: false, reason: 'socket');
     } on TimeoutException {
-      // Expected when core is starting up or firewalled locally.
-      return false;
+      return (ok: false, reason: 'timeout');
     } catch (e) {
-      // Anything else (malformed response, TLS mismatch, unexpected throw)
-      // is worth surfacing — callers only see a bool.
       debugPrint('[MihomoApi] /version health-check unexpected failure: $e');
-      return false;
+      return (ok: false, reason: 'other');
     }
   }
 

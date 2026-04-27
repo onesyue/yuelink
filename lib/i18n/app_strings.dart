@@ -89,6 +89,8 @@ class S {
   String get routeModeGlobal => _t.routeModeGlobal;
   String get routeModeDirect => _t.routeModeDirect;
   String get routingModeSetting => _t.routingModeSetting;
+  String get tipTapToSwitchRouting => _t.tipTapToSwitchRouting;
+  String get tipTapToSwitchConnection => _t.tipTapToSwitchConnection;
   String get modeSwitched => _t.modeSwitched;
   String get directModeDesc => _t.directModeDesc;
   String get globalModeDesc => _t.globalModeDesc;

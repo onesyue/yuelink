@@ -33,6 +33,21 @@ import (
 // Lifecycle
 // --------------------------------------------------------------------
 
+// coreLogMaxBytes caps a single core.log at 5 MB. The rotating writer
+// trips at this threshold within a running session; InitCore also
+// checks at startup so that a file inherited from the previous launch
+// is shifted before the new session begins writing.
+//
+// Stay well under the iOS NEPacketTunnelProvider 15 MB memory window —
+// even if the live file is somehow mmap'd into the extension it can't
+// cross that budget alone.
+const coreLogMaxBytes int64 = 5 * 1024 * 1024
+
+// coreLogBackups is the number of historical sidecars retained
+// (core.log.1, core.log.2, …). Total on-disk footprint is bounded by
+// (coreLogBackups + 1) × coreLogMaxBytes — today ~15 MB.
+const coreLogBackups = 2
+
 // InitCore initializes the mihomo core with the given home directory.
 // Sets up config paths and prepares the runtime environment.
 // Returns a C string: empty string on success, error message on failure.
@@ -76,24 +91,32 @@ func InitCore(homeDir *C.char) (result *C.char) {
 		return C.CString(fmt.Sprintf("config.Init failed: %v", err))
 	}
 
-	// Close previous log file handle if re-initializing (prevents fd leak)
-	if state.logFile != nil {
-		state.logFile.Close()
-		state.logFile = nil
+	// Close previous log writer handle if re-initializing (prevents fd leak)
+	if state.logWriter != nil {
+		_ = state.logWriter.Close()
+		state.logWriter = nil
 	}
 
 	// Redirect logrus output to core.log so Dart can read Go-side logs.
 	// Also tee to stdout for adb logcat / Xcode console.
-	// Log rotation: keep at most `core.log` + `.1` + `.2` (~15 MB total).
-	// Was: O_TRUNC on every InitCore — correct for disk cap, wrong for
-	// diagnosability (a crash's Go panic got wiped on auto-restart).
-	// Now: rotate if current size exceeds 5 MB, append otherwise.
+	// Log rotation: keep `core.log` + `.1` + `.2` (~15 MB total).
+	//
+	// Two complementary checkpoints:
+	//   1. rotateLogFile below handles the "session-to-session" case —
+	//      if the previous session ended with a large file, we shift it
+	//      once before the new session starts appending.
+	//   2. The rotatingLogWriter handles the "within a single long
+	//      session" case — logrus writes through it, and as soon as
+	//      the live file would cross coreLogMaxBytes the writer
+	//      rotates in-place without an InitCore round-trip.
+	// Previously only (1) existed; a VPN session running for days could
+	// grow a single core.log arbitrarily large.
 	logPath := filepath.Join(dir, "core.log")
-	rotateLogFile(logPath, 5*1024*1024, 3)
-	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
-	if err == nil {
-		state.logFile = logFile
-		logrus.SetOutput(io.MultiWriter(os.Stdout, logFile))
+	rotateLogFile(logPath, coreLogMaxBytes, coreLogBackups)
+	writer, werr := newRotatingLogWriter(logPath, coreLogMaxBytes, coreLogBackups)
+	if werr == nil {
+		state.logWriter = writer
+		logrus.SetOutput(io.MultiWriter(os.Stdout, writer))
 	}
 
 	log.Infoln("[BOOT] InitCore OK, homeDir=%s", dir)
@@ -104,15 +127,20 @@ func InitCore(homeDir *C.char) (result *C.char) {
 	return C.CString("")
 }
 
-// rotateLogFile rotates `path` → `path.1` → `path.2` … → `path.(backups-1)`
-// when the current file exceeds maxBytes. Older ones get discarded by the
-// shift. No-op if the file is missing or still small enough.
+// rotateLogFile performs a single rotation step: when `path` exceeds
+// maxBytes, shift historical generations (`path.(backups-1)` → `.backups`,
+// …, `path.1` → `.2`) and rename `path` to `path.1`. Oldest generation
+// beyond `backups` rolls off. No-op if the file is missing or still
+// small enough.
 //
-// Tiny hand-rolled rotation so we don't pull lumberjack (would bloat the
-// static library 1 MB+ on mobile for a single feature). Rotation only
-// happens at InitCore time; within a single long session the live file
-// can grow past maxBytes until the next restart — acceptable because
-// the VPN core typically churns on Wi-Fi switches / OS sleeps anyway.
+// Intended for session-start cleanup. Live rotation inside a running
+// session is handled by rotatingLogWriter in state.go so a long VPN
+// session never grows a single file past maxBytes.
+//
+// Fail-soft by design (no return value) — a startup rotation failure
+// must not block InitCore; we just continue with the existing layout.
+// Each rename still goes through renameReplace so Windows, where
+// os.Rename fails on existing dst, doesn't silently skip the shift.
 func rotateLogFile(path string, maxBytes int64, backups int) {
 	info, err := os.Stat(path)
 	if err != nil || info.Size() <= maxBytes {
@@ -121,9 +149,9 @@ func rotateLogFile(path string, maxBytes int64, backups int) {
 	for i := backups - 1; i >= 1; i-- {
 		src := fmt.Sprintf("%s.%d", path, i)
 		dst := fmt.Sprintf("%s.%d", path, i+1)
-		_ = os.Rename(src, dst) // silent if src is missing; overwrite dst
+		_ = renameReplace(src, dst)
 	}
-	_ = os.Rename(path, path+".1")
+	_ = renameReplace(path, path+".1")
 }
 
 // StartCore starts the mihomo core with the given YAML configuration.

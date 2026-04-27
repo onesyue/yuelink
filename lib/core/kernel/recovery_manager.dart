@@ -32,6 +32,26 @@ class RecoveryManager {
     return apiOk && ffiRunning;
   }
 
+  /// Same as [isAliveForPlatform] but also handles desktop TUN service
+  /// mode (mihomo runs in the privileged helper subprocess, so the in-app
+  /// FFI `IsRunning()` flag stays `false` even when the core is healthy).
+  ///
+  /// When [isDesktopTunService] is true, trust [apiOk] alone — symmetric
+  /// to Android/iOS where the core also lives outside the main process.
+  /// Without this branch the heartbeat sees apiOk=true + ffi=false on
+  /// Windows/macOS/Linux service-mode TUN and triggers an endless loop
+  /// of false-positive auto-recovery restarts.
+  static bool isAliveForMode({
+    required bool apiOk,
+    required bool ffiRunning,
+    required bool isAndroid,
+    required bool isIOS,
+    required bool isDesktopTunService,
+  }) {
+    if (isAndroid || isIOS || isDesktopTunService) return apiOk;
+    return apiOk && ffiRunning;
+  }
+
   // ── Shared state reset ─────────────────────────────────────────────────
 
   /// Reset all core-related provider state to stopped and stop the core.
@@ -66,29 +86,33 @@ class RecoveryManager {
   ///
   /// On iOS the Go core runs in a separate process so FFI `IsRunning`
   /// always returns false in the main app. Only the REST API check works.
-  static Future<({bool alive, bool apiOk})> checkCoreHealth() async {
+  static Future<({bool alive, bool apiOk, String apiReason})>
+      checkCoreHealth() async {
     final manager = CoreManager.instance;
-    final apiOk = await manager.api
-        .isAvailable()
-        .timeout(const Duration(seconds: 2), onTimeout: () => false);
-    if (Platform.isIOS || Platform.isAndroid) {
-      return (alive: apiOk, apiOk: apiOk);
-    }
-    if (Platform.isMacOS || Platform.isWindows) {
+    // Snapshot returns a classified reason (`'ok'` / `'socket'` /
+    // `'timeout'` / `'http_<N>'` / `'other'`) so heartbeat can write
+    // it to EventLog instead of just "down" — useful for
+    // distinguishing transient network flap from a wedged mihomo
+    // when triaging user reports.
+    final snap = await manager.api
+        .healthSnapshot()
+        .timeout(const Duration(seconds: 2),
+            onTimeout: () => (ok: false, reason: 'timeout'));
+    var isDesktopTunService = false;
+    if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
       final connectionMode = await SettingsService.getConnectionMode();
-      if (connectionMode == 'tun') {
-        return (alive: apiOk, apiOk: apiOk);
-      }
+      isDesktopTunService = connectionMode == 'tun';
     }
-    final alive = manager.isCoreActuallyRunning;
     return (
-      alive: isAliveForPlatform(
-        apiOk: apiOk,
-        ffiRunning: alive,
+      alive: isAliveForMode(
+        apiOk: snap.ok,
+        ffiRunning: manager.isCoreActuallyRunning,
         isAndroid: Platform.isAndroid,
         isIOS: Platform.isIOS,
+        isDesktopTunService: isDesktopTunService,
       ),
-      apiOk: apiOk,
+      apiOk: snap.ok,
+      apiReason: snap.reason,
     );
   }
 }

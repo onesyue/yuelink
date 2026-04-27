@@ -19,30 +19,29 @@ import 'constants.dart';
 import 'i18n/app_strings.dart';
 import 'i18n/strings_g.dart';
 import 'modules/dashboard/dashboard_page.dart';
-import 'modules/dashboard/mode_actions.dart';
 import 'modules/nodes/nodes_page.dart';
 import 'modules/settings/settings_page.dart';
 import 'modules/settings/providers/settings_providers.dart';
 import 'modules/settings/hotkey_codec.dart';
-import 'domain/models/proxy.dart';
 import 'modules/onboarding/onboarding_page.dart';
 import 'modules/onboarding/persona_prompt_page.dart';
 import 'modules/carrier/carrier_provider.dart';
+import 'modules/yue_auth/presentation/auth_loading_fallback.dart';
 import 'modules/yue_auth/presentation/yue_auth_page.dart';
 import 'modules/yue_auth/providers/yue_auth_providers.dart';
 import 'modules/connections/providers/connections_providers.dart';
 import 'modules/dashboard/providers/dashboard_providers.dart';
-import 'modules/nodes/favorites/node_favorites_providers.dart';
+import 'modules/dashboard/providers/traffic_providers.dart';
 import 'core/managers/system_proxy_manager.dart';
 import 'core/providers/core_provider.dart';
 import 'modules/profiles/providers/profiles_providers.dart';
 import 'shared/app_notifier.dart';
-import 'core/kernel/config_template.dart';
 import 'core/kernel/core_manager.dart';
 import 'core/kernel/recovery_manager.dart';
 import 'core/platform/quit_watchdog.dart';
 import 'core/platform/tile_service.dart';
 import 'core/platform/vpn_service.dart';
+import 'core/platform/window_close_policy.dart';
 import 'core/storage/auth_token_service.dart';
 import 'core/env_config.dart';
 import 'shared/error_logger.dart';
@@ -54,6 +53,7 @@ import 'core/profile/profile_service.dart';
 import 'core/profile/subscription_sync_service.dart';
 import 'modules/updater/update_checker.dart';
 import 'core/storage/settings_service.dart';
+import 'shared/desktop/app_tray_controller.dart';
 import 'modules/emby/emby_media_page.dart';
 import 'modules/emby/emby_providers.dart';
 import 'modules/emby/emby_web_page.dart';
@@ -73,8 +73,10 @@ Future<bool> _ensureSingleInstance() async {
   const port = 47866;
   try {
     _singleInstanceServer = await ServerSocket.bind(
-        InternetAddress.loopbackIPv4, port,
-        shared: false);
+      InternetAddress.loopbackIPv4,
+      port,
+      shared: false,
+    );
     _singleInstanceServer!.listen((socket) {
       socket.listen((data) {
         final msg = String.fromCharCodes(data).trim();
@@ -89,12 +91,21 @@ Future<bool> _ensureSingleInstance() async {
   } on SocketException {
     // Another instance is running — ask it to show itself
     try {
-      final socket = await Socket.connect(InternetAddress.loopbackIPv4, port,
-          timeout: const Duration(seconds: 1));
+      final socket = await Socket.connect(
+        InternetAddress.loopbackIPv4,
+        port,
+        timeout: const Duration(seconds: 1),
+      );
       socket.write('show\n');
       await socket.flush();
       await socket.close();
-    } catch (_) {}
+    } catch (e) {
+      EventLog.writeTagged(
+        'App',
+        'single_instance_show_failed',
+        context: {'error': e},
+      );
+    }
     return false;
   }
 }
@@ -147,12 +158,14 @@ Future<void> _bootstrap() async {
   // make the bars transparent with the correct icon brightness.
   if (Platform.isAndroid) {
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-    SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      systemNavigationBarColor: Colors.transparent,
-      systemNavigationBarDividerColor: Colors.transparent,
-      systemNavigationBarContrastEnforced: false,
-    ));
+    SystemChrome.setSystemUIOverlayStyle(
+      const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        systemNavigationBarColor: Colors.transparent,
+        systemNavigationBarDividerColor: Colors.transparent,
+        systemNavigationBarContrastEnforced: false,
+      ),
+    );
   }
 
   // ── Image cache limit (prevent 1GB+ memory from decoded bitmaps) ──
@@ -170,72 +183,151 @@ Future<void> _bootstrap() async {
   }
 
   // ── Anonymous telemetry (opt-in, default OFF) ──
-  unawaited(Telemetry.init().then((_) async {
-    // Daily heartbeat — emit at most once per calendar day (UTC) so retention
-    // curves count users who launched the app even when no feature event
-    // happened. Persisted as a YYYY-MM-DD string; cheap string compare.
-    final today = DateTime.now().toUtc().toIso8601String().substring(0, 10);
-    final last = await SettingsService.get<String>('telemetryDailyPingDay');
-    if (last != today) {
-      Telemetry.event('daily_ping');
-      await SettingsService.set('telemetryDailyPingDay', today);
-    }
-  }));
+  unawaited(
+    Telemetry.init().then((_) async {
+      // Daily heartbeat — emit at most once per calendar day (UTC) so retention
+      // curves count users who launched the app even when no feature event
+      // happened. Persisted as a YYYY-MM-DD string; cheap string compare.
+      final today = DateTime.now().toUtc().toIso8601String().substring(0, 10);
+      final last = await SettingsService.get<String>('telemetryDailyPingDay');
+      if (last != today) {
+        Telemetry.event('daily_ping');
+        await SettingsService.set('telemetryDailyPingDay', today);
+      }
+    }),
+  );
 
   // ── Remote feature flags — fire-and-forget, safe defaults apply on offline ──
   unawaited(FeatureFlags.I.init());
 
-  // Restore persisted settings + auth state. Two slow disk reads run in
-  // parallel:
-  //   - SettingsService.load() reads settings.json (one shot, then all
-  //     getX() calls sync from in-memory cache)
-  //   - authService.getToken() walks the encrypted SecureStorage path,
-  //     which on macOS does ioreg → HKDF → AES-GCM decrypt (~65 ms cold)
+  // ── v1.0.22 P0-4a: bootstrap storage hardening ──────────────────────────
   //
-  // Previously they were serial. Parallelising saves ~30 ms on cold start.
-  // After the parallel section, all the SettingsService.getX() calls hit
-  // the populated cache and complete in microtasks.
+  // Pre-fix: a Future.wait([SettingsService.load(), authService.getToken()])
+  // gated `runApp()`. If either future hung (Windows Defender scanning
+  // settings.json, slow Keychain unlock, FUSE/SMB volume stuck), the
+  // Flutter root never instantiated and the user saw "原生白屏" with no
+  // app log to diagnose because the engine wasn't loaded yet.
+  //
+  // Post-fix: each blocking storage call has a hard 4 s wall-clock cap,
+  // and the entire data-gather block is wrapped in a single try/catch
+  // with safe defaults pre-declared so any unexpected throw still lets
+  // `runApp()` fire with a working override list. Cached token/profile
+  // are only "lost" in the timeout/throw paths — AuthNotifier._init()
+  // (P0-4b) re-reads SecureStorage on first run, so a transient hang
+  // resolves into the correct logged-in state automatically once disk
+  // I/O un-sticks.
+  const bootstrapStorageTimeout = Duration(seconds: 4);
   final authService = AuthTokenService.instance;
-  final earlyResults = await Future.wait<Object?>([
-    SettingsService.load(),
-    authService.getToken(),
-  ]);
-  final savedToken = earlyResults[1] as String?;
 
-  // One-time accent reset (v1.0.16): force Blue-500 default for existing installs
-  await SettingsService.migrateAccentToBlueIfNeeded();
-  final savedAccentColor = await SettingsService.getAccentColor();
-  final savedSubSyncInterval = await SettingsService.getSubSyncInterval();
-  final savedTheme = await SettingsService.getThemeMode();
-  final savedProfileId = await SettingsService.getActiveProfileId();
-  final savedRoutingMode = await SettingsService.getRoutingMode();
-  final savedConnectionMode = await SettingsService.getConnectionMode();
-  final savedQuicPolicy = await SettingsService.getQuicPolicy();
-  final savedDesktopTunStack = await SettingsService.getDesktopTunStack();
-  final savedLogLevel = await SettingsService.getLogLevel();
-  final savedAutoConnect = await SettingsService.getAutoConnect();
-  // v1.0.21 hotfix: hydrate userStoppedProvider from disk so
-  // _maybeAutoConnect() sees the manual-stop intent even on engine
-  // recreate / cold start. Without this, the provider's default (false)
-  // lets auto-connect fire after a user had explicitly disconnected.
-  final savedManualStopped = await SettingsService.getManualStopped();
-  final savedSystemProxy = await SettingsService.getSystemProxyOnConnect();
-  final savedLanguage = await SettingsService.getLanguage();
-  final savedTestUrl = await SettingsService.getTestUrl();
-  final savedCloseBehavior = await SettingsService.getCloseBehavior();
-  final savedToggleHotkey = await SettingsService.getToggleHotkey();
-  final savedDelayResults = await SettingsService.getDelayResults();
-  final savedTabIndex = await SettingsService.getLastTabIndex();
-  final savedBuiltTabs = await SettingsService.getBuiltTabs();
-  final savedOnboarding = await SettingsService.getHasSeenOnboarding();
-  final savedPersona = await SettingsService.get<String>('onboardingPersona');
-  final savedTileShowNodeInfo = await SettingsService.getTileShowNodeInfo();
+  // Seed cache (never throws — falls back to {} on hang).
+  await SettingsService.loadWithTimeout(bootstrapStorageTimeout);
 
-  // Profile fetch is gated on token presence — only one secure-storage
-  // read here, and only if we actually need it.
-  final savedProfile = (savedToken != null && savedToken.isNotEmpty)
-      ? await authService.getCachedProfile()
-      : null;
+  // Pre-declare every override target with a default that mirrors the
+  // SettingsService getter fallback. If the cascade below throws, runApp
+  // still fires with these in place — degraded but functional.
+  //
+  // `authBootstrapUncertain` is the v1.0.22 P0-4b half of the white-screen
+  // fix: a `null` savedToken can mean two very different things, and we
+  // must distinguish them downstream.
+  //   - savedToken == null AND uncertain == false → user really has no
+  //     token. Pass `loggedOut` to preloadedAuthStateProvider; AuthNotifier
+  //     skips _init() (existing fast path).
+  //   - savedToken == null AND uncertain == true → SecureStorage timed
+  //     out or threw. We don't actually know the token state. Pass
+  //     `null` to preloadedAuthStateProvider so AuthNotifier.build()
+  //     falls into _init() and re-attempts the read (with its own
+  //     timeout). Without this signal, a transient cold-start hang
+  //     would permanently demote a logged-in user to the login page
+  //     until the next cold restart.
+  bool authBootstrapUncertain = false;
+  String? savedToken;
+  String savedAccentColor = '3B82F6';
+  int savedSubSyncInterval = 6;
+  ThemeMode savedTheme = ThemeMode.system;
+  String? savedProfileId;
+  String savedRoutingMode = 'rule';
+  String savedConnectionMode = 'systemProxy';
+  String savedQuicPolicy = SettingsService.defaultQuicPolicy;
+  String savedDesktopTunStack = 'mixed';
+  String savedLogLevel = 'error';
+  bool savedAutoConnect = false;
+  bool savedManualStopped = false;
+  bool savedSystemProxy = true;
+  String savedLanguage = 'zh';
+  String savedTestUrl = 'https://www.gstatic.com/generate_204';
+  String savedCloseBehavior = 'tray';
+  String savedToggleHotkey = 'ctrl+alt+c';
+  Map<String, int> savedDelayResults = const {};
+  int savedTabIndex = 0;
+  List<int> savedBuiltTabs = const [0];
+  bool savedOnboarding = false;
+  String? savedPersona;
+  bool savedTileShowNodeInfo = false;
+  UserProfile? savedProfile;
+
+  try {
+    // Distinguish "no token" from "storage hung" so AuthNotifier._init()
+    // knows whether to re-attempt the SecureStorage read. A bare
+    // `onTimeout: () => null` would conflate the two and permanently
+    // demote a logged-in user to the login screen on a transient hang.
+    try {
+      savedToken =
+          await authService.getToken().timeout(bootstrapStorageTimeout);
+    } on TimeoutException {
+      authBootstrapUncertain = true;
+      debugPrint('[Bootstrap] getToken timed out — auth marked uncertain');
+    } catch (e) {
+      authBootstrapUncertain = true;
+      debugPrint('[Bootstrap] getToken threw, auth marked uncertain: $e');
+    }
+
+    // One-time accent reset (v1.0.16): force Blue-500 default for existing installs
+    await SettingsService.migrateAccentToBlueIfNeeded();
+    savedAccentColor = await SettingsService.getAccentColor();
+    savedSubSyncInterval = await SettingsService.getSubSyncInterval();
+    savedTheme = await SettingsService.getThemeMode();
+    savedProfileId = await SettingsService.getActiveProfileId();
+    savedRoutingMode = await SettingsService.getRoutingMode();
+    savedConnectionMode = await SettingsService.getConnectionMode();
+    savedQuicPolicy = await SettingsService.getQuicPolicy();
+    savedDesktopTunStack = await SettingsService.getDesktopTunStack();
+    savedLogLevel = await SettingsService.getLogLevel();
+    savedAutoConnect = await SettingsService.getAutoConnect();
+    // v1.0.21 hotfix: hydrate userStoppedProvider from disk so
+    // _maybeAutoConnect() sees the manual-stop intent even on engine
+    // recreate / cold start. Without this, the provider's default (false)
+    // lets auto-connect fire after a user had explicitly disconnected.
+    savedManualStopped = await SettingsService.getManualStopped();
+    savedSystemProxy = await SettingsService.getSystemProxyOnConnect();
+    savedLanguage = await SettingsService.getLanguage();
+    savedTestUrl = await SettingsService.getTestUrl();
+    savedCloseBehavior = await SettingsService.getCloseBehavior();
+    savedToggleHotkey = await SettingsService.getToggleHotkey();
+    savedDelayResults = await SettingsService.getDelayResults();
+    savedTabIndex = await SettingsService.getLastTabIndex();
+    savedBuiltTabs = await SettingsService.getBuiltTabs();
+    savedOnboarding = await SettingsService.getHasSeenOnboarding();
+    savedPersona = await SettingsService.get<String>('onboardingPersona');
+    savedTileShowNodeInfo = await SettingsService.getTileShowNodeInfo();
+
+    // Profile fetch is gated on token presence — only one secure-storage
+    // read here, and only if we actually need it.
+    if (savedToken != null && savedToken.isNotEmpty) {
+      savedProfile = await authService
+          .getCachedProfile()
+          .timeout(bootstrapStorageTimeout, onTimeout: () => null);
+    }
+  } catch (e, st) {
+    debugPrint(
+      '[Bootstrap] data gather threw — runApp will use safe defaults: $e\n$st',
+    );
+    // We don't know how far the cascade got before throwing; assume the
+    // auth read is unreliable so AuthNotifier._init() retries it.
+    authBootstrapUncertain = true;
+    // The pre-declared defaults above are already populated. Continue
+    // straight to runApp() rather than letting the exception escape and
+    // white-screen the user.
+  }
 
   // Apply global strings language before runApp (for tray etc.)
   S.setLanguage(savedLanguage);
@@ -270,9 +362,21 @@ Future<void> _bootstrap() async {
     for (final sig in [ProcessSignal.sigterm, ProcessSignal.sigint]) {
       sig.watch().listen((_) async {
         try {
-          await CoreActions.clearSystemProxyStatic()
-              .timeout(const Duration(seconds: 2));
-        } catch (_) {}
+          await CoreActions.clearSystemProxyStatic().timeout(
+            const Duration(seconds: 2),
+          );
+        } catch (e) {
+          // Fire-and-forget — writeTagged does not await the file write,
+          // so exit(0) below is never blocked by logging. If the buffered
+          // write loses its race with process termination, that is fine:
+          // the proxy-clear failure we care about is also logged by the
+          // OS-side networksetup stderr.
+          EventLog.writeTagged(
+            'App',
+            'signal_proxy_clear_failed',
+            context: {'error': e},
+          );
+        }
         exit(0);
       });
     }
@@ -315,13 +419,18 @@ Future<void> _bootstrap() async {
   // the user triggers a subscription sync. Fire-and-forget — never blocks
   // cold start, never throws.
   if (savedProfileId != null && savedProfileId.isNotEmpty) {
-    unawaited(NodeTelemetry.ensureInventoryLoaded(
-      loadActiveConfig: () => ProfileService.loadConfig(savedProfileId),
-    ));
+    // Bind to a final local so the closure captures a non-nullable
+    // value — Dart's flow analysis doesn't promote a mutable outer
+    // var across the closure boundary.
+    final activeProfileId = savedProfileId;
+    unawaited(
+      NodeTelemetry.ensureInventoryLoaded(
+        loadActiveConfig: () => ProfileService.loadConfig(activeProfileId),
+      ),
+    );
   }
 
   // Initialize core manager
-  ConfigTemplate.setDefaultQuicRejectPolicy(savedQuicPolicy);
   CoreManager.instance;
 
   // ── Global hotkeys (desktop) ─────────────────────────────────────────────
@@ -329,48 +438,58 @@ Future<void> _bootstrap() async {
     await hotKeyManager.unregisterAll();
   }
 
-  runApp(ProviderScope(
-    overrides: [
-      themeProvider.overrideWith((ref) => savedTheme),
-      languageProvider.overrideWith((ref) => savedLanguage),
-      accentColorProvider.overrideWith((ref) => savedAccentColor),
-      subSyncIntervalProvider.overrideWith((ref) => savedSubSyncInterval),
-      preloadedProfileIdProvider.overrideWithValue(savedProfileId),
-      routingModeProvider.overrideWith((ref) => savedRoutingMode),
-      connectionModeProvider.overrideWith((ref) => savedConnectionMode),
-      quicPolicyProvider.overrideWith((ref) => savedQuicPolicy),
-      desktopTunStackProvider.overrideWith((ref) => savedDesktopTunStack),
-      logLevelProvider.overrideWith((ref) => savedLogLevel),
-      autoConnectProvider.overrideWith((ref) => savedAutoConnect),
-      userStoppedProvider.overrideWith((ref) => savedManualStopped),
-      systemProxyOnConnectProvider.overrideWith((ref) => savedSystemProxy),
-      testUrlProvider.overrideWith((ref) => savedTestUrl),
-      closeBehaviorProvider.overrideWith((ref) => savedCloseBehavior),
-      toggleHotkeyProvider.overrideWith((ref) => savedToggleHotkey),
-      delayResultsProvider.overrideWith((ref) => savedDelayResults),
-      expandedGroupNamesProvider.overrideWith((ref) => <String>{}),
-      initialTabIndexProvider.overrideWithValue(savedTabIndex),
-      hasSeenOnboardingProvider.overrideWith((ref) => savedOnboarding),
-      onboardingPersonaProvider.overrideWith((ref) => savedPersona),
-      initialBuiltTabsProvider.overrideWithValue(savedBuiltTabs),
-      tileShowNodeInfoProvider.overrideWith((ref) => savedTileShowNodeInfo),
-      // Pre-loaded auth state: eliminates blank screen from async AuthNotifier._init()
-      preloadedAuthStateProvider.overrideWithValue(
-        (savedToken != null && savedToken.isNotEmpty)
-            ? AuthState(
-                status: AuthStatus.loggedIn,
-                token: savedToken,
-                userProfile: savedProfile,
-              )
-            : const AuthState(status: AuthStatus.loggedOut),
-      ),
-    ],
-    // TranslationProvider feeds slang's `Translations.of(context)` —
-    // required for the new `S.of(context)` adapter (which forwards to
-    // slang's `t`). Sits inside ProviderScope so Riverpod's languageProvider
-    // can still drive the locale change via S.setLanguage().
-    child: TranslationProvider(child: const YueLinkApp()),
-  ));
+  runApp(
+    ProviderScope(
+      overrides: [
+        themeProvider.overrideWith((ref) => savedTheme),
+        languageProvider.overrideWith((ref) => savedLanguage),
+        accentColorProvider.overrideWith((ref) => savedAccentColor),
+        subSyncIntervalProvider.overrideWith((ref) => savedSubSyncInterval),
+        preloadedProfileIdProvider.overrideWithValue(savedProfileId),
+        routingModeProvider.overrideWith((ref) => savedRoutingMode),
+        connectionModeProvider.overrideWith((ref) => savedConnectionMode),
+        quicPolicyProvider.overrideWith((ref) => savedQuicPolicy),
+        desktopTunStackProvider.overrideWith((ref) => savedDesktopTunStack),
+        logLevelProvider.overrideWith((ref) => savedLogLevel),
+        autoConnectProvider.overrideWith((ref) => savedAutoConnect),
+        userStoppedProvider.overrideWith((ref) => savedManualStopped),
+        systemProxyOnConnectProvider.overrideWith((ref) => savedSystemProxy),
+        testUrlProvider.overrideWith((ref) => savedTestUrl),
+        closeBehaviorProvider.overrideWith((ref) => savedCloseBehavior),
+        toggleHotkeyProvider.overrideWith((ref) => savedToggleHotkey),
+        delayResultsProvider.overrideWith((ref) => savedDelayResults),
+        expandedGroupNamesProvider.overrideWith((ref) => <String>{}),
+        initialTabIndexProvider.overrideWithValue(savedTabIndex),
+        hasSeenOnboardingProvider.overrideWith((ref) => savedOnboarding),
+        onboardingPersonaProvider.overrideWith((ref) => savedPersona),
+        initialBuiltTabsProvider.overrideWithValue(savedBuiltTabs),
+        tileShowNodeInfoProvider.overrideWith((ref) => savedTileShowNodeInfo),
+        // Pre-loaded auth state: eliminates blank screen from async
+        // AuthNotifier._init() in the common case. v1.0.22 P0-4b: when
+        // bootstrap couldn't read auth state confidently (timeout or
+        // throw), pass `null` so AuthNotifier.build() falls into _init()
+        // for a fresh attempt — without this, a transient SecureStorage
+        // hang at cold start would cache a permanent "loggedOut" view of
+        // a user who actually has a token on disk.
+        preloadedAuthStateProvider.overrideWithValue(
+          authBootstrapUncertain
+              ? null
+              : (savedToken != null && savedToken.isNotEmpty)
+                  ? AuthState(
+                      status: AuthStatus.loggedIn,
+                      token: savedToken,
+                      userProfile: savedProfile,
+                    )
+                  : const AuthState(status: AuthStatus.loggedOut),
+        ),
+      ],
+      // TranslationProvider feeds slang's `Translations.of(context)` —
+      // required for the new `S.of(context)` adapter (which forwards to
+      // slang's `t`). Sits inside ProviderScope so Riverpod's languageProvider
+      // can still drive the locale change via S.setLanguage().
+      child: TranslationProvider(child: const YueLinkApp()),
+    ),
+  );
 }
 
 class YueLinkApp extends ConsumerStatefulWidget {
@@ -381,8 +500,8 @@ class YueLinkApp extends ConsumerStatefulWidget {
 }
 
 class _YueLinkAppState extends ConsumerState<YueLinkApp>
-    with TrayListener, WindowListener, WidgetsBindingObserver {
-  bool _trayInitialized = false;
+    with WindowListener, WidgetsBindingObserver {
+  late final AppTrayController _tray;
   final _appLinks = AppLinks();
   StreamSubscription<Uri>? _appLinksSub;
 
@@ -396,6 +515,8 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
   ProviderSubscription? _exitIpSub;
   ProviderSubscription? _tileNodeInfoSub;
   ProviderSubscription? _delayResetSub;
+  ProviderSubscription? _routingModeTraySub;
+  ProviderSubscription? _connectionModeTraySub;
 
   /// Guard to prevent onWindowClose from interfering during programmatic quit.
   bool _isQuitting = false;
@@ -415,6 +536,19 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
   @override
   void initState() {
     super.initState();
+    _tray = AppTrayController(
+      ref: ref,
+      showMainWindow: _showMainWindow,
+      loadSelectedProfileConfig: () async {
+        // Mirrors the old _handleTrayConnect lookup: return null when
+        // there's no active profile OR when loading it fails; the
+        // controller treats null as "show main window".
+        final activeId = ref.read(activeProfileIdProvider);
+        if (activeId == null) return null;
+        return ProfileService.loadConfig(activeId);
+      },
+      onQuit: _handleQuit,
+    );
     WidgetsBinding.instance.addObserver(this);
     if (Platform.isAndroid || Platform.isIOS) {
       _setupVpnRevocationListener();
@@ -427,7 +561,7 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
       windowManager.setPreventClose(true);
     }
     if (Platform.isMacOS || Platform.isWindows) {
-      _initTray();
+      _tray.init();
     }
     // Auto-connect and expiry check after first frame is rendered
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -473,7 +607,7 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
     // Keep S.current in sync with language provider
     _langSub = ref.listenManual(languageProvider, (_, lang) {
       S.setLanguage(lang);
-      _updateTrayMenu(
+      _tray.updateMenu(
         status: ref.read(coreStatusProvider),
         groups: ref.read(proxyGroupsProvider),
       );
@@ -481,10 +615,7 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
 
     // Sync tray menu with connection state; notify on unexpected disconnect
     _statusSub = ref.listenManual(coreStatusProvider, (prev, next) {
-      _updateTrayMenu(
-        status: next,
-        groups: ref.read(proxyGroupsProvider),
-      );
+      _tray.updateMenu(status: next, groups: ref.read(proxyGroupsProvider));
       // Update Android Quick Settings tile state (includes transition
       // flag for "连接中..." / "断开中..." intermediate UX).
       if (Platform.isAndroid) {
@@ -500,9 +631,27 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
 
     // Sync tray proxy submenu when proxy groups change
     _groupsSub = ref.listenManual(proxyGroupsProvider, (_, groups) {
-      _updateTrayMenu(
+      _tray.updateMenu(status: ref.read(coreStatusProvider), groups: groups);
+    });
+
+    // v1.0.22 P2-2: refresh tray statusLine when routing/connection
+    // mode changes. The tooltip + menu header now encode both modes
+    // (e.g. "YueLink · 已连接 · 规则 · TUN · HK-1") so the user can
+    // identify the active configuration without opening the main
+    // window — but only if the tray repaints on each switch.
+    _routingModeTraySub = ref.listenManual(routingModeProvider, (prev, next) {
+      if (prev == next) return;
+      _tray.updateMenu(
         status: ref.read(coreStatusProvider),
-        groups: groups,
+        groups: ref.read(proxyGroupsProvider),
+      );
+    });
+    _connectionModeTraySub =
+        ref.listenManual(connectionModeProvider, (prev, next) {
+      if (prev == next) return;
+      _tray.updateMenu(
+        status: ref.read(coreStatusProvider),
+        groups: ref.read(proxyGroupsProvider),
       );
     });
 
@@ -533,25 +682,25 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
     // proxy conflict) and core/managers/core_lifecycle_manager (stop
     // finally). Those call sites now rely on this one listener so the
     // two core/managers files can drop their modules/nodes imports.
-    _delayResetSub = ref.listenManual<CoreStatus>(
-      coreStatusProvider,
-      (prev, next) {
-        if (prev != null &&
-            prev != CoreStatus.stopped &&
-            next == CoreStatus.stopped) {
-          ref.read(delayResultsProvider.notifier).state = {};
-          ref.read(delayTestingProvider.notifier).state = {};
-        }
-      },
-    );
+    _delayResetSub = ref.listenManual<CoreStatus>(coreStatusProvider, (
+      prev,
+      next,
+    ) {
+      if (prev != null &&
+          prev != CoreStatus.stopped &&
+          next == CoreStatus.stopped) {
+        ref.read(delayResultsProvider.notifier).state = {};
+        ref.read(delayTestingProvider.notifier).state = {};
+      }
+    });
 
     // Android tile subtitle refresh on exit-IP resolution and on the
     // show-node-info toggle. Both are cheap and idempotent.
     if (Platform.isAndroid) {
-      _exitIpSub = ref.listenManual(exitIpInfoProvider, (_, __) {
+      _exitIpSub = ref.listenManual(exitIpInfoProvider, (_, _) {
         _pushTileState();
       });
-      _tileNodeInfoSub = ref.listenManual(tileShowNodeInfoProvider, (_, __) {
+      _tileNodeInfoSub = ref.listenManual(tileShowNodeInfoProvider, (_, _) {
         _pushTileState();
       });
     }
@@ -587,8 +736,10 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
         try {
           final api = CoreManager.instance.api;
           if (!await api.isAvailable()) return;
-          debugPrint('[App] transport $prev→$now — flushing fake-ip + '
-              'closing connections');
+          debugPrint(
+            '[App] transport $prev→$now — flushing fake-ip + '
+            'closing connections',
+          );
           // Fire both in parallel; either one failing isn't fatal.
           await Future.wait<void>([
             api.flushFakeIpCache().then((_) {}).catchError((_) {}),
@@ -713,11 +864,13 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
     _exitIpSub?.close();
     _tileNodeInfoSub?.close();
     _delayResetSub?.close();
+    _routingModeTraySub?.close();
+    _connectionModeTraySub?.close();
     TileService.onToggleRequested = null;
     TileService.onOpenPreferences = null;
     WidgetsBinding.instance.removeObserver(this);
     _appLinksSub?.cancel();
-    if (_trayInitialized) trayManager.removeListener(this);
+    _tray.dispose();
     if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
       windowManager.removeListener(this);
     }
@@ -756,7 +909,8 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
       // duplicate stream invalidations, state flip-flop).
       if (Platform.isAndroid && !_initialRecoveryDone) {
         debugPrint(
-            '[AppLifecycle] skipping resumed — initial recovery pending');
+          '[AppLifecycle] skipping resumed — initial recovery pending',
+        );
         return;
       }
       // Second-level guard: coalesce overlapping resume events. If a handler
@@ -832,26 +986,50 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
       // still-alive mihomo API and pull the UI back to "running" even
       // though the user had explicitly disconnected, leaving them with a
       // "connected" indicator and a dead network.
-      final persistedManualStopped =
-          await SettingsService.getManualStopped();
+      final persistedManualStopped = await SettingsService.getManualStopped();
       if (persistedManualStopped && !ref.read(userStoppedProvider)) {
         // Hydrate the in-memory provider from persistence so subsequent
         // listeners (heartbeat, VPN revocation callback) also respect it.
         ref.read(userStoppedProvider.notifier).state = true;
       }
       if (ref.read(userStoppedProvider) || persistedManualStopped) {
-        debugPrint('[AppLifecycle] resumed in user-stopped state — '
-            'skipping health recovery '
-            '(persisted=$persistedManualStopped, '
-            'provider=${ref.read(userStoppedProvider)})');
+        debugPrint(
+          '[AppLifecycle] resumed in user-stopped state — '
+          'skipping health recovery '
+          '(persisted=$persistedManualStopped, '
+          'provider=${ref.read(userStoppedProvider)})',
+        );
         return;
       }
       ref.read(recoveryInProgressProvider.notifier).state = true;
       try {
         final health = await RecoveryManager.checkCoreHealth();
+        // v1.0.22 P0-1: TOCTOU re-check. Between the await above and the
+        // state mutations below, the user may have tapped Stop — the
+        // first guard at the top of this method only covers the pre-await
+        // window. Without this re-check the recovery branch overwrites
+        // `coreStatusProvider` to running and clears `userStoppedProvider`,
+        // resurrecting the very bug v1.0.21 P0-1 was supposed to fix:
+        // UI shows "connected" while TUN fd / system proxy are gone.
+        //
+        // Re-read both the in-memory provider AND the persisted flag —
+        // either becoming true between the two checks means the user
+        // stopped during the await, and we must not promote to running.
+        final userStoppedNow = ref.read(userStoppedProvider);
+        final persistedNow = await SettingsService.getManualStopped();
+        if (userStoppedNow || persistedNow) {
+          debugPrint(
+            '[AppLifecycle] manual stop landed during health-check await — '
+            'aborting recovery (provider=$userStoppedNow, '
+            'persisted=$persistedNow)',
+          );
+          ref.read(recoveryInProgressProvider.notifier).state = false;
+          return;
+        }
         if (health.alive && health.apiOk) {
           debugPrint(
-              '[AppLifecycle] core alive but Dart state was $status — recovering');
+            '[AppLifecycle] core alive but Dart state was $status — recovering',
+          );
           // Restore Dart state + ports to match reality
           await manager.markRunning();
           // Invalidate streams BEFORE setting status to running.
@@ -869,12 +1047,21 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
           ref.read(userStoppedProvider.notifier).state = false;
           ref.read(proxyGroupsProvider.notifier).refresh();
         }
-        // Note: recovery guard stays up — cleared after _maybeAutoConnect
-        // in the post-frame callback, or at the end of this method for
-        // subsequent resume calls (not engine-create).
+        // Note: on Android the recovery guard stays up so the post-frame
+        // `_maybeAutoConnect()` callback can clear it after the cold-start
+        // engine-recreate path completes. Other platforms don't take that
+        // path on resume, so the `finally` below drops the guard
+        // unconditionally — without it, a normal-but-no-mutation resume
+        // (e.g. health check returns alive=false on iOS/desktop, which
+        // skips the recovery branch) would leave the guard stuck and
+        // suppress every subsequent heartbeat tick.
       } catch (e) {
         debugPrint('[AppLifecycle] recovery check failed: $e');
         ref.read(recoveryInProgressProvider.notifier).state = false;
+      } finally {
+        if (!Platform.isAndroid) {
+          ref.read(recoveryInProgressProvider.notifier).state = false;
+        }
       }
       return;
     }
@@ -898,7 +1085,7 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
         // Refresh proxy groups in case core reloaded config
         ref.read(proxyGroupsProvider.notifier).refresh();
         // v1.0.21 hotfix P0-2: system-proxy tamper detection on resume.
-        // If the user flipped over to v2rayN / vr2 / any other proxy tool
+        // If the user flipped over to v2rayN / Clash Verge / any other proxy tool
         // while YueLink was backgrounded, the 60 s verify cache would
         // leave the heartbeat unable to notice for up to that TTL —
         // resulting in the "connected but no network" UX. force:true
@@ -925,11 +1112,19 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
       final port = CoreManager.instance.mixedPort;
       final ok = await SystemProxyManager.verify(port, force: true);
       if (ok == false) {
-        debugPrint('[AppLifecycle] systemProxy tampered on resume '
-            '(expected 127.0.0.1:$port) — restoring');
-        EventLog.write('[AppLifecycle] systemProxy tamper detected on '
-            'resume port=$port');
-        final restored = await SystemProxyManager.set(port);
+        debugPrint(
+          '[AppLifecycle] systemProxy tampered on resume '
+          '(expected 127.0.0.1:$port) — restoring',
+        );
+        EventLog.write(
+          '[AppLifecycle] systemProxy tamper detected on '
+          'resume port=$port',
+        );
+        // v1.0.22 P1-4: retry on transient failure (1.5 s × 3) so a
+        // settle race (DPAPI not yet warm / networksetup briefly
+        // racing AV) doesn't drop the user into a 30 s wait for the
+        // next heartbeat round to retry.
+        final restored = await SystemProxyManager.setWithRetry(port);
         if (!restored) {
           AppNotifier.warning(S.current.errSystemProxyFailed);
         }
@@ -970,15 +1165,19 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
     // Linux: global hotkeys unreliable under Wayland — skip silently
     if (Platform.isLinux) {
       debugPrint(
-          '[Hotkey] Skipping global hotkey on Linux (Wayland not supported)');
+        '[Hotkey] Skipping global hotkey on Linux (Wayland not supported)',
+      );
       return;
     }
     try {
       final stored = ref.read(toggleHotkeyProvider);
       final toggleKey = parseStoredHotkey(stored);
-      await hotKeyManager.register(toggleKey, keyDownHandler: (_) {
-        _handleTrayToggle();
-      });
+      await hotKeyManager.register(
+        toggleKey,
+        keyDownHandler: (_) {
+          _tray.handleToggle();
+        },
+      );
     } catch (e) {
       // Hotkey registration can fail if another app holds the shortcut
       debugPrint('[App] hotkey registration: $e');
@@ -990,9 +1189,12 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
     try {
       await hotKeyManager.unregisterAll();
       final toggleKey = parseStoredHotkey(newHotkeyStr);
-      await hotKeyManager.register(toggleKey, keyDownHandler: (_) {
-        _handleTrayToggle();
-      });
+      await hotKeyManager.register(
+        toggleKey,
+        keyDownHandler: (_) {
+          _tray.handleToggle();
+        },
+      );
     } catch (e) {
       debugPrint('[App] hotkey re-registration: $e');
     }
@@ -1005,13 +1207,16 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
     // If programmatic quit is in progress, don't interfere
     if (_isQuitting) return;
 
-    // Linux has no system tray — always quit on close
-    if (Platform.isLinux) {
-      await _handleQuit();
-      return;
-    }
-    final behavior = ref.read(closeBehaviorProvider);
-    if (behavior == 'exit') {
+    // v1.0.22 P0-3: delegate the quit-vs-hide decision to the pure
+    // policy helper. Adds a Windows + core-running carve-out so the
+    // Win11 taskbar's right-click → Close window does not silently
+    // hide while the VPN keeps running (the "无法退出" report).
+    final shouldQuit = shouldQuitOnWindowClose(
+      platform: Platform.operatingSystem,
+      status: ref.read(coreStatusProvider),
+      behavior: ref.read(closeBehaviorProvider),
+    );
+    if (shouldQuit) {
       await _handleQuit();
     } else {
       await windowManager.hide();
@@ -1020,347 +1225,10 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
 
   // ── Tray (Desktop Quick Control) ─────────────────────────────────
   //
-  // Provides a unified menu bar (macOS) / system tray (Windows) control
-  // center with: status display, connect/disconnect, best node, recent
-  // nodes quick switch, basic stats, subscription update, and quit.
-  //
-  // All actions route through existing CoreManager / CoreActions /
-  // ProxyGroupsNotifier — no independent connection logic here.
-
-  Future<void> _initTray() async {
-    try {
-      await trayManager.setIcon(
-        Platform.isWindows
-            // Squircle-rounded brand icon (indigo). A white-on-transparent
-            // variant disappears on light Windows tray themes — use the
-            // colored brand icon. Multi-size .ico generated by
-            // scripts/round_appicon.py.
-            ? 'assets/app_icon_tray.ico'
-            : 'assets/tray_icon_macos.png',
-      );
-      _trayInitialized = true;
-      await _updateTrayMenu(
-        status: CoreStatus.stopped,
-        groups: const [],
-      );
-      trayManager.addListener(this);
-    } catch (e) {
-      debugPrint('[Tray] init failed: $e');
-    }
-  }
-
-  Future<void> _updateTrayMenu({
-    required CoreStatus status,
-    List<ProxyGroup>? groups,
-  }) async {
-    if (!_trayInitialized) return;
-    final s = S.current;
-    final isRunning = status == CoreStatus.running;
-    final isConnecting = status == CoreStatus.starting;
-    final auth = ref.read(authProvider);
-    final isLoggedIn = auth.isLoggedIn;
-
-    // ── Status line ──
-    String statusLine;
-    if (!isLoggedIn) {
-      statusLine = 'YueLink · 未登录';
-    } else if (isConnecting) {
-      statusLine = 'YueLink · 连接中...';
-    } else if (isRunning) {
-      final currentNode = _getCurrentNodeName(groups);
-      statusLine = currentNode != null
-          ? 'YueLink · 已连接 · ${_truncate(currentNode, 16)}'
-          : 'YueLink · 已连接';
-    } else {
-      statusLine = 'YueLink · 未连接';
-    }
-
-    // Update tooltip
-    trayManager.setToolTip(statusLine).ignore();
-
-    // ── Build menu items ──
-    final items = <MenuItem>[];
-
-    // 1. Status header (disabled label)
-    items.add(MenuItem(key: '_status', label: statusLine));
-    items.add(MenuItem.separator());
-
-    // 2. Connect / Disconnect
-    if (isConnecting) {
-      items.add(MenuItem(key: '_connecting', label: '连接中，请稍候...'));
-    } else if (isRunning) {
-      items.add(MenuItem(key: 'disconnect', label: s.trayDisconnect));
-      items.add(MenuItem(key: 'best_node', label: '连接最佳节点'));
-    } else {
-      items.add(MenuItem(key: 'connect', label: s.trayConnect));
-      items.add(MenuItem(key: 'best_node', label: '连接最佳节点'));
-    }
-    items.add(MenuItem.separator());
-
-    // 3. Recent nodes (max 5)
-    final recentNodes = ref.read(recentNodesProvider);
-    if (recentNodes.isNotEmpty) {
-      final recentItems = <MenuItem>[];
-      for (var i = 0; i < recentNodes.length; i++) {
-        final node = recentNodes[i];
-        recentItems.add(MenuItem(
-          key: 'recent_$i',
-          label: _truncate(node.name, 20),
-        ));
-      }
-      items.add(MenuItem.submenu(
-        label: '最近节点',
-        submenu: Menu(items: recentItems),
-      ));
-    }
-
-    // 4. Proxy groups quick switch (when running)
-    if (isRunning && groups != null && groups.isNotEmpty) {
-      final proxySubMenus = <MenuItem>[];
-      final selectors = groups
-          .where((g) => g.type.toLowerCase() == 'selector')
-          .take(3)
-          .toList();
-      for (var gi = 0; gi < selectors.length; gi++) {
-        final group = selectors[gi];
-        final nodeItems = <MenuItem>[];
-        final nodes = group.all.take(10).toList();
-        for (var ni = 0; ni < nodes.length; ni++) {
-          final node = nodes[ni];
-          nodeItems.add(MenuItem(
-            key: 'proxy_${gi}_$ni',
-            label: node == group.now ? '✓ $node' : '  $node',
-          ));
-        }
-        if (nodeItems.isNotEmpty) {
-          proxySubMenus.add(MenuItem.submenu(
-            label: group.name,
-            submenu: Menu(items: nodeItems),
-          ));
-        }
-      }
-      if (proxySubMenus.isNotEmpty) {
-        items.add(MenuItem.submenu(
-          label: s.trayProxies,
-          submenu: Menu(items: proxySubMenus),
-        ));
-      }
-    }
-
-    // 4b. Mode quick-switch (v1.0.21 hotfix P2-6).
-    // Was missing entirely in v1.0.20 — users asked for tray-level
-    // routing (rule/global/direct) and transport (systemProxy/TUN)
-    // switches so they don't have to open the main window for what
-    // should be a one-click change. Logic goes through ModeActions
-    // so the HeroCard pill and this menu can never drift apart.
-    final currentRoutingMode = ref.read(routingModeProvider);
-    final routingItems = <MenuItem>[
-      MenuItem(
-        key: 'mode_route_rule',
-        label: '${currentRoutingMode == 'rule' ? '✓ ' : '  '}${s.routeModeRule}',
-      ),
-      MenuItem(
-        key: 'mode_route_global',
-        label:
-            '${currentRoutingMode == 'global' ? '✓ ' : '  '}${s.routeModeGlobal}',
-      ),
-      MenuItem(
-        key: 'mode_route_direct',
-        label:
-            '${currentRoutingMode == 'direct' ? '✓ ' : '  '}${s.routeModeDirect}',
-      ),
-    ];
-    // Transport (systemProxy/TUN) — desktop only; mobile is always VPN/TUN
-    // regardless of this setting so the menu would be misleading there.
-    final transportItems = <MenuItem>[];
-    if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
-      final currentConnMode = ref.read(connectionModeProvider);
-      transportItems.addAll([
-        MenuItem.separator(),
-        MenuItem(
-          key: 'mode_conn_systemProxy',
-          label:
-              '${currentConnMode == 'systemProxy' ? '✓ ' : '  '}系统代理',
-        ),
-        MenuItem(
-          key: 'mode_conn_tun',
-          label: '${currentConnMode == 'tun' ? '✓ ' : '  '}TUN',
-        ),
-      ]);
-    }
-    items.add(MenuItem.submenu(
-      label: '模式',
-      submenu: Menu(items: [...routingItems, ...transportItems]),
-    ));
-
-    // 5. Basic status info (when running)
-    if (isRunning) {
-      items.add(MenuItem.separator());
-      final mode = ref.read(connectionModeProvider);
-      final modeName = mode == 'tun' ? 'TUN' : '系统代理';
-      final profile = auth.userProfile;
-      final statusItems = <MenuItem>[
-        MenuItem(key: '_mode', label: '模式：$modeName'),
-      ];
-      if (profile != null && profile.transferEnable != null) {
-        final used = (profile.uploadUsed ?? 0) + (profile.downloadUsed ?? 0);
-        final total = profile.transferEnable!;
-        final usedGb = (used / 1073741824).toStringAsFixed(1);
-        final totalGb = (total / 1073741824).toStringAsFixed(0);
-        statusItems.add(MenuItem(
-          key: '_traffic',
-          label: '流量：$usedGb GB / $totalGb GB',
-        ));
-      }
-      items.add(MenuItem.submenu(
-        label: '基础状态',
-        submenu: Menu(items: statusItems),
-      ));
-    }
-
-    items.add(MenuItem.separator());
-
-    // 6. Actions
-    items.add(MenuItem(key: 'show', label: s.trayShowWindow));
-    items.add(MenuItem(key: 'sync', label: '更新订阅'));
-    items.add(MenuItem.separator());
-    items.add(MenuItem(key: 'quit', label: s.trayQuit));
-
-    try {
-      await trayManager.setContextMenu(Menu(items: items));
-    } catch (e) {
-      debugPrint('[Tray] menu update: $e');
-    }
-  }
-
-  /// Get the currently selected node name from the first selector group.
-  String? _getCurrentNodeName(List<ProxyGroup>? groups) {
-    if (groups == null || groups.isEmpty) return null;
-    final selector =
-        groups.where((g) => g.type.toLowerCase() == 'selector').firstOrNull;
-    return selector?.now;
-  }
-
-  /// Truncate a string for tray display.
-  static String _truncate(String s, int max) =>
-      s.length <= max ? s : '${s.substring(0, max)}…';
-
-  // Resolves a proxy_gi_ni key to (groupName, nodeName) using current groups.
-  (String, String)? _resolveProxyKey(String key) {
-    final parts = key.split('_');
-    if (parts.length != 3) return null;
-    final gi = int.tryParse(parts[1]);
-    final ni = int.tryParse(parts[2]);
-    if (gi == null || ni == null) return null;
-    final groups = ref
-        .read(proxyGroupsProvider)
-        .where((g) => g.type.toLowerCase() == 'selector')
-        .take(3)
-        .toList();
-    if (gi >= groups.length) return null;
-    final group = groups[gi];
-    final nodes = group.all.take(10).toList();
-    if (ni >= nodes.length) return null;
-    return (group.name, nodes[ni]);
-  }
-
-  @override
-  void onTrayIconMouseDown() {
-    if (Platform.isMacOS) {
-      // macOS: left-click shows menu (standard menu bar behavior)
-      trayManager.popUpContextMenu();
-    } else {
-      // Windows: left-click toggles window
-      _showMainWindow();
-    }
-  }
-
-  @override
-  void onTrayIconRightMouseDown() {
-    trayManager.popUpContextMenu();
-  }
-
-  @override
-  void onTrayMenuItemClick(MenuItem menuItem) {
-    final key = menuItem.key ?? '';
-    // Write every tray click to event.log so if a user reports "Quit
-    // doesn't exit" we can confirm from the log file whether the
-    // callback actually fired (and with what key).
-    debugPrint('[Tray] menu click: key="$key" label="${menuItem.label}"');
-    try {
-      EventLog.write('[Tray] click key=$key label=${menuItem.label}');
-    } catch (_) {}
-
-    // Unified quit path — _handleQuit awaits the system-proxy clear (critical
-    // on macOS, where fire-and-forget would have exit(0) race past the
-    // networksetup subprocesses), and carries its own 3s hard-cap safety
-    // timer so this can't hang. Previous fire-and-forget implementation
-    // was dropping the clear entirely on fast machines.
-    if (key == 'quit' || menuItem.label == S.current.trayQuit) {
-      unawaited(_handleQuit());
-      return;
-    }
-
-    // All other tray items continue async.
-    _dispatchTrayMenuItemAsync(key);
-  }
-
-  Future<void> _dispatchTrayMenuItemAsync(String key) async {
-    // Status header: the top "YueLink · 已连接 · <node>" line. Treat a click
-    // on it as a shortcut to the main window so users don't have to scroll
-    // down to the explicit "显示窗口" item.
-    if (key == '_status') {
-      await _showMainWindow();
-      return;
-    }
-    // Ignore other disabled status labels (mode / traffic submenu entries).
-    if (key.startsWith('_')) return;
-
-    if (key.startsWith('proxy_')) {
-      final resolved = _resolveProxyKey(key);
-      if (resolved != null) {
-        ref
-            .read(proxyGroupsProvider.notifier)
-            .changeProxy(resolved.$1, resolved.$2);
-      }
-      return;
-    }
-
-    if (key.startsWith('recent_')) {
-      final idx = int.tryParse(key.substring(7));
-      if (idx != null) await _handleRecentNodeSwitch(idx);
-      return;
-    }
-
-    // v1.0.21 hotfix P2-6: tray mode quick-switch. Key shape:
-    //   mode_route_{rule|global|direct}
-    //   mode_conn_{systemProxy|tun}
-    // Dispatch to the shared ModeActions so behaviour matches the
-    // HeroCard pill exactly.
-    if (key.startsWith('mode_route_')) {
-      final mode = key.substring('mode_route_'.length);
-      await ModeActions.setRoutingMode(ref, mode);
-      return;
-    }
-    if (key.startsWith('mode_conn_')) {
-      final mode = key.substring('mode_conn_'.length);
-      await ModeActions.setConnectionMode(ref, mode);
-      return;
-    }
-
-    switch (key) {
-      case 'connect':
-        await _handleTrayConnect();
-      case 'disconnect':
-        await _handleTrayDisconnect();
-      case 'best_node':
-        await _handleBestNode();
-      case 'show':
-        await _showMainWindow();
-      case 'sync':
-        await _handleSyncSubscription();
-    }
-  }
+  // All tray icon / menu / dispatch logic lives in
+  // lib/shared/desktop/app_tray_controller.dart. Connect/disconnect routes
+  // through the same CoreManager / CoreActions / ProxyGroupsNotifier paths
+  // the main UI uses — no independent connection logic.
 
   Future<void> _showMainWindow() async {
     try {
@@ -1368,81 +1236,6 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
       await windowManager.focus();
     } catch (e) {
       debugPrint('[Tray] show window: $e');
-    }
-  }
-
-  Future<void> _handleTrayConnect() async {
-    final status = ref.read(coreStatusProvider);
-    if (status != CoreStatus.stopped) return; // debounce
-    final actions = ref.read(coreActionsProvider);
-    final isMock = ref.read(isMockModeProvider);
-
-    if (isMock) {
-      await actions.start('');
-    } else {
-      final activeId = ref.read(activeProfileIdProvider);
-      if (activeId == null) {
-        await _showMainWindow();
-        return;
-      }
-      final config = await ProfileService.loadConfig(activeId);
-      if (config == null) return;
-      await actions.start(config);
-    }
-  }
-
-  Future<void> _handleTrayDisconnect() async {
-    final status = ref.read(coreStatusProvider);
-    if (status != CoreStatus.running) return; // debounce
-    await ref.read(coreActionsProvider).stop();
-  }
-
-  Future<void> _handleTrayToggle() async {
-    final status = ref.read(coreStatusProvider);
-    if (status == CoreStatus.running) {
-      await _handleTrayDisconnect();
-    } else if (status == CoreStatus.stopped) {
-      await _handleTrayConnect();
-    }
-  }
-
-  Future<void> _handleBestNode() async {
-    // Open main window so the user can see the result; smart select
-    // requires the full UI context and running core.
-    await _showMainWindow();
-  }
-
-  Future<void> _handleRecentNodeSwitch(int index) async {
-    final recentNodes = ref.read(recentNodesProvider);
-    if (index >= recentNodes.length) return;
-    final node = recentNodes[index];
-
-    // If running, switch node in the group
-    if (ref.read(coreStatusProvider) == CoreStatus.running) {
-      try {
-        await CoreManager.instance.api.changeProxy(node.group, node.name);
-        ref.read(proxyGroupsProvider.notifier).refresh();
-        AppNotifier.success('已切换到 ${node.name}');
-      } catch (e) {
-        debugPrint('[Tray] switch recent node: $e');
-      }
-    } else {
-      // Not running — start with current profile then the node will be used
-      await _handleTrayConnect();
-    }
-  }
-
-  Future<void> _handleSyncSubscription() async {
-    final auth = ref.read(authProvider);
-    if (!auth.isLoggedIn) {
-      await _showMainWindow();
-      return;
-    }
-    try {
-      await ref.read(authProvider.notifier).syncSubscription();
-      AppNotifier.success('订阅更新成功');
-    } catch (e) {
-      AppNotifier.error('订阅更新失败');
     }
   }
 
@@ -1467,12 +1260,20 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
         // Isolate spawn itself failed — fall back to a Dart Timer.
         // Worse safety net than the isolate (same jam risk) but better
         // than nothing; at least on a healthy event loop it still fires.
-        debugPrint('[Quit] watchdog isolate spawn failed: $e — '
-            'falling back to Dart Timer');
+        debugPrint(
+          '[Quit] watchdog isolate spawn failed: $e — '
+          'falling back to Dart Timer',
+        );
         Future.delayed(const Duration(seconds: 3), () {
           try {
             Process.killPid(pid, ProcessSignal.sigkill);
-          } catch (_) {}
+          } catch (e) {
+            EventLog.writeTagged(
+              'Quit',
+              'quit_kill_fallback_failed',
+              context: {'error': e},
+            );
+          }
           exit(0);
         });
       }
@@ -1481,33 +1282,70 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
     try {
       final status = ref.read(coreStatusProvider);
       if (status == CoreStatus.running) {
-        await ref.read(coreActionsProvider).stop().timeout(
-              const Duration(seconds: 2),
-              onTimeout: () {},
-            );
+        await ref
+            .read(coreActionsProvider)
+            .stop()
+            .timeout(const Duration(seconds: 2), onTimeout: () {});
       }
       try {
         _singleInstanceServer?.close();
-      } catch (_) {}
+      } catch (e) {
+        EventLog.writeTagged(
+          'Quit',
+          'quit_server_close_failed',
+          context: {'error': e},
+        );
+      }
       // System proxy clear is the user-visible correctness requirement —
       // must complete before exit, or the OS keeps routing traffic through
       // a dead mixed-port. 2s cap covers the slow macOS path (N network
       // services × 3 networksetup calls); the global 3s timer above is the
       // hard safety net if this itself hangs.
       try {
-        await CoreActions.clearSystemProxyStatic()
-            .timeout(const Duration(seconds: 2));
-      } catch (_) {}
+        await CoreActions.clearSystemProxyStatic().timeout(
+          const Duration(seconds: 2),
+        );
+      } catch (e) {
+        EventLog.writeTagged(
+          'Quit',
+          'quit_proxy_clear_failed',
+          context: {'error': e},
+        );
+      }
       try {
         trayManager.destroy();
-      } catch (_) {}
+      } catch (e) {
+        EventLog.writeTagged(
+          'Quit',
+          'quit_tray_destroy_failed',
+          context: {'error': e},
+        );
+      }
       try {
         windowManager.setPreventClose(false);
-      } catch (_) {}
+      } catch (e) {
+        EventLog.writeTagged(
+          'Quit',
+          'quit_prevent_close_failed',
+          context: {'error': e},
+        );
+      }
       try {
         windowManager.destroy();
-      } catch (_) {}
-    } catch (_) {}
+      } catch (e) {
+        EventLog.writeTagged(
+          'Quit',
+          'quit_window_destroy_failed',
+          context: {'error': e},
+        );
+      }
+    } catch (e) {
+      EventLog.writeTagged(
+        'Quit',
+        'quit_cleanup_failed',
+        context: {'error': e},
+      );
+    }
     exit(0);
   }
 
@@ -1545,12 +1383,14 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
       final config = await ProfileService.loadConfig(activeId);
       if (config == null) {
         debugPrint(
-            '[AutoConnect] config file not found for profile: $activeId');
+          '[AutoConnect] config file not found for profile: $activeId',
+        );
         return;
       }
 
       debugPrint(
-          '[AutoConnect] starting with profile: $activeId (${config.length} bytes)');
+        '[AutoConnect] starting with profile: $activeId (${config.length} bytes)',
+      );
       final ok = await ref.read(coreActionsProvider).start(config);
       debugPrint('[AutoConnect] result: $ok');
     } catch (e) {
@@ -1606,8 +1446,8 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
     // explicit: "subscribe to lifecycle, never rebuild me on emissions".
     // (Both are Provider<void>; ref.watch happened to work because null
     // == null, but ref.listen documents the contract clearly.)
-    ref.listen<void>(coreHeartbeatProvider, (_, __) {});
-    ref.listen<void>(subscriptionSyncProvider, (_, __) {});
+    ref.listen<void>(coreHeartbeatProvider, (_, _) {});
+    ref.listen<void>(subscriptionSyncProvider, (_, _) {});
 
     // DynamicColorBuilder pulls the OS palette (Material You) on Android 12+
     // and macOS, falling back to our seeded accentColor elsewhere. The
@@ -1616,7 +1456,8 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
     // so the app doesn't spontaneously change palette under them.
     return DynamicColorBuilder(
       builder: (lightDynamic, darkDynamic) {
-        final useDynamic = accentColor == YLColors.primary &&
+        final useDynamic =
+            accentColor == YLColors.primary &&
             lightDynamic != null &&
             darkDynamic != null;
         return MaterialApp(
@@ -1696,8 +1537,12 @@ class _AuthGate extends ConsumerWidget {
     final authState = ref.watch(authProvider);
     switch (authState.status) {
       case AuthStatus.unknown:
-        // With pre-loaded auth, this should never show. Keep as safety fallback.
-        return const SizedBox.shrink();
+        // v1.0.22 P0-4c: render a quiet centred loader instead of
+        // SizedBox.shrink(). With P0-4a's bootstrap timeout and
+        // P0-4b's _init() timeout/catch, unknown is guaranteed
+        // transient (max ~5 s on a wedged SecureStorage); showing
+        // anything beats a blank window.
+        return const AuthLoadingFallback();
       case AuthStatus.loggedOut:
         return const YueAuthPage();
       case AuthStatus.loggedIn:
@@ -1750,8 +1595,9 @@ class _MainShellState extends ConsumerState<MainShell> {
   @override
   void initState() {
     super.initState();
-    _currentIndex =
-        ref.read(initialTabIndexProvider).clamp(0, _pages.length - 1);
+    _currentIndex = ref
+        .read(initialTabIndexProvider)
+        .clamp(0, _pages.length - 1);
     // Restore previously visited tabs from persistence (Android process restore)
     final savedTabs = ref.read(initialBuiltTabsProvider);
     _builtTabs = <int, bool>{
@@ -1768,7 +1614,8 @@ class _MainShellState extends ConsumerState<MainShell> {
       if (next >= 0 && next < _pages.length) switchTab(next);
       // Use microtask so the notifier isn't mutated during the notification.
       Future.microtask(
-          () => ref.read(tileNavRequestProvider.notifier).state = null);
+        () => ref.read(tileNavRequestProvider.notifier).state = null,
+      );
     });
   }
 
@@ -1828,22 +1675,22 @@ class _MainShellState extends ConsumerState<MainShell> {
       (
         const Icon(Icons.home_outlined, size: 20),
         const Icon(Icons.home_filled, size: 20),
-        s.navHome
+        s.navHome,
       ),
       (
         const Icon(Icons.public_outlined, size: 20),
         const Icon(Icons.public, size: 20),
-        s.navProxies
+        s.navProxies,
       ),
       (
         const Icon(Icons.play_circle_outline, size: 20),
         const Icon(Icons.play_circle_filled, size: 20),
-        s.navEmby
+        s.navEmby,
       ),
       (
         const Icon(Icons.person_outline_rounded, size: 20),
         const Icon(Icons.person_rounded, size: 20),
-        s.navMine
+        s.navMine,
       ),
     ];
 
@@ -1862,8 +1709,9 @@ class _MainShellState extends ConsumerState<MainShell> {
       bottomNavigationBar: CupertinoTabBar(
         currentIndex: _currentIndex,
         onTap: (i) => switchTab(i),
-        backgroundColor:
-            Theme.of(context).colorScheme.surface.withValues(alpha: 0.85),
+        backgroundColor: Theme.of(
+          context,
+        ).colorScheme.surface.withValues(alpha: 0.85),
         border: Border(
           top: BorderSide(
             color: Theme.of(context).brightness == Brightness.dark
@@ -1928,22 +1776,27 @@ class _Sidebar extends StatelessWidget {
                     color: YLColors.primary,
                     borderRadius: BorderRadius.circular(YLRadius.xl),
                   ),
-                  child: const Icon(Icons.link_rounded,
-                      size: 20, color: Colors.white),
+                  child: const Icon(
+                    Icons.link_rounded,
+                    size: 20,
+                    color: Colors.white,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text('悦通',
-                        style: YLText.titleMedium.copyWith(
-                          fontWeight: FontWeight.w700,
-                        )),
-                    Text('AI · 全球加速',
-                        style: YLText.caption.copyWith(
-                          color: YLColors.zinc400,
-                        )),
+                    Text(
+                      '悦通',
+                      style: YLText.titleMedium.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    Text(
+                      'AI · 全球加速',
+                      style: YLText.caption.copyWith(color: YLColors.zinc400),
+                    ),
                   ],
                 ),
               ],
@@ -2028,19 +1881,23 @@ class _SidebarItem extends StatelessWidget {
                 : null,
             child: Row(
               children: [
-                Icon(icon,
-                    size: 16,
+                Icon(
+                  icon,
+                  size: 16,
+                  color: isActive
+                      ? (isDark ? Colors.white : YLColors.zinc900)
+                      : YLColors.zinc500,
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  label,
+                  style: YLText.body.copyWith(
+                    fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
                     color: isActive
                         ? (isDark ? Colors.white : YLColors.zinc900)
-                        : YLColors.zinc500),
-                const SizedBox(width: 10),
-                Text(label,
-                    style: YLText.body.copyWith(
-                      fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
-                      color: isActive
-                          ? (isDark ? Colors.white : YLColors.zinc900)
-                          : YLColors.zinc500,
-                    )),
+                        : YLColors.zinc500,
+                  ),
+                ),
               ],
             ),
           ),
@@ -2063,10 +1920,9 @@ class _EmbyTabPage extends ConsumerWidget {
     final s = S.of(context);
     final emby = ref.watch(embyProvider);
     return emby.when(
-      loading: () => const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      ),
-      error: (e, __) => Scaffold(
+      loading: () =>
+          const Scaffold(body: Center(child: CircularProgressIndicator())),
+      error: (e, _) => Scaffold(
         body: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -2084,9 +1940,7 @@ class _EmbyTabPage extends ConsumerWidget {
       ),
       data: (info) {
         if (info == null || !info.hasAccess) {
-          return Scaffold(
-            body: Center(child: Text(s.mineEmbyNoAccess)),
-          );
+          return Scaffold(body: Center(child: Text(s.mineEmbyNoAccess)));
         }
         if (info.hasNativeAccess) {
           return EmbyMediaPage(

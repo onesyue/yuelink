@@ -70,6 +70,21 @@ class StartupReport {
   final String? failedStep;
   final List<String> coreLogs;
 
+  /// Phase 1B relay block (extends the 1A shape):
+  ///   `{
+  ///     'injected':        bool,            // RelayInjector.apply outcome
+  ///     'targetCount':     int?,            // # of nodes wrapped
+  ///     'skipReason':      String?,         // closed set in [RelayApplyResult]
+  ///     'selectedKind':    String?,         // direct|officialCommercial|officialAccess
+  ///     'selectedReason':  String?,         // closed set in [RelaySelectReason]
+  ///   }`
+  ///
+  /// Null only before the first start. After A5a wired the selector into
+  /// every start path the block is always populated, even on cold runs
+  /// where direct was selected and no relay was injected — telemetry
+  /// downstream relies on the consistent shape.
+  final Map<String, dynamic>? relay;
+
   const StartupReport({
     required this.timestamp,
     required this.platform,
@@ -77,6 +92,7 @@ class StartupReport {
     required this.steps,
     this.failedStep,
     this.coreLogs = const [],
+    this.relay,
   });
 
   /// Human-readable summary: "[errorCode] step: message"
@@ -127,6 +143,7 @@ class StartupReport {
         'failedStep': failedStep,
         'steps': steps.map((s) => s.toJson()).toList(),
         'coreLogs': coreLogs,
+        if (relay != null) 'relay': relay,
       };
 
   factory StartupReport.fromJson(Map<String, dynamic> json) => StartupReport(
@@ -141,6 +158,9 @@ class StartupReport {
                 ?.map((e) => e as String)
                 .toList() ??
             const [],
+        relay: json['relay'] is Map
+            ? Map<String, dynamic>.from(json['relay'] as Map)
+            : null,
       );
 
   /// Save report to disk.

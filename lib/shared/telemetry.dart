@@ -70,6 +70,15 @@ class TelemetryEvents {
   // Errors
   static const crash = 'crash';
   static const networkError = 'network_error';
+
+  // Relay scheduler (Phase 1B). Field schemas live in
+  // `lib/core/relay/relay_telemetry.dart` — every emitter must build
+  // props through the helpers there so the closed-set field contract
+  // is enforced in one place.
+  static const relayProbe = 'relay_probe';
+  static const relaySelected = 'relay_selected';
+  static const relayFallback = 'relay_fallback';
+  static const networkProfileSample = 'network_profile_sample';
 }
 
 /// Anonymous, opt-in telemetry for understanding feature usage.

@@ -83,7 +83,9 @@ void main() {
       expect(out.results, isNull);
       expect(out.failureReason, DelayTestFailureReason.allTimeout);
       expect(out.recovered, isFalse);
-      expect(runCount, 3, reason: 'first + 2 recovery attempts');
+      expect(runCount, 4,
+          reason:
+              'P0-2 default backoff has 3 entries → first + 3 recovery attempts');
     });
   });
 
@@ -141,8 +143,8 @@ void main() {
     });
 
     test(
-        'exception on every attempt (first + 2 recoveries) → results null, '
-        'reason stays "exception"', () async {
+        'exception on every attempt (first + 3 recoveries with default '
+        'backoff) → results null, reason stays "exception"', () async {
       var runCount = 0;
       final out = await runGroupDelayWithRecovery(
         runTest: () async {
@@ -158,7 +160,8 @@ void main() {
       expect(out.results, isNull);
       expect(out.failureReason, DelayTestFailureReason.exception);
       expect(out.recovered, isFalse);
-      expect(runCount, 3);
+      expect(runCount, 4,
+          reason: 'P0-2: backoff[0..2] = 3 recovery rounds + 1 first attempt');
     });
 
     test(
@@ -258,11 +261,9 @@ void main() {
       expect(sleepCount, 3);
     });
 
-    test('sleep duration defaults to 1.5s (production spec)', () async {
+    test('first sleep duration defaults to 500ms (P0-2 backoff[0])',
+        () async {
       Duration? observed;
-      // Helper short-circuits on success; make first attempt succeed but
-      // assert sleep is never called — and separately test the default
-      // value by using a one-shot failure + one-shot recovery.
       await runGroupDelayWithRecovery(
         runTest: () async {
           // Never recover, so we exhaust retries and observe sleep.
@@ -276,7 +277,143 @@ void main() {
           observed = d;
         },
       );
-      expect(observed, const Duration(milliseconds: 1500));
+      expect(observed, const Duration(milliseconds: 500));
+    });
+  });
+
+  group('runGroupDelayWithRecovery — P0-2 healthcheck + backoff', () {
+    test('healthCheckProviders runs once per recovery round, AFTER flushes',
+        () async {
+      final order = <String>[];
+      var runCount = 0;
+
+      final out = await runGroupDelayWithRecovery(
+        runTest: () async {
+          runCount++;
+          order.add('runTest');
+          if (runCount == 1) throw Exception('first blew');
+          return {'A': 100};
+        },
+        flushConnections: () async => order.add('flushConn'),
+        flushFakeIp: () async => order.add('flushIp'),
+        healthCheckProviders: () async => order.add('healthcheck'),
+        isAllTimeout: _allTimeout,
+        sleep: (_) async => order.add('sleep'),
+      );
+
+      expect(out.recovered, isTrue);
+      // First runTest fails, then exactly one recovery round before success.
+      expect(order, [
+        'runTest',
+        'flushConn',
+        'flushIp',
+        'healthcheck',
+        'sleep',
+        'runTest',
+      ]);
+    });
+
+    test('healthCheckProviders default no-op preserves back-compat', () async {
+      // No `healthCheckProviders` argument — the existing all-timeout path
+      // must still recover the same way it did pre-P0-2. Belt-and-
+      // suspenders for callers that haven't been rewired yet.
+      var runCount = 0;
+      final out = await runGroupDelayWithRecovery(
+        runTest: () async {
+          runCount++;
+          if (runCount == 1) return {'A': 0};
+          return {'A': 60};
+        },
+        flushConnections: () async {},
+        flushFakeIp: () async {},
+        isAllTimeout: _allTimeout,
+        sleep: (_) async {},
+      );
+      expect(out.recovered, isTrue);
+      expect(out.results, {'A': 60});
+    });
+
+    test('healthcheck failure is swallowed — recovery still retries',
+        () async {
+      var runCount = 0;
+      var hcCalls = 0;
+      final out = await runGroupDelayWithRecovery(
+        runTest: () async {
+          runCount++;
+          if (runCount == 1) throw Exception('first');
+          return {'A': 42};
+        },
+        flushConnections: () async {},
+        flushFakeIp: () async {},
+        healthCheckProviders: () async {
+          hcCalls++;
+          throw Exception('mihomo healthcheck 502');
+        },
+        isAllTimeout: _allTimeout,
+        sleep: (_) async {},
+      );
+      expect(out.results, {'A': 42});
+      expect(out.recovered, isTrue);
+      expect(hcCalls, 1, reason: 'one round = one healthcheck attempt');
+    });
+
+    test(
+        'per-attempt backoff escalates 500ms → 1500ms → 3000ms across rounds',
+        () async {
+      final observed = <Duration>[];
+      await runGroupDelayWithRecovery(
+        runTest: () async => throw Exception('always'),
+        flushConnections: () async {},
+        flushFakeIp: () async {},
+        healthCheckProviders: () async {},
+        isAllTimeout: _allTimeout,
+        sleep: (d) async => observed.add(d),
+      );
+      expect(observed, const [
+        Duration(milliseconds: 500),
+        Duration(milliseconds: 1500),
+        Duration(milliseconds: 3000),
+      ]);
+    });
+
+    test(
+        'custom backoff list overrides default and bounds maxRetries silently',
+        () async {
+      final observed = <Duration>[];
+      await runGroupDelayWithRecovery(
+        runTest: () async => throw Exception('always'),
+        flushConnections: () async {},
+        flushFakeIp: () async {},
+        isAllTimeout: _allTimeout,
+        backoff: const [Duration(milliseconds: 10)],
+        maxRetries: 5, // larger than backoff.length — should clamp to 1
+        sleep: (d) async => observed.add(d),
+      );
+      expect(observed.length, 1,
+          reason: 'maxRetries clamps to backoff.length to avoid OOB');
+    });
+
+    test(
+        'persistent failure across all backoff entries — results null, '
+        'failureReason preserved as exception (P0-2 throughput-failure path)',
+        () async {
+      var runCount = 0;
+      final out = await runGroupDelayWithRecovery(
+        runTest: () async {
+          runCount++;
+          throw Exception('persistent helper down');
+        },
+        flushConnections: () async {},
+        flushFakeIp: () async {},
+        healthCheckProviders: () async {},
+        isAllTimeout: _allTimeout,
+        sleep: (_) async {},
+      );
+      expect(out.results, isNull);
+      expect(out.failureReason, DelayTestFailureReason.exception);
+      expect(out.recovered, isFalse);
+      expect(runCount, 4,
+          reason: 'first attempt + 3 backoff rounds = 4 runTest calls');
     });
   });
 }

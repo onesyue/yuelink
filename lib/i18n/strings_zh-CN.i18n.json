@@ -42,6 +42,8 @@
   "routeModeGlobal": "全局",
   "routeModeDirect": "直连",
   "routingModeSetting": "路由模式",
+  "tipTapToSwitchRouting": "点击切换路由模式",
+  "tipTapToSwitchConnection": "点击切换连接模式",
   "modeSwitched": "模式已切换",
   "directModeDesc": "所有流量直接连接，不经过代理节点",
   "globalModeDesc": "所有流量通过下方选择的节点转发",

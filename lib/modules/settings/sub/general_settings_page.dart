@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:launch_at_startup/launch_at_startup.dart';
 
-import '../../../core/kernel/config_template.dart';
 import '../../../core/kernel/core_manager.dart';
 import '../../../core/storage/settings_service.dart';
 import '../../../i18n/app_strings.dart';
@@ -66,7 +65,7 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
     }
   }
 
-Future<void> _showTunBypassEditor(BuildContext context) async {
+  Future<void> _showTunBypassEditor(BuildContext context) async {
     final s = S.of(context);
     final addrs = await SettingsService.getTunBypassAddresses();
     final procs = await SettingsService.getTunBypassProcesses();
@@ -89,8 +88,10 @@ Future<void> _showTunBypassEditor(BuildContext context) async {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(s.tunBypassAddrHint,
-                    style: YLText.caption.copyWith(color: YLColors.zinc500)),
+                Text(
+                  s.tunBypassAddrHint,
+                  style: YLText.caption.copyWith(color: YLColors.zinc500),
+                ),
                 const SizedBox(height: 4),
                 TextField(
                   controller: addrCtrl,
@@ -104,8 +105,10 @@ Future<void> _showTunBypassEditor(BuildContext context) async {
                   ),
                 ),
                 const SizedBox(height: 16),
-                Text(s.tunBypassProcHint,
-                    style: YLText.caption.copyWith(color: YLColors.zinc500)),
+                Text(
+                  s.tunBypassProcHint,
+                  style: YLText.caption.copyWith(color: YLColors.zinc500),
+                ),
                 const SizedBox(height: 4),
                 TextField(
                   controller: procCtrl,
@@ -216,13 +219,17 @@ Future<void> _showTunBypassEditor(BuildContext context) async {
                           ),
                           segments: [
                             ButtonSegment(
-                                value: 'rule', label: Text(s.routeModeRule)),
+                              value: 'rule',
+                              label: Text(s.routeModeRule),
+                            ),
                             ButtonSegment(
-                                value: 'global',
-                                label: Text(s.routeModeGlobal)),
+                              value: 'global',
+                              label: Text(s.routeModeGlobal),
+                            ),
                             ButtonSegment(
-                                value: 'direct',
-                                label: Text(s.routeModeDirect)),
+                              value: 'direct',
+                              label: Text(s.routeModeDirect),
+                            ),
                           ],
                           selected: {routingMode},
                           onSelectionChanged: (v) async {
@@ -236,8 +243,9 @@ Future<void> _showTunBypassEditor(BuildContext context) async {
                             );
                             if (status == CoreStatus.running) {
                               try {
-                                await CoreManager.instance.api
-                                    .setRoutingMode(mode);
+                                await CoreManager.instance.api.setRoutingMode(
+                                  mode,
+                                );
                               } catch (_) {}
                             }
                           },
@@ -272,7 +280,6 @@ Future<void> _showTunBypassEditor(BuildContext context) async {
                         onChanged: (v) async {
                           if (v == null || v == quicPolicy) return;
                           ref.read(quicPolicyProvider.notifier).state = v;
-                          ConfigTemplate.setDefaultQuicRejectPolicy(v);
                           await SettingsService.setQuicPolicy(v);
                         },
                       ),
@@ -316,14 +323,18 @@ Future<void> _showTunBypassEditor(BuildContext context) async {
                           style: YLText.body.copyWith(
                             color: isDark ? YLColors.zinc200 : YLColors.zinc700,
                           ),
-                          dropdownColor:
-                              isDark ? YLColors.zinc800 : Colors.white,
+                          dropdownColor: isDark
+                              ? YLColors.zinc800
+                              : Colors.white,
                           items: [
                             DropdownMenuItem(
-                                value: 'tun', child: Text(s.modeTun)),
+                              value: 'tun',
+                              child: Text(s.modeTun),
+                            ),
                             DropdownMenuItem(
-                                value: 'systemProxy',
-                                child: Text(s.modeSystemProxy)),
+                              value: 'systemProxy',
+                              child: Text(s.modeSystemProxy),
+                            ),
                           ],
                           onChanged: (v) async {
                             if (v == null || v == connectionMode) return;
@@ -345,7 +356,9 @@ Future<void> _showTunBypassEditor(BuildContext context) async {
                                 fallbackMode: previous,
                               );
                               if (!ok) {
-                                ref.read(connectionModeProvider.notifier).state =
+                                ref
+                                        .read(connectionModeProvider.notifier)
+                                        .state =
                                     previous;
                                 await SettingsService.setConnectionMode(
                                   previous,
@@ -365,11 +378,13 @@ Future<void> _showTunBypassEditor(BuildContext context) async {
                             value: desktopTunStack,
                             underline: const SizedBox.shrink(),
                             style: YLText.body.copyWith(
-                              color:
-                                  isDark ? YLColors.zinc200 : YLColors.zinc700,
+                              color: isDark
+                                  ? YLColors.zinc200
+                                  : YLColors.zinc700,
                             ),
-                            dropdownColor:
-                                isDark ? YLColors.zinc800 : Colors.white,
+                            dropdownColor: isDark
+                                ? YLColors.zinc800
+                                : Colors.white,
                             items: [
                               DropdownMenuItem(
                                 value: 'mixed',
@@ -401,8 +416,9 @@ Future<void> _showTunBypassEditor(BuildContext context) async {
                             description: s.tunBypassSub,
                             trailing: Icon(
                               Icons.chevron_right,
-                              color:
-                                  isDark ? YLColors.zinc400 : YLColors.zinc500,
+                              color: isDark
+                                  ? YLColors.zinc400
+                                  : YLColors.zinc500,
                             ),
                           ),
                         ),
@@ -416,8 +432,9 @@ Future<void> _showTunBypassEditor(BuildContext context) async {
                           activeTrackColor: YLColors.connected,
                           onChanged: (v) async {
                             ref
-                                .read(systemProxyOnConnectProvider.notifier)
-                                .state = v;
+                                    .read(systemProxyOnConnectProvider.notifier)
+                                    .state =
+                                v;
                             await SettingsService.setSystemProxyOnConnect(v);
                           },
                         ),
@@ -479,22 +496,29 @@ Future<void> _showTunBypassEditor(BuildContext context) async {
                         dropdownColor: isDark ? YLColors.zinc800 : Colors.white,
                         items: [
                           DropdownMenuItem(
-                              value: 0, child: Text(isEn ? 'Manual' : '手动')),
+                            value: 0,
+                            child: Text(isEn ? 'Manual' : '手动'),
+                          ),
                           DropdownMenuItem(
-                              value: 1,
-                              child: Text(isEn ? 'Every hour' : '每小时')),
+                            value: 1,
+                            child: Text(isEn ? 'Every hour' : '每小时'),
+                          ),
                           DropdownMenuItem(
-                              value: 6,
-                              child: Text(isEn ? 'Every 6 hours' : '每6小时')),
+                            value: 6,
+                            child: Text(isEn ? 'Every 6 hours' : '每6小时'),
+                          ),
                           DropdownMenuItem(
-                              value: 12,
-                              child: Text(isEn ? 'Every 12 hours' : '每12小时')),
+                            value: 12,
+                            child: Text(isEn ? 'Every 12 hours' : '每12小时'),
+                          ),
                           DropdownMenuItem(
-                              value: 24,
-                              child: Text(isEn ? 'Every day' : '每天')),
+                            value: 24,
+                            child: Text(isEn ? 'Every day' : '每天'),
+                          ),
                           DropdownMenuItem(
-                              value: 48,
-                              child: Text(isEn ? 'Every 2 days' : '每2天')),
+                            value: 48,
+                            child: Text(isEn ? 'Every 2 days' : '每2天'),
+                          ),
                         ],
                         onChanged: (v) async {
                           if (v == null) return;
@@ -525,4 +549,3 @@ Future<void> _showTunBypassEditor(BuildContext context) async {
     );
   }
 }
-

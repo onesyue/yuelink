@@ -61,6 +61,27 @@ class SettingsService {
   /// Invalidate the in-memory cache so the next read comes from disk.
   static void invalidateCache() => _cache = null;
 
+  /// Load with a hard wall-clock cap. Used by `main()` to keep
+  /// `runApp()` reachable when a pathological cold-start I/O hang
+  /// (Windows Defender scan, slow Keychain unlock, FUSE/SMB volume
+  /// stuck) would otherwise block the Flutter root from instantiating
+  /// — the "原生白屏" report that v1.0.22 P0-4 targets.
+  ///
+  /// Never throws. On timeout or exception, the cache is force-seeded
+  /// to an empty map so subsequent [get] calls resolve to their
+  /// per-getter defaults instead of re-blocking on the same hung
+  /// future. Honours an existing populated cache if [load] already
+  /// completed, so warm-paths are unaffected.
+  static Future<Map<String, dynamic>> loadWithTimeout(Duration timeout) async {
+    try {
+      return await load().timeout(timeout);
+    } catch (e) {
+      debugPrint('[SettingsService] loadWithTimeout fallback: $e');
+      _cache ??= <String, dynamic>{};
+      return _cache!;
+    }
+  }
+
   /// Internal: actually write the current cache to disk. Atomic via
   /// tmp+rename. Chained on `_saveGuard` so concurrent flushes serialise.
   ///

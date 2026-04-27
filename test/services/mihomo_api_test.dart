@@ -22,6 +22,23 @@ void main() {
       final available = await api.isAvailable();
       expect(available, false);
     });
+
+    test('healthSnapshot classifies socket failure (port not listening)',
+        () async {
+      // Port 1 is reserved and almost never has a listener; the OS
+      // refuses the connection synchronously, which surfaces as
+      // SocketException → reason 'socket'.
+      final api = MihomoApi(port: 1);
+      final snap = await api.healthSnapshot();
+      expect(snap.ok, isFalse);
+      expect(
+        snap.reason,
+        anyOf('socket', 'timeout'),
+        reason:
+            'connect-refused on most platforms is socket; some sandboxed '
+            'CI environments swallow it and surface as timeout instead',
+      );
+    });
   });
 
   group('MihomoApiException', () {

@@ -33,6 +33,7 @@ class EventLog {
   /// Keys in a context map whose values should never land on disk. Matched
   /// case-insensitively against the bare key name.
   static const _redactedKeys = <String>{
+    // Credentials
     'token',
     'access_token',
     'auth_token',
@@ -43,6 +44,16 @@ class EventLog {
     'api_key',
     'apikey',
     'cookie',
+    // PII / account identifiers — XBoard & checkin surface these in
+    // context maps during sync/diagnostic paths. Keeping them out of
+    // event.log is a compliance baseline, not a per-caller judgment.
+    'subscribe_url',
+    'subscribeurl',
+    'order_no',
+    'orderno',
+    'email',
+    'phone',
+    'ip',
   };
 
   /// Format a tagged event with context key/values. Safe for logs:
@@ -101,7 +112,9 @@ class EventLog {
       if (f.existsSync()) {
         final lines = await f.readAsLines();
         if (lines.length >= _kMaxLines) {
-          await f.writeAsString('${lines.skip(lines.length ~/ 2).join('\n')}\n');
+          await f.writeAsString(
+            '${lines.skip(lines.length ~/ 2).join('\n')}\n',
+          );
         }
       }
 

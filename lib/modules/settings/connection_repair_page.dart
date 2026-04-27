@@ -10,6 +10,7 @@ import '../../core/profile/profile_service.dart';
 import '../../core/providers/core_provider.dart';
 import '../../i18n/app_strings.dart';
 import '../../shared/app_notifier.dart';
+import '../../shared/log_export_sources.dart';
 import '../../shared/log_export_service.dart';
 import '../../shared/telemetry.dart';
 import '../../theme.dart';
@@ -35,12 +36,16 @@ class _ConnectionRepairPageState extends ConsumerState<ConnectionRepairPage> {
     setState(() => _busy = true);
     try {
       final appDir = await getApplicationSupportDirectory();
-      const sources = [
+      // v1.0.22 P3-A: expand `core.log` to include rotated sidecars
+      // (`.2` and `.1` if present) so the export captures recent
+      // history that the Go-side rotation may have shifted out of the
+      // live file mid-session. Other sources pass through unchanged.
+      final sources = expandRotatedLogSources(const [
         'core.log',
         'crash.log',
         'event.log',
         'startup_report.json',
-      ];
+      ]);
       final buffer = StringBuffer();
       buffer.writeln('YueLink diagnostic bundle');
       buffer.writeln('Generated: ${DateTime.now().toIso8601String()}');
@@ -50,6 +55,14 @@ class _ConnectionRepairPageState extends ConsumerState<ConnectionRepairPage> {
       var found = 0;
       for (final name in sources) {
         final f = File('${appDir.path}/$name');
+        // Sidecars are routinely absent on freshly-installed
+        // instances or sessions that never crossed the rotation
+        // threshold. Skip the "═══ name ═══ <not present>" header
+        // for absent rotated sidecars to keep the bundle readable;
+        // still emit the header for the canonical sources so the
+        // user can see at a glance which expected files were missing.
+        final isRotatedSidecar = name.startsWith('core.log.');
+        if (isRotatedSidecar && !f.existsSync()) continue;
         buffer.writeln('═══ $name ${'═' * (60 - name.length)}');
         if (f.existsSync()) {
           found++;

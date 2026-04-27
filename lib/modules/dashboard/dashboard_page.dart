@@ -8,6 +8,7 @@ import '../../core/storage/settings_service.dart';
 import '../../i18n/app_strings.dart';
 import '../../modules/yue_auth/providers/yue_auth_providers.dart';
 import '../../core/providers/core_provider.dart';
+import 'providers/traffic_providers.dart';
 import '../profiles/providers/profiles_providers.dart';
 import '../../shared/app_notifier.dart';
 import '../../core/kernel/core_manager.dart';
@@ -59,7 +60,11 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
 
   @override
   Widget build(BuildContext context) {
-    final status = ref.watch(coreStatusProvider);
+    // UI reads the derived display status so a manual-stop that races a
+    // resume recovery cannot leave HeroCard showing "connected" for one
+    // frame. Internals (lifecycle, heartbeat, tray) keep using
+    // `coreStatusProvider` for ground truth.
+    final status = ref.watch(displayCoreStatusProvider);
     final isRunning = status == CoreStatus.running;
 
     // Activate stream providers without triggering Dashboard rebuilds.
@@ -114,8 +119,9 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                         // ── 1.5 订阅过期提示 ─────────────────────────
                         const _StaggeredIn(
                           index: 1,
-                          child:
-                              RepaintBoundary(child: StaleSubscriptionBanner()),
+                          child: RepaintBoundary(
+                            child: StaleSubscriptionBanner(),
+                          ),
                         ),
 
                         const SizedBox(height: 12),
@@ -185,8 +191,9 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
           FilledButton(
             onPressed: () async {
               Navigator.pop(ctx);
-              final ok =
-                  await ref.read(coreActionsProvider).start(lastGoodConfig);
+              final ok = await ref
+                  .read(coreActionsProvider)
+                  .start(lastGoodConfig);
               if (ok) {
                 AppNotifier.success(s.rollbackSuccess);
               } else {
@@ -228,8 +235,9 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
         return;
       }
 
-      final config =
-          await ref.read(profileRepositoryProvider).loadConfig(activeId);
+      final config = await ref
+          .read(profileRepositoryProvider)
+          .loadConfig(activeId);
       if (config == null) {
         AppNotifier.warning(s.snackConfigMissing);
         return;
@@ -295,7 +303,8 @@ class _TrafficSectionState extends ConsumerState<_TrafficSection> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final isRunning = ref.watch(coreStatusProvider) == CoreStatus.running;
+    final isRunning =
+        ref.watch(displayCoreStatusProvider) == CoreStatus.running;
 
     final headerColor = isDark ? YLColors.zinc200 : YLColors.zinc700;
     final borderColor = isDark

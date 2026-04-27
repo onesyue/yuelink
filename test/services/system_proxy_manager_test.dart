@@ -170,4 +170,105 @@ void main() {
       );
     });
   });
+
+  group('SystemProxyManager.setWithRetry — P1-4 resume retry contract', () {
+    test('first attempt succeeds → no retries, no sleep', () async {
+      var attempts = 0;
+      var sleepCount = 0;
+
+      final ok = await SystemProxyManager.setWithRetry(
+        7890,
+        attemptOverride: (port) async {
+          attempts++;
+          return true;
+        },
+        sleepOverride: (_) async => sleepCount++,
+      );
+
+      expect(ok, isTrue);
+      expect(attempts, 1);
+      expect(sleepCount, 0,
+          reason: 'happy path must not pay the 1.5 s settle delay');
+    });
+
+    test(
+      'first attempt fails, second succeeds → recovers within one settle round',
+      () async {
+        var attempts = 0;
+        final sleeps = <Duration>[];
+
+        final ok = await SystemProxyManager.setWithRetry(
+          7890,
+          attemptOverride: (port) async {
+            attempts++;
+            return attempts >= 2;
+          },
+          sleepOverride: (d) async => sleeps.add(d),
+        );
+
+        expect(ok, isTrue);
+        expect(attempts, 2);
+        expect(sleeps, [const Duration(milliseconds: 1500)],
+            reason: 'one settle round = one 1.5 s sleep');
+      },
+    );
+
+    test(
+      'all 3 attempts fail → returns false, exactly 2 sleeps between rounds',
+      () async {
+        var attempts = 0;
+        final sleeps = <Duration>[];
+
+        final ok = await SystemProxyManager.setWithRetry(
+          7890,
+          attemptOverride: (port) async {
+            attempts++;
+            return false;
+          },
+          sleepOverride: (d) async => sleeps.add(d),
+        );
+
+        expect(ok, isFalse);
+        expect(attempts, 3);
+        expect(sleeps.length, 2,
+            reason: 'no trailing sleep after the final attempt');
+        expect(sleeps.every((d) => d == const Duration(milliseconds: 1500)),
+            isTrue);
+      },
+    );
+
+    test(
+      'attempt that throws is treated as a failure and retry continues',
+      () async {
+        var attempts = 0;
+        final ok = await SystemProxyManager.setWithRetry(
+          7890,
+          attemptOverride: (port) async {
+            attempts++;
+            if (attempts == 1) throw StateError('mock platform error');
+            return attempts >= 2;
+          },
+          sleepOverride: (_) async {},
+        );
+
+        expect(ok, isTrue);
+        expect(attempts, 2);
+      },
+    );
+
+    test('custom maxAttempts honoured', () async {
+      var attempts = 0;
+      final ok = await SystemProxyManager.setWithRetry(
+        7890,
+        maxAttempts: 1,
+        attemptOverride: (port) async {
+          attempts++;
+          return false;
+        },
+        sleepOverride: (_) async {},
+      );
+      expect(ok, isFalse);
+      expect(attempts, 1, reason: 'maxAttempts=1 disables retry');
+    });
+  });
 }
