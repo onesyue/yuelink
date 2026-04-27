@@ -388,7 +388,7 @@ class SystemProxyManager {
   ///
   /// Pass `force: true` to bypass the cache — used by resume / window-focus
   /// hooks where the user may have just flipped a competing proxy tool
-  /// (v2rayN, vr2, …) in the ~60 s since the last verify. Waiting for
+  /// (v2rayN, Clash Verge, …) in the ~60 s since the last verify. Waiting for
   /// the cache to expire before noticing leaves the user with a
   /// "connected" UI and a dead network; `force: true` skips straight to
   /// the OS read.

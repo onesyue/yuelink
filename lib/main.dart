@@ -938,7 +938,7 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
         // Refresh proxy groups in case core reloaded config
         ref.read(proxyGroupsProvider.notifier).refresh();
         // v1.0.21 hotfix P0-2: system-proxy tamper detection on resume.
-        // If the user flipped over to v2rayN / vr2 / any other proxy tool
+        // If the user flipped over to v2rayN / Clash Verge / any other proxy tool
         // while YueLink was backgrounded, the 60 s verify cache would
         // leave the heartbeat unable to notice for up to that TTL —
         // resulting in the "connected but no network" UX. force:true
