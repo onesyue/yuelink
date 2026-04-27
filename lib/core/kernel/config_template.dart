@@ -533,10 +533,22 @@ class ConfigTemplate {
       config = _removeSection(config, 'tun');
     }
 
+    // v1.0.22 P1-2: Windows defaults to strict, other desktops keep
+    // always. mihomo upstream default is strict; YueLink chose always
+    // historically for split-tunnel-by-process UI, but the always
+    // mode triggers a process-name lookup on every connection — on
+    // Windows that means QueryFullProcessImageName + handle resolution
+    // per packet flow, which interacts poorly with high-frequency
+    // download tools (IDM/迅雷/Steam create short-lived helper
+    // processes) and produced the "Win 下载软件一直断开链接" report.
+    // Strict only resolves process names when a rule actually
+    // references PROCESS-NAME, eliminating the per-flow cost without
+    // breaking the common rule-based routing path.
+    final defaultMode = _defaultFindProcessMode();
     if (_hasKey(config, 'find-process-mode')) {
-      config = _replaceScalar(config, 'find-process-mode', 'always');
+      config = _replaceScalar(config, 'find-process-mode', defaultMode);
     } else {
-      config += '\nfind-process-mode: always\n';
+      config += '\nfind-process-mode: $defaultMode\n';
     }
 
     // Force fake-ip DNS mode for TUN (CVR does the same in use_tun())
@@ -1263,8 +1275,9 @@ class ConfigTemplate {
   }
 
   /// Ensure find-process-mode based on platform.
-  /// Desktop (macOS/Windows/Linux): always — enables process-based routing.
-  /// Mobile (Android/iOS): off — no permission, avoids useless overhead.
+  ///   * Mobile (Android/iOS): off — no permission, avoids useless overhead.
+  ///   * Windows: strict — see [_defaultFindProcessMode] docstring.
+  ///   * macOS / Linux: always — preserves split-tunnel-by-process UX.
   static String _ensureFindProcessMode(String config) {
     if (_hasKey(config, 'find-process-mode')) {
       // On mobile, force off regardless of subscription setting
@@ -1273,8 +1286,25 @@ class ConfigTemplate {
       }
       return config;
     }
-    final mode = (Platform.isAndroid || Platform.isIOS) ? 'off' : 'always';
-    return '$config\nfind-process-mode: $mode\n';
+    return '$config\nfind-process-mode: ${_defaultFindProcessMode()}\n';
+  }
+
+  /// Default `find-process-mode` for the current platform.
+  ///
+  /// v1.0.22 P1-2: Windows shifts from `always` to `strict` to fix the
+  /// "Win 下载软件一直断开链接" report — `always` resolves the
+  /// originating process for every connection (a Windows
+  /// QueryFullProcessImageName + handle resolution per packet flow),
+  /// which is hostile to high-frequency download tools that spawn
+  /// short-lived helper processes (IDM/迅雷/Steam). `strict` only
+  /// performs the lookup when a rule actually references
+  /// `PROCESS-NAME`, eliminating the per-flow cost without affecting
+  /// rule-based routing. macOS / Linux retain `always` until / unless
+  /// similar reports surface there. Mobile is `off` (no permission).
+  static String _defaultFindProcessMode() {
+    if (Platform.isAndroid || Platform.isIOS) return 'off';
+    if (Platform.isWindows) return 'strict';
+    return 'always';
   }
 
   /// Remove a top-level YAML section (key + all indented content below it).

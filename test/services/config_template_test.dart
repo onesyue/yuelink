@@ -50,7 +50,13 @@ find-process-mode: off
         expect(result, contains('auto-route: true'));
         expect(result, contains('auto-detect-interface: true'));
         expect(result, contains('dns-hijack:'));
-        expect(result, contains('find-process-mode: always'));
+        // v1.0.22 P1-2: Windows TUN now defaults to strict (was always);
+        // macOS keeps always pending similar reports.
+        if (Platform.isWindows) {
+          expect(result, contains('find-process-mode: strict'));
+        } else {
+          expect(result, contains('find-process-mode: always'));
+        }
         expect(result, isNot(contains('file-descriptor: 42')));
       } else {
         expect(result, contains('file-descriptor: 42'));
@@ -76,6 +82,58 @@ tun:
         expect(result, contains('enable: true'));
       }
     });
+
+    test(
+      'find-process-mode default is platform-aware (P1-2 Win=strict, '
+      'mac/linux=always, mobile=off)',
+      () {
+        // Subscription with NO find-process-mode key → injection path
+        // (line 1268 in config_template.dart) decides the value.
+        const config = 'mixed-port: 7890\ndns:\n  enable: true\n';
+        final result = ConfigTemplate.process(
+          config,
+          connectionMode: 'systemProxy',
+        );
+
+        if (Platform.isAndroid || Platform.isIOS) {
+          expect(result, contains('find-process-mode: off'));
+        } else if (Platform.isWindows) {
+          expect(result, contains('find-process-mode: strict'),
+              reason: 'Win default flipped strict to fix download-tool '
+                  'churn from per-flow process lookup');
+        } else {
+          expect(result, contains('find-process-mode: always'),
+              reason: 'macOS / Linux retain always until similar reports');
+        }
+      },
+    );
+
+    test(
+      'find-process-mode existing value is preserved on desktop, forced off '
+      'on mobile',
+      () {
+        const config = '''
+mixed-port: 7890
+find-process-mode: always
+dns:
+  enable: true
+''';
+        final result = ConfigTemplate.process(
+          config,
+          connectionMode: 'systemProxy',
+        );
+
+        if (Platform.isAndroid || Platform.isIOS) {
+          expect(result, contains('find-process-mode: off'));
+        } else {
+          // Desktop: subscription wins. Both Windows and macOS keep
+          // the user-supplied 'always' instead of clobbering to the
+          // platform default. (TUN mode is the special case that
+          // does override — covered separately above.)
+          expect(result, contains('find-process-mode: always'));
+        }
+      },
+    );
   });
 
   group('ConfigTemplate extraction', () {
