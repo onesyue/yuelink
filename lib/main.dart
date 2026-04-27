@@ -40,6 +40,7 @@ import 'core/kernel/recovery_manager.dart';
 import 'core/platform/quit_watchdog.dart';
 import 'core/platform/tile_service.dart';
 import 'core/platform/vpn_service.dart';
+import 'core/platform/window_close_policy.dart';
 import 'core/storage/auth_token_service.dart';
 import 'core/env_config.dart';
 import 'shared/error_logger.dart';
@@ -1087,13 +1088,16 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
     // If programmatic quit is in progress, don't interfere
     if (_isQuitting) return;
 
-    // Linux has no system tray — always quit on close
-    if (Platform.isLinux) {
-      await _handleQuit();
-      return;
-    }
-    final behavior = ref.read(closeBehaviorProvider);
-    if (behavior == 'exit') {
+    // v1.0.22 P0-3: delegate the quit-vs-hide decision to the pure
+    // policy helper. Adds a Windows + core-running carve-out so the
+    // Win11 taskbar's right-click → Close window does not silently
+    // hide while the VPN keeps running (the "无法退出" report).
+    final shouldQuit = shouldQuitOnWindowClose(
+      platform: Platform.operatingSystem,
+      status: ref.read(coreStatusProvider),
+      behavior: ref.read(closeBehaviorProvider),
+    );
+    if (shouldQuit) {
       await _handleQuit();
     } else {
       await windowManager.hide();
