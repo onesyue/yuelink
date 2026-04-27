@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/ffi/core_controller.dart';
 import '../../core/kernel/core_manager.dart';
 import '../../core/kernel/recovery_manager.dart';
 import '../../core/profile/profile_service.dart';
@@ -43,13 +42,21 @@ class CoreHeartbeatManager {
   // system proxy (a single round-trip) before letting go — without
   // forcing a core reset on the very first missed write.
   int _proxyRestoreFailures = 0;
-  // One-shot retry gate: the first time we hit the "3 failures" threshold we
+  // One-shot retry gate: the first time we hit the failure threshold we
   // try a silent restart before giving up. This survives things like cell
   // tower flap / brief Wi-Fi lapse / transient DNS failure — cases where a
   // single `stop + start` fixes the core faster than the user could even
   // notice. Reset on any successful heartbeat OR after a hard giveup.
   bool _retriedThisOutage = false;
   bool _restartInFlight = false;
+  // Cooldown after a hard give-up: suppresses the next wave of recovery
+  // attempts so we don't toast the user every 30 s when the underlying
+  // problem (no network, helper down) hasn't gone away.
+  DateTime? _lastGiveUpAt;
+
+  // Visible for tests.
+  static const int failureThreshold = 5;
+  static const Duration giveUpCooldown = Duration(seconds: 60);
 
   /// Start the heartbeat. Idempotent — repeated calls reset the timer
   /// (used when [appInBackgroundProvider] flips and the interval changes).
@@ -68,6 +75,7 @@ class CoreHeartbeatManager {
     _proxyRestoreFailures = 0;
     _retriedThisOutage = false;
     _restartInFlight = false;
+    _lastGiveUpAt = null;
   }
 
   Future<void> _tick({required bool inBackground}) async {
@@ -84,19 +92,21 @@ class CoreHeartbeatManager {
       debugPrint('[Heartbeat] skipped — silent restart in flight');
       return;
     }
+    // Cooldown after a give-up: don't immediately re-enter the recovery
+    // dance every 30 s while the underlying problem (no network, helper
+    // dead, hardware sleep) is unchanged.
+    if (_lastGiveUpAt != null &&
+        DateTime.now().difference(_lastGiveUpAt!) < giveUpCooldown) {
+      return;
+    }
 
-    final manager = CoreManager.instance;
-
-    final ffiRunning =
-        Platform.isIOS ? false : CoreController.instance.isRunning;
-    final apiOk = await manager.api.isAvailable();
-
-    if (RecoveryManager.isAliveForPlatform(
-      apiOk: apiOk,
-      ffiRunning: ffiRunning,
-      isAndroid: Platform.isAndroid,
-      isIOS: Platform.isIOS,
-    )) {
+    // Use [RecoveryManager.checkCoreHealth] so desktop TUN service mode
+    // (mihomo runs in the privileged helper subprocess) is treated as
+    // alive when the REST API responds — the in-app FFI flag stays
+    // false in that mode and the previous inline check would loop the
+    // user through endless false-positive auto-recovery restarts.
+    final health = await RecoveryManager.checkCoreHealth();
+    if (health.alive) {
       _failures = 0;
       _retriedThisOutage = false;
       await _maybeProxyGuard(inBackground: inBackground);
@@ -104,9 +114,8 @@ class CoreHeartbeatManager {
     }
 
     _failures++;
-    debugPrint('[Heartbeat] failure #$_failures — '
-        'ffi.isRunning=$ffiRunning, api=$apiOk');
-    if (_failures < 3) return;
+    debugPrint('[Heartbeat] failure #$_failures — apiOk=${health.apiOk}');
+    if (_failures < failureThreshold) return;
 
     if (!_retriedThisOutage) {
       _retriedThisOutage = true;
@@ -115,7 +124,7 @@ class CoreHeartbeatManager {
       return;
     }
 
-    // Second round of 3 failures after a restart attempt — give up.
+    // Second round of failures after a restart attempt — give up.
     // v1.0.21 hotfix P2-7: surface this to the user. Before, silent
     // restart + silent give-up both ran invisibly; the user saw
     // "disconnected" appear and had no clue auto-recovery was tried
@@ -128,6 +137,7 @@ class CoreHeartbeatManager {
     // for coreStatusProvider → stopped transition).
     _failures = 0;
     _retriedThisOutage = false;
+    _lastGiveUpAt = DateTime.now();
   }
 
   /// Last-chance silent restart before declaring the core dead. Matches CVR
