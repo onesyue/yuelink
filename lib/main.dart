@@ -515,6 +515,8 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
   ProviderSubscription? _exitIpSub;
   ProviderSubscription? _tileNodeInfoSub;
   ProviderSubscription? _delayResetSub;
+  ProviderSubscription? _routingModeTraySub;
+  ProviderSubscription? _connectionModeTraySub;
 
   /// Guard to prevent onWindowClose from interfering during programmatic quit.
   bool _isQuitting = false;
@@ -630,6 +632,27 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
     // Sync tray proxy submenu when proxy groups change
     _groupsSub = ref.listenManual(proxyGroupsProvider, (_, groups) {
       _tray.updateMenu(status: ref.read(coreStatusProvider), groups: groups);
+    });
+
+    // v1.0.22 P2-2: refresh tray statusLine when routing/connection
+    // mode changes. The tooltip + menu header now encode both modes
+    // (e.g. "YueLink · 已连接 · 规则 · TUN · HK-1") so the user can
+    // identify the active configuration without opening the main
+    // window — but only if the tray repaints on each switch.
+    _routingModeTraySub = ref.listenManual(routingModeProvider, (prev, next) {
+      if (prev == next) return;
+      _tray.updateMenu(
+        status: ref.read(coreStatusProvider),
+        groups: ref.read(proxyGroupsProvider),
+      );
+    });
+    _connectionModeTraySub =
+        ref.listenManual(connectionModeProvider, (prev, next) {
+      if (prev == next) return;
+      _tray.updateMenu(
+        status: ref.read(coreStatusProvider),
+        groups: ref.read(proxyGroupsProvider),
+      );
     });
 
     // Re-check subscription expiry after profiles are updated
@@ -841,6 +864,8 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
     _exitIpSub?.close();
     _tileNodeInfoSub?.close();
     _delayResetSub?.close();
+    _routingModeTraySub?.close();
+    _connectionModeTraySub?.close();
     TileService.onToggleRequested = null;
     TileService.onOpenPreferences = null;
     WidgetsBinding.instance.removeObserver(this);

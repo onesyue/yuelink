@@ -33,6 +33,56 @@ import '../event_log.dart';
 /// The controller implements [TrayListener] itself and registers with
 /// [trayManager] inside [init] / [dispose]; `_YueLinkAppState` no longer
 /// needs the mixin.
+/// Format the tray tooltip / menu-header line. Pure function so the
+/// rule set is testable without spinning up a real tray binding.
+///
+/// v1.0.22 P2-2: extends the previous "YueLink · 已连接 · {node}"
+/// shape with the current routing mode (rule/global/direct) and
+/// the desktop connection mode (TUN / 系统代理). Surfaces the same
+/// state the user can see on the dashboard pills + the tray menu's
+/// 模式 submenu, so a glance at the system tray icon's hover text
+/// is enough to identify the active configuration without opening
+/// the main window.
+///
+/// Mobile callers pass `isDesktop: false` — connection mode is
+/// implicit (always VPN/TUN) and the `TUN/系统代理` label is
+/// omitted. Routing mode is still surfaced.
+String formatTrayStatusLine({
+  required bool isLoggedIn,
+  required CoreStatus status,
+  required String? currentNode,
+  required String routingMode,
+  required String connectionMode,
+  required bool isDesktop,
+}) {
+  if (!isLoggedIn) return 'YueLink · 未登录';
+  if (status == CoreStatus.starting) return 'YueLink · 连接中...';
+  if (status != CoreStatus.running) return 'YueLink · 未连接';
+
+  final routing = switch (routingMode) {
+    'rule' => '规则',
+    'global' => '全局',
+    'direct' => '直连',
+    _ => routingMode,
+  };
+  final connection =
+      isDesktop ? (connectionMode == 'tun' ? 'TUN' : '系统代理') : null;
+  final node = (currentNode != null && currentNode.isNotEmpty)
+      ? _truncateForTray(currentNode, 16)
+      : null;
+
+  return [
+    'YueLink',
+    '已连接',
+    routing,
+    ?connection,
+    ?node,
+  ].join(' · ');
+}
+
+String _truncateForTray(String s, int max) =>
+    s.length <= max ? s : '${s.substring(0, max)}…';
+
 class AppTrayController with TrayListener {
   AppTrayController({
     required this.ref,
@@ -87,19 +137,17 @@ class AppTrayController with TrayListener {
     final isLoggedIn = auth.isLoggedIn;
 
     // ── Status line ──
-    String statusLine;
-    if (!isLoggedIn) {
-      statusLine = 'YueLink · 未登录';
-    } else if (isConnecting) {
-      statusLine = 'YueLink · 连接中...';
-    } else if (isRunning) {
-      final currentNode = _getCurrentNodeName(groups);
-      statusLine = currentNode != null
-          ? 'YueLink · 已连接 · ${_truncate(currentNode, 16)}'
-          : 'YueLink · 已连接';
-    } else {
-      statusLine = 'YueLink · 未连接';
-    }
+    // v1.0.22 P2-2: now includes routing + connection mode so a
+    // glance at the tray tooltip identifies the full active
+    // configuration without opening the main window.
+    final statusLine = formatTrayStatusLine(
+      isLoggedIn: isLoggedIn,
+      status: status,
+      currentNode: isRunning ? _getCurrentNodeName(groups) : null,
+      routingMode: ref.read(routingModeProvider),
+      connectionMode: ref.read(connectionModeProvider),
+      isDesktop: Platform.isMacOS || Platform.isWindows || Platform.isLinux,
+    );
 
     // Update tooltip
     trayManager.setToolTip(statusLine).ignore();
