@@ -740,9 +740,24 @@ jobs:
           # would otherwise double the asset list on the Release page.
           # Users verify everything via the consolidated
           # YueLink-*-SHA256SUMS file (sha256sum -c compatible).
+          #
+          # Enumerated extensions (instead of `dist/*` + `!dist/*.sha256`)
+          # because softprops/action-gh-release@v3 evaluates each `files:`
+          # line as an independent glob and unions the results — the `!`
+          # negation never excluded anything, so v1.0.22 still shipped 9
+          # extra `.sha256` rows on the Release page. The explicit list
+          # below covers every artifact extension the build matrix
+          # produces (apk / ipa / dmg / exe / zip / AppImage) plus the
+          # consolidated `YueLink-<version>-SHA256SUMS` file. Adding a
+          # new platform in the matrix means adding the extension here.
           files: |
-            dist/*
-            !dist/*.sha256
+            dist/*.apk
+            dist/*.ipa
+            dist/*.dmg
+            dist/*.exe
+            dist/*.zip
+            dist/*.AppImage
+            dist/*-SHA256SUMS
           # Prerelease rule: the floating `pre` tag and any `vX.Y.Z-pre`
           # variant are pre-releases. Plain `vX.Y.Z` tags publish as full
           # releases. Previously only `refs/tags/pre` matched, so a tag like
