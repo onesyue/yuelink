@@ -146,6 +146,39 @@ class SystemProxyManager {
     return ok;
   }
 
+  /// Same as [set] but retries on failure with a short fixed delay.
+  /// First attempt + up to ([maxAttempts] - 1) retries.
+  ///
+  /// v1.0.22 P1-4: used by `_resumeProxyTamperCheck` so a transient
+  /// permission denial / settle race on resume (Windows DPAPI key
+  /// not yet warm, macOS networksetup briefly racing a Defender
+  /// scan) does not dump the user into a 30 s wait for the next
+  /// heartbeat round. Mirrors the 1.5 s × 3 pattern the Android
+  /// `startAndroidVpn` already uses for its own settle-race tolerance.
+  ///
+  /// Throwing attempts (rare — `set` itself swallows most errors and
+  /// returns false) are caught and counted as a failed attempt so the
+  /// retry loop still progresses.
+  static Future<bool> setWithRetry(
+    int mixedPort, {
+    int maxAttempts = 3,
+    Duration retryDelay = const Duration(milliseconds: 1500),
+    Future<bool> Function(int)? attemptOverride,
+    Future<void> Function(Duration)? sleepOverride,
+  }) async {
+    final attempt = attemptOverride ?? set;
+    final doSleep = sleepOverride ?? Future.delayed;
+    for (var i = 1; i <= maxAttempts; i++) {
+      try {
+        if (await attempt(mixedPort)) return true;
+      } catch (e) {
+        debugPrint('[SystemProxy] setWithRetry attempt $i threw: $e');
+      }
+      if (i < maxAttempts) await doSleep(retryDelay);
+    }
+    return false;
+  }
+
   static Future<bool> _setMacOS(int mixedPort) async {
     final services = await _listNetworkServices();
     if (services.isEmpty) {

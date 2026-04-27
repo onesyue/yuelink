@@ -1095,7 +1095,11 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
           '[AppLifecycle] systemProxy tamper detected on '
           'resume port=$port',
         );
-        final restored = await SystemProxyManager.set(port);
+        // v1.0.22 P1-4: retry on transient failure (1.5 s × 3) so a
+        // settle race (DPAPI not yet warm / networksetup briefly
+        // racing AV) doesn't drop the user into a 30 s wait for the
+        // next heartbeat round to retry.
+        final restored = await SystemProxyManager.setWithRetry(port);
         if (!restored) {
           AppNotifier.warning(S.current.errSystemProxyFailed);
         }
