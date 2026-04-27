@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'event_log.dart';
+import 'rotating_log_file.dart';
 import 'telemetry.dart';
 
 /// Unified error reporting — logs locally AND to remote monitoring.
@@ -210,7 +211,14 @@ class ErrorLogger {
     // multiple handlers only shows up once — local crash.log above stays
     // unconditional.
     final firstLine = error.split('\n').first;
-    if (_shouldEmitTelemetry(_fingerprint(firstLine, stack))) {
+    // v1.0.22 P3-B: compute the dedup decision ONCE so both telemetry
+    // and the remote reporter share the same fingerprint window.
+    // _shouldEmitTelemetry has the side-effect of stamping the
+    // fingerprint into the recent-map; calling it twice would always
+    // return false on the second call and silently drop the remote
+    // report on every legitimate first emission.
+    final shouldEmit = _shouldEmitTelemetry(_fingerprint(firstLine, stack));
+    if (shouldEmit) {
       final typeHint = firstLine.length > 80
           ? firstLine.substring(0, 80)
           : firstLine;
@@ -223,8 +231,14 @@ class ErrorLogger {
       );
     }
 
-    // 3. Forward to remote reporter (release only)
+    // 3. Forward to remote reporter (release only). v1.0.22 P3-B:
+    //    gated on the same dedup window as telemetry so a tight crash
+    //    loop doesn't hammer Sentry / Crashlytics with the same
+    //    fingerprint hundreds of times per minute. Local crash.log
+    //    (step 1) and EventLog (step 2) intentionally stay
+    //    unconditional — timestamps in those have forensic value.
     if (!kReleaseMode || _reporter == null) return;
+    if (!shouldEmit) return;
     try {
       _reporter!.report(error, stack);
     } catch (e) {
@@ -269,7 +283,12 @@ class ErrorLogger {
       final logFile = File('${dir.path}/crash.log');
       final timestamp = DateTime.now().toIso8601String();
       final entry = '[$timestamp]\n$error\n$stack\n\n';
-      await logFile.writeAsString(entry, mode: FileMode.append);
+      // v1.0.22 P3-B: cap crash.log at 1 MB with one rotated sidecar
+      // (~2 MB total). Prevents a tight crash loop from ballooning the
+      // file. Rotation is handled inside [appendWithRotation] —
+      // pre-write size check + .1 sidecar shift, fail-soft on any IO
+      // error so the existing swallow-all contract is preserved.
+      await appendWithRotation(logFile, entry);
     } catch (_) {}
   }
 }
