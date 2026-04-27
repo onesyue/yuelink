@@ -22,7 +22,7 @@ void main() {
   late Directory tempDir;
   Completer<dynamic>? hangCompleter;
 
-  Future<dynamic> _maybeHang(dynamic onResolve) {
+  Future<dynamic> maybeHang(dynamic onResolve) {
     if (hangCompleter != null) return hangCompleter!.future;
     return Future.value(onResolve);
   }
@@ -36,7 +36,7 @@ void main() {
       (call) async {
         if (call.method == 'getApplicationSupportDirectory' ||
             call.method == 'getApplicationDocumentsDirectory') {
-          return _maybeHang(tempDir.path);
+          return maybeHang(tempDir.path);
         }
         return null;
       },
@@ -47,8 +47,8 @@ void main() {
         .setMockMethodCallHandler(
       const MethodChannel('plugins.it_nomads.com/flutter_secure_storage'),
       (call) async {
-        if (call.method == 'read') return _maybeHang(null);
-        if (call.method == 'readAll') return _maybeHang(<String, String>{});
+        if (call.method == 'read') return maybeHang(null);
+        if (call.method == 'readAll') return maybeHang(<String, String>{});
         return null;
       },
     );

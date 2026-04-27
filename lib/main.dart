@@ -697,10 +697,10 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
     // Android tile subtitle refresh on exit-IP resolution and on the
     // show-node-info toggle. Both are cheap and idempotent.
     if (Platform.isAndroid) {
-      _exitIpSub = ref.listenManual(exitIpInfoProvider, (_, __) {
+      _exitIpSub = ref.listenManual(exitIpInfoProvider, (_, _) {
         _pushTileState();
       });
-      _tileNodeInfoSub = ref.listenManual(tileShowNodeInfoProvider, (_, __) {
+      _tileNodeInfoSub = ref.listenManual(tileShowNodeInfoProvider, (_, _) {
         _pushTileState();
       });
     }
@@ -1446,8 +1446,8 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
     // explicit: "subscribe to lifecycle, never rebuild me on emissions".
     // (Both are Provider<void>; ref.watch happened to work because null
     // == null, but ref.listen documents the contract clearly.)
-    ref.listen<void>(coreHeartbeatProvider, (_, __) {});
-    ref.listen<void>(subscriptionSyncProvider, (_, __) {});
+    ref.listen<void>(coreHeartbeatProvider, (_, _) {});
+    ref.listen<void>(subscriptionSyncProvider, (_, _) {});
 
     // DynamicColorBuilder pulls the OS palette (Material You) on Android 12+
     // and macOS, falling back to our seeded accentColor elsewhere. The
@@ -1922,7 +1922,7 @@ class _EmbyTabPage extends ConsumerWidget {
     return emby.when(
       loading: () =>
           const Scaffold(body: Center(child: CircularProgressIndicator())),
-      error: (e, __) => Scaffold(
+      error: (e, _) => Scaffold(
         body: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
