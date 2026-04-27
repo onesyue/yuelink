@@ -26,6 +26,7 @@ import 'modules/settings/hotkey_codec.dart';
 import 'modules/onboarding/onboarding_page.dart';
 import 'modules/onboarding/persona_prompt_page.dart';
 import 'modules/carrier/carrier_provider.dart';
+import 'modules/yue_auth/presentation/auth_loading_fallback.dart';
 import 'modules/yue_auth/presentation/yue_auth_page.dart';
 import 'modules/yue_auth/providers/yue_auth_providers.dart';
 import 'modules/connections/providers/connections_providers.dart';
@@ -1507,8 +1508,12 @@ class _AuthGate extends ConsumerWidget {
     final authState = ref.watch(authProvider);
     switch (authState.status) {
       case AuthStatus.unknown:
-        // With pre-loaded auth, this should never show. Keep as safety fallback.
-        return const SizedBox.shrink();
+        // v1.0.22 P0-4c: render a quiet centred loader instead of
+        // SizedBox.shrink(). With P0-4a's bootstrap timeout and
+        // P0-4b's _init() timeout/catch, unknown is guaranteed
+        // transient (max ~5 s on a wedged SecureStorage); showing
+        // anything beats a blank window.
+        return const AuthLoadingFallback();
       case AuthStatus.loggedOut:
         return const YueAuthPage();
       case AuthStatus.loggedIn:
