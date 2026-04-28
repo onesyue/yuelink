@@ -18,12 +18,32 @@ class MihomoApi {
     this.host = '127.0.0.1',
     this.port = 9090,
     this.secret,
-  });
+    http.Client? client,
+  }) : _client = client ?? http.Client();
 
   final String host;
   final int port;
   final String? secret;
   final CircuitBreaker _breaker = CircuitBreaker();
+
+  /// HTTP client used for every request. Production callers leave it
+  /// null and get a stock `http.Client()` (which today is an `IOClient`
+  /// wrapping the platform's HttpClient). Tests inject a
+  /// `MockClient.handler` from `package:http/testing.dart` to stub
+  /// responses without binding a real socket. The instance is owned —
+  /// hold a single MihomoApi for the process lifetime; recreate (don't
+  /// reuse) when `host`/`port`/`secret` change.
+  final http.Client _client;
+
+  /// Release the underlying HTTP client. Call from
+  /// `CoreManager.stop()` / on session teardown so `IOClient` returns
+  /// its connection-pool sockets to the OS instead of waiting for GC.
+  /// Idempotent — once-closed clients silently no-op subsequent
+  /// requests with `ClientException` which the retry path treats as
+  /// transient.
+  void dispose() {
+    _client.close();
+  }
 
   String get _baseUrl => 'http://$host:$port';
 
@@ -54,7 +74,7 @@ class MihomoApi {
   ///   * `'other'`     — anything else (malformed response, TLS mismatch, …)
   Future<({bool ok, String reason})> healthSnapshot() async {
     try {
-      final resp = await http
+      final resp = await _client
           .get(Uri.parse('$_baseUrl/version'), headers: _headers)
           .timeout(const Duration(seconds: 2));
       if (resp.statusCode == 200) {
@@ -116,7 +136,7 @@ class MihomoApi {
   Future<Map<String, dynamic>> testGroupDelay(String groupName,
       {String url = 'https://www.gstatic.com/generate_204',
       int timeout = 5000}) async {
-    final resp = await http
+    final resp = await _client
         .get(
           Uri.parse(
             '$_baseUrl/group/${Uri.encodeComponent(groupName)}/delay'
@@ -378,7 +398,7 @@ class MihomoApi {
   static const _kIsolateDecodeThreshold = 20 * 1024;
 
   Future<Map<String, dynamic>> _get(String path) => _withRetry(() async {
-    final resp = await http
+    final resp = await _client
         .get(Uri.parse('$_baseUrl$path'), headers: _headers)
         .timeout(_kTimeout);
     if (resp.statusCode != 200) {
@@ -396,7 +416,7 @@ class MihomoApi {
 
   Future<http.Response> _put(String path,
       {Map<String, dynamic>? body}) async {
-    return http
+    return _client
         .put(
           Uri.parse('$_baseUrl$path'),
           headers: _headers,
@@ -407,7 +427,7 @@ class MihomoApi {
 
   Future<http.Response> _patch(String path,
       {Map<String, dynamic>? body}) async {
-    return http
+    return _client
         .patch(
           Uri.parse('$_baseUrl$path'),
           headers: _headers,
@@ -417,14 +437,14 @@ class MihomoApi {
   }
 
   Future<http.Response> _delete(String path) async {
-    return http
+    return _client
         .delete(Uri.parse('$_baseUrl$path'), headers: _headers)
         .timeout(_kTimeout);
   }
 
   Future<http.Response> _post(String path,
       {Map<String, dynamic>? body}) async {
-    return http
+    return _client
         .post(
           Uri.parse('$_baseUrl$path'),
           headers: _headers,
