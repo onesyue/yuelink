@@ -101,6 +101,16 @@ class CoreManager {
   bool _initialized = false;
   bool _serviceModeActive = false;
 
+  /// True while [start] is mid-flight (between port remap and verify).
+  /// Read by [markRunning] to skip the persistence-based port restore,
+  /// which would otherwise stomp the just-remapped in-memory `_apiPort`
+  /// with the previous run's persisted value if a resume event lands
+  /// during startup. See macOS startup_fail report 2026-04-28 — port
+  /// 9090 busy → remapped to 9091, resume mid-startup re-restored 9090
+  /// from persistence, all subsequent api/stream traffic hit the wrong
+  /// port → verify failed with E008.
+  bool _startInFlight = false;
+
   /// Guards against concurrent start/stop calls.
   Completer<void>? _pendingOperation;
 
@@ -180,6 +190,14 @@ class CoreManager {
 
   /// Restore the Dart _running flag and port config after detecting that the
   /// Go core survived a Flutter engine restart. Called from _onAppResumed.
+  ///
+  /// If [start] is mid-flight (`_startInFlight == true`), the in-memory
+  /// `_apiPort` / `_mixedPort` are the freshly-remapped authoritative
+  /// values from the current run's `buildConfig` — and the just-completed
+  /// API health check that motivated this call already proved they're
+  /// correct. Skipping the persistence restore in that window prevents
+  /// the macOS race where remapped 9091 got stomped back to persisted
+  /// 9090 mid-startup → verify failed.
   Future<void> markRunning() async {
     _running = true;
     final savedConnectionMode = await SettingsService.getConnectionMode();
@@ -190,12 +208,17 @@ class CoreManager {
         (Platform.isMacOS || Platform.isLinux || Platform.isWindows) &&
         savedConnectionMode == 'tun' &&
         await ServiceManager.isInstalled();
-    // Restore ports from persisted settings (engine restart loses Dart state)
-    final savedApiPort = await SettingsService.get<int>('lastApiPort');
-    final savedMixedPort = await SettingsService.get<int>('lastMixedPort');
-    if (savedApiPort != null) _apiPort = savedApiPort;
-    if (savedMixedPort != null) _mixedPort = savedMixedPort;
-    // Recreate API/stream clients with restored ports
+    if (!_startInFlight) {
+      // Restore ports from persisted settings (engine restart loses
+      // Dart state). Skipped when start() is mid-flight — in-memory
+      // is authoritative there.
+      final savedApiPort = await SettingsService.get<int>('lastApiPort');
+      final savedMixedPort = await SettingsService.get<int>('lastMixedPort');
+      if (savedApiPort != null) _apiPort = savedApiPort;
+      if (savedMixedPort != null) _mixedPort = savedMixedPort;
+    }
+    // Recreate API/stream clients with current ports (whether restored
+    // from persistence or kept in-memory from the active start flow).
     _api = null;
     _stream = null;
     _clashCore = null;
@@ -254,6 +277,7 @@ class CoreManager {
     }
     if (_running) return true; // re-check after waiting
     _pendingOperation = Completer<void>();
+    _startInFlight = true;
 
     // Everything below must be inside the try so the catch handler always
     // completes _pendingOperation — even if SettingsService throws before
@@ -598,6 +622,7 @@ class CoreManager {
       unawaited(_backgroundNetworkSample());
       _pendingOperation?.complete();
       _pendingOperation = null;
+      _startInFlight = false;
       return true;
     } catch (e) {
       final failedName =
@@ -630,6 +655,7 @@ class CoreManager {
 
       _pendingOperation?.complete();
       _pendingOperation = null;
+      _startInFlight = false;
       rethrow;
     }
   }
@@ -770,6 +796,7 @@ class CoreManager {
       unawaited(_backgroundNetworkSample());
       _pendingOperation?.complete();
       _pendingOperation = null;
+      _startInFlight = false;
       return true;
     } catch (e) {
       final failedName =
@@ -787,6 +814,7 @@ class CoreManager {
 
       _pendingOperation?.complete();
       _pendingOperation = null;
+      _startInFlight = false;
       rethrow;
     }
   }
