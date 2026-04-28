@@ -13,6 +13,8 @@ import '../clash_core_real.dart';
 import '../ffi/core_controller.dart';
 import '../../domain/models/relay_profile.dart';
 import '../../domain/models/startup_report.dart';
+import 'startup_config_builder.dart' as cfg;
+import 'startup_diagnostics.dart' as diag;
 import 'config_template.dart';
 import 'geodata_service.dart';
 import '../../infrastructure/datasources/mihomo_api.dart';
@@ -35,6 +37,13 @@ import '../storage/settings_service.dart';
 import '../platform/vpn_service.dart' as vpn;
 import '../../infrastructure/surge_modules/module_rule_injector.dart';
 import '../../shared/telemetry.dart';
+
+// Service-mode startup logic lives in a part file so it can mutate
+// CoreManager's private state (`_apiPort`, `_running`,
+// `_serviceModeActive`, `_pendingOperation`, …) without exposing those
+// fields to the rest of the codebase. Logically the same class; physically
+// split because the desktop helper-subprocess flow was 213 lines on its own.
+part 'desktop_service_mode.dart';
 
 /// How mihomo is managed.
 enum CoreMode { ffi, subprocess, mock }
@@ -299,11 +308,11 @@ class CoreManager {
       // core init doesn't need geo files. Running in parallel saves
       // 100-500ms on first launch or when CDN fallback is needed.
       await Future.wait([
-        _step(steps, 'ensureGeo', StartupError.geoFilesFailed, () async {
+        diag.runStartupStep(steps, 'ensureGeo', StartupError.geoFilesFailed, () async {
           final installed = await GeoDataService.ensureFiles();
           return 'installed=$installed';
         }),
-        _step(steps, 'initCore', StartupError.initCoreFailed, () async {
+        diag.runStartupStep(steps, 'initCore', StartupError.initCoreFailed, () async {
           if (_initialized) {
             return 'skip (already initialized)';
           }
@@ -335,7 +344,7 @@ class CoreManager {
 
       // ── Step 3: vpnPermission (Android only) ───────────────────────
       if (Platform.isAndroid && !isMockMode) {
-        await _step(
+        await diag.runStartupStep(
           steps,
           'vpnPermission',
           StartupError.vpnPermissionDenied,
@@ -370,7 +379,7 @@ class CoreManager {
       if (Platform.isAndroid && !isMockMode) {
         // Run VPN fd + config prep in parallel
         late final Future<String> configFuture;
-        await _step(steps, 'startVpn', StartupError.vpnFdInvalid, () async {
+        await diag.runStartupStep(steps, 'startVpn', StartupError.vpnFdInvalid, () async {
           configFuture = prepareConfig();
           final rawMp = ConfigTemplate.getMixedPort(configYaml);
           tunFd = await vpn.VpnService.startAndroidVpn(mixedPort: rawMp);
@@ -380,7 +389,7 @@ class CoreManager {
           return 'fd=$tunFd, mixedPort=$rawMp';
         });
 
-        await _step(
+        await diag.runStartupStep(
           steps,
           'buildConfig',
           StartupError.configBuildFailed,
@@ -412,7 +421,7 @@ class CoreManager {
         );
       } else {
         // Non-Android: sequential (no VPN step)
-        await _step(
+        await diag.runStartupStep(
           steps,
           'buildConfig',
           StartupError.configBuildFailed,
@@ -445,7 +454,7 @@ class CoreManager {
       }
 
       // ── Step 6: startCore (Go hub.Parse) ───────────────────────────
-      await _step(steps, 'startCore', StartupError.coreStartFailed, () async {
+      await diag.runStartupStep(steps, 'startCore', StartupError.coreStartFailed, () async {
         // Write config to disk for debugging (atomic tmp+rename)
         debugPrint('[CoreManager] startCore: writing config to disk...');
         final appDir = await getApplicationSupportDirectory();
@@ -492,7 +501,7 @@ class CoreManager {
       // avoid burning CPU on laggy devices / large subscriptions where the
       // API can take 5-10s to bind. Total ceiling 14s — covers the 2-user
       // startup_fail cases observed at the original 5s cap.
-      await _step(steps, 'waitApi', StartupError.apiTimeout, () async {
+      await diag.runStartupStep(steps, 'waitApi', StartupError.apiTimeout, () async {
         if (isMockMode) return 'skip (mock)';
         for (var i = 1; i <= 100; i++) {
           // Fast-fail: if Go core died (panic / crash after StartCore returned),
@@ -540,14 +549,14 @@ class CoreManager {
       // listener before parsing the config and stitching the proxy
       // graph. testGroupDelay landing in this window saw an empty
       // /proxies and painted everything red. See _waitProxiesReady.
-      await _step(steps, 'waitProxies', StartupError.apiTimeout, () async {
+      await diag.runStartupStep(steps, 'waitProxies', StartupError.apiTimeout, () async {
         if (isMockMode) return 'skip (mock)';
         await _waitProxiesReady();
         return 'ready';
       });
 
       // ── Step 8: verify ─────────────────────────────────────────────
-      await _step(steps, 'verify', StartupError.coreDiedAfterStart, () async {
+      await diag.runStartupStep(steps, 'verify', StartupError.coreDiedAfterStart, () async {
         if (isMockMode) return 'skip (mock)';
         final goRunning = _core.isRunning;
         final apiOk = await api.isAvailable();
@@ -642,7 +651,7 @@ class CoreManager {
     String processed = configYaml;
 
     try {
-      await _step(
+      await diag.runStartupStep(
         steps,
         'buildConfig_ios',
         StartupError.configBuildFailed,
@@ -701,19 +710,21 @@ class CoreManager {
         },
       );
 
-      await _step(steps, 'ensureGeo', StartupError.geoFilesFailed, () async {
+      await diag.runStartupStep(steps, 'ensureGeo', StartupError.geoFilesFailed, () async {
         final installed = await GeoDataService.ensureFiles();
         return 'installed=$installed';
       });
 
-      await _step(steps, 'startIosVpn', StartupError.coreStartFailed, () async {
+      await diag.runStartupStep(steps, 'startIosVpn', StartupError.coreStartFailed, () async {
         final ok = await vpn.VpnService.startIosVpn(configYaml: processed);
-        // iOS 15 MB PacketTunnel cap: a 5 MB subscription becomes ~10 MB of
-        // UTF-16 Dart heap plus a Swift copy plus a Go parse arena. Once the
-        // extension has written its App Group file, the Dart-side string is
-        // redundant — drop it immediately so the next Isolate.run / YAML
-        // reparse doesn't re-amplify. length-report captured for logs before
-        // clearing.
+        // iOS PacketTunnel runs under a ~50 MB cap on iOS 15+ (Apple raised
+        // it from the 14-era ~15 MB; Apple Dev Forums #106377). A 5 MB
+        // subscription still becomes ~10 MB of UTF-16 Dart heap plus a
+        // Swift copy plus a Go parse arena, so we keep the existing
+        // amplification fix: once the extension has written its App Group
+        // file, the Dart-side string is redundant — drop it immediately so
+        // the next Isolate.run / YAML reparse doesn't re-amplify.
+        // length-report captured for logs before clearing.
         final len = processed.length;
         processed = '';
         if (!ok) throw Exception('startIosVpn returned false');
@@ -725,7 +736,7 @@ class CoreManager {
       // The Go core runs inside the PacketTunnel extension process.
       // Its REST API on 127.0.0.1:apiPort may take a moment to bind
       // after the VPN reports .connected. Poll until reachable.
-      await _step(steps, 'waitApi', StartupError.apiTimeout, () async {
+      await diag.runStartupStep(steps, 'waitApi', StartupError.apiTimeout, () async {
         // Same progressive backoff as the Android/desktop path — caps at
         // ~14s to accommodate slow extension starts on older iPhones.
         for (var i = 1; i <= 100; i++) {
@@ -742,7 +753,7 @@ class CoreManager {
       // ── Step 3.5: waitProxies (v1.0.22 P0-2, iOS) ─────────────────
       // PacketTunnel-extension mihomo has the same /version-vs-/proxies
       // gap. See _waitProxiesReady.
-      await _step(steps, 'waitProxies', StartupError.apiTimeout, () async {
+      await diag.runStartupStep(steps, 'waitProxies', StartupError.apiTimeout, () async {
         await _waitProxiesReady();
         return 'ready';
       });
@@ -782,215 +793,6 @@ class CoreManager {
     }
   }
 
-  Future<bool> _startDesktopServiceMode(
-    String configYaml,
-    List<StartupStep> steps, {
-    required String connectionMode,
-    required String desktopTunStack,
-    List<String> tunBypassAddresses = const [],
-    List<String> tunBypassProcesses = const [],
-    String quicRejectPolicy = ConfigTemplate.defaultQuicRejectPolicy,
-  }) async {
-    String processed = configYaml;
-    String? homeDir;
-
-    try {
-      await _step(steps, 'ensureGeo', StartupError.geoFilesFailed, () async {
-        final installed = await GeoDataService.ensureFiles();
-        return 'installed=$installed';
-      });
-
-      await _step(steps, 'buildConfig', StartupError.configBuildFailed, () async {
-        final appDir = await getApplicationSupportDirectory();
-        homeDir = appDir.path;
-
-        // A5a relay wiring on desktop service-mode path.
-        final relay = await _resolveRelay();
-        final withOverwrite = await _prepareConfig(
-          configYaml,
-          relayProfile: relay.profile,
-        );
-        processed = await ConfigTemplate.processInIsolate(
-          withOverwrite,
-          apiPort: _apiPort,
-          secret: _apiSecret,
-          connectionMode: connectionMode,
-          desktopTunStack: desktopTunStack,
-          tunBypassAddresses: tunBypassAddresses,
-          tunBypassProcesses: tunBypassProcesses,
-          quicRejectPolicy: quicRejectPolicy,
-          relayHostWhitelist: relay.bypassHosts,
-        );
-        _apiPort = ConfigTemplate.getApiPort(processed);
-        _mixedPort = ConfigTemplate.getMixedPort(processed);
-        final parsedSecret = ConfigTemplate.getSecret(processed);
-        if (parsedSecret != null && parsedSecret.isNotEmpty) {
-          _apiSecret = parsedSecret;
-        }
-        _api = null;
-        _stream = null;
-        _clashCore = null;
-        return 'output=${processed.length}b, apiPort=$_apiPort, mixedPort=$_mixedPort, homeDir=$homeDir';
-      });
-
-      // Two-factor readiness: SCM registered (isInstalled) + HTTP listener
-      // actually answering. Without the second factor, install() can return
-      // success while the helper's listener is still binding, causing the
-      // subsequent POST /v1/start to race and fail — the classic "user has
-      // to refresh once before it connects" symptom. Matches FlClash's
-      // `sc query RUNNING && ping` and CVR's `wait_for_service_ipc`.
-      await _step(steps, 'waitService', StartupError.coreStartFailed, () async {
-        for (var i = 0; i < 50; i++) {
-          if (await ServiceClient.ping()) {
-            return 'ready after ${i + 1} ping(s)';
-          }
-          await Future.delayed(const Duration(milliseconds: 200));
-        }
-        throw Exception(
-          'service helper not answering ping after 10s — likely a cold '
-          'install + Windows Defender / TUN driver init. Retry usually '
-          'works once the helper has bound its listener.',
-        );
-      });
-
-      await _step(
-        steps,
-        'startService',
-        StartupError.coreStartFailed,
-        () async {
-          // Write the processed config to a file in homeDir BEFORE calling
-          // the helper. The helper no longer accepts raw YAML over IPC — it
-          // reads from the file path we hand it (which it validates against
-          // its install-time path allowlist). This eliminates the previous
-          // "client → root file write" attack surface.
-          final configFile = File('$homeDir/yuelink-service.yaml');
-          await configFile.parent.create(recursive: true);
-          await configFile.writeAsString(processed);
-
-          // One silent retry on first start — the helper may have passed
-          // ping but mihomo subprocess spawn can still lose a race against
-          // Windows' TUN driver registration on the very first connect.
-          DesktopServiceInfo status;
-          try {
-            status = await ServiceClient.start(
-              configPath: configFile.path,
-              homeDir: homeDir!,
-            );
-          } catch (e) {
-            debugPrint(
-              '[CoreManager] startService attempt-1 failed: $e — '
-              'retrying once after 1.5 s warmup',
-            );
-            await Future.delayed(const Duration(milliseconds: 1500));
-            status = await ServiceClient.start(
-              configPath: configFile.path,
-              homeDir: homeDir!,
-            );
-          }
-          _running = true;
-          _serviceModeActive = true;
-          return 'service OK, pid=${status.pid ?? 0}';
-        },
-      );
-
-      await _step(steps, 'waitApi', StartupError.apiTimeout, () async {
-        // Windows cold-start budget: wintun.dll first-load + Defender scan
-        // + mihomo process start + external-controller bind can push past
-        // 10 s on older machines. Previous 5 s cap caused "install OK,
-        // first connect fails, second connect works" — users had to click
-        // twice because the app was racing the TUN driver. 150 × 100 ms
-        // = 15 s matches the service install _waitUntilReachable ceiling
-        // so the whole install→run flow has a consistent window.
-        for (var i = 1; i <= 150; i++) {
-          if (await api.isAvailable()) {
-            return 'ready after $i attempts';
-          }
-          try {
-            final status = await ServiceClient.status();
-            if (!status.mihomoRunning) {
-              throw Exception(
-                'service child stopped before API ready: ${status.lastError ?? status.lastExit ?? 'unknown'}',
-              );
-            }
-          } catch (e) {
-            throw Exception('service helper unavailable while waiting API: $e');
-          }
-          await Future.delayed(const Duration(milliseconds: 100));
-        }
-        throw Exception('API not available after 150 attempts (15s)');
-      });
-
-      // ── waitProxies (v1.0.22 P0-2, desktop service mode) ─────────
-      // Service-helper-hosted mihomo binds /version before /proxies
-      // is fully populated, same as the FFI path. See _waitProxiesReady.
-      await _step(steps, 'waitProxies', StartupError.apiTimeout, () async {
-        await _waitProxiesReady();
-        return 'ready';
-      });
-
-      await _step(steps, 'verify', StartupError.coreDiedAfterStart, () async {
-        final status = await ServiceClient.status();
-        final apiOk = await api.isAvailable();
-
-        if (!status.mihomoRunning) {
-          throw Exception('service child is not running');
-        }
-        if (!apiOk) {
-          throw Exception('API unavailable after startup');
-        }
-
-        final appDir = await getApplicationSupportDirectory();
-        await File(
-          '${appDir.path}/$_kLastWorkingConfig',
-        ).writeAsString(processed);
-
-        var info = 'serviceRunning=${status.mihomoRunning}, apiOk=$apiOk';
-        try {
-          final dns = await api.queryDns('google.com');
-          final answers = dns['Answer'] as List?;
-          info += ', dns=${answers?.length ?? 0}answers';
-        } catch (e) {
-          info += ', dnsErr=$e';
-        }
-        return info;
-      });
-
-      await _persistPorts();
-      await _finishReport(steps, true, null);
-      // A5b: kick off the background probe AFTER finishReport so the
-      // current start's report is finalised first. Fire-and-forget by
-      // design — probe results land in metrics for the NEXT start, not
-      // this one.
-      unawaited(_backgroundProbe());
-      // A5c-2: sample the client-side network profile (IPv6/NAT/medium)
-      // — also fire-and-forget. No-ops when the cached sample is younger
-      // than 6h, so users restarting frequently don't get sampled
-      // repeatedly.
-      unawaited(_backgroundNetworkSample());
-      _pendingOperation?.complete();
-      _pendingOperation = null;
-      return true;
-    } catch (e) {
-      final failedName =
-          steps.where((s) => !s.success).firstOrNull?.name ?? 'unknown';
-      await _finishReport(steps, false, failedName);
-
-      if (_running || _serviceModeActive) {
-        _running = false;
-        try {
-          await ServiceClient.stop();
-        } catch (stopError) {
-          debugPrint(
-            '[CoreManager] cleanup ServiceClient.stop() after failed desktop start: $stopError',
-          );
-        }
-      }
-      _serviceModeActive = false;
-      _pendingOperation?.complete();
-      _pendingOperation = null;
-      rethrow;
-    }
-  }
 
   // ==================================================================
   // Stop
@@ -1095,19 +897,6 @@ class CoreManager {
     return base64UrlEncode(bytes).replaceAll('=', '');
   }
 
-  Future<bool> _shouldUseDesktopServiceMode(String connectionMode) async {
-    if (!ServiceManager.isSupported || isMockMode) return false;
-    // ServiceManager.isSupported already gates by platform (mac/linux/win).
-    // The previous extra `Platform.isMacOS || isWindows` clause silently
-    // excluded Linux even though the install UI showed it as supported,
-    // leaving Linux users with a "Service Mode installed" badge that did
-    // nothing. Linux + Unix-socket helper is now first-class.
-    if (!(Platform.isMacOS || Platform.isLinux || Platform.isWindows)) {
-      return false;
-    }
-    if (connectionMode != 'tun') return false;
-    return ServiceManager.isInstalled();
-  }
 
   /// Phase 1B A5a: load persisted relay profile, run the cold-start
   /// selector, record what was picked. Returns the profile to actually
@@ -1224,66 +1013,31 @@ class CoreManager {
     }
   }
 
+  /// Run the config-build pipeline (overwrite → MITM rules → upstream
+  /// proxy → relay injector → port rebind) and capture the relay result
+  /// onto [lastRelayResult]. The actual logic lives in
+  /// `lib/core/kernel/startup_config_builder.dart`; this delegate
+  /// keeps the CoreManager state side-effects (port invalidation,
+  /// `_apiPort`, `_api` / `_stream` / `_clashCore` reset, `lastRelayResult`)
+  /// next to the rest of CoreManager's bookkeeping.
   Future<String> _prepareConfig(
     String configYaml, {
     RelayProfile? relayProfile,
   }) async {
-    final overwrite = await OverwriteService.load();
-    var withOverwrite = OverwriteService.apply(configYaml, overwrite);
-
-    final mitmPort = CoreController.instance.getMitmEnginePort();
-    withOverwrite = await ModuleRuleInjector.inject(
-      withOverwrite,
-      mitmPort: mitmPort,
+    final result = await cfg.buildStartConfig(
+      configYaml: configYaml,
+      currentApiPort: _apiPort,
+      isMockMode: isMockMode,
+      relayProfile: relayProfile,
     );
-
-    final upstream = await SettingsService.getUpstreamProxy();
-    if (upstream != null && (upstream['server'] as String).isNotEmpty) {
-      withOverwrite = ConfigTemplate.injectUpstreamProxy(
-        withOverwrite,
-        upstream['type'] as String,
-        upstream['server'] as String,
-        upstream['port'] as int,
-      );
+    lastRelayResult = result.relayResult;
+    if (result.apiPort != _apiPort) {
+      _apiPort = result.apiPort;
+      _api = null;
+      _stream = null;
+      _clashCore = null;
     }
-
-    // Commercial dialer-proxy (Phase 1A). Pure additive: no-op when the
-    // profile is absent or invalid. Applied after upstream proxy so a user
-    // who sets both gets the relay wrapping their chosen exit nodes while
-    // the soft-router `_upstream` still fronts everything else. The result
-    // is captured for StartupReport / telemetry regardless of outcome.
-    final relayResult = RelayInjector.apply(withOverwrite, relayProfile);
-    lastRelayResult = relayResult;
-    withOverwrite = relayResult.config;
-
-    // Port-conflict check applies to all desktop platforms — Linux is now
-    // a first-class desktop target via .deb / .rpm / AppImage releases.
-    if ((Platform.isMacOS || Platform.isLinux || Platform.isWindows) &&
-        !isMockMode) {
-      final preferredMixed = ConfigTemplate.getMixedPort(withOverwrite);
-      final ports = await Future.wait([
-        _findAvailablePort(preferredMixed),
-        _findAvailablePort(_apiPort),
-      ]);
-      final freeMixed = ports[0];
-      final freeApi = ports[1];
-      if (freeMixed != preferredMixed) {
-        debugPrint(
-          '[CoreManager] mixed-port $preferredMixed busy → remapped to $freeMixed',
-        );
-        withOverwrite = ConfigTemplate.setMixedPort(withOverwrite, freeMixed);
-      }
-      if (freeApi != _apiPort) {
-        debugPrint(
-          '[CoreManager] apiPort $_apiPort busy → remapped to $freeApi',
-        );
-        _apiPort = freeApi;
-        _api = null;
-        _stream = null;
-        _clashCore = null;
-      }
-    }
-    return withOverwrite;
+    return result.yaml;
   }
 
   Future<String?> loadLastWorkingConfig() async {
@@ -1293,43 +1047,11 @@ class CoreManager {
     return file.readAsString();
   }
 
-  /// Run a single step with timing, errorCode, and structured recording.
-  Future<void> _step(
-    List<StartupStep> steps,
-    String name,
-    String errorCode,
-    Future<String> Function() action,
-  ) async {
-    final sw = Stopwatch()..start();
-    try {
-      final detail = await action();
-      sw.stop();
-      steps.add(
-        StartupStep(
-          name: name,
-          success: true,
-          detail: detail,
-          durationMs: sw.elapsedMilliseconds,
-        ),
-      );
-      debugPrint('[CoreManager] ✓ $name (${sw.elapsedMilliseconds}ms) $detail');
-    } catch (e) {
-      sw.stop();
-      steps.add(
-        StartupStep(
-          name: name,
-          success: false,
-          errorCode: errorCode,
-          error: e.toString(),
-          durationMs: sw.elapsedMilliseconds,
-        ),
-      );
-      debugPrint(
-        '[CoreManager] ✗ $name [$errorCode] (${sw.elapsedMilliseconds}ms) $e',
-      );
-      rethrow;
-    }
-  }
+  // _step / _finishReport / _relayReportFields / _errorCodeFor moved to
+  // lib/core/kernel/startup_diagnostics.dart. Call sites use
+  // `diag.runStartupStep(...)` directly; report finalisation now goes
+  // through [_finishReport] below as a thin delegate that hydrates the
+  // relay-block from CoreManager state.
 
   /// Poll `/proxies` until the proxy graph is materialised (not just
   /// `/version` answering). v1.0.22 P0-2 root fix for "测速全红": the
@@ -1358,130 +1080,29 @@ class CoreManager {
     throw Exception('proxies not ready after 50 attempts (~5s)');
   }
 
-  /// Find a free TCP port starting from [preferred], trying up to 20 ports.
-  /// Returns [preferred] if all attempts fail (let mihomo surface the error).
-  static Future<int> _findAvailablePort(int preferred) async {
-    for (var port = preferred; port < preferred + 20; port++) {
-      try {
-        final server = await ServerSocket.bind(
-          InternetAddress.loopbackIPv4,
-          port,
-          shared: false,
-        );
-        await server.close();
-        return port;
-      } on SocketException {
-        continue;
-      }
-    }
-    return preferred;
-  }
+  // _findAvailablePort moved to lib/core/kernel/startup_config_builder.dart
+  // (now `cfg.findAvailablePort`); used by _prepareConfig's port-rebind path.
 
-  /// Build the final report, read Go core logs, save to disk.
+  /// Thin delegate to [diag.buildAndPersistStartupReport] that hydrates
+  /// the relay-block from CoreManager's relay-state fields, captures the
+  /// returned report onto [lastReport] for the UI, and emits the
+  /// success / failure telemetry. Body lives in startup_diagnostics.dart.
   Future<void> _finishReport(
     List<StartupStep> steps,
     bool success,
     String? failedStep,
   ) async {
-    // Read Go-side core.log (written by logrus in InitCore)
-    List<String> coreLogs = [];
-    try {
-      final appDir = await getApplicationSupportDirectory();
-      final logFile = File('${appDir.path}/core.log');
-      if (logFile.existsSync()) {
-        final lines = await logFile.readAsLines();
-        // Keep last 100 lines to avoid huge reports
-        coreLogs = lines.length > 100
-            ? lines.sublist(lines.length - 100)
-            : lines;
-      }
-    } catch (e) {
-      debugPrint('[CoreManager] failed to read core.log: $e');
-    }
-
-    final report = StartupReport(
-      timestamp: DateTime.now(),
-      platform: Platform.operatingSystem,
-      overallSuccess: success,
+    final report = await diag.buildAndPersistStartupReport(
       steps: steps,
+      success: success,
       failedStep: failedStep,
-      coreLogs: coreLogs,
-      relay: _relayReportFields(),
+      relayReportFields: diag.buildRelayReportFields(
+        lastRelayResult: lastRelayResult,
+        lastSelectedKind: lastSelectedKind,
+        lastSelectedReason: lastSelectedReason,
+      ),
     );
-
     lastReport = report;
-    debugPrint(report.toDebugString());
-
-    // Telemetry — record aggregate outcome + which step failed.
-    if (success) {
-      final totalMs = steps.fold<int>(0, (a, s) => a + s.durationMs);
-      Telemetry.event(
-        TelemetryEvents.startupOk,
-        props: {'total_ms': totalMs, 'steps': steps.length},
-      );
-    } else {
-      Telemetry.event(
-        TelemetryEvents.startupFail,
-        priority: true,
-        props: {
-          'step': failedStep ?? 'unknown',
-          'code': _errorCodeFor(failedStep),
-        },
-      );
-    }
-
-    // Save to disk (fire-and-forget)
-    StartupReport.save(report);
-  }
-
-  /// Build the relay block for StartupReport.
-  /// Returns null only when the selector has never run (e.g. before the
-  /// first start). Once A5a wired the selector into every start path,
-  /// every successful or failed start records its selectedKind /
-  /// selectedReason here — telemetry sees the consistent shape.
-  Map<String, dynamic>? _relayReportFields() {
-    final r = lastRelayResult;
-    final kind = lastSelectedKind;
-    if (r == null && kind == null) return null;
-    return {
-      if (r != null) 'injected': r.injected,
-      if (r != null && r.targetCount > 0) 'targetCount': r.targetCount,
-      if (r != null && r.skipReason != null) 'skipReason': r.skipReason,
-      if (kind != null) 'selectedKind': kind.name,
-      if (lastSelectedReason != null) 'selectedReason': lastSelectedReason,
-    };
-  }
-
-  /// Stable error codes for dashboard grouping. Mirrors the E002–E009
-  /// constants rendered in StartupErrorBanner.
-  static String _errorCodeFor(String? step) {
-    switch (step) {
-      case 'initCore':
-        return 'E002';
-      case 'vpnPermission':
-        return 'E003';
-      case 'startVpn':
-        return 'E004';
-      case 'buildConfig':
-        return 'E005';
-      case 'startCore':
-        return 'E006';
-      case 'waitApi':
-        return 'E007';
-      case 'waitProxies':
-        // Same family as waitApi — REST is up but the proxy graph is
-        // not yet usable. Re-uses E007 so dashboard grouping and
-        // telemetry counters stay consistent with the commit body
-        // contract; the distinct step name preserves diagnostic
-        // detail in the StartupReport.
-        return 'E007';
-      case 'verify':
-        return 'E008';
-      case 'ensureGeo':
-        return 'E009';
-      default:
-        return 'Exx';
-    }
   }
 }
 

@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/legacy.dart';
 
 import '../../../core/storage/auth_token_service.dart';
 import '../../../core/storage/settings_service.dart';
@@ -21,94 +20,25 @@ import '../../../infrastructure/repositories/profile_repository.dart';
 import '../../../shared/app_notifier.dart';
 import '../../../shared/event_log.dart';
 import '../../../shared/telemetry.dart';
+import 'auth_state.dart';
+import 'xboard_api_providers.dart';
 
-// ------------------------------------------------------------------
-// Auth state
-// ------------------------------------------------------------------
+// AuthState / AuthStatus → auth_state.dart
+// xboardApiProvider + host-fallback config → xboard_api_providers.dart
+// Re-exported here so the two files keep their existing import path
+// stable for the rest of the codebase.
+export 'auth_state.dart';
+export 'xboard_api_providers.dart'
+    show xboardApiProvider, apiHostProvider;
 
-enum AuthStatus { unknown, loggedOut, loggedIn, guest }
-
-class AuthState {
-  final AuthStatus status;
-  final String? token;
-  final UserProfile? userProfile;
-  final String? error;
-  final bool isLoading;
-
-  const AuthState({
-    this.status = AuthStatus.unknown,
-    this.token,
-    this.userProfile,
-    this.error,
-    this.isLoading = false,
-  });
-
-  /// Copy with nullable field support. Pass [_clearToken] or [_clearProfile]
-  /// as `true` to explicitly null out the field (since `null` means "keep").
-  AuthState copyWith({
-    AuthStatus? status,
-    String? token,
-    bool clearToken = false,
-    UserProfile? userProfile,
-    bool clearProfile = false,
-    String? error,
-    bool? isLoading,
-  }) {
-    return AuthState(
-      status: status ?? this.status,
-      token: clearToken ? null : (token ?? this.token),
-      userProfile: clearProfile ? null : (userProfile ?? this.userProfile),
-      error: error,
-      isLoading: isLoading ?? this.isLoading,
-    );
-  }
-
-  bool get isLoggedIn => status == AuthStatus.loggedIn && token != null;
-  bool get isGuest => status == AuthStatus.guest;
-}
-
-// ------------------------------------------------------------------
-// XBoard API provider
-// ------------------------------------------------------------------
-
-/// Default XBoard panel URL — override via AuthTokenService.saveApiHost().
-/// The current primary bootstrap route is the raw panel IP on port 8001.
+/// Runtime business APIs may use the local proxy after login, but only
+/// when the core is genuinely up. Bootstrap/auth flows continue to use
+/// [xboardApiProvider] directly so login / subscription recovery never
+/// depend on the current node being healthy.
 ///
-/// Note: this endpoint only speaks plain HTTP on 66.55.76.208:8001; HTTPS
-/// fails the TLS handshake, so the scheme here must stay `http://`.
-const _kDefaultApiHost = 'http://66.55.76.208:8001';
-
-/// Ordered fallback hosts tried when the primary returns a transport-level
-/// error (502/503/504 / timeout / socket / TLS).
-///
-/// Keep the old CDN / business domains as alternates so the app can fail over
-/// if the raw IP route is unreachable on a given network.
-const _kFallbackHosts = <String>[
-  'https://d7ccm19ki90mg.cloudfront.net',
-  'https://yue.yuebao.website',
-  'https://yuetong.app',
-];
-
-const _kBootstrapTimeout = Duration(seconds: 8);
-const _kBootstrapRetries = 1;
-
-/// Tracks the current API host — updated on login and restored from storage.
-final _apiHostProvider = StateProvider<String>((ref) => _kDefaultApiHost);
-
-List<String> _fallbackHostsFor(String primaryHost) => [
-      for (final host in [_kDefaultApiHost, ..._kFallbackHosts])
-        if (host != primaryHost) host,
-    ];
-
-final xboardApiProvider = Provider<XBoardApi>((ref) {
-  final host = ref.watch(_apiHostProvider);
-  return XBoardApi(baseUrl: host, fallbackUrls: _fallbackHostsFor(host));
-});
-
-/// Runtime business APIs may use the local proxy after login, but only when
-/// the core is genuinely up. Bootstrap/auth flows continue to use
-/// [xboardApiProvider] directly so login / subscription recovery never depend
-/// on the current node being healthy.
+/// Lives here (not in xboard_api_providers.dart) because it depends on
+/// `authProvider`; co-locating with AuthNotifier avoids the
+/// xboard_api_providers ↔ yue_auth_providers cycle.
 final businessProxyPortProvider = Provider<int?>((ref) {
   final token = ref.watch(authProvider.select((s) => s.token));
   final status = ref.watch(coreStatusProvider);
@@ -121,11 +51,11 @@ final businessProxyPortProvider = Provider<int?>((ref) {
 });
 
 final businessXboardApiProvider = Provider<XBoardApi>((ref) {
-  final host = ref.watch(_apiHostProvider);
+  final host = ref.watch(apiHostProvider);
   final proxyPort = ref.watch(businessProxyPortProvider);
   return XBoardApi(
     baseUrl: host,
-    fallbackUrls: _fallbackHostsFor(host),
+    fallbackUrls: fallbackHostsFor(host),
     proxyPort: proxyPort,
   );
 });
@@ -169,9 +99,9 @@ class AuthNotifier extends Notifier<AuthState> {
   Iterable<String> _bootstrapHosts(String preferredHost) sync* {
     final seen = <String>{};
     for (final host in [
-      _kDefaultApiHost,
+      kDefaultApiHost,
       preferredHost,
-      ..._fallbackHostsFor(preferredHost),
+      ...fallbackHostsFor(preferredHost),
     ]) {
       if (host.isEmpty || !seen.add(host)) {
         continue;
@@ -190,8 +120,8 @@ class AuthNotifier extends Notifier<AuthState> {
         final api = XBoardApi(
           baseUrl: host,
           fallbackUrls: const <String>[],
-          timeout: _kBootstrapTimeout,
-          maxRetries: _kBootstrapRetries,
+          timeout: kBootstrapTimeout,
+          maxRetries: kBootstrapRetries,
         );
         final value = await request(api);
         return (host: host, value: value);
@@ -226,7 +156,7 @@ class AuthNotifier extends Notifier<AuthState> {
   /// `state = ...` assignment; on a disposed Notifier that throws. The
   /// guard pattern here is the same as in checkin_provider: check
   /// `_disposed` after every await and bail out before touching state
-  /// (or any other provider's state). Also covers the `_apiHostProvider`
+  /// (or any other provider's state). Also covers the `apiHostProvider`
   /// write so a dispose-after-token doesn't reach through into unrelated
   /// providers.
   ///
@@ -253,7 +183,7 @@ class AuthNotifier extends Notifier<AuthState> {
             .timeout(timeout, onTimeout: () => null);
         if (_disposed) return;
         if (savedHost != null && savedHost.isNotEmpty) {
-          ref.read(_apiHostProvider.notifier).state = savedHost;
+          ref.read(apiHostProvider.notifier).state = savedHost;
         }
         final cachedProfile = await _authService
             .getCachedProfile()
@@ -285,7 +215,7 @@ class AuthNotifier extends Notifier<AuthState> {
 
     try {
       // Resolve API host
-      final preferredHost = apiHost ?? _kDefaultApiHost;
+      final preferredHost = apiHost ?? kDefaultApiHost;
 
       // 1. Login
       final loginResult = await _runBootstrapRequest(
@@ -299,7 +229,7 @@ class AuthNotifier extends Notifier<AuthState> {
       // 2. Save token and host, update provider so all consumers get correct host
       await _authService.saveToken(token);
       await _authService.saveApiHost(host);
-      ref.read(_apiHostProvider.notifier).state = host;
+      ref.read(apiHostProvider.notifier).state = host;
       EventLog.write('[Auth] login_ok');
 
       // 3. Get subscribe data (profile + URL) in one request.
@@ -456,7 +386,7 @@ class AuthNotifier extends Notifier<AuthState> {
 
   Future<void> _refreshUserInfo(String token) async {
     try {
-      final host = await _authService.getApiHost() ?? _kDefaultApiHost;
+      final host = await _authService.getApiHost() ?? kDefaultApiHost;
       final subResult = await _runBootstrapRequest(
         (api) => api.getSubscribeData(token),
         preferredHost: host,
@@ -468,7 +398,7 @@ class AuthNotifier extends Notifier<AuthState> {
       await _authService.saveSubscribeUrl(sub.subscribeUrl);
       if (resolvedHost != host) {
         await _authService.saveApiHost(resolvedHost);
-        ref.read(_apiHostProvider.notifier).state = resolvedHost;
+        ref.read(apiHostProvider.notifier).state = resolvedHost;
       }
       if (!_disposed) {
         state = state.copyWith(userProfile: sub.profile);
@@ -487,7 +417,7 @@ class AuthNotifier extends Notifier<AuthState> {
     final token = state.token;
     if (token == null) return;
     try {
-      final host = await _authService.getApiHost() ?? _kDefaultApiHost;
+      final host = await _authService.getApiHost() ?? kDefaultApiHost;
       // Always fetch fresh from server — also updates profile data
       final subResult = await _runBootstrapRequest(
         (api) => api.getSubscribeData(token),
@@ -498,7 +428,7 @@ class AuthNotifier extends Notifier<AuthState> {
       await _authService.cacheProfile(sub.profile);
       if (resolvedHost != host) {
         await _authService.saveApiHost(resolvedHost);
-        ref.read(_apiHostProvider.notifier).state = resolvedHost;
+        ref.read(apiHostProvider.notifier).state = resolvedHost;
       }
       await _authService.saveSubscribeUrl(sub.subscribeUrl);
       if (!_disposed) state = state.copyWith(userProfile: sub.profile);
