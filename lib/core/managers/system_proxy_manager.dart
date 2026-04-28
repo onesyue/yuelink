@@ -20,6 +20,41 @@ import '../storage/settings_service.dart';
 class SystemProxyManager {
   SystemProxyManager._();
 
+  // ── Process timeout helper ──────────────────────────────────────────────
+  //
+  // v1.0.22 P3: every external command in this file now goes through this
+  // helper. Pre-fix, raw `Process.run` had no timeout — a corrupted
+  // network configuration on macOS Monterey+ (rare but real) can wedge
+  // `networksetup` for minutes; Windows Defender mid-scan can stall
+  // `reg query`; KDE's `dbus-send` has stalled on stuck session buses.
+  // Without an upper bound, those wedges propagated into the heartbeat
+  // loop and froze the Connect button.
+  //
+  // On timeout we synthesise a non-zero ProcessResult so callers' existing
+  // exit-code checks treat the wedge as a failed command (rather than an
+  // exception) and the same recovery path applies. Leaking-zombie risk is
+  // negligible — these binaries finish on their own once unblocked, and
+  // they each only print a few hundred bytes (no stdout buffer fill).
+  static Future<ProcessResult> _runWithTimeout(
+    String executable,
+    List<String> arguments, {
+    Duration timeout = const Duration(seconds: 8),
+  }) async {
+    try {
+      return await Process.run(executable, arguments).timeout(timeout);
+    } on TimeoutException {
+      debugPrint('[SystemProxy] $executable ${arguments.join(' ')} '
+          'timed out after ${timeout.inSeconds}s');
+      EventLog.write('[SysProxy] proc_timeout cmd=$executable '
+          'budget=${timeout.inSeconds}s');
+      return ProcessResult(0, -1, '', 'timeout after ${timeout.inSeconds}s');
+    }
+  }
+
+  // PowerShell on Windows is slower to spin up than the other utilities
+  // on this list — first invocation can take 4-5 s on cold caches.
+  static const _kPowerShellTimeout = Duration(seconds: 12);
+
   // ── Verification cache ──────────────────────────────────────────────────
   static bool? _verifyCached;
   static DateTime? _verifyCachedAt;
@@ -189,11 +224,11 @@ class SystemProxyManager {
     for (final svc in services) {
       try {
         final results = await Future.wait([
-          Process.run('networksetup',
+          _runWithTimeout('networksetup',
               ['-setwebproxy', svc, '127.0.0.1', '$mixedPort']),
-          Process.run('networksetup',
+          _runWithTimeout('networksetup',
               ['-setsecurewebproxy', svc, '127.0.0.1', '$mixedPort']),
-          Process.run('networksetup',
+          _runWithTimeout('networksetup',
               ['-setsocksfirewallproxy', svc, '127.0.0.1', '$mixedPort']),
         ]);
         final allOk = results.every((r) => r.exitCode == 0);
@@ -206,9 +241,11 @@ class SystemProxyManager {
           }
         }
         await Future.wait([
-          Process.run('networksetup', ['-setwebproxystate', svc, 'on']),
-          Process.run('networksetup', ['-setsecurewebproxystate', svc, 'on']),
-          Process.run(
+          _runWithTimeout(
+              'networksetup', ['-setwebproxystate', svc, 'on']),
+          _runWithTimeout(
+              'networksetup', ['-setsecurewebproxystate', svc, 'on']),
+          _runWithTimeout(
               'networksetup', ['-setsocksfirewallproxystate', svc, 'on']),
         ]);
         if (allOk) anySuccess = true;
@@ -237,14 +274,14 @@ class SystemProxyManager {
   static Future<bool> _setWindows(int mixedPort) async {
     const regKey =
         r'HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings';
-    final r1 = await Process.run('reg', [
+    final r1 = await _runWithTimeout('reg', [
       'add', regKey, '/v', 'ProxyEnable', '/t', 'REG_DWORD', '/d', '1', '/f',
     ]);
-    final r2 = await Process.run('reg', [
+    final r2 = await _runWithTimeout('reg', [
       'add', regKey, '/v', 'ProxyServer', '/t', 'REG_SZ',
       '/d', '127.0.0.1:$mixedPort', '/f',
     ]);
-    final r3 = await Process.run('reg', [
+    final r3 = await _runWithTimeout('reg', [
       'add', regKey, '/v', 'ProxyOverride', '/t', 'REG_SZ',
       '/d',
       'localhost;127.*;10.*;172.16.*;172.17.*;172.18.*;172.19.*;172.20.*;172.21.*;172.22.*;172.23.*;172.24.*;172.25.*;172.26.*;172.27.*;172.28.*;172.29.*;172.30.*;172.31.*;192.168.*;<local>',
@@ -263,27 +300,27 @@ class SystemProxyManager {
   static Future<bool> _setLinux(int mixedPort) async {
     // Try GNOME gsettings first (works on GNOME, Cinnamon, Budgie, Unity)
     try {
-      final r1 = await Process.run('gsettings', [
+      final r1 = await _runWithTimeout('gsettings', [
         'set', 'org.gnome.system.proxy', 'mode', "'manual'",
       ]);
       if (r1.exitCode == 0) {
         await Future.wait([
-          Process.run('gsettings', [
+          _runWithTimeout('gsettings', [
             'set', 'org.gnome.system.proxy.http', 'host', "'127.0.0.1'",
           ]),
-          Process.run('gsettings', [
+          _runWithTimeout('gsettings', [
             'set', 'org.gnome.system.proxy.http', 'port', '$mixedPort',
           ]),
-          Process.run('gsettings', [
+          _runWithTimeout('gsettings', [
             'set', 'org.gnome.system.proxy.https', 'host', "'127.0.0.1'",
           ]),
-          Process.run('gsettings', [
+          _runWithTimeout('gsettings', [
             'set', 'org.gnome.system.proxy.https', 'port', '$mixedPort',
           ]),
-          Process.run('gsettings', [
+          _runWithTimeout('gsettings', [
             'set', 'org.gnome.system.proxy.socks', 'host', "'127.0.0.1'",
           ]),
-          Process.run('gsettings', [
+          _runWithTimeout('gsettings', [
             'set', 'org.gnome.system.proxy.socks', 'port', '$mixedPort',
           ]),
         ]);
@@ -298,24 +335,24 @@ class SystemProxyManager {
     // Fallback: KDE kwriteconfig5/6
     for (final cmd in ['kwriteconfig6', 'kwriteconfig5']) {
       try {
-        final r = await Process.run(cmd, [
+        final r = await _runWithTimeout(cmd, [
           '--file', 'kioslaverc',
           '--group', 'Proxy Settings',
           '--key', 'ProxyType', '1',
         ]);
         if (r.exitCode == 0) {
           await Future.wait([
-            Process.run(cmd, [
+            _runWithTimeout(cmd, [
               '--file', 'kioslaverc',
               '--group', 'Proxy Settings',
               '--key', 'httpProxy', 'http://127.0.0.1:$mixedPort',
             ]),
-            Process.run(cmd, [
+            _runWithTimeout(cmd, [
               '--file', 'kioslaverc',
               '--group', 'Proxy Settings',
               '--key', 'httpsProxy', 'http://127.0.0.1:$mixedPort',
             ]),
-            Process.run(cmd, [
+            _runWithTimeout(cmd, [
               '--file', 'kioslaverc',
               '--group', 'Proxy Settings',
               '--key', 'socksProxy', 'socks://127.0.0.1:$mixedPort',
@@ -323,7 +360,7 @@ class SystemProxyManager {
           ]);
           // Notify KDE to reload
           try {
-            await Process.run('dbus-send', [
+            await _runWithTimeout('dbus-send', [
               '--type=signal',
               '/KIO/Scheduler',
               'org.kde.KIO.Scheduler.reparseSlaveConfiguration',
@@ -368,10 +405,11 @@ class SystemProxyManager {
       for (final svc in services) {
         try {
           await Future.wait([
-            Process.run('networksetup', ['-setwebproxystate', svc, 'off']),
-            Process.run(
+            _runWithTimeout(
+                'networksetup', ['-setwebproxystate', svc, 'off']),
+            _runWithTimeout(
                 'networksetup', ['-setsecurewebproxystate', svc, 'off']),
-            Process.run(
+            _runWithTimeout(
                 'networksetup', ['-setsocksfirewallproxystate', svc, 'off']),
           ]);
         } catch (e) {
@@ -382,17 +420,18 @@ class SystemProxyManager {
     } else if (Platform.isWindows) {
       const regKey =
           r'HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings';
-      final r = await Process.run('reg', [
+      final r = await _runWithTimeout('reg', [
         'add', regKey, '/v', 'ProxyEnable', '/t', 'REG_DWORD', '/d', '0', '/f',
       ]);
       if (r.exitCode != 0) {
         debugPrint('[SystemProxy] Windows registry clear failed: ${r.stderr}');
       }
-      await Process.run('reg', ['delete', regKey, '/v', 'ProxyOverride', '/f']);
+      await _runWithTimeout(
+          'reg', ['delete', regKey, '/v', 'ProxyOverride', '/f']);
       _notifyWindowsProxyChanged();
     } else if (Platform.isLinux) {
       try {
-        await Process.run('gsettings', [
+        await _runWithTimeout('gsettings', [
           'set', 'org.gnome.system.proxy', 'mode', "'none'",
         ]);
       } catch (e) {
@@ -400,7 +439,7 @@ class SystemProxyManager {
       }
       for (final cmd in ['kwriteconfig6', 'kwriteconfig5']) {
         try {
-          await Process.run(cmd, [
+          await _runWithTimeout(cmd, [
             '--file', 'kioslaverc',
             '--group', 'Proxy Settings',
             '--key', 'ProxyType', '0',
@@ -466,7 +505,7 @@ class SystemProxyManager {
 
   static Future<bool> _verifyMacOSScutil(int mixedPort) async {
     try {
-      final r = await Process.run('scutil', ['--proxy']);
+      final r = await _runWithTimeout('scutil', ['--proxy']);
       final out = r.stdout as String;
       final httpEnabled = RegExp(r'HTTPEnable\s*:\s*1').hasMatch(out);
       final httpsEnabled = RegExp(r'HTTPSEnable\s*:\s*1').hasMatch(out);
@@ -495,12 +534,12 @@ class SystemProxyManager {
     try {
       const regKey =
           r'HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings';
-      final r1 =
-          await Process.run('reg', ['query', regKey, '/v', 'ProxyEnable']);
+      final r1 = await _runWithTimeout(
+          'reg', ['query', regKey, '/v', 'ProxyEnable']);
       final o1 = r1.stdout as String;
       if (!o1.contains('0x1')) return false;
-      final r2 =
-          await Process.run('reg', ['query', regKey, '/v', 'ProxyServer']);
+      final r2 = await _runWithTimeout(
+          'reg', ['query', regKey, '/v', 'ProxyServer']);
       final o2 = r2.stdout as String;
       if (!o2.contains('127.0.0.1:$mixedPort')) {
         debugPrint('[SystemProxy] Windows proxy changed, no longer '
@@ -524,13 +563,13 @@ class SystemProxyManager {
   /// working correctly but simply not introspectable this way.
   static Future<bool?> _verifyLinuxGsettings(int mixedPort) async {
     try {
-      final r = await Process.run(
+      final r = await _runWithTimeout(
         'gsettings',
         ['get', 'org.gnome.system.proxy', 'mode'],
       );
       final mode = (r.stdout as String).trim();
       if (mode != "'manual'") return false;
-      final r2 = await Process.run(
+      final r2 = await _runWithTimeout(
         'gsettings',
         ['get', 'org.gnome.system.proxy.http', 'port'],
       );
@@ -558,10 +597,10 @@ class SystemProxyManager {
     for (final svc in services) {
       try {
         final result =
-            await Process.run('networksetup', ['-getdnsservers', svc]);
+            await _runWithTimeout('networksetup', ['-getdnsservers', svc]);
         final output = (result.stdout as String).trim();
         _savedDnsServers[svc] = output;
-        await Process.run('networksetup', [
+        await _runWithTimeout('networksetup', [
           '-setdnsservers',
           svc,
           '114.114.114.114',
@@ -585,14 +624,15 @@ class SystemProxyManager {
         final svc = entry.key;
         final original = entry.value;
         if (original.contains("any DNS Servers") || original.isEmpty) {
-          await Process.run('networksetup', ['-setdnsservers', svc, 'Empty']);
+          await _runWithTimeout(
+              'networksetup', ['-setdnsservers', svc, 'Empty']);
         } else {
           final servers = original
               .split('\n')
               .map((s) => s.trim())
               .where((s) => s.isNotEmpty)
               .toList();
-          await Process.run(
+          await _runWithTimeout(
               'networksetup', ['-setdnsservers', svc, ...servers]);
         }
         debugPrint('[TunDns] restored DNS for $svc');
@@ -619,7 +659,11 @@ class SystemProxyManager {
         '\n[WinINet]::InternetSetOption([IntPtr]::Zero,39,[IntPtr]::Zero,0);'
         '\n[WinINet]::InternetSetOption([IntPtr]::Zero,37,[IntPtr]::Zero,0)';
     try {
-      await Process.run('powershell', ['-NoProfile', '-Command', ps]);
+      await _runWithTimeout(
+        'powershell',
+        ['-NoProfile', '-Command', ps],
+        timeout: _kPowerShellTimeout,
+      );
     } catch (e) {
       EventLog.write('[SysProxy] notifyWindowsProxyChanged err=$e');
     }
@@ -634,8 +678,8 @@ class SystemProxyManager {
       return _cachedNetworkServices!;
     }
     try {
-      final result =
-          await Process.run('networksetup', ['-listallnetworkservices']);
+      final result = await _runWithTimeout(
+          'networksetup', ['-listallnetworkservices']);
       final services = (result.stdout as String)
           .split('\n')
           .skip(1) // First line is the header notice

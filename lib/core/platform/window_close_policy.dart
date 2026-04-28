@@ -3,25 +3,21 @@ import '../providers/core_runtime_providers.dart';
 /// Decision for the OS window-close button (X / taskbar Close / Cmd+W):
 /// quit the process or hide to system tray?
 ///
-/// v1.0.22 P0-3 narrows the previous "always honour close behaviour"
-/// rule on Windows. The Win11 taskbar's right-click → Close window
-/// dispatches the same window_manager `onWindowClose` callback as the
-/// title-bar X, and many users have no other muscle-memory exit path
-/// (no Alt+F4, no tray right-click → Quit). Pre-fix, "tray" behaviour
-/// silently swallowed those clicks while the VPN kept running, and the
-/// user reported "无法退出" because `yuelink.exe` lived on in Task
-/// Manager indefinitely.
+/// v1.0.22 P0-3 added a Windows+running carve-out that force-quit when
+/// the VPN was active, motivated by users who reported "无法退出" after
+/// using the Win11 taskbar's right-click → Close window. The carve-out
+/// turned out to break the opposite group: users who explicitly set
+/// `closeBehavior='tray'` and expected the window to hide while their
+/// VPN kept running. The reverse fix below honours user preference
+/// strictly on Windows. The "无法退出" path is preserved through the
+/// tray icon's right-click → Quit menu (always wired up on Windows).
 ///
 /// Rule:
 ///   - Linux  → always quit (no system tray to hide to in the first
 ///     place; the existing `onWindowClose` already had this carve-out).
-///   - Windows + core running → quit. Trade-off accepted: clicking the
-///     title-bar X with an active VPN now exits the app instead of
-///     hiding it. Consistent with what users expect when they can see
-///     the VPN status indicator and choose to close the window.
-///   - Otherwise (macOS always, Windows-not-running) → respect
-///     [behavior]. `'exit'` quits, anything else (including the
-///     default `'tray'`) hides.
+///   - macOS / Windows → respect [behavior]. `'exit'` quits, anything
+///     else (including the default `'tray'`) hides. Identical contract
+///     across desktop platforms with system trays.
 ///
 /// Pure function — `platform` is a `Platform.operatingSystem` value
 /// (`'windows'` / `'macos'` / `'linux'` / etc.) so tests can drive
@@ -32,6 +28,5 @@ bool shouldQuitOnWindowClose({
   required String behavior,
 }) {
   if (platform == 'linux') return true;
-  if (platform == 'windows' && status == CoreStatus.running) return true;
   return behavior == 'exit';
 }

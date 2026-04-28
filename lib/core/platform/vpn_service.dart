@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -16,6 +17,29 @@ import '../storage/settings_service.dart';
 /// - Windows: system proxy via registry
 class VpnService {
   static const _channel = MethodChannel('com.yueto.yuelink/vpn');
+
+  // ── MethodChannel timeout budgets ──────────────────────────────────────
+  //
+  // Pre-fix (v1.0.22 P3): MethodChannel calls relied entirely on the native
+  // side returning. If the platform code hung — Samsung Secure Folder
+  // edge cases, Doze-suspended VpnService binder, iOS configurationStale
+  // race past the native 20 s cap — Dart awaits would never complete and
+  // the user-facing "Connect" spinner stuck forever. Each call now has an
+  // explicit budget; on expiry we surface failure via the same channel as
+  // a `PlatformException` (return -1 / false / null) so callers' existing
+  // error paths apply.
+  //
+  // Buckets:
+  //   • _kPermissionDialogBudget — calls that surface a system dialog the
+  //     user reads and decides on (VPN consent, battery whitelist).
+  //   • _kStartTunnelBudget — `startVpn` after permission already granted;
+  //     covers tunnel handshake + iOS configurationStale retry but stays
+  //     short enough that a wedged native side surfaces fast.
+  //   • _kQuickOpBudget — local file / state ops with no I/O blocking
+  //     dialog (stop, reset, clear, query).
+  static const _kPermissionDialogBudget = Duration(seconds: 60);
+  static const _kStartTunnelBudget = Duration(seconds: 30);
+  static const _kQuickOpBudget = Duration(seconds: 10);
 
   /// Start the Android VPN service and obtain the TUN file descriptor.
   ///
@@ -40,8 +64,12 @@ class VpnService {
           'mixedPort': mixedPort,
           'splitMode': splitMode,
           'splitApps': splitApps,
-        });
+        }).timeout(_kPermissionDialogBudget);
         return fd ?? -1;
+      } on TimeoutException {
+        debugPrint('[VpnService] startAndroidVpn timed out after '
+            '${_kPermissionDialogBudget.inSeconds}s');
+        return -1;
       } on PlatformException catch (_) {
         return -1;
       }
@@ -71,13 +99,17 @@ class VpnService {
       final raw = await _appsChannel.invokeListMethod<Map>(
         'getInstalledApps',
         {'showSystem': showSystem},
-      );
+      ).timeout(_kStartTunnelBudget);
       return (raw ?? [])
           .map((m) => {
                 'packageName': m['packageName'] as String? ?? '',
                 'appName': m['appName'] as String? ?? '',
               })
           .toList();
+    } on TimeoutException {
+      debugPrint('[VpnService] getInstalledApps timed out after '
+          '${_kStartTunnelBudget.inSeconds}s');
+      return [];
     } on PlatformException catch (e) {
       debugPrint('[VpnService] getInstalledApps PlatformException: $e');
       return [];
@@ -92,8 +124,12 @@ class VpnService {
   static Future<int> getTunFd() async {
     assert(Platform.isAndroid);
     try {
-      final fd = await _channel.invokeMethod<int>('getTunFd');
+      final fd = await _channel
+          .invokeMethod<int>('getTunFd')
+          .timeout(_kQuickOpBudget);
       return fd ?? -1;
+    } on TimeoutException {
+      return -1;
     } on PlatformException catch (_) {
       return -1;
     }
@@ -108,15 +144,23 @@ class VpnService {
     // Do NOT catch PlatformException here — let it propagate so _step
     // records the actual iOS error code (VPN_SAVE_ERROR, VPN_START_ERROR, etc.)
     // in the startup report instead of the opaque "returned false" message.
-    final result = await _channel.invokeMethod<bool>('startVpn', configYaml);
+    // Native side caps at 20 s; the 30 s Dart budget is a hard safety net
+    // that surfaces as TimeoutException → fed into _step error code path.
+    final result = await _channel
+        .invokeMethod<bool>('startVpn', configYaml)
+        .timeout(_kStartTunnelBudget);
     return result ?? false;
   }
 
   /// Start the platform VPN tunnel (iOS / generic path).
   static Future<bool> startVpn() async {
     try {
-      final result = await _channel.invokeMethod<bool>('startVpn');
+      final result = await _channel
+          .invokeMethod<bool>('startVpn')
+          .timeout(_kStartTunnelBudget);
       return result ?? false;
+    } on TimeoutException {
+      return false;
     } on PlatformException catch (_) {
       return false;
     }
@@ -125,8 +169,12 @@ class VpnService {
   /// Stop the platform VPN tunnel.
   static Future<bool> stopVpn() async {
     try {
-      final result = await _channel.invokeMethod<bool>('stopVpn');
+      final result = await _channel
+          .invokeMethod<bool>('stopVpn')
+          .timeout(_kQuickOpBudget);
       return result ?? false;
+    } on TimeoutException {
+      return false;
     } on PlatformException catch (_) {
       return false;
     }
@@ -136,8 +184,12 @@ class VpnService {
   static Future<bool> requestPermission() async {
     if (!Platform.isAndroid) return true;
     try {
-      final result = await _channel.invokeMethod<bool>('requestPermission');
+      final result = await _channel
+          .invokeMethod<bool>('requestPermission')
+          .timeout(_kPermissionDialogBudget);
       return result ?? false;
+    } on TimeoutException {
+      return false;
     } on PlatformException catch (_) {
       return false;
     }
@@ -154,8 +206,10 @@ class VpnService {
         'host': host,
         'httpPort': httpPort,
         'socksPort': socksPort,
-      });
+      }).timeout(_kQuickOpBudget);
       return result ?? false;
+    } on TimeoutException {
+      return false;
     } on PlatformException catch (_) {
       return false;
     }
@@ -164,8 +218,12 @@ class VpnService {
   /// Clear system proxy settings.
   static Future<bool> clearSystemProxy() async {
     try {
-      final result = await _channel.invokeMethod<bool>('clearSystemProxy');
+      final result = await _channel
+          .invokeMethod<bool>('clearSystemProxy')
+          .timeout(_kQuickOpBudget);
       return result ?? false;
+    } on TimeoutException {
+      return false;
     } on PlatformException catch (_) {
       return false;
     }
@@ -176,8 +234,12 @@ class VpnService {
   static Future<bool> resetVpnProfile() async {
     if (!Platform.isIOS) return true; // Only needed on iOS
     try {
-      final result = await _channel.invokeMethod<bool>('resetVpnProfile');
+      final result = await _channel
+          .invokeMethod<bool>('resetVpnProfile')
+          .timeout(_kQuickOpBudget);
       return result ?? false;
+    } on TimeoutException {
+      return false;
     } on PlatformException catch (_) {
       return false;
     }
@@ -188,8 +250,12 @@ class VpnService {
   static Future<bool> clearAppGroupConfig() async {
     if (!Platform.isIOS) return true;
     try {
-      final result = await _channel.invokeMethod<bool>('clearAppGroupConfig');
+      final result = await _channel
+          .invokeMethod<bool>('clearAppGroupConfig')
+          .timeout(_kQuickOpBudget);
       return result ?? false;
+    } on TimeoutException {
+      return false;
     } on PlatformException catch (_) {
       return false;
     }
@@ -235,8 +301,11 @@ class VpnService {
     if (!Platform.isAndroid) return true;
     try {
       final ok = await _channel
-          .invokeMethod<bool>('isBatteryOptimizationIgnored');
+          .invokeMethod<bool>('isBatteryOptimizationIgnored')
+          .timeout(_kQuickOpBudget);
       return ok ?? false;
+    } on TimeoutException {
+      return false;
     } on PlatformException catch (_) {
       return false;
     }
@@ -251,8 +320,11 @@ class VpnService {
     if (!Platform.isAndroid) return true;
     try {
       final ok = await _channel
-          .invokeMethod<bool>('requestIgnoreBatteryOptimization');
+          .invokeMethod<bool>('requestIgnoreBatteryOptimization')
+          .timeout(_kPermissionDialogBudget);
       return ok ?? false;
+    } on TimeoutException {
+      return false;
     } on PlatformException catch (_) {
       return false;
     }

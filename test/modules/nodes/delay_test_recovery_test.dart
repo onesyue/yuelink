@@ -416,4 +416,101 @@ void main() {
           reason: 'first attempt + 3 backoff rounds = 4 runTest calls');
     });
   });
+
+  group('runGroupDelayWithRecovery — P3-D wall-clock budget', () {
+    test('totalBudget=null preserves pre-fix unbounded behaviour', () async {
+      var runCount = 0;
+      final out = await runGroupDelayWithRecovery(
+        runTest: () async {
+          runCount++;
+          throw Exception('always');
+        },
+        flushConnections: () async {},
+        flushFakeIp: () async {},
+        healthCheckProviders: () async {},
+        isAllTimeout: _allTimeout,
+        sleep: (_) async {},
+        // totalBudget intentionally omitted
+      );
+      expect(out.results, isNull);
+      expect(runCount, 4, reason: 'all 3 recovery rounds run when uncapped');
+    });
+
+    test(
+        'budget exhausted after first attempt → no recovery rounds run',
+        () async {
+      // Slow first attempt that consumes the entire budget. The loop
+      // must short-circuit BEFORE running flushConnections in round 1.
+      var runCount = 0;
+      var flushCount = 0;
+      final out = await runGroupDelayWithRecovery(
+        runTest: () async {
+          runCount++;
+          // Burn 100ms of real wall-clock so the budget elapses.
+          await Future.delayed(const Duration(milliseconds: 100));
+          throw Exception('slow first');
+        },
+        flushConnections: () async => flushCount++,
+        flushFakeIp: () async {},
+        healthCheckProviders: () async {},
+        isAllTimeout: _allTimeout,
+        sleep: (_) async {},
+        totalBudget: const Duration(milliseconds: 50),
+      );
+      expect(out.results, isNull);
+      expect(out.failureReason, DelayTestFailureReason.exception);
+      expect(out.recovered, isFalse);
+      expect(runCount, 1,
+          reason: 'budget exhausted after first attempt; no retries');
+      expect(flushCount, 0, reason: 'no recovery side-effects past budget');
+    });
+
+    test(
+        'budget large enough for first attempt + one round → at most one '
+        'retry runs', () async {
+      var runCount = 0;
+      var flushCount = 0;
+      final out = await runGroupDelayWithRecovery(
+        runTest: () async {
+          runCount++;
+          await Future.delayed(const Duration(milliseconds: 80));
+          throw Exception('slow always');
+        },
+        flushConnections: () async => flushCount++,
+        flushFakeIp: () async {},
+        healthCheckProviders: () async {},
+        isAllTimeout: _allTimeout,
+        sleep: (_) async {},
+        totalBudget: const Duration(milliseconds: 200),
+      );
+      expect(out.results, isNull);
+      // 80ms first attempt + recovery round (≈80ms) ≈ 160ms < 200ms,
+      // round 2 would push past 200ms. Allow either 2 or 3 to keep
+      // the test stable across CI timing jitter.
+      expect(runCount, inInclusiveRange(2, 3));
+      expect(flushCount, inInclusiveRange(1, 2),
+          reason: 'flush ran in at least the surviving round(s)');
+    });
+
+    test(
+        'budget does not block a fast-path success on first attempt',
+        () async {
+      var runCount = 0;
+      final out = await runGroupDelayWithRecovery(
+        runTest: () async {
+          runCount++;
+          return {'A': 100, 'B': 150};
+        },
+        flushConnections: () async {},
+        flushFakeIp: () async {},
+        healthCheckProviders: () async {},
+        isAllTimeout: _allTimeout,
+        sleep: (_) async {},
+        totalBudget: const Duration(milliseconds: 1),
+      );
+      expect(out.results, {'A': 100, 'B': 150});
+      expect(out.recovered, isFalse);
+      expect(runCount, 1, reason: 'success short-circuits before budget check');
+    });
+  });
 }

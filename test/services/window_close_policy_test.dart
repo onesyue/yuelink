@@ -21,34 +21,13 @@ void main() {
       }
     });
 
-    group('Windows + running quits regardless of behavior (P0-3 carve-out)',
-        () {
-      // The exact branch the user reported: Win11 taskbar Close while
-      // connected was being swallowed by the default 'tray' behaviour,
-      // and yuelink.exe stayed in Task Manager.
-      for (final behavior in const ['tray', 'exit', 'unset']) {
-        test('windows/running/$behavior → quit', () {
-          expect(
-            shouldQuitOnWindowClose(
-              platform: 'windows',
-              status: CoreStatus.running,
-              behavior: behavior,
-            ),
-            isTrue,
-          );
-        });
-      }
-    });
-
-    group('Windows + non-running respects behavior', () {
-      // When the VPN is stopped the existing default ("hide to tray on
-      // X") is the user-friendly choice — they may want to keep the
-      // app reachable from tray for a quick reconnect later.
-      for (final status in const [
-        CoreStatus.stopped,
-        CoreStatus.starting,
-        CoreStatus.stopping,
-      ]) {
+    group('Windows respects behavior in every status', () {
+      // Reverse of v1.0.22 P0-3 carve-out. The user-reported regression:
+      // explicit `closeBehavior='tray'` was being overridden when the VPN
+      // was running, so closing the window force-quit instead of hiding.
+      // The "无法退出" group is now served by the tray right-click → Quit
+      // menu, identical to macOS muscle-memory.
+      for (final status in CoreStatus.values) {
         test('windows/$status/tray → hide', () {
           expect(
             shouldQuitOnWindowClose(
@@ -72,10 +51,10 @@ void main() {
       }
     });
 
-    group('macOS always respects behavior (no carve-out)', () {
+    group('macOS respects behavior in every status', () {
       // macOS Cmd+W on the title-bar X is widely-understood to hide;
-      // the OS has its own quit muscle-memory (Cmd+Q). Keep parity
-      // with the pre-P0-3 contract.
+      // the OS has its own quit muscle-memory (Cmd+Q). Identical
+      // contract to Windows post-revert.
       for (final status in CoreStatus.values) {
         test('macos/$status/tray → hide', () {
           expect(
@@ -119,7 +98,7 @@ void main() {
       );
     });
 
-    test('unknown behavior on macOS treated as not-exit (hide)', () {
+    test('unknown behavior treated as not-exit (hide)', () {
       // Defensive: any behavior string other than 'exit' is treated as
       // hide. Catches typos in settings.json and old persisted values
       // from removed UI options.
@@ -127,6 +106,14 @@ void main() {
         shouldQuitOnWindowClose(
           platform: 'macos',
           status: CoreStatus.stopped,
+          behavior: 'something-removed-in-v0.9',
+        ),
+        isFalse,
+      );
+      expect(
+        shouldQuitOnWindowClose(
+          platform: 'windows',
+          status: CoreStatus.running,
           behavior: 'something-removed-in-v0.9',
         ),
         isFalse,

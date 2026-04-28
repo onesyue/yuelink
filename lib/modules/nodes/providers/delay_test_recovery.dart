@@ -72,6 +72,16 @@ const List<Duration> kDelayRecoveryBackoff = [
 ///
 /// `healthCheckProviders` defaults to a no-op so existing tests stay
 /// passing without rewiring; production must pass it.
+///
+/// `totalBudget` caps the wall-clock duration of the entire recovery
+/// loop (first attempt + all retries + side-effects). When the budget
+/// is exhausted between phases, the loop short-circuits and returns
+/// `results: null` with whatever `failureReason` was last classified.
+/// Without this cap, a sluggish post-reconnect mihomo can keep each
+/// retry round in the tens-of-seconds range (provider healthchecks
+/// stack serially) and the user-facing spinner stays "testing…" for
+/// minutes — the v1.0.22 P3-D regression report. `null` disables the
+/// cap and preserves pre-fix behaviour for tests.
 Future<GroupDelayOutcome> runGroupDelayWithRecovery({
   required GroupDelayFn runTest,
   required SideEffectFn flushConnections,
@@ -81,7 +91,12 @@ Future<GroupDelayOutcome> runGroupDelayWithRecovery({
   SleepFn? sleep,
   int? maxRetries,
   List<Duration> backoff = kDelayRecoveryBackoff,
+  Duration? totalBudget,
 }) async {
+  final stopwatch = Stopwatch()..start();
+  bool budgetExhausted() =>
+      totalBudget != null && stopwatch.elapsed >= totalBudget;
+
   final doSleep = sleep ?? Future.delayed;
   final doHealthCheck = healthCheckProviders ?? (() async {});
   final rounds = maxRetries ?? backoff.length;
@@ -106,25 +121,31 @@ Future<GroupDelayOutcome> runGroupDelayWithRecovery({
   // healthcheck providers → wait → retry. Order matters — connections
   // must close before the cache flush takes effect, and the cache must
   // be flushed before the healthcheck pulls fresh delay values into
-  // the selector.
+  // the selector. Each phase checks the wall-clock budget before
+  // running so a slow earlier phase can't leak into the next one.
   for (var attempt = 1; attempt <= effectiveRounds; attempt++) {
+    if (budgetExhausted()) break;
     try {
       await flushConnections();
     } catch (_) {
       // mihomo may reject close-all during a bad state; retry still worth it.
     }
+    if (budgetExhausted()) break;
     try {
       await flushFakeIp();
     } catch (_) {
       // same
     }
+    if (budgetExhausted()) break;
     try {
       await doHealthCheck();
     } catch (_) {
       // healthcheck failures are not fatal — the next runTest() will
       // surface whatever state the core is in.
     }
+    if (budgetExhausted()) break;
     await doSleep(backoff[attempt - 1]);
+    if (budgetExhausted()) break;
     try {
       final retried = await runTest();
       if (!isAllTimeout(retried)) {
