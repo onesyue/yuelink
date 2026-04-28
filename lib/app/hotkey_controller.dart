@@ -5,8 +5,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 
-import '../../modules/settings/hotkey_codec.dart';
-import '../../modules/settings/providers/settings_providers.dart'
+import '../modules/settings/hotkey_codec.dart';
+import '../modules/settings/providers/settings_providers.dart'
     show toggleHotkeyProvider;
 
 /// Owns the desktop global hotkey lifecycle (register / re-register on

@@ -6,9 +6,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 
-import '../../core/platform/quit_watchdog.dart';
-import '../../core/providers/core_provider.dart';
-import '../event_log.dart';
+import '../core/platform/quit_watchdog.dart';
+import '../core/providers/core_provider.dart';
+import '../shared/event_log.dart';
 
 /// Owns the desktop quit sequence: watchdog spawn → core stop →
 /// system-proxy clear → tray + window destroy → `exit(0)`.

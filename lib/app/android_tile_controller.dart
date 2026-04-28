@@ -4,11 +4,11 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/platform/tile_service.dart';
-import '../../core/providers/core_provider.dart';
-import '../../modules/dashboard/providers/dashboard_providers.dart'
+import '../core/platform/tile_service.dart';
+import '../core/providers/core_provider.dart';
+import '../modules/dashboard/providers/dashboard_providers.dart'
     show exitIpInfoProvider;
-import '../../modules/settings/providers/settings_providers.dart'
+import '../modules/settings/providers/settings_providers.dart'
     show tileShowNodeInfoProvider;
 
 /// Owns the Android Quick Settings tile lifecycle and state push for the

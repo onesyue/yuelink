@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yuelink/core/providers/core_runtime_providers.dart';
-import 'package:yuelink/shared/desktop/app_tray_controller.dart';
+import 'package:yuelink/app/app_tray_controller.dart';
 
 /// v1.0.22 P2-2: lock the tray status line format that surfaces the
 /// active routing + connection mode in the tray tooltip / menu

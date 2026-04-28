@@ -29,7 +29,7 @@ import '../mine/widgets/notices_card.dart';
 import 'widgets/emby_preview_row.dart';
 import 'widgets/stale_subscription_banner.dart';
 import '../../domain/emby/emby_info_entity.dart';
-import '../../shared/main_shell.dart';
+import '../../app/main_shell.dart';
 import '../../shared/nps_service.dart';
 import '../../shared/widgets/nps_sheet.dart';
 import '../../widgets/loading_overlay.dart';

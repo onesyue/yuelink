@@ -49,13 +49,13 @@ import 'core/profile/profile_service.dart';
 import 'core/profile/subscription_sync_service.dart';
 import 'modules/updater/update_checker.dart';
 import 'core/storage/settings_service.dart';
-import 'core/lifecycle/app_resume_controller.dart';
-import 'shared/deeplink_controller.dart';
-import 'shared/desktop/app_quit_controller.dart';
-import 'shared/desktop/app_tray_controller.dart';
-import 'shared/desktop/hotkey_controller.dart';
-import 'shared/main_shell.dart';
-import 'shared/mobile/android_tile_controller.dart';
+import 'app/android_tile_controller.dart';
+import 'app/app_quit_controller.dart';
+import 'app/app_resume_controller.dart';
+import 'app/app_tray_controller.dart';
+import 'app/deeplink_controller.dart';
+import 'app/hotkey_controller.dart';
+import 'app/main_shell.dart';
 import 'theme.dart';
 
 /// Global navigator key for deep-link navigation outside widget tree.
@@ -121,7 +121,7 @@ final hasSeenOnboardingProvider = StateProvider<bool>((ref) => false);
 final onboardingPersonaProvider = StateProvider<String?>((ref) => null);
 
 // initialTabIndexProvider, initialBuiltTabsProvider, tileNavRequestProvider
-// moved to lib/shared/main_shell.dart together with MainShell itself.
+// moved to lib/app/main_shell.dart together with MainShell itself.
 //
 // tileShowNodeInfoProvider moved to lib/modules/settings/providers/
 // settings_providers.dart as part of the Android tile controller split.
@@ -836,7 +836,7 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
 
   // ── Global hotkeys ────────────────────────────────────────────────────────
   // All registration / re-registration / cleanup lives in
-  // lib/shared/desktop/hotkey_controller.dart. _hotkey is wired in
+  // lib/app/hotkey_controller.dart. _hotkey is wired in
   // initState; init() runs from the post-frame callback; dispose()
   // unregisters via _hotkey.dispose() in dispose().
 
@@ -869,7 +869,7 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
   // ── Tray (Desktop Quick Control) ─────────────────────────────────
   //
   // All tray icon / menu / dispatch logic lives in
-  // lib/shared/desktop/app_tray_controller.dart. Connect/disconnect routes
+  // lib/app/app_tray_controller.dart. Connect/disconnect routes
   // through the same CoreManager / CoreActions / ProxyGroupsNotifier paths
   // the main UI uses — no independent connection logic.
 

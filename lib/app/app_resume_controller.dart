@@ -4,22 +4,22 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../i18n/app_strings.dart';
-import '../../modules/dashboard/providers/dashboard_providers.dart'
+import '../i18n/app_strings.dart';
+import '../modules/dashboard/providers/dashboard_providers.dart'
     show exitIpInfoProvider;
-import '../../modules/dashboard/providers/traffic_providers.dart';
-import '../../modules/connections/providers/connections_providers.dart';
-import '../../modules/yue_auth/providers/yue_auth_providers.dart';
-import '../../modules/nodes/providers/nodes_providers.dart'
+import '../modules/dashboard/providers/traffic_providers.dart';
+import '../modules/connections/providers/connections_providers.dart';
+import '../modules/yue_auth/providers/yue_auth_providers.dart';
+import '../modules/nodes/providers/nodes_providers.dart'
     show proxyGroupsProvider, delayResultsProvider;
-import '../../shared/app_notifier.dart';
-import '../../shared/event_log.dart';
-import '../kernel/core_manager.dart';
-import '../kernel/recovery_manager.dart';
-import '../managers/system_proxy_manager.dart';
-import '../platform/vpn_service.dart';
-import '../providers/core_provider.dart';
-import '../storage/settings_service.dart';
+import '../shared/app_notifier.dart';
+import '../shared/event_log.dart';
+import '../core/kernel/core_manager.dart';
+import '../core/kernel/recovery_manager.dart';
+import '../core/managers/system_proxy_manager.dart';
+import '../core/platform/vpn_service.dart';
+import '../core/providers/core_provider.dart';
+import '../core/storage/settings_service.dart';
 
 /// Coordinates "user came back to the app" semantics:
 ///

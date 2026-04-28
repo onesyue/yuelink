@@ -5,16 +5,16 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tray_manager/tray_manager.dart';
 
-import '../../core/kernel/core_manager.dart';
-import '../../core/providers/core_provider.dart';
-import '../../domain/models/proxy.dart';
-import '../../i18n/app_strings.dart';
-import '../../modules/dashboard/mode_actions.dart';
-import '../../modules/nodes/favorites/node_favorites_providers.dart';
-import '../../modules/nodes/providers/nodes_providers.dart';
-import '../../modules/yue_auth/providers/yue_auth_providers.dart';
-import '../app_notifier.dart';
-import '../event_log.dart';
+import '../core/kernel/core_manager.dart';
+import '../core/providers/core_provider.dart';
+import '../domain/models/proxy.dart';
+import '../i18n/app_strings.dart';
+import '../modules/dashboard/mode_actions.dart';
+import '../modules/nodes/favorites/node_favorites_providers.dart';
+import '../modules/nodes/providers/nodes_providers.dart';
+import '../modules/yue_auth/providers/yue_auth_providers.dart';
+import '../shared/app_notifier.dart';
+import '../shared/event_log.dart';
 
 /// Owns the system-tray icon, context menu, and menu-click dispatch for
 /// desktop builds. Previously inlined in `_YueLinkAppState` (lib/main.dart,
