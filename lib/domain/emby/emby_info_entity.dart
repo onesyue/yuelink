@@ -53,4 +53,14 @@ class EmbyInfo {
       autoLoginUrl: json['auto_login_url'] as String?,
     );
   }
+
+  /// Serialise back to the same shape XBoard's `/emby` endpoint returns,
+  /// so the cache round-trips through `fromJson` without losing fidelity.
+  /// `auto_login_url` carries access-token + user-id query params, which
+  /// is why callers persist this through SecureStorage rather than
+  /// SettingsService — same threat-model as the Bearer token.
+  Map<String, dynamic> toJson() => {
+        if (embyUrl != null) 'emby_url': embyUrl,
+        if (autoLoginUrl != null) 'auto_login_url': autoLoginUrl,
+      };
 }
