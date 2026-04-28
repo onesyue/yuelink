@@ -631,14 +631,18 @@ class CoreManager {
       // than 6h, so users restarting frequently don't get sampled
       // repeatedly.
       unawaited(_backgroundNetworkSample());
-      _pendingOperation?.complete();
-      _pendingOperation = null;
-      _startInFlight = false;
       return true;
     } catch (e) {
       final failedName =
           steps.where((s) => !s.success).firstOrNull?.name ?? 'unknown';
-      await _finishReport(steps, false, failedName);
+      // Wrap the report write so an exception inside finishReport (disk
+      // full, JSON serialization edge case, settings IO failure) doesn't
+      // bypass the cleanup-and-guard-clear path below.
+      try {
+        await _finishReport(steps, false, failedName);
+      } catch (e2) {
+        debugPrint('[CoreManager] _finishReport during catch failed: $e2');
+      }
 
       // Clean up partial state
       if (_running) {
@@ -664,10 +668,16 @@ class CoreManager {
         }
       }
 
+      rethrow;
+    } finally {
+      // Guard-clear must run even if _finishReport / cleanup throws —
+      // otherwise the next caller awaits a Completer that never
+      // resolves and the app wedges, AND AppResumeController's
+      // `if (CoreManager.instance.isStartInFlight) return` blocks
+      // every subsequent resume tick. finally is the only safe site.
       _pendingOperation?.complete();
       _pendingOperation = null;
       _startInFlight = false;
-      rethrow;
     }
   }
 
@@ -805,14 +815,16 @@ class CoreManager {
       // than 6h, so users restarting frequently don't get sampled
       // repeatedly.
       unawaited(_backgroundNetworkSample());
-      _pendingOperation?.complete();
-      _pendingOperation = null;
-      _startInFlight = false;
       return true;
     } catch (e) {
       final failedName =
           steps.where((s) => !s.success).firstOrNull?.name ?? 'unknown';
-      await _finishReport(steps, false, failedName);
+      // Wrap the report write — see outer start() for the same rationale.
+      try {
+        await _finishReport(steps, false, failedName);
+      } catch (e2) {
+        debugPrint('[CoreManager] _finishReport during iOS catch failed: $e2');
+      }
 
       if (_running) {
         _running = false;
@@ -823,10 +835,15 @@ class CoreManager {
         debugPrint('[CoreManager] cleanup stopVpn after failed iOS start: $e');
       }
 
+      rethrow;
+    } finally {
+      // See outer start()'s finally for rationale: the resume-controller
+      // path checks `isStartInFlight` and is silently blocked until this
+      // flag clears, so any code path that bypasses it (an exception in
+      // _finishReport / persistPorts) wedges resume permanently.
       _pendingOperation?.complete();
       _pendingOperation = null;
       _startInFlight = false;
-      rethrow;
     }
   }
 
