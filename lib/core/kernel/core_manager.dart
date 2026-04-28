@@ -109,7 +109,18 @@ class CoreManager {
   /// 9090 busy → remapped to 9091, resume mid-startup re-restored 9090
   /// from persistence, all subsequent api/stream traffic hit the wrong
   /// port → verify failed with E008.
+  ///
+  /// Also read by AppResumeController.run() to skip the entire resume
+  /// handler. During start(), in-memory `userStoppedProvider` is the
+  /// authoritative value (CoreLifecycleManager.start() sets it to
+  /// `false` synchronously), but the matching `setManualStopped(false)`
+  /// disk write is async. A resume event landing in that window would
+  /// read the still-stale persisted `true`, hydrate userStoppedProvider
+  /// back to true, and `displayCoreStatusProvider` would surface
+  /// `stopped` after a successful start — UI showed "未连接" with
+  /// mihomo actually running.
   bool _startInFlight = false;
+  bool get isStartInFlight => _startInFlight;
 
   /// Guards against concurrent start/stop calls.
   Completer<void>? _pendingOperation;

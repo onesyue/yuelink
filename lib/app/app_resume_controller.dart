@@ -146,6 +146,20 @@ class AppResumeController {
     final manager = CoreManager.instance;
     if (manager.isMockMode) return;
 
+    // Defer entirely while start() is mid-flight. The in-memory state
+    // (userStoppedProvider, coreStatusProvider) is being driven by the
+    // active CoreLifecycleManager.start() call and is authoritative —
+    // the persistence-based hydrate path below would read the still-
+    // stale `manualStopped=true` (from before start() flushed false)
+    // and stomp the just-cleared userStoppedProvider. Symptom: macOS
+    // 2026-04-28 — startup SUCCESS, mihomo + system proxy both up,
+    // but UI rendered '未连接' because displayCoreStatusProvider
+    // returned stopped on the resurrected userStopped flag.
+    if (manager.isStartInFlight) {
+      debugPrint('[Resume] start() in flight — deferring resume handler');
+      return;
+    }
+
     final status = ref.read(coreStatusProvider);
 
     // 2. Recovery: Dart thinks stopped but Go core is actually still running.
