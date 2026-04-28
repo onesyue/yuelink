@@ -92,7 +92,12 @@ final embyPreviewProvider =
     accessToken: emby.parsedAccessToken!,
     userId: emby.parsedUserId!,
   );
-  ref.onDispose(client.close);
+  // Close in finally instead of `ref.onDispose(client.close)`. onDispose
+  // fires the moment the provider is invalidated (refresh, ancestor
+  // rebuild), which would slam the door shut on the in-flight fetch
+  // below — observed as `ClientException: HTTP request failed. Client
+  // is already closed.` (macOS 2026-04-28). The client's lifetime is
+  // exactly this one fetch; finally is the right scope.
 
   final uid = emby.parsedUserId!;
   final cfg = ref.watch(embyPreviewConfigProvider);
@@ -119,6 +124,8 @@ final embyPreviewProvider =
   } catch (e) {
     debugPrint('[EmbyPreview] fetch failed: $e');
     return const [];
+  } finally {
+    client.close();
   }
 });
 

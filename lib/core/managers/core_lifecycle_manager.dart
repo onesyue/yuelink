@@ -38,11 +38,15 @@ class CoreLifecycleManager {
     );
     Telemetry.event(TelemetryEvents.connectStart);
     ref.read(userStoppedProvider.notifier).state = false;
-    // Clear the persisted stop flag (v1.0.21 hotfix). Cheap regular flush
-    // is fine here — start failures don't reinstate the flag, and a
-    // mid-start kill leaves us with persisted=false which is correctly
-    // interpreted as "no recent manual stop" on next resume.
-    await SettingsService.setManualStopped(false, immediate: false);
+    // Clear the persisted stop flag IMMEDIATELY. The previous debounced
+    // write opened a resume-race: if the user backgrounded mid-start
+    // (window lost focus, system sheet, etc.), `_onAppResumed` would
+    // read the still-stale `true`, hydrate `userStoppedProvider` back
+    // to true, and `displayCoreStatusProvider` would surface `stopped`
+    // even after a successful start — UI showed "未连接" with mihomo
+    // actually running. Reported on macOS 2026-04-28. The disk write
+    // costs a few ms; the race costs user trust.
+    await SettingsService.setManualStopped(false);
     ref.read(coreStatusProvider.notifier).state = CoreStatus.starting;
     ref.read(coreStartupErrorProvider.notifier).state = null;
 
