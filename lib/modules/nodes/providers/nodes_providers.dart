@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
@@ -131,6 +133,18 @@ bool shouldFetchLiveProxyGroups({
 }
 
 class ProxyGroupsNotifier extends Notifier<List<ProxyGroup>> {
+  /// Background-retry timer for the empty-on-startup case. Subscriptions
+  /// with proxy-providers / rule-providers that fetch from the network
+  /// can take 30–60 s to fully materialise the proxy graph after mihomo
+  /// starts. Without retry, the dashboard would show "处理中..." until
+  /// the user manually pulled-to-refresh on the Nodes page.
+  Timer? _emptyRetry;
+
+  /// Cleared once we've ever seen a non-empty groups state in this
+  /// session. After that, downstream listeners (heartbeat, manual refresh)
+  /// are sufficient — no need to keep re-polling.
+  bool _seenNonEmpty = false;
+
   @override
   List<ProxyGroup> build() {
     // Auto-refresh on core startup. `core_lifecycle_manager.start()`
@@ -146,8 +160,18 @@ class ProxyGroupsNotifier extends Notifier<List<ProxyGroup>> {
       if (prev != null &&
           prev != CoreStatus.running &&
           next == CoreStatus.running) {
+        _seenNonEmpty = false;
         refresh();
       }
+      // Cancel any pending retry when leaving the running state.
+      if (next != CoreStatus.running) {
+        _emptyRetry?.cancel();
+        _emptyRetry = null;
+      }
+    });
+    ref.onDispose(() {
+      _emptyRetry?.cancel();
+      _emptyRetry = null;
     });
     return [];
   }
@@ -249,8 +273,37 @@ class ProxyGroupsNotifier extends Notifier<List<ProxyGroup>> {
     // value comparison: when mihomo's `/proxies` polls return the same
     // payload (the common case) we skip the entire downstream rebuild
     // chain (nodes_page → SliverList → all GroupCards).
-    if (listEquals(state, groups)) return;
+    if (listEquals(state, groups)) {
+      _maybeScheduleEmptyRetry(groups);
+      return;
+    }
     state = groups;
+    _maybeScheduleEmptyRetry(groups);
+  }
+
+  /// If we just refreshed and got an empty graph but the core is running,
+  /// schedule a one-shot retry. Repeat with a fixed 3-s gap up to 10
+  /// attempts (~30 s) — by then either the proxy-providers have fetched
+  /// or the user's network is genuinely broken and a `[]` graph is
+  /// correct. Once we've ever seen a non-empty graph in this session,
+  /// disarm: heartbeat + manual refresh handle steady-state updates.
+  void _maybeScheduleEmptyRetry(List<ProxyGroup> latest) {
+    if (latest.isNotEmpty) {
+      _seenNonEmpty = true;
+      _emptyRetry?.cancel();
+      _emptyRetry = null;
+      return;
+    }
+    if (_seenNonEmpty) return;
+    if (ref.read(coreStatusProvider) != CoreStatus.running) return;
+    if (CoreManager.instance.isMockMode) return;
+    if (_emptyRetry != null) return; // one timer at a time
+    _emptyRetry = Timer(const Duration(seconds: 3), () {
+      _emptyRetry = null;
+      // Re-check status — user may have stopped between schedule and fire.
+      if (ref.read(coreStatusProvider) != CoreStatus.running) return;
+      refresh();
+    });
   }
 
   /// Parse proxy groups and nodes from the active profile's YAML config.

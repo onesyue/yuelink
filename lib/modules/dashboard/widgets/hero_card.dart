@@ -38,6 +38,18 @@ class HeroCard extends ConsumerWidget {
       if (info != null) {
         activeNodeName = info.nodeName.isNotEmpty ? info.nodeName : s.directAuto;
         activeNodeGroup = info.groupName;
+      } else {
+        // Status is running but the proxy graph hasn't materialised yet
+        // — happens with subscriptions whose proxy-providers / rule-
+        // providers fetch from the network on first start (waitProxies
+        // soft-timed-out as 'slow'). Showing dashDisconnectedTitle
+        // ('未连接') here was wrong: the top label already says
+        // statusConnected ('保护中'), and bottom + top contradicting
+        // each other made users think connect failed when it didn't.
+        // ProxyGroupsNotifier's background-retry loop will populate
+        // the graph as soon as mihomo finishes parsing.
+        activeNodeName = s.statusProcessing; // '处理中...' / 'Processing...'
+        activeNodeGroup = '';
       }
     }
 
