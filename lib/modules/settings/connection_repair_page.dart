@@ -336,6 +336,42 @@ class _ConnectionRepairPageState extends ConsumerState<ConnectionRepairPage> {
                     AppNotifier.success('已在白名单中');
                     return true;
                   }
+                  // In-app rationale BEFORE the OS prompt. Android's
+                  // system dialog is short and uncontextualised
+                  // ("Allow YueLink to ignore battery optimizations?")
+                  // — without this explainer users have no reason to
+                  // trust the request. Showing the rationale here, on
+                  // a user-initiated action surface (settings →
+                  // connection repair), avoids the anti-pattern of
+                  // surfacing the prompt at first launch.
+                  if (!context.mounted) return false;
+                  final proceed = await showDialog<bool>(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: const Text('授予电池豁免?'),
+                      content: const Text(
+                        '小米、华为、OPPO 等国产厂商默认 30 分钟后会杀掉后台 VPN '
+                        '服务，导致连接突然中断。\n\n'
+                        '系统接下来会弹一个权限对话框：\n'
+                        '«允许 YueLink 不进行电池优化吗?»\n\n'
+                        '点「允许」后，YueLink 才能在息屏 / 长时间后台时保持 '
+                        'VPN 隧道不被强制关闭。\n\n'
+                        '此设置不会显著增加耗电 — VPN 的能耗主要来自心跳，'
+                        'YueLink 已根据 Wi-Fi / 蜂窝自动调节。',
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx, false),
+                          child: const Text('取消'),
+                        ),
+                        FilledButton(
+                          onPressed: () => Navigator.pop(ctx, true),
+                          child: const Text('继续'),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (proceed != true) return false;
                   return VpnService.requestIgnoreBatteryOptimization();
                 }),
               ),

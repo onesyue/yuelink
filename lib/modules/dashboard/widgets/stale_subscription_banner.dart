@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../domain/models/profile.dart';
 import '../../../theme.dart';
 import '../../profiles/providers/profiles_providers.dart';
+import '../../yue_auth/presentation/sync_failure_dialog.dart';
 import '../../yue_auth/providers/yue_auth_providers.dart';
 
 /// Shows a subtle warning banner when the active subscription profile
@@ -106,7 +107,10 @@ class _StaleSubscriptionBannerState
   Future<void> _refresh() async {
     setState(() => _syncing = true);
     try {
-      await ref.read(authProvider.notifier).syncSubscription();
+      await syncSubscriptionWithFailureDialog(
+        context: context,
+        ref: ref,
+      );
     } finally {
       if (mounted) setState(() => _syncing = false);
     }

@@ -29,6 +29,7 @@ import 'widgets/emby_preview_row.dart';
 import 'widgets/stale_subscription_banner.dart';
 import '../../shared/nps_service.dart';
 import '../../shared/widgets/nps_sheet.dart';
+import '../../widgets/loading_overlay.dart';
 
 class DashboardPage extends ConsumerStatefulWidget {
   const DashboardPage({super.key});
@@ -276,12 +277,51 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
         }
       }
 
-      final ok = await actions.start(config);
+      // iOS-only progress overlay. The startIosVpn path can stall for up
+      // to 20 s on first connect (provisioning prompt + Go core init in
+      // the PacketTunnel extension). Pre-fix this was a silent black-
+      // looking screen — users assumed the app was hung and tapped
+      // Connect again. The overlay turns the wait into a visible
+      // "starting tunnel" state without altering the underlying flow.
+      // Other platforms have their own progress affordances (Android's
+      // system VPN dialog, desktop's near-instant start) so we skip it
+      // there to avoid double-loaders.
+      final bool ok;
+      if (Platform.isIOS && context.mounted) {
+        ok = await LoadingOverlay.run<bool>(
+          context,
+          message: s.isEn
+              ? 'Starting secure tunnel… (first launch can take ~30 s)'
+              : '正在建立安全隧道…首次启动可能需要 30 秒',
+          action: () => actions.start(config),
+        );
+      } else {
+        ok = await actions.start(config);
+      }
       if (!ok && mounted) {
         AppNotifier.error(s.snackStartFailed);
         final lastGood = await CoreManager.instance.loadLastWorkingConfig();
         if (lastGood != null && lastGood != config && mounted) {
           _showRollbackDialog(s, lastGood);
+        }
+      } else if (ok && mounted) {
+        // Desktop systemProxy mode used to be silent on success — users
+        // tapped Connect, the button flipped to "Connected", but nothing
+        // told them their HTTP/HTTPS/SOCKS proxy was being rewritten on
+        // every network service. Surface a one-shot info toast so the
+        // change is visible. Skipped on TUN (the active-tunnel UX is
+        // self-evident) and on mobile (VPN sheet is OS-driven).
+        final isDesktop = Platform.isMacOS ||
+            Platform.isWindows ||
+            Platform.isLinux;
+        if (isDesktop &&
+            ref.read(connectionModeProvider) == 'systemProxy' &&
+            ref.read(systemProxyOnConnectProvider)) {
+          AppNotifier.info(
+            s.isEn
+                ? 'System proxy enabled — all traffic now routes through YueLink'
+                : '系统代理已启用 — 所有流量将通过 YueLink 路由',
+          );
         }
       }
     } finally {
