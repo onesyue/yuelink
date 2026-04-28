@@ -921,6 +921,66 @@ proxies: []
     });
   });
 
+  group('ConfigTemplate provider-fetch DIRECT injection', () {
+    test('injects jsdelivr + githubusercontent DIRECT rules into rules section',
+        () {
+      const config = '''
+mixed-port: 7890
+rules:
+  - DOMAIN-SUFFIX,example.com,DIRECT
+  - MATCH,Proxy
+''';
+      final result = ConfigTemplate.process(config);
+      expect(result, contains('DOMAIN-SUFFIX,jsdelivr.net,DIRECT'));
+      expect(result, contains('DOMAIN-SUFFIX,githubusercontent.com,DIRECT'));
+      // Must come BEFORE the catch-all MATCH so providers don't get
+      // routed through the proxy.
+      final jsdelivrIdx = result.indexOf('jsdelivr.net');
+      final matchIdx = result.indexOf('MATCH,Proxy');
+      expect(jsdelivrIdx, greaterThan(0));
+      expect(jsdelivrIdx, lessThan(matchIdx));
+    });
+
+    test('skip injection when no rules section exists (idempotent)', () {
+      const config = '''
+mixed-port: 7890
+proxies: []
+''';
+      final result = ConfigTemplate.process(config);
+      expect(result, isNot(contains('jsdelivr.net,DIRECT')));
+    });
+
+    test('idempotent: do not duplicate when domain already mentioned', () {
+      const config = '''
+mixed-port: 7890
+rules:
+  - DOMAIN-SUFFIX,jsdelivr.net,DIRECT
+  - DOMAIN-SUFFIX,githubusercontent.com,Proxy
+  - MATCH,Proxy
+''';
+      final result = ConfigTemplate.process(config);
+      // Existing rule untouched + no duplicate. (jsdelivr also appears in
+      // _ensureGeodata's geox-url URLs, so we count only rule lines.)
+      final jsdelivrRuleCount = RegExp(
+        r'-\s*"?DOMAIN-SUFFIX,jsdelivr\.net,',
+      ).allMatches(result).length;
+      expect(jsdelivrRuleCount, 1);
+      expect(result, contains('githubusercontent.com,Proxy'));
+      expect(result, isNot(contains('githubusercontent.com,DIRECT')));
+    });
+
+    test('detects custom indentation from existing rules', () {
+      // 4-space indent (uncommon but legal)
+      const config = '''
+mixed-port: 7890
+rules:
+    - MATCH,Proxy
+''';
+      final result = ConfigTemplate.process(config);
+      expect(result, contains('    - "DOMAIN-SUFFIX,jsdelivr.net,DIRECT"'));
+    });
+  });
+
   group('ConfigTemplate TUN MTU', () {
     test(
       'desktop tun uses AppConstants.defaultTunMtu (matches hot-switch PATCH)',

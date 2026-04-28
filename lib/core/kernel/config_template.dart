@@ -217,6 +217,9 @@ class ConfigTemplate {
     config = _ensureConnectivityRules(config);
     debugPrint('[Config] 10b connectivityRules done');
 
+    config = _ensureProviderFetchDirect(config);
+    debugPrint('[Config] 10b2 providerFetchDirect done');
+
     config = _ensureQuicReject(config, effectiveQuicRejectPolicy);
     debugPrint('[Config] 10c quicReject done');
 
@@ -1489,6 +1492,69 @@ class ConfigTemplate {
     if (injection.isEmpty) return config;
 
     // Insert right after "rules:\n"
+    return config.substring(0, rulesMatch.end) +
+        injection +
+        config.substring(rulesMatch.end);
+  }
+
+  /// Force CDN domains used by `proxy-providers` and `rule-providers`
+  /// to route DIRECT, breaking the chicken-and-egg loop where mihomo
+  /// can't fetch the provider files because the proxy that's supposed
+  /// to fetch them isn't ready yet.
+  ///
+  /// Symptom (real-world Android log, 2026-04-28):
+  ///   [TCP] dial 兜底分流 (match RuleSet/proxy)
+  ///         mihomo --> fastly.jsdelivr.net:443
+  ///         error: v4.yuetoto.net:443 connect error: context deadline exceeded
+  ///   [Provider] proxy pull error: Get "https://fastly.jsdelivr.net/.../Proxy.yaml": EOF
+  ///   [Provider] google pull error: ... EOF
+  ///
+  /// The rule-provider URL gets matched by the catch-all "兜底分流"
+  /// group and routed through `v4.yuetoto.net`. But that node hasn't
+  /// authenticated yet — the very rule-providers that *would* enable
+  /// proper routing are the ones blocked. Result: providers stay
+  /// empty for the entire session, and groups using `use:` show
+  /// no proxies.
+  ///
+  /// Domain choice: only pure CDN hosts that are *only* ever fetched
+  /// for static config / rule files. github.com / gitlab.com are
+  /// excluded because users actually browse those.
+  static String _ensureProviderFetchDirect(String config) {
+    final rulesMatch = RegExp(
+      r'^rules:\s*\n',
+      multiLine: true,
+    ).firstMatch(config);
+    if (rulesMatch == null) return config;
+
+    const domains = [
+      'jsdelivr.net',          // covers cdn./fastly./gcore./testingcf.
+      'githubusercontent.com', // covers raw.
+    ];
+
+    // Slice out just the rules block so we don't false-positive on
+    // `geox-url:` references to jsdelivr (those are pre-injected by
+    // _ensureGeodata for the GeoIP/Geosite mirrors and are not rules).
+    final rulesBody = config.substring(rulesMatch.end);
+
+    final firstRule = RegExp(
+      r'^([ \t]*)-\s',
+      multiLine: true,
+    ).firstMatch(rulesBody);
+    final ruleIndent = firstRule?.group(1) ?? '  ';
+
+    var injection = '';
+    for (final d in domains) {
+      // Idempotent: skip if any rule line in the rules block already
+      // mentions this exact domain. We don't enforce DIRECT — if the user
+      // explicitly routes jsdelivr through a specific group, respect it.
+      // Use a comma-anchored match (`,jsdelivr.net,`) so partial substring
+      // matches against unrelated text don't suppress the injection.
+      final escaped = RegExp.escape(d);
+      if (RegExp('[, ]$escaped[, ]').hasMatch(rulesBody)) continue;
+      injection += '$ruleIndent- "DOMAIN-SUFFIX,$d,DIRECT"\n';
+    }
+    if (injection.isEmpty) return config;
+
     return config.substring(0, rulesMatch.end) +
         injection +
         config.substring(rulesMatch.end);
