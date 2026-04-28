@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../i18n/app_strings.dart';
-import '../../../main.dart';
+import '../../../shared/main_shell.dart';
 import '../../../theme.dart';
 import '../../nodes/scene_mode/scene_mode_sheet.dart';
 import '../../nodes/smart_select/smart_select_sheet.dart';

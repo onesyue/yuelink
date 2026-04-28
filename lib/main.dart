@@ -1,8 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:app_links/app_links.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:dynamic_color/dynamic_color.dart';
@@ -12,35 +10,33 @@ import 'package:flutter_riverpod/legacy.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:launch_at_startup/launch_at_startup.dart';
 
-import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'constants.dart';
 import 'i18n/app_strings.dart';
 import 'i18n/strings_g.dart';
-import 'modules/dashboard/dashboard_page.dart';
-import 'modules/nodes/nodes_page.dart';
-import 'modules/settings/settings_page.dart';
+import 'modules/nodes/providers/nodes_providers.dart'
+    show
+        delayResultsProvider,
+        delayTestingProvider,
+        expandedGroupNamesProvider,
+        proxyGroupsProvider,
+        testUrlProvider;
 import 'modules/settings/providers/settings_providers.dart';
-import 'modules/settings/hotkey_codec.dart';
 import 'modules/onboarding/onboarding_page.dart';
 import 'modules/onboarding/persona_prompt_page.dart';
 import 'modules/carrier/carrier_provider.dart';
 import 'modules/yue_auth/presentation/auth_loading_fallback.dart';
 import 'modules/yue_auth/presentation/yue_auth_page.dart';
 import 'modules/yue_auth/providers/yue_auth_providers.dart';
-import 'modules/connections/providers/connections_providers.dart';
 import 'modules/dashboard/providers/dashboard_providers.dart';
-import 'modules/dashboard/providers/traffic_providers.dart';
 import 'core/managers/system_proxy_manager.dart';
 import 'core/providers/core_provider.dart';
 import 'modules/profiles/providers/profiles_providers.dart';
 import 'shared/app_notifier.dart';
 import 'core/kernel/core_manager.dart';
-import 'core/kernel/recovery_manager.dart';
-import 'core/platform/quit_watchdog.dart';
+import 'core/platform/macos_gatekeeper.dart';
 import 'core/platform/tile_service.dart';
-import 'core/platform/vpn_service.dart';
 import 'core/platform/window_close_policy.dart';
 import 'core/storage/auth_token_service.dart';
 import 'core/env_config.dart';
@@ -53,10 +49,13 @@ import 'core/profile/profile_service.dart';
 import 'core/profile/subscription_sync_service.dart';
 import 'modules/updater/update_checker.dart';
 import 'core/storage/settings_service.dart';
+import 'core/lifecycle/app_resume_controller.dart';
+import 'shared/deeplink_controller.dart';
+import 'shared/desktop/app_quit_controller.dart';
 import 'shared/desktop/app_tray_controller.dart';
-import 'modules/emby/emby_media_page.dart';
-import 'modules/emby/emby_providers.dart';
-import 'modules/emby/emby_web_page.dart';
+import 'shared/desktop/hotkey_controller.dart';
+import 'shared/main_shell.dart';
+import 'shared/mobile/android_tile_controller.dart';
 import 'theme.dart';
 
 /// Global navigator key for deep-link navigation outside widget tree.
@@ -113,9 +112,6 @@ Future<bool> _ensureSingleInstance() async {
 /// Jump-to-profile-page notifier (deep link triggers this).
 final deepLinkUrlProvider = StateProvider<String?>((ref) => null);
 
-/// Initial tab index restored from SettingsService (Android process restore).
-final initialTabIndexProvider = Provider<int>((ref) => 0);
-
 /// Pre-loaded onboarding flag (avoids async blank flash in _AuthGate).
 final hasSeenOnboardingProvider = StateProvider<bool>((ref) => false);
 
@@ -124,18 +120,11 @@ final hasSeenOnboardingProvider = StateProvider<bool>((ref) => false);
 /// `onboarding_split` feature flag in `_AuthGate`.
 final onboardingPersonaProvider = StateProvider<String?>((ref) => null);
 
-/// Pre-loaded built tabs (avoids SizedBox.shrink for previously visited tabs).
-final initialBuiltTabsProvider = Provider<List<int>>((ref) => [0]);
-
-/// One-shot navigation request from outside the widget tree (e.g. the
-/// Android Quick Settings tile long-press). MainShell listens and swaps
-/// to the requested tab, then resets to null.
-final tileNavRequestProvider = StateProvider<int?>((ref) => null);
-
-/// Android-only: include current exit node ("🇭🇰 香港") in the tile
-/// subtitle when connected. Default off — the Quick Settings panel is
-/// visible to anyone who pulls down the shade.
-final tileShowNodeInfoProvider = StateProvider<bool>((ref) => false);
+// initialTabIndexProvider, initialBuiltTabsProvider, tileNavRequestProvider
+// moved to lib/shared/main_shell.dart together with MainShell itself.
+//
+// tileShowNodeInfoProvider moved to lib/modules/settings/providers/
+// settings_providers.dart as part of the Android tile controller split.
 
 void main() {
   // Zone-level safety net — catches fire-and-forget async exceptions that
@@ -502,15 +491,17 @@ class YueLinkApp extends ConsumerStatefulWidget {
 class _YueLinkAppState extends ConsumerState<YueLinkApp>
     with WindowListener, WidgetsBindingObserver {
   late final AppTrayController _tray;
-  final _appLinks = AppLinks();
-  StreamSubscription<Uri>? _appLinksSub;
+  late final AndroidTileController _tile;
+  late final HotkeyController _hotkey;
+  late final AppQuitController _quit;
+  late final AppResumeController _resume;
+  late final DeeplinkController _deeplink;
 
   // Managed provider subscriptions — cleaned up in dispose()
   ProviderSubscription? _langSub;
   ProviderSubscription? _statusSub;
   ProviderSubscription? _groupsSub;
   ProviderSubscription? _profilesSub;
-  ProviderSubscription? _hotkeySub;
   ProviderSubscription? _carrierSub;
   ProviderSubscription? _exitIpSub;
   ProviderSubscription? _tileNodeInfoSub;
@@ -518,20 +509,14 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
   ProviderSubscription? _routingModeTraySub;
   ProviderSubscription? _connectionModeTraySub;
 
-  /// Guard to prevent onWindowClose from interfering during programmatic quit.
-  bool _isQuitting = false;
-
   /// True while the initial post-frame recovery has run.
   /// Prevents didChangeAppLifecycleState(resumed) from re-running
   /// _onAppResumed() on the same engine-create cycle.
   bool _initialRecoveryDone = false;
 
-  /// True while `_onAppResumed` is executing. Fast background↔foreground
-  /// flips on mobile (and multi-window surface redraws on desktop) can
-  /// deliver a second `resumed` before the first handler's awaits return;
-  /// without this guard, two handlers race on the same provider invalidations
-  /// and `RecoveryManager.checkCoreHealth()` calls.
-  bool _resumeInFlight = false;
+  // Resume in-flight flag is owned by AppResumeController; reach it via
+  // `_resume.inFlight`. The controller coalesces overlapping run() calls
+  // so main.dart no longer guards the second-event race itself.
 
   @override
   void initState() {
@@ -547,14 +532,49 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
         if (activeId == null) return null;
         return ProfileService.loadConfig(activeId);
       },
-      onQuit: _handleQuit,
+      onQuit: () => _quit.runQuit(),
+    );
+    _tile = AndroidTileController(
+      ref: ref,
+      // Reuses the same active-profile lookup the tray controller does —
+      // tile-tap → start core uses whichever profile the user picked
+      // last, falling back to "no profile" silently.
+      loadProfileConfig: _loadSelectedProfileConfig,
+      onTilePreferences: () {
+        // Long-press on the QS tile (QS_TILE_PREFERENCES intent) →
+        // open the Nodes tab once MainShell mounts. Decoupled via
+        // tileNavRequestProvider so the controller doesn't need to
+        // know about MainShell's BuildContext.
+        ref.read(tileNavRequestProvider.notifier).state = MainShell.tabProxies;
+      },
+    );
+    _hotkey = HotkeyController(
+      ref: ref,
+      // Tray + global hotkey share the same toggle action — pressing
+      // Ctrl+Alt+C does exactly what right-click → Connect/Disconnect
+      // in the system tray menu does, including the routing through
+      // CoreActions / ProxyGroupsNotifier.
+      onTriggered: _tray.handleToggle,
+    );
+    _quit = AppQuitController(
+      ref: ref,
+      // Single-instance ServerSocket lives at module scope (top-level
+      // `_singleInstanceServer`); pass a small closure so the
+      // controller doesn't need to know about main.dart's private
+      // bootstrap state.
+      closeSingleInstanceServer: () => _singleInstanceServer?.close(),
+    );
+    _resume = AppResumeController(ref: ref);
+    _deeplink = DeeplinkController(
+      ref: ref,
+      deepLinkUrlProvider: deepLinkUrlProvider,
     );
     WidgetsBinding.instance.addObserver(this);
     if (Platform.isAndroid || Platform.isIOS) {
-      _setupVpnRevocationListener();
+      _resume.setupVpnRevocationListener();
     }
     if (Platform.isAndroid) {
-      _setupTileService();
+      _tile.init();
     }
     if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
       windowManager.addListener(this);
@@ -572,9 +592,9 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
         // Run the recovery check here to detect a surviving Go core immediately
         // instead of waiting up to 10s for the heartbeat.
         if (Platform.isAndroid) {
-          await _onAppResumed();
+          await _resume.run();
           // Mark initial recovery as done so didChangeAppLifecycleState
-          // doesn't re-run _onAppResumed() on this same engine create cycle.
+          // doesn't re-run resume on this same engine-create cycle.
           _initialRecoveryDone = true;
         }
         await _maybeAutoConnect();
@@ -586,9 +606,17 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
         }
         _checkSubscriptionExpiry();
         _checkForUpdateOnLaunch();
-        _initDeepLinks();
-        if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
-          _registerHotkeys();
+        _deeplink.init(mounted: () => mounted);
+        _hotkey.init();
+        // macOS-only silent Gatekeeper repair. Fire-and-forget — never
+        // blocks the launch path, never surfaces UI in Settings, only
+        // prompts for the system password if the running .app still has
+        // the `com.apple.quarantine` xattr (typically right after a fresh
+        // download or self-update). Idempotent: once xattr is cleared,
+        // hasQuarantine() returns false and this becomes a no-op on
+        // subsequent launches.
+        if (Platform.isMacOS) {
+          unawaited(_maybeRepairGatekeeper());
         }
       } catch (e) {
         debugPrint('[Init] post-frame init error (non-fatal): $e');
@@ -619,7 +647,7 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
       // Update Android Quick Settings tile state (includes transition
       // flag for "连接中..." / "断开中..." intermediate UX).
       if (Platform.isAndroid) {
-        _pushTileState();
+        _tile.pushState();
       }
       if (prev == CoreStatus.running && next == CoreStatus.stopped) {
         if (!ref.read(userStoppedProvider) &&
@@ -660,12 +688,8 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
       if (next is AsyncData) _checkSubscriptionExpiry();
     });
 
-    // Re-register hotkey when user changes it in Settings
-    if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
-      _hotkeySub = ref.listenManual(toggleHotkeyProvider, (prev, next) {
-        if (prev != null && prev != next) _reregisterHotkeys(next);
-      });
-    }
+    // Hotkey re-registration on settings change is handled inside
+    // HotkeyController.init() — see _hotkey wiring in initState.
 
     // Carrier detection + SNI polling: start when core is running
     _carrierSub = ref.listenManual(coreStatusProvider, (prev, next) {
@@ -698,137 +722,21 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
     // show-node-info toggle. Both are cheap and idempotent.
     if (Platform.isAndroid) {
       _exitIpSub = ref.listenManual(exitIpInfoProvider, (_, _) {
-        _pushTileState();
+        _tile.pushState();
       });
       _tileNodeInfoSub = ref.listenManual(tileShowNodeInfoProvider, (_, _) {
-        _pushTileState();
+        _tile.pushState();
       });
-    }
-  }
-
-  /// Register VPN revocation listener (Android only).
-  ///
-  /// Uses the recoveryInProgressProvider as the guard instead of a local
-  /// bool, so it stays in sync with the provider-level guard that heartbeat
-  /// also respects. This prevents VPN revocation from racing with recovery.
-  void _setupVpnRevocationListener() {
-    VpnService.listenForRevocation(
-      () {
-        // Skip if recovery is in progress — the recovery logic will handle
-        // state correctly. Without this guard, onVpnRevoked races with
-        // _onAppResumed() on engine recreate and resets state prematurely.
-        if (ref.read(recoveryInProgressProvider)) {
-          debugPrint('[App] VPN revoked during recovery — ignoring');
-          return;
-        }
-        debugPrint('[App] VPN revoked — resetting state');
-        resetCoreToStopped(ref);
-        // delay-state wipe happens via _delayResetSub (core status → stopped).
-        AppNotifier.warning(S.current.disconnectedUnexpected);
-      },
-      onTransportChanged: (prev, now) async {
-        // Wi-Fi → cellular / cellular → Wi-Fi: stale TCP pool + polluted
-        // fake-ip mappings kill perceived responsiveness for ~30 s after
-        // the switch. Flush both.  Skip the initial "none → wifi" transition
-        // at cold start — there's nothing to flush yet.
-        if (prev == 'none') return;
-        if (CoreManager.instance.isMockMode) return;
-        try {
-          final api = CoreManager.instance.api;
-          if (!await api.isAvailable()) return;
-          debugPrint(
-            '[App] transport $prev→$now — flushing fake-ip + '
-            'closing connections',
-          );
-          // Fire both in parallel; either one failing isn't fatal.
-          await Future.wait<void>([
-            api.flushFakeIpCache().then((_) {}).catchError((_) {}),
-            api.closeAllConnections().then((_) {}).catchError((_) {}),
-          ]);
-          // Invalidate cached delay results — proxies that were fast on
-          // Wi-Fi may be slow on cellular and vice versa.
-          ref.read(delayResultsProvider.notifier).state = {};
-        } catch (e) {
-          debugPrint('[App] transport-change flush threw: $e');
-        }
-      },
-    );
-  }
-
-  /// Set up Android Quick Settings tile integration.
-  ///
-  /// Initializes the MethodChannel listener for tile toggle requests
-  /// and sets the callback to toggle VPN via the existing core lifecycle.
-  void _setupTileService() {
-    TileService.init();
-    TileService.onToggleRequested = _performTileToggle;
-    TileService.onOpenPreferences = () {
-      // Route long-press (QS_TILE_PREFERENCES) to the Nodes tab.
-      ref.read(tileNavRequestProvider.notifier).state = MainShell.tabProxies;
-    };
-    // Push the current state immediately — the tile may have been added
-    // while the app was closed and its SharedPreferences may be stale.
-    _pushTileState();
-    // Drain any toggle queued by the native ProxyTileService while the
-    // engine was still booting (the headless cold-start path).
-    Future.microtask(() async {
-      if (await TileService.consumePendingToggle()) {
-        debugPrint('[App] Draining queued tile toggle from cold-start');
-        await _performTileToggle();
-      }
-    });
-  }
-
-  /// Compute and push the full tile state to native — active flag,
-  /// transition (starting/stopping), and optional "🇭🇰 香港" subtitle.
-  /// Called on any of: core status change, exit-IP resolution, or the
-  /// showNodeInTile toggle.
-  void _pushTileState() {
-    if (!Platform.isAndroid) return;
-    final status = ref.read(coreStatusProvider);
-    final active = status == CoreStatus.running;
-    final transition = switch (status) {
-      CoreStatus.starting => 'starting',
-      CoreStatus.stopping => 'stopping',
-      _ => null,
-    };
-    String? subtitle;
-    if (active && transition == null && ref.read(tileShowNodeInfoProvider)) {
-      final info = ref.read(exitIpInfoProvider).value;
-      if (info != null && info.flagEmoji.isNotEmpty) {
-        final loc = info.locationLine;
-        subtitle = loc.isNotEmpty ? '${info.flagEmoji} $loc' : info.flagEmoji;
-      }
-    }
-    TileService.updateState(
-      active: active,
-      transition: transition,
-      subtitle: subtitle,
-    );
-  }
-
-  Future<void> _performTileToggle() async {
-    final status = ref.read(coreStatusProvider);
-    if (status == CoreStatus.starting || status == CoreStatus.stopping) {
-      debugPrint('[App] Tile toggle ignored — core is $status');
-      return;
-    }
-    debugPrint('[App] Tile toggle — current status: $status');
-    final actions = ref.read(coreActionsProvider);
-    if (status == CoreStatus.running) {
-      await actions.stop();
-    } else {
-      final configYaml = await _loadSelectedProfileConfig();
-      if (configYaml != null) {
-        await actions.start(configYaml);
-      } else {
-        debugPrint('[App] Tile toggle: no profile selected, cannot start');
-      }
     }
   }
 
   /// Load the config YAML from the currently selected profile.
   /// Returns null if no profile is selected or loading fails.
+  /// Used by [AndroidTileController] (and any other path that needs to
+  /// kick off a connect from outside the dashboard) — kept here in
+  /// _YueLinkAppState because the lookup is shared across the tray
+  /// controller and the tile controller, and pulling in `ProfileService`
+  /// is cheap.
   Future<String?> _loadSelectedProfileConfig() async {
     try {
       final activeId = await SettingsService.getActiveProfileId();
@@ -859,7 +767,6 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
     _statusSub?.close();
     _groupsSub?.close();
     _profilesSub?.close();
-    _hotkeySub?.close();
     _carrierSub?.close();
     _exitIpSub?.close();
     _tileNodeInfoSub?.close();
@@ -869,13 +776,11 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
     TileService.onToggleRequested = null;
     TileService.onOpenPreferences = null;
     WidgetsBinding.instance.removeObserver(this);
-    _appLinksSub?.cancel();
+    unawaited(_deeplink.dispose());
     _tray.dispose();
+    unawaited(_hotkey.dispose());
     if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
       windowManager.removeListener(this);
-    }
-    if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
-      hotKeyManager.unregisterAll();
     }
     super.dispose();
   }
@@ -902,30 +807,24 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
 
     if (state == AppLifecycleState.resumed) {
       Telemetry.event(TelemetryEvents.appResumed);
-      // On Android, the first resume after engine recreate is already handled
-      // by addPostFrameCallback. Without this guard, _onAppResumed() runs
-      // TWICE on the same cycle: once from post-frame, once from here.
-      // The double call causes race conditions (concurrent API checks,
-      // duplicate stream invalidations, state flip-flop).
+      // On Android, the first resume after engine recreate is already
+      // handled by addPostFrameCallback. Without this guard, the resume
+      // handler runs TWICE on the same cycle: once from post-frame, once
+      // from here. The double call causes race conditions (concurrent
+      // API checks, duplicate stream invalidations, state flip-flop).
       if (Platform.isAndroid && !_initialRecoveryDone) {
         debugPrint(
           '[AppLifecycle] skipping resumed — initial recovery pending',
         );
         return;
       }
-      // Second-level guard: coalesce overlapping resume events. If a handler
-      // is already running, drop this one — the in-flight call will finish
-      // refreshing everything. Without this, two resume events during the
-      // same ~1-2s window double-invalidate streams and race on recovery.
-      if (_resumeInFlight) {
-        debugPrint('[AppLifecycle] resumed coalesced — handler in flight');
-        return;
-      }
-      _resumeInFlight = true;
-      _onAppResumed().whenComplete(() {
-        _resumeInFlight = false;
-        // Clear recovery guard for subsequent resume calls (background→foreground).
-        // The initial engine-create path clears this in the post-frame callback.
+      // Second-level coalescing (in-flight check) is owned by
+      // AppResumeController.run() — call unconditionally and trust the
+      // controller to drop duplicates.
+      _resume.run().whenComplete(() {
+        // Clear recovery guard for subsequent resume calls
+        // (background→foreground). The initial engine-create path
+        // clears this in the post-frame callback.
         if (Platform.isAndroid) {
           ref.read(recoveryInProgressProvider.notifier).state = false;
         }
@@ -933,291 +832,35 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
     }
   }
 
-  /// Validate core state immediately when app returns from background.
-  /// Avoids waiting up to 10s for the heartbeat to detect a crashed core.
-  ///
-  /// If the core is still alive, invalidates stream providers to force
-  /// WebSocket reconnection (the OS may have suspended the sockets during
-  /// a long background period).
-  Future<void> _onAppResumed() async {
-    // 1. Refresh auth / user profile in background (catches token expiry)
-    ref.read(authProvider.notifier).refreshUserInfo().ignore();
-
-    final manager = CoreManager.instance;
-    if (manager.isMockMode) return;
-
-    final status = ref.read(coreStatusProvider);
-
-    // 2. Recovery: Dart thinks stopped but Go core is actually still running.
-    //    This happens on Android when the OS kills the Flutter engine in the
-    //    background but the VPN service + Go core survive. On resume, the
-    //    engine is recreated with default state (stopped), but the core is alive.
-    //
-    //    The recovery guard is set on the PROVIDER (not a local bool) so that
-    //    both the heartbeat timer and the VPN revocation callback respect it.
-    //    The guard stays up until auto-connect also completes — this prevents
-    //    the status listener from firing "unexpected disconnect" during the
-    //    brief stopped→running transition.
-    if (status != CoreStatus.running) {
-      // Respect the user's explicit stop. userStoppedProvider is set to
-      // true by CoreLifecycleManager.stop() and only cleared on a fresh
-      // start(). When it's true, the user tapped disconnect — state must
-      // stay stopped until the next user-initiated connect.
-      //
-      // Bug this guards against: after user stop, the Go core / service
-      // helper / PacketTunnel extension can still respond "alive" on the
-      // mihomo API for a short window (shutdown sequence in flight, or
-      // Service Mode helper's mihomo subprocess still winding down).
-      // The old recovery path saw `health.alive && health.apiOk == true`,
-      // bumped status → running and wiped userStoppedProvider, so the UI
-      // showed "connected" while the TUN fd / system proxy were actually
-      // gone — the user had a "connected" indicator and dead network.
-      //
-      // Engine-recreate on Android (the case this recovery path was
-      // written for) is unaffected: Riverpod rebuilds ProviderScope from
-      // defaults, so userStoppedProvider reverts to false and we go
-      // through the normal health check.
-      // v1.0.21 hotfix: also consult the persisted manual-stop flag.
-      // The in-memory userStoppedProvider is wiped to its default (false)
-      // whenever Riverpod's ProviderScope rebuilds — which happens on
-      // every Android engine recreate (background-kill of the Flutter
-      // engine while the VPN service + Go core continue running). Without
-      // the persisted check, the recovery branch below would see the
-      // still-alive mihomo API and pull the UI back to "running" even
-      // though the user had explicitly disconnected, leaving them with a
-      // "connected" indicator and a dead network.
-      final persistedManualStopped = await SettingsService.getManualStopped();
-      if (persistedManualStopped && !ref.read(userStoppedProvider)) {
-        // Hydrate the in-memory provider from persistence so subsequent
-        // listeners (heartbeat, VPN revocation callback) also respect it.
-        ref.read(userStoppedProvider.notifier).state = true;
-      }
-      if (ref.read(userStoppedProvider) || persistedManualStopped) {
-        debugPrint(
-          '[AppLifecycle] resumed in user-stopped state — '
-          'skipping health recovery '
-          '(persisted=$persistedManualStopped, '
-          'provider=${ref.read(userStoppedProvider)})',
-        );
-        return;
-      }
-      ref.read(recoveryInProgressProvider.notifier).state = true;
-      try {
-        final health = await RecoveryManager.checkCoreHealth();
-        // v1.0.22 P0-1: TOCTOU re-check. Between the await above and the
-        // state mutations below, the user may have tapped Stop — the
-        // first guard at the top of this method only covers the pre-await
-        // window. Without this re-check the recovery branch overwrites
-        // `coreStatusProvider` to running and clears `userStoppedProvider`,
-        // resurrecting the very bug v1.0.21 P0-1 was supposed to fix:
-        // UI shows "connected" while TUN fd / system proxy are gone.
-        //
-        // Re-read both the in-memory provider AND the persisted flag —
-        // either becoming true between the two checks means the user
-        // stopped during the await, and we must not promote to running.
-        final userStoppedNow = ref.read(userStoppedProvider);
-        final persistedNow = await SettingsService.getManualStopped();
-        if (userStoppedNow || persistedNow) {
-          debugPrint(
-            '[AppLifecycle] manual stop landed during health-check await — '
-            'aborting recovery (provider=$userStoppedNow, '
-            'persisted=$persistedNow)',
-          );
-          ref.read(recoveryInProgressProvider.notifier).state = false;
-          return;
-        }
-        if (health.alive && health.apiOk) {
-          debugPrint(
-            '[AppLifecycle] core alive but Dart state was $status — recovering',
-          );
-          // Restore Dart state + ports to match reality
-          await manager.markRunning();
-          // Invalidate streams BEFORE setting status to running.
-          // This ensures streams reconnect before heartbeat or listeners
-          // check for data, preventing a brief "no data" state.
-          ref.invalidate(trafficStreamProvider);
-          ref.invalidate(memoryStreamProvider);
-          ref.invalidate(connectionsStreamProvider);
-          ref.invalidate(exitIpInfoProvider);
-          // Now set state — this triggers the status listener and heartbeat
-          ref.read(coreStatusProvider.notifier).state = CoreStatus.running;
-          // Clear any stale startup error from previous session
-          ref.read(coreStartupErrorProvider.notifier).state = null;
-          // Also reset the user-stopped flag so the UI shows connected state
-          ref.read(userStoppedProvider.notifier).state = false;
-          ref.read(proxyGroupsProvider.notifier).refresh();
-        }
-        // Note: on Android the recovery guard stays up so the post-frame
-        // `_maybeAutoConnect()` callback can clear it after the cold-start
-        // engine-recreate path completes. Other platforms don't take that
-        // path on resume, so the `finally` below drops the guard
-        // unconditionally — without it, a normal-but-no-mutation resume
-        // (e.g. health check returns alive=false on iOS/desktop, which
-        // skips the recovery branch) would leave the guard stuck and
-        // suppress every subsequent heartbeat tick.
-      } catch (e) {
-        debugPrint('[AppLifecycle] recovery check failed: $e');
-        ref.read(recoveryInProgressProvider.notifier).state = false;
-      } finally {
-        if (!Platform.isAndroid) {
-          ref.read(recoveryInProgressProvider.notifier).state = false;
-        }
-      }
-      return;
-    }
-
-    // 3. Normal case: Dart says running — verify core is still alive
-    try {
-      final health = await RecoveryManager.checkCoreHealth();
-      if (!health.alive || !health.apiOk) {
-        debugPrint('[AppLifecycle] core dead after resume — resetting state');
-        resetCoreToStopped(ref);
-        // delay-state wipe happens via _delayResetSub (core status → stopped).
-      } else {
-        // Core alive — refresh data but do NOT invalidate trafficStreamProvider.
-        // Invalidating it creates a new TrafficHistory(), wiping the chart.
-        // The WebSocket reconnection logic (exponential backoff in MihomoStream)
-        // handles stale connections automatically when data stops flowing.
-        ref.invalidate(memoryStreamProvider);
-        ref.invalidate(connectionsStreamProvider);
-        // Refresh exit IP in case network changed during background
-        ref.invalidate(exitIpInfoProvider);
-        // Refresh proxy groups in case core reloaded config
-        ref.read(proxyGroupsProvider.notifier).refresh();
-        // v1.0.21 hotfix P0-2: system-proxy tamper detection on resume.
-        // If the user flipped over to v2rayN / Clash Verge / any other proxy tool
-        // while YueLink was backgrounded, the 60 s verify cache would
-        // leave the heartbeat unable to notice for up to that TTL —
-        // resulting in the "connected but no network" UX. force:true
-        // bypasses the cache, and a tampered result immediately triggers
-        // restore instead of waiting for the 30 s heartbeat round.
-        unawaited(_resumeProxyTamperCheck());
-      }
-    } catch (e) {
-      debugPrint('[AppLifecycle] resume check failed: $e');
-    }
-  }
-
-  /// v1.0.21 hotfix P0-2: best-effort force-verify + restore on resume.
-  /// Runs only when the user has systemProxy mode selected and core is
-  /// running. Fire-and-forget: caller doesn't await; any exception is
-  /// swallowed and logged so the rest of the resume path is unaffected.
-  Future<void> _resumeProxyTamperCheck() async {
-    if (!(Platform.isMacOS || Platform.isWindows || Platform.isLinux)) {
-      return;
-    }
-    if (ref.read(connectionModeProvider) != 'systemProxy') return;
-    if (!ref.read(systemProxyOnConnectProvider)) return;
-    try {
-      final port = CoreManager.instance.mixedPort;
-      final ok = await SystemProxyManager.verify(port, force: true);
-      if (ok == false) {
-        debugPrint(
-          '[AppLifecycle] systemProxy tampered on resume '
-          '(expected 127.0.0.1:$port) — restoring',
-        );
-        EventLog.write(
-          '[AppLifecycle] systemProxy tamper detected on '
-          'resume port=$port',
-        );
-        // v1.0.22 P1-4: retry on transient failure (1.5 s × 3) so a
-        // settle race (DPAPI not yet warm / networksetup briefly
-        // racing AV) doesn't drop the user into a 30 s wait for the
-        // next heartbeat round to retry.
-        final restored = await SystemProxyManager.setWithRetry(port);
-        if (!restored) {
-          AppNotifier.warning(S.current.errSystemProxyFailed);
-        }
-      }
-    } catch (e) {
-      debugPrint('[AppLifecycle] resume tamper check failed: $e');
-    }
-  }
-
-  // ── Deep links ────────────────────────────────────────────────────────────
-
-  void _initDeepLinks() {
-    // Handle links that launched the app cold
-    _appLinks.getInitialLink().then((uri) {
-      if (uri != null) _handleDeepLink(uri);
-    });
-    // Handle links while app is already running — store to cancel in dispose()
-    _appLinksSub = _appLinks.uriLinkStream.listen(_handleDeepLink);
-  }
-
-  /// Parses clash://install-config?url=... or mihomo://install-config?url=...
-  void _handleDeepLink(Uri uri) {
-    if (!mounted) return;
-    final rawUrl = uri.queryParameters['url'];
-    if (rawUrl == null || rawUrl.isEmpty) return;
-    // Notify the profile page to pre-fill the add dialog
-    ref.read(deepLinkUrlProvider.notifier).state = rawUrl;
-    // If window is hidden (desktop), bring it to front
-    if (Platform.isMacOS || Platform.isWindows) {
-      windowManager.show();
-      windowManager.focus();
-    }
-  }
+  // (Resume + deeplink handling live in AppResumeController + DeeplinkController.)
 
   // ── Global hotkeys ────────────────────────────────────────────────────────
-
-  Future<void> _registerHotkeys() async {
-    // Linux: global hotkeys unreliable under Wayland — skip silently
-    if (Platform.isLinux) {
-      debugPrint(
-        '[Hotkey] Skipping global hotkey on Linux (Wayland not supported)',
-      );
-      return;
-    }
-    try {
-      final stored = ref.read(toggleHotkeyProvider);
-      final toggleKey = parseStoredHotkey(stored);
-      await hotKeyManager.register(
-        toggleKey,
-        keyDownHandler: (_) {
-          _tray.handleToggle();
-        },
-      );
-    } catch (e) {
-      // Hotkey registration can fail if another app holds the shortcut
-      debugPrint('[App] hotkey registration: $e');
-    }
-  }
-
-  Future<void> _reregisterHotkeys(String newHotkeyStr) async {
-    if (Platform.isLinux) return;
-    try {
-      await hotKeyManager.unregisterAll();
-      final toggleKey = parseStoredHotkey(newHotkeyStr);
-      await hotKeyManager.register(
-        toggleKey,
-        keyDownHandler: (_) {
-          _tray.handleToggle();
-        },
-      );
-    } catch (e) {
-      debugPrint('[App] hotkey re-registration: $e');
-    }
-  }
+  // All registration / re-registration / cleanup lives in
+  // lib/shared/desktop/hotkey_controller.dart. _hotkey is wired in
+  // initState; init() runs from the post-frame callback; dispose()
+  // unregisters via _hotkey.dispose() in dispose().
 
   // ── Window manager callbacks ─────────────────────────────────────
 
   @override
   void onWindowClose() async {
     // If programmatic quit is in progress, don't interfere
-    if (_isQuitting) return;
+    if (_quit.isQuitting) return;
 
-    // v1.0.22 P0-3: delegate the quit-vs-hide decision to the pure
-    // policy helper. Adds a Windows + core-running carve-out so the
-    // Win11 taskbar's right-click → Close window does not silently
-    // hide while the VPN keeps running (the "无法退出" report).
+    // Delegate the quit-vs-hide decision to the pure policy helper.
+    // Honours the user's `closeBehavior` setting strictly on Windows
+    // and macOS — the previous v1.0.22 P0-3 carve-out (Windows +
+    // running → force-quit) was reverted because it overrode users
+    // who explicitly chose 'tray'. Users who want quit-on-X set
+    // `closeBehavior='exit'`; those who hit "无法退出" use the tray
+    // right-click → Quit menu.
     final shouldQuit = shouldQuitOnWindowClose(
       platform: Platform.operatingSystem,
       status: ref.read(coreStatusProvider),
       behavior: ref.read(closeBehaviorProvider),
     );
     if (shouldQuit) {
-      await _handleQuit();
+      await _quit.runQuit();
     } else {
       await windowManager.hide();
     }
@@ -1239,115 +882,6 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
     }
   }
 
-  Future<void> _handleQuit() async {
-    _isQuitting = true;
-
-    // v1.0.21 hotfix P1-5: hard-cap the quit sequence with a watchdog
-    // that runs in a SEPARATE isolate. Previously this was a
-    // Future.delayed(3s) scheduled on the main isolate's event loop —
-    // which is exactly the loop being starved when platform channel
-    // awaits (windowManager.destroy / trayManager.destroy /
-    // ServiceClient.stop) sit in blocking native calls under Win11.
-    // User-reported symptom: tray → Quit, window closes, process stays
-    // resident. The watchdog isolate has its own event loop so its
-    // Future.delayed fires regardless of main-isolate jam; on fire it
-    // SIGKILLs our pid which OS-level terminates the whole process.
-    // Desktop only — mobile doesn't hit _handleQuit.
-    if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
-      try {
-        await spawnQuitWatchdog(delay: const Duration(seconds: 3));
-      } catch (e) {
-        // Isolate spawn itself failed — fall back to a Dart Timer.
-        // Worse safety net than the isolate (same jam risk) but better
-        // than nothing; at least on a healthy event loop it still fires.
-        debugPrint(
-          '[Quit] watchdog isolate spawn failed: $e — '
-          'falling back to Dart Timer',
-        );
-        Future.delayed(const Duration(seconds: 3), () {
-          try {
-            Process.killPid(pid, ProcessSignal.sigkill);
-          } catch (e) {
-            EventLog.writeTagged(
-              'Quit',
-              'quit_kill_fallback_failed',
-              context: {'error': e},
-            );
-          }
-          exit(0);
-        });
-      }
-    }
-
-    try {
-      final status = ref.read(coreStatusProvider);
-      if (status == CoreStatus.running) {
-        await ref
-            .read(coreActionsProvider)
-            .stop()
-            .timeout(const Duration(seconds: 2), onTimeout: () {});
-      }
-      try {
-        _singleInstanceServer?.close();
-      } catch (e) {
-        EventLog.writeTagged(
-          'Quit',
-          'quit_server_close_failed',
-          context: {'error': e},
-        );
-      }
-      // System proxy clear is the user-visible correctness requirement —
-      // must complete before exit, or the OS keeps routing traffic through
-      // a dead mixed-port. 2s cap covers the slow macOS path (N network
-      // services × 3 networksetup calls); the global 3s timer above is the
-      // hard safety net if this itself hangs.
-      try {
-        await CoreActions.clearSystemProxyStatic().timeout(
-          const Duration(seconds: 2),
-        );
-      } catch (e) {
-        EventLog.writeTagged(
-          'Quit',
-          'quit_proxy_clear_failed',
-          context: {'error': e},
-        );
-      }
-      try {
-        trayManager.destroy();
-      } catch (e) {
-        EventLog.writeTagged(
-          'Quit',
-          'quit_tray_destroy_failed',
-          context: {'error': e},
-        );
-      }
-      try {
-        windowManager.setPreventClose(false);
-      } catch (e) {
-        EventLog.writeTagged(
-          'Quit',
-          'quit_prevent_close_failed',
-          context: {'error': e},
-        );
-      }
-      try {
-        windowManager.destroy();
-      } catch (e) {
-        EventLog.writeTagged(
-          'Quit',
-          'quit_window_destroy_failed',
-          context: {'error': e},
-        );
-      }
-    } catch (e) {
-      EventLog.writeTagged(
-        'Quit',
-        'quit_cleanup_failed',
-        context: {'error': e},
-      );
-    }
-    exit(0);
-  }
 
   Future<void> _maybeAutoConnect() async {
     // Skip if core is already running (e.g. recovered from Android engine recreate)
@@ -1413,6 +947,57 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
         );
       }
     });
+  }
+
+  /// Detect-and-repair the macOS `com.apple.quarantine` xattr on the
+  /// running `.app` bundle. Fully silent unless the OS itself surfaces
+  /// the standard administrator-password dialog — there is no Settings
+  /// row, no in-app dialog, no confirmation step.
+  ///
+  /// Skipped during onboarding: a brand-new user who hasn't finished
+  /// the onboarding flow shouldn't be greeted by an unexpected
+  /// password prompt — the in-app explanation hasn't even rendered yet.
+  /// Once `hasSeenOnboarding` flips to true, the next launch repairs.
+  ///
+  /// Skipped outside an `.app` bundle (debug `flutter run`).
+  ///
+  /// Failure modes (user cancels password dialog, osascript missing,
+  /// xattr fails): logged to EventLog and dropped. The xattr stays;
+  /// the next launch will try again — entirely user-driven cadence.
+  Future<void> _maybeRepairGatekeeper() async {
+    try {
+      if (MacOSGatekeeper.bundlePath() == null) return;
+      if (!ref.read(hasSeenOnboardingProvider)) return;
+      final dirty = await MacOSGatekeeper.hasQuarantine();
+      if (!dirty) return;
+      EventLog.writeTagged(
+        'Gatekeeper',
+        'auto_repair_start',
+        context: {'bundle': MacOSGatekeeper.bundlePath()},
+      );
+      // Brief heads-up so the user understands the password dialog they're
+      // about to see is initiated by YueLink (and isn't, e.g., a phishing
+      // popup). One short toast — no modal, no flow interruption.
+      if (mounted) {
+        AppNotifier.info(S.current.gatekeeperFixRunning);
+      }
+      final ok = await MacOSGatekeeper.removeQuarantine();
+      EventLog.writeTagged(
+        'Gatekeeper',
+        ok ? 'auto_repair_success' : 'auto_repair_failed_or_cancelled',
+      );
+      if (ok && mounted) {
+        AppNotifier.success(S.current.gatekeeperFixSuccess);
+      }
+      // Failure path: stay silent. User-cancelled password dialogs are the
+      // common case and shouldn't generate an error toast.
+    } catch (e) {
+      EventLog.writeTagged(
+        'Gatekeeper',
+        'auto_repair_exception',
+        context: {'error': e},
+      );
+    }
   }
 
   void _checkSubscriptionExpiry() {
@@ -1552,409 +1137,6 @@ class _AuthGate extends ConsumerWidget {
   }
 }
 
-class MainShell extends ConsumerStatefulWidget {
-  const MainShell({super.key = const ValueKey('mainShell')});
-
-  /// Tab indices for programmatic navigation.
-  static const tabDashboard = 0;
-  static const tabProxies = 1;
-  static const tabEmby = 2;
-  static const tabSettings = 3;
-
-  static void switchToTab(BuildContext context, int index) {
-    context.findAncestorStateOfType<_MainShellState>()?.switchTab(index);
-  }
-
-  @override
-  ConsumerState<MainShell> createState() => _MainShellState();
-}
-
-class _MainShellState extends ConsumerState<MainShell> {
-  late int _currentIndex;
-  late final Map<int, bool> _builtTabs;
-  ProviderSubscription? _tileNavSub;
-
-  void switchTab(int index) {
-    setState(() {
-      _currentIndex = index;
-      _builtTabs[index] = true;
-    });
-    SettingsService.setLastTabIndex(index);
-    SettingsService.setBuiltTabs(
-      _builtTabs.keys.where((k) => _builtTabs[k] == true).toList(),
-    );
-  }
-
-  static const _pages = [
-    DashboardPage(),
-    NodesPage(),
-    _EmbyTabPage(),
-    SettingsPage(),
-  ];
-
-  @override
-  void initState() {
-    super.initState();
-    _currentIndex = ref
-        .read(initialTabIndexProvider)
-        .clamp(0, _pages.length - 1);
-    // Restore previously visited tabs from persistence (Android process restore)
-    final savedTabs = ref.read(initialBuiltTabsProvider);
-    _builtTabs = <int, bool>{
-      for (final i in savedTabs)
-        if (i >= 0 && i < _pages.length) i: true,
-    };
-    _builtTabs[_currentIndex] = true;
-
-    // Listen for one-shot navigation requests from outside the widget
-    // tree (currently: Android tile long-press). Reset to null after
-    // handling so a re-set to the same value still fires.
-    _tileNavSub = ref.listenManual<int?>(tileNavRequestProvider, (_, next) {
-      if (next == null) return;
-      if (next >= 0 && next < _pages.length) switchTab(next);
-      // Use microtask so the notifier isn't mutated during the notification.
-      Future.microtask(
-        () => ref.read(tileNavRequestProvider.notifier).state = null,
-      );
-    });
-  }
-
-  @override
-  void dispose() {
-    _tileNavSub?.close();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final isWide = MediaQuery.sizeOf(context).width > 640;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    if (isWide) {
-      return Scaffold(
-        body: Row(
-          children: [
-            // ── Sidebar ────────────────────────────────────────
-            RepaintBoundary(
-              child: _Sidebar(
-                currentIndex: _currentIndex,
-                onSelect: (i) => switchTab(i),
-              ),
-            ),
-
-            // ── Sidebar / content divider ──────────────────────
-            Container(
-              width: 0.5,
-              color: isDark
-                  ? Colors.white.withValues(alpha: 0.06)
-                  : Colors.black.withValues(alpha: 0.06),
-            ),
-
-            // ── Content ────────────────────────────────────────
-            Expanded(
-              child: RepaintBoundary(
-                child: IndexedStack(
-                  index: _currentIndex,
-                  children: [
-                    for (int i = 0; i < _pages.length; i++)
-                      _builtTabs[i] == true
-                          ? _pages[i]
-                          : const SizedBox.shrink(),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    // ── Mobile bottom navigation ─────────────────────────────────
-    final s = S.of(context);
-    final mobileItems = [
-      (
-        const Icon(Icons.home_outlined, size: 20),
-        const Icon(Icons.home_filled, size: 20),
-        s.navHome,
-      ),
-      (
-        const Icon(Icons.public_outlined, size: 20),
-        const Icon(Icons.public, size: 20),
-        s.navProxies,
-      ),
-      (
-        const Icon(Icons.play_circle_outline, size: 20),
-        const Icon(Icons.play_circle_filled, size: 20),
-        s.navEmby,
-      ),
-      (
-        const Icon(Icons.person_outline_rounded, size: 20),
-        const Icon(Icons.person_rounded, size: 20),
-        s.navMine,
-      ),
-    ];
-
-    return Scaffold(
-      body: RepaintBoundary(
-        child: IndexedStack(
-          index: _currentIndex,
-          children: [
-            for (int i = 0; i < _pages.length; i++)
-              _builtTabs[i] == true ? _pages[i] : const SizedBox.shrink(),
-          ],
-        ),
-      ),
-      // Unified tab bar across all platforms — iOS-style blurred background
-      // with hairline top border, matching Telegram's cross-platform design.
-      bottomNavigationBar: CupertinoTabBar(
-        currentIndex: _currentIndex,
-        onTap: (i) => switchTab(i),
-        backgroundColor: Theme.of(
-          context,
-        ).colorScheme.surface.withValues(alpha: 0.85),
-        border: Border(
-          top: BorderSide(
-            color: Theme.of(context).brightness == Brightness.dark
-                ? Colors.white.withValues(alpha: 0.08)
-                : Colors.black.withValues(alpha: 0.08),
-            width: 0.33,
-          ),
-        ),
-        activeColor: Theme.of(context).colorScheme.primary,
-        inactiveColor: Theme.of(context).brightness == Brightness.dark
-            ? YLColors.zinc400
-            : YLColors.zinc500,
-        items: [
-          for (int i = 0; i < mobileItems.length; i++)
-            BottomNavigationBarItem(
-              icon: mobileItems[i].$1,
-              activeIcon: mobileItems[i].$2,
-              label: mobileItems[i].$3,
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Sidebar ────────────────────────────────────────────────────────────────────
-
-class _Sidebar extends StatelessWidget {
-  final int currentIndex;
-  final ValueChanged<int> onSelect;
-
-  const _Sidebar({required this.currentIndex, required this.onSelect});
-
-  @override
-  Widget build(BuildContext context) {
-    final s = S.of(context);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    final navItems = [
-      (Icons.home_outlined, Icons.home_filled, s.navHome),
-      (Icons.public_outlined, Icons.public, s.navProxies),
-      (Icons.play_circle_outline, Icons.play_circle_filled, s.navEmby),
-    ];
-
-    return Container(
-      width: 230,
-      color: isDark
-          ? YLColors.zinc900
-          : YLColors.zinc50, // Sidebar one shade lighter than zinc100 bg
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // ── Brand ────────────────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
-            child: Row(
-              children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: YLColors.primary,
-                    borderRadius: BorderRadius.circular(YLRadius.xl),
-                  ),
-                  child: const Icon(
-                    Icons.link_rounded,
-                    size: 20,
-                    color: Colors.white,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      '悦通',
-                      style: YLText.titleMedium.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    Text(
-                      'AI · 全球加速',
-                      style: YLText.caption.copyWith(color: YLColors.zinc400),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-
-          // ── Navigation items ─────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Column(
-              children: [
-                for (int i = 0; i < navItems.length; i++)
-                  _SidebarItem(
-                    icon: currentIndex == i ? navItems[i].$2 : navItems[i].$1,
-                    label: navItems[i].$3,
-                    isActive: currentIndex == i,
-                    onTap: () => onSelect(i),
-                  ),
-              ],
-            ),
-          ),
-
-          const Spacer(),
-
-          // ── 我的 at bottom ────────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
-            child: _SidebarItem(
-              icon: currentIndex == MainShell.tabSettings
-                  ? Icons.person_rounded
-                  : Icons.person_outline_rounded,
-              label: s.navMine,
-              isActive: currentIndex == MainShell.tabSettings,
-              onTap: () => onSelect(MainShell.tabSettings),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SidebarItem extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool isActive;
-  final VoidCallback onTap;
-
-  const _SidebarItem({
-    required this.icon,
-    required this.label,
-    required this.isActive,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    final activeColor = isDark ? YLColors.zinc800 : Colors.white;
-    final borderColor = isDark
-        ? Colors.white.withValues(alpha: 0.08)
-        : Colors.black.withValues(alpha: 0.06);
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 2),
-      child: Material(
-        color: isActive ? activeColor : Colors.transparent,
-        borderRadius: BorderRadius.circular(YLRadius.lg),
-        shadowColor: Colors.black.withValues(alpha: 0.05),
-        elevation: isActive && !isDark ? 1 : 0,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(YLRadius.lg),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-            decoration: isActive
-                ? BoxDecoration(
-                    borderRadius: BorderRadius.circular(YLRadius.lg),
-                    border: Border.all(color: borderColor, width: 0.5),
-                  )
-                : null,
-            child: Row(
-              children: [
-                Icon(
-                  icon,
-                  size: 16,
-                  color: isActive
-                      ? (isDark ? Colors.white : YLColors.zinc900)
-                      : YLColors.zinc500,
-                ),
-                const SizedBox(width: 10),
-                Text(
-                  label,
-                  style: YLText.body.copyWith(
-                    fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
-                    color: isActive
-                        ? (isDark ? Colors.white : YLColors.zinc900)
-                        : YLColors.zinc500,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ── Emby tab wrapper ──────────────────────────────────────────────────────────
-
-/// Full-screen tab wrapper for 悦视频.
-/// Watches [embyProvider] and delegates to [EmbyMediaPage] (native) or
-/// [EmbyWebPage] (WebView fallback) once info is loaded.
-class _EmbyTabPage extends ConsumerWidget {
-  const _EmbyTabPage();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final s = S.of(context);
-    final emby = ref.watch(embyProvider);
-    return emby.when(
-      loading: () =>
-          const Scaffold(body: Center(child: CircularProgressIndicator())),
-      error: (e, _) => Scaffold(
-        body: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(e.toString(), textAlign: TextAlign.center),
-              const SizedBox(height: 12),
-              TextButton.icon(
-                onPressed: () => ref.invalidate(embyProvider),
-                icon: const Icon(Icons.refresh_rounded, size: 18),
-                label: Text(s.retry),
-              ),
-            ],
-          ),
-        ),
-      ),
-      data: (info) {
-        if (info == null || !info.hasAccess) {
-          return Scaffold(body: Center(child: Text(s.mineEmbyNoAccess)));
-        }
-        if (info.hasNativeAccess) {
-          return EmbyMediaPage(
-            serverUrl: info.serverBaseUrl!,
-            userId: info.parsedUserId!,
-            accessToken: info.parsedAccessToken!,
-            serverId: info.parsedServerId ?? '',
-          );
-        }
-        return EmbyWebPage(url: info.launchUrl!);
-      },
-    );
-  }
-}
 
 // ── Crash logging ─────────────────────────────────────────────────────────────
 

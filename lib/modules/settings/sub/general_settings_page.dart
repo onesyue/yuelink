@@ -10,7 +10,6 @@ import '../../../core/storage/settings_service.dart';
 import '../../../i18n/app_strings.dart';
 import '../../../i18n/strings_g.dart';
 import '../../../core/providers/core_provider.dart';
-import '../../../main.dart' show tileShowNodeInfoProvider;
 import '../../../shared/app_notifier.dart';
 import '../../../shared/telemetry.dart';
 import '../../../theme.dart';

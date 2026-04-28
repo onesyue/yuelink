@@ -55,3 +55,11 @@ final closeBehaviorProvider = StateProvider<String>((ref) => 'tray');
 
 /// Desktop: toggle connection hotkey stored as "ctrl+alt+c" lowercase.
 final toggleHotkeyProvider = StateProvider<String>((ref) => 'ctrl+alt+c');
+
+/// Android-only: include current exit node ("🇭🇰 香港") in the Quick
+/// Settings tile subtitle when connected. Default off — the QS panel is
+/// visible to anyone who pulls down the shade. Lives here (not in
+/// main.dart) so the tile controller and the settings UI both reach it
+/// through the modules/settings path rather than reverse-importing the
+/// app entry.
+final tileShowNodeInfoProvider = StateProvider<bool>((ref) => false);

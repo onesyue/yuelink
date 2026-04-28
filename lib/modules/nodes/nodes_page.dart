@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/models/proxy.dart';
 import '../../i18n/app_strings.dart';
-import '../../main.dart';
+import '../../shared/main_shell.dart';
 import '../../core/providers/core_provider.dart';
 import '../../core/kernel/core_manager.dart';
 import '../../core/storage/settings_service.dart';
