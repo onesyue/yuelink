@@ -759,6 +759,26 @@ jobs:
               printf '| iOS | `YueLink-%s-ios.ipa` | 侧载，iOS 15+（TrollStore / AltStore / SideStore） |\n' "$VERSION"
               printf '| Linux | `YueLink-%s-linux-amd64.AppImage` | x86_64 |\n' "$VERSION"
               printf '\n每个产物附同名 `.sha256`，汇总见 `YueLink-%s-SHA256SUMS`。\n' "$VERSION"
+              printf '\n## Install notes\n\n'
+              printf '<details>\n<summary>Windows — SmartScreen 蓝色对话框</summary>\n\n'
+              printf 'YueLink 没有购买 EV 代码签名证书，首次启动 Windows 可能弹"已保护你的电脑"。\n'
+              printf '点击对话框里的 **More info / 更多信息** → **Run anyway / 仍要运行** 即可。\n'
+              printf '担心安全可上传 [VirusTotal](https://www.virustotal.com/) 复核。\n\n</details>\n\n'
+              printf '<details>\n<summary>macOS — Gatekeeper "无法验证"</summary>\n\n'
+              printf '同样是无 EV 证书。**首次安装**：右键 .app → 打开（不是双击）。\n'
+              printf '**升级后再次出现**：app 内 Settings 顶部已自动 detect + 一键 fix（v1.0.22+）。\n\n</details>\n\n'
+              printf '<details>\n<summary>Android — 未知来源 / 出厂限制</summary>\n\n'
+              printf '允许浏览器或文件管理器安装未知来源应用即可。\n'
+              printf '小米/华为/OPPO 用户：进入 app 后 Settings → 连接修复 → 加入电池优化白名单（v1.0.23+ 有详细解释卡）。\n\n</details>\n\n'
+              printf '<details>\n<summary>iOS — 选择 TrollStore / AltStore / SideStore</summary>\n\n'
+              printf 'YueLink 没有 App Store 上架。三种侧载方式：\n\n'
+              printf '* **TrollStore**（推荐，永久签名）：iOS 14.0–16.6.1 / 17.0 用户首选，安装后永不掉签。直接在 TrollStore 里点 + → 选下载好的 ipa。\n'
+              printf '* **AltStore / SideStore**（每 7 天续签）：未越狱用户的标准方案。AltStore 同步签名一次维持 7 天；SideStore 是 fork。\n'
+              printf '* **Sideloadly**：连电脑用 Apple ID 签一次，7 天有效。\n\n'
+              printf '安装后第一次连接会弹"YueLink 想要添加 VPN 配置"——这是必要权限，点允许即可。\n\n</details>\n\n'
+              printf '<details>\n<summary>Linux — Ubuntu 20.04 等老 LTS</summary>\n\n'
+              printf 'v1.0.23+ AppImage 内置 libmpv2，所有支持的 LTS 都能直接运行。\n'
+              printf 'v1.0.22 及之前的 AppImage 需要系统装 libmpv2（Ubuntu 22.04+ / Debian 12+ / Fedora 36+ 自带，20.04 需 PPA）。\n\n</details>\n'
               if [ -n "$PREV_TAG" ]; then
                 printf '\n**Full Changelog**: https://github.com/%s/compare/%s...%s\n' "$GITHUB_REPOSITORY" "$PREV_TAG" "$TAG"
               fi
