@@ -217,8 +217,8 @@ class ConfigTemplate {
     config = _ensureConnectivityRules(config);
     debugPrint('[Config] 10b connectivityRules done');
 
-    config = _ensureProviderFetchDirect(config);
-    debugPrint('[Config] 10b2 providerFetchDirect done');
+    config = _ensureProviderProxyDirect(config);
+    debugPrint('[Config] 10b2 providerProxyDirect done');
 
     config = _ensureQuicReject(config, effectiveQuicRejectPolicy);
     debugPrint('[Config] 10c quicReject done');
@@ -1497,10 +1497,8 @@ class ConfigTemplate {
         config.substring(rulesMatch.end);
   }
 
-  /// Force CDN domains used by `proxy-providers` and `rule-providers`
-  /// to route DIRECT, breaking the chicken-and-egg loop where mihomo
-  /// can't fetch the provider files because the proxy that's supposed
-  /// to fetch them isn't ready yet.
+  /// Force every `proxy-providers` and `rule-providers` entry that
+  /// hasn't explicitly chosen a fetch route to use `proxy: DIRECT`.
   ///
   /// Symptom (real-world Android log, 2026-04-28):
   ///   [TCP] dial 兜底分流 (match RuleSet/proxy)
@@ -1509,55 +1507,178 @@ class ConfigTemplate {
   ///   [Provider] proxy pull error: Get "https://fastly.jsdelivr.net/.../Proxy.yaml": EOF
   ///   [Provider] google pull error: ... EOF
   ///
-  /// The rule-provider URL gets matched by the catch-all "兜底分流"
-  /// group and routed through `v4.yuetoto.net`. But that node hasn't
+  /// The rule-provider URL was matched by the catch-all "兜底分流"
+  /// group and routed through `v4.yuetoto.net`. That node hadn't
   /// authenticated yet — the very rule-providers that *would* enable
-  /// proper routing are the ones blocked. Result: providers stay
-  /// empty for the entire session, and groups using `use:` show
-  /// no proxies.
+  /// proper routing were the ones blocked. Providers stayed empty
+  /// for the entire session.
   ///
-  /// Domain choice: only pure CDN hosts that are *only* ever fetched
-  /// for static config / rule files. github.com / gitlab.com are
-  /// excluded because users actually browse those.
-  static String _ensureProviderFetchDirect(String config) {
-    final rulesMatch = RegExp(
-      r'^rules:\s*\n',
+  /// The original fix injected `DOMAIN-SUFFIX,jsdelivr.net,DIRECT`
+  /// rules into the rules section. That worked but was a CDN
+  /// whitelist (jsdelivr.net + githubusercontent.com only) that
+  /// would silently fail on configs hosted elsewhere
+  /// (raw.fastgit.org, gcore mirrors, custom CDNs). It also polluted
+  /// the user's `rules:` list.
+  ///
+  /// mihomo's native solution is per-provider `proxy: DIRECT` — see
+  /// https://wiki.metacubex.one/en/config/rule-providers/ and
+  /// https://wiki.metacubex.one/en/config/proxy-providers/. Setting
+  /// it on the provider definition itself bypasses rule matching
+  /// entirely for the fetch and works for *any* host. If a user wants
+  /// a specific provider to fetch through a proxy (e.g. a
+  /// GFW-hosted rule list), they set `proxy: <group>` themselves and
+  /// this function leaves it alone.
+  ///
+  /// Handles both inline (`name: { type: http, url: ... }`) and
+  /// block-style (`name:\n  type: http\n  url: ...`) provider
+  /// entries, and detects sibling indentation rather than hardcoding it.
+  static String _ensureProviderProxyDirect(String config) {
+    config = _injectProxyDirectInBlock(config, 'proxy-providers');
+    config = _injectProxyDirectInBlock(config, 'rule-providers');
+    return config;
+  }
+
+  /// Inject `proxy: DIRECT` into every entry under the named top-level
+  /// providers block that doesn't already declare a `proxy:` field.
+  static String _injectProxyDirectInBlock(String config, String blockName) {
+    final headerMatch = RegExp(
+      '^${RegExp.escape(blockName)}:\\s*\\n',
       multiLine: true,
     ).firstMatch(config);
-    if (rulesMatch == null) return config;
+    if (headerMatch == null) return config;
 
-    const domains = [
-      'jsdelivr.net',          // covers cdn./fastly./gcore./testingcf.
-      'githubusercontent.com', // covers raw.
-    ];
+    final blockStart = headerMatch.end;
 
-    // Slice out just the rules block so we don't false-positive on
-    // `geox-url:` references to jsdelivr (those are pre-injected by
-    // _ensureGeodata for the GeoIP/Geosite mirrors and are not rules).
-    final rulesBody = config.substring(rulesMatch.end);
+    // Block ends at the next line whose first character is non-whitespace
+    // (next top-level YAML key) or EOF.
+    final tail = config.substring(blockStart);
+    final endRel = RegExp(r'^\S', multiLine: true).firstMatch(tail);
+    final blockEnd = endRel != null ? blockStart + endRel.start : config.length;
 
-    final firstRule = RegExp(
-      r'^([ \t]*)-\s',
-      multiLine: true,
-    ).firstMatch(rulesBody);
-    final ruleIndent = firstRule?.group(1) ?? '  ';
+    final body = config.substring(blockStart, blockEnd);
+    if (body.trim().isEmpty) return config;
 
-    var injection = '';
-    for (final d in domains) {
-      // Idempotent: skip if any rule line in the rules block already
-      // mentions this exact domain. We don't enforce DIRECT — if the user
-      // explicitly routes jsdelivr through a specific group, respect it.
-      // Use a comma-anchored match (`,jsdelivr.net,`) so partial substring
-      // matches against unrelated text don't suppress the injection.
-      final escaped = RegExp.escape(d);
-      if (RegExp('[, ]$escaped[, ]').hasMatch(rulesBody)) continue;
-      injection += '$ruleIndent- "DOMAIN-SUFFIX,$d,DIRECT"\n';
+    // Detect entry-level indent from the first non-blank child line.
+    final firstEntry = RegExp(r'^([ \t]+)\S', multiLine: true).firstMatch(body);
+    if (firstEntry == null) return config;
+    final entryIndent = firstEntry.group(1)!;
+    final entryIndentEsc = RegExp.escape(entryIndent);
+
+    final inlineRe = RegExp(
+      r'^(' + entryIndentEsc + r')([\w.\-]+):\s*\{([^}]*)\}(\s*)$',
+    );
+    final blockHeadRe = RegExp(
+      r'^(' + entryIndentEsc + r')([\w.\-]+):\s*$',
+    );
+    // A `proxy:` key can appear either as the first key after `{`
+    // (`{ proxy: DIRECT, ... }`) or after a comma — anchoring to those
+    // boundaries avoids false-positives like `path: ./proxies/...`
+    // or URLs containing `some-proxy:8080`.
+    final inlineHasProxy = RegExp(r'(?:^|,)\s*proxy\s*:');
+
+    final lines = body.split('\n');
+    final out = <String>[];
+    var i = 0;
+    var changed = false;
+
+    while (i < lines.length) {
+      final line = lines[i];
+
+      final inline = inlineRe.firstMatch(line);
+      if (inline != null) {
+        final inner = inline.group(3)!;
+        if (inlineHasProxy.hasMatch(inner)) {
+          out.add(line);
+        } else {
+          // Strip a single trailing comma + whitespace so the result
+          // doesn't end with `, , proxy: DIRECT }`. Leading whitespace
+          // inside `{...}` is preserved so the diff stays minimal.
+          final cleanedInner =
+              inner.replaceAll(RegExp(r',?\s*$'), '');
+          final trimmedLeft = cleanedInner.trimLeft();
+          final newInner = trimmedLeft.isEmpty
+              ? ' proxy: DIRECT '
+              : ' ${cleanedInner.trimLeft()}, proxy: DIRECT ';
+          out.add(
+            '${inline.group(1)}${inline.group(2)}: '
+            '{${newInner}}${inline.group(4)}',
+          );
+          changed = true;
+        }
+        i++;
+        continue;
+      }
+
+      final blockHead = blockHeadRe.firstMatch(line);
+      if (blockHead != null) {
+        // Collect children: lines indented strictly more than entryIndent
+        // (or blank). Stop at the next sibling at the same indent or at
+        // the end of the block. Trailing blank lines are kept so the
+        // overall body byte-shape is preserved.
+        final children = <String>[];
+        var j = i + 1;
+        while (j < lines.length) {
+          final next = lines[j];
+          if (next.isEmpty) {
+            children.add(next);
+            j++;
+            continue;
+          }
+          final ind = RegExp(r'^[ \t]*').firstMatch(next)!.group(0)!;
+          final isBlank = next.trim().isEmpty;
+          if (isBlank || ind.length > entryIndent.length) {
+            children.add(next);
+            j++;
+          } else {
+            break;
+          }
+        }
+
+        final hasProxy = children.any(
+          (c) => RegExp(r'^\s+proxy\s*:').hasMatch(c),
+        );
+        final realChildren = children
+            .where((c) => c.trim().isNotEmpty)
+            .toList(growable: false);
+
+        out.add(line);
+        if (!hasProxy && realChildren.isNotEmpty) {
+          // Insert the injected `proxy: DIRECT` right AFTER the last
+          // non-blank child, before any trailing blank/whitespace lines.
+          // Without this guard, appending after a trailing empty
+          // string from split('\n') would produce
+          //   `    interval: 86400\n\n    proxy: DIRECTrules: []`
+          // — extra blank line in the middle AND no newline before
+          // the next top-level key.
+          var lastReal = children.length - 1;
+          while (lastReal >= 0 && children[lastReal].trim().isEmpty) {
+            lastReal--;
+          }
+          // Match the first real child's indent so the injected line
+          // sits flush with its siblings.
+          final childIndent =
+              RegExp(r'^[ \t]+').firstMatch(realChildren.first)?.group(0) ??
+                  ('$entryIndent  ');
+          out.addAll(children.sublist(0, lastReal + 1));
+          out.add('${childIndent}proxy: DIRECT');
+          out.addAll(children.sublist(lastReal + 1));
+          changed = true;
+        } else {
+          out.addAll(children);
+        }
+        i = j;
+        continue;
+      }
+
+      out.add(line);
+      i++;
     }
-    if (injection.isEmpty) return config;
 
-    return config.substring(0, rulesMatch.end) +
-        injection +
-        config.substring(rulesMatch.end);
+    if (!changed) return config;
+
+    return config.substring(0, blockStart) +
+        out.join('\n') +
+        config.substring(blockEnd);
   }
 
   /// Apply the configured QUIC fallback policy.

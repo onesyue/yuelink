@@ -921,63 +921,165 @@ proxies: []
     });
   });
 
-  group('ConfigTemplate provider-fetch DIRECT injection', () {
-    test('injects jsdelivr + githubusercontent DIRECT rules into rules section',
+  group('ConfigTemplate provider proxy: DIRECT injection', () {
+    test('injects proxy: DIRECT into inline rule-providers entries', () {
+      const config = '''
+mixed-port: 7890
+rule-providers:
+  ads: { type: http, behavior: classical, url: 'https://fastly.jsdelivr.net/ads.yaml', path: ./ads.yaml, interval: 86400 }
+  openai: { type: http, behavior: classical, url: 'https://fastly.jsdelivr.net/openai.yaml', path: ./openai.yaml, interval: 86400 }
+rules:
+  - MATCH,Proxy
+''';
+      final result = ConfigTemplate.process(config);
+      // Both inline entries get proxy: DIRECT appended inside the {...}.
+      expect(
+        RegExp(r'ads:\s*\{[^}]*proxy:\s*DIRECT[^}]*\}').hasMatch(result),
+        isTrue,
+        reason: 'ads provider missing proxy: DIRECT',
+      );
+      expect(
+        RegExp(r'openai:\s*\{[^}]*proxy:\s*DIRECT[^}]*\}').hasMatch(result),
+        isTrue,
+        reason: 'openai provider missing proxy: DIRECT',
+      );
+      // Original keys preserved.
+      expect(result, contains("url: 'https://fastly.jsdelivr.net/ads.yaml'"));
+      expect(result, contains('interval: 86400'));
+    });
+
+    test('injects proxy: DIRECT into inline proxy-providers entries', () {
+      const config = '''
+mixed-port: 7890
+proxy-providers:
+  airport1: { type: http, url: 'https://example.com/sub', path: ./airport1.yaml, interval: 3600 }
+rules: []
+''';
+      final result = ConfigTemplate.process(config);
+      expect(
+        RegExp(r'airport1:\s*\{[^}]*proxy:\s*DIRECT[^}]*\}').hasMatch(result),
+        isTrue,
+      );
+    });
+
+    test('idempotent: respects existing proxy: field (DIRECT or otherwise)',
         () {
       const config = '''
 mixed-port: 7890
+rule-providers:
+  ads: { type: http, url: 'https://x.com/ads', path: ./ads.yaml, interval: 86400, proxy: DIRECT }
+  custom: { type: http, url: 'https://y.com/c', path: ./c.yaml, interval: 86400, proxy: MyGroup }
+  pristine: { type: http, url: 'https://z.com/p', path: ./p.yaml, interval: 86400 }
+rules: []
+''';
+      final result = ConfigTemplate.process(config);
+      // ads keeps its single proxy: DIRECT, no duplicate.
+      final adsProxyCount = RegExp(
+        r"ads:\s*\{[^}]*?proxy:\s*",
+      ).allMatches(result).length;
+      expect(adsProxyCount, 1);
+      // custom: MyGroup is NOT overwritten — user's explicit choice wins.
+      expect(result, contains('proxy: MyGroup'));
+      expect(
+        result.contains('custom:') &&
+            RegExp(r'custom:\s*\{[^}]*proxy:\s*DIRECT')
+                .hasMatch(result),
+        isFalse,
+        reason: 'custom: MyGroup must not be replaced by DIRECT',
+      );
+      // pristine had no proxy field — gets DIRECT injected.
+      expect(
+        RegExp(r'pristine:\s*\{[^}]*proxy:\s*DIRECT[^}]*\}').hasMatch(result),
+        isTrue,
+      );
+    });
+
+    test('handles block-style providers and matches sibling indent', () {
+      const config = '''
+mixed-port: 7890
+rule-providers:
+  ads:
+    type: http
+    behavior: classical
+    url: 'https://fastly.jsdelivr.net/ads.yaml'
+    path: ./ruleset/ads.yaml
+    interval: 86400
+rules: []
+''';
+      final result = ConfigTemplate.process(config);
+      // Injected as a sibling key under `ads:`, indented to match siblings
+      // (4 spaces in this fixture).
+      expect(
+        result,
+        contains('    interval: 86400\n    proxy: DIRECT'),
+        reason: 'block-style provider missing proxy: DIRECT at sibling indent',
+      );
+    });
+
+    test('block-style: skips entry that already has a proxy field', () {
+      const config = '''
+mixed-port: 7890
+rule-providers:
+  ads:
+    type: http
+    url: 'https://fastly.jsdelivr.net/ads.yaml'
+    path: ./ads.yaml
+    interval: 86400
+    proxy: MyGroup
+rules: []
+''';
+      final result = ConfigTemplate.process(config);
+      // Single proxy field, untouched.
+      expect(
+        RegExp(r'ads:\n(?:\s+.*\n)*\s+proxy:').allMatches(result).length,
+        1,
+      );
+      expect(result, contains('proxy: MyGroup'));
+      expect(result, isNot(contains('proxy: DIRECT')));
+    });
+
+    test('no providers blocks → no-op', () {
+      const config = '''
+mixed-port: 7890
+proxies: []
+rules: []
+''';
+      final result = ConfigTemplate.process(config);
+      expect(result, isNot(contains('proxy: DIRECT')));
+    });
+
+    test('false-positive guard: path/url containing the word "proxy" is safe',
+        () {
+      // `path: ./proxies/...` previously could have tripped a naive
+      // `proxy:` substring search. The (?:^|,) anchor avoids this.
+      const config = '''
+mixed-port: 7890
+rule-providers:
+  ads: { type: http, url: 'https://some-proxy.example.com:8080/ads', path: ./proxies/ads.yaml, interval: 86400 }
+rules: []
+''';
+      final result = ConfigTemplate.process(config);
+      // Should still inject proxy: DIRECT — the URL substring doesn't count.
+      expect(
+        RegExp(r'ads:\s*\{[^}]*proxy:\s*DIRECT[^}]*\}').hasMatch(result),
+        isTrue,
+      );
+    });
+
+    test('no longer pollutes user rules section', () {
+      // Pre-fix, every user got DOMAIN-SUFFIX,jsdelivr.net,DIRECT injected
+      // into their rules. Confirm we don't do that any more.
+      const config = '''
+mixed-port: 7890
+rule-providers:
+  ads: { type: http, url: 'https://fastly.jsdelivr.net/ads.yaml', path: ./ads.yaml, interval: 86400 }
 rules:
   - DOMAIN-SUFFIX,example.com,DIRECT
   - MATCH,Proxy
 ''';
       final result = ConfigTemplate.process(config);
-      expect(result, contains('DOMAIN-SUFFIX,jsdelivr.net,DIRECT'));
-      expect(result, contains('DOMAIN-SUFFIX,githubusercontent.com,DIRECT'));
-      // Must come BEFORE the catch-all MATCH so providers don't get
-      // routed through the proxy.
-      final jsdelivrIdx = result.indexOf('jsdelivr.net');
-      final matchIdx = result.indexOf('MATCH,Proxy');
-      expect(jsdelivrIdx, greaterThan(0));
-      expect(jsdelivrIdx, lessThan(matchIdx));
-    });
-
-    test('skip injection when no rules section exists (idempotent)', () {
-      const config = '''
-mixed-port: 7890
-proxies: []
-''';
-      final result = ConfigTemplate.process(config);
-      expect(result, isNot(contains('jsdelivr.net,DIRECT')));
-    });
-
-    test('idempotent: do not duplicate when domain already mentioned', () {
-      const config = '''
-mixed-port: 7890
-rules:
-  - DOMAIN-SUFFIX,jsdelivr.net,DIRECT
-  - DOMAIN-SUFFIX,githubusercontent.com,Proxy
-  - MATCH,Proxy
-''';
-      final result = ConfigTemplate.process(config);
-      // Existing rule untouched + no duplicate. (jsdelivr also appears in
-      // _ensureGeodata's geox-url URLs, so we count only rule lines.)
-      final jsdelivrRuleCount = RegExp(
-        r'-\s*"?DOMAIN-SUFFIX,jsdelivr\.net,',
-      ).allMatches(result).length;
-      expect(jsdelivrRuleCount, 1);
-      expect(result, contains('githubusercontent.com,Proxy'));
-      expect(result, isNot(contains('githubusercontent.com,DIRECT')));
-    });
-
-    test('detects custom indentation from existing rules', () {
-      // 4-space indent (uncommon but legal)
-      const config = '''
-mixed-port: 7890
-rules:
-    - MATCH,Proxy
-''';
-      final result = ConfigTemplate.process(config);
-      expect(result, contains('    - "DOMAIN-SUFFIX,jsdelivr.net,DIRECT"'));
+      expect(result, isNot(contains('DOMAIN-SUFFIX,jsdelivr.net,DIRECT')));
+      expect(result, isNot(contains('DOMAIN-SUFFIX,githubusercontent.com,DIRECT')));
     });
   });
 
