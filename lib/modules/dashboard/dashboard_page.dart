@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -27,9 +28,12 @@ import 'widgets/quick_actions.dart';
 import '../mine/widgets/notices_card.dart';
 import 'widgets/emby_preview_row.dart';
 import 'widgets/stale_subscription_banner.dart';
+import '../../domain/emby/emby_info_entity.dart';
+import '../../shared/main_shell.dart';
 import '../../shared/nps_service.dart';
 import '../../shared/widgets/nps_sheet.dart';
 import '../../widgets/loading_overlay.dart';
+import '../emby/emby_providers.dart';
 
 class DashboardPage extends ConsumerStatefulWidget {
   const DashboardPage({super.key});
@@ -41,6 +45,8 @@ class DashboardPage extends ConsumerStatefulWidget {
 class _DashboardPageState extends ConsumerState<DashboardPage> {
   bool _busy = false;
   bool _npsChecked = false;
+  bool _embyActivationChecked = false;
+  ProviderSubscription? _embyActivationSub;
 
   @override
   void initState() {
@@ -57,6 +63,126 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
         showNpsSheet(context);
       }
     });
+
+    // First-time Emby activation prompt. Fires once per device when
+    // the embyProvider first reports `hasNativeAccess == true` AND the
+    // user hasn't seen the prompt before. Goal: surface the Emby
+    // perk to subscribers who don't realise their plan includes it.
+    // Listener self-disarms after the first eligible event so we
+    // don't fire repeatedly while embyProvider rebuilds.
+    _embyActivationSub = ref.listenManual<AsyncValue<EmbyInfo?>>(
+      embyProvider,
+      (prev, next) {
+        if (_embyActivationChecked) return;
+        final info = next.value;
+        if (info == null || !info.hasNativeAccess) return;
+        _embyActivationChecked = true;
+        // 2 s delay so the prompt doesn't race the rest of the
+        // first-paint sequence (NPS at 5 s, hero animations).
+        Future<void>.delayed(const Duration(seconds: 2), () async {
+          if (!mounted) return;
+          final seen = await SettingsService.get<bool>(
+                  'hasSeenEmbyActivation') ??
+              false;
+          if (seen || !mounted) return;
+          await _showEmbyActivationSheet();
+          await SettingsService.set('hasSeenEmbyActivation', true);
+        });
+      },
+      fireImmediately: true,
+    );
+  }
+
+  @override
+  void dispose() {
+    _embyActivationSub?.close();
+    super.dispose();
+  }
+
+  Future<void> _showEmbyActivationSheet() async {
+    if (!mounted) return;
+    final isEn = S.of(context).isEn;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: false,
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 4, 24, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: YLColors.primary.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(YLRadius.lg),
+                    ),
+                    child: const Icon(
+                      Icons.movie_outlined,
+                      color: YLColors.primary,
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      isEn ? 'Emby is unlocked' : '悦视频已解锁',
+                      style: YLText.titleMedium.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: isDark ? Colors.white : YLColors.zinc900,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Text(
+                isEn
+                    ? 'Your subscription includes access to Emby. Watch '
+                        'licensed movies and TV shows directly inside the app.'
+                    : '你的订阅已包含悦视频权益，无需额外付费即可在 app '
+                        '内观看正版电影与剧集。',
+                style: YLText.body.copyWith(
+                  color: isDark ? YLColors.zinc300 : YLColors.zinc600,
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: Text(isEn ? 'Later' : '稍后再看'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    flex: 2,
+                    child: FilledButton(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        if (mounted) {
+                          MainShell.switchToTab(context, MainShell.tabEmby);
+                        }
+                      },
+                      child: Text(isEn ? 'Open Emby' : '立即打开'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -323,10 +449,153 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                 : '系统代理已启用 — 所有流量将通过 YueLink 路由',
           );
         }
+        // Fire-and-forget connectivity self-test prompt. First-connect
+        // only — flag persisted so subsequent connects don't ask again.
+        // The probe itself waits 2 s so the toast above lands first.
+        unawaited(_maybeOfferConnectivityTest());
       }
     } finally {
       _busy = false;
     }
+  }
+
+  /// First-connect connectivity self-test prompt. Fires once per
+  /// device after a successful connect. Goal: confirm the tunnel
+  /// actually works before the user wanders off and discovers a
+  /// browser failure half an hour later.
+  ///
+  /// The flag is set BEFORE the user confirms the test so that even
+  /// dismissing the prompt counts as "asked once" — never nag again.
+  Future<void> _maybeOfferConnectivityTest() async {
+    final seen =
+        await SettingsService.get<bool>('hasSeenConnectivityTest') ?? false;
+    if (seen || !mounted) return;
+    await Future<void>.delayed(const Duration(seconds: 2));
+    if (!mounted) return;
+    final s = S.of(context);
+    final isEn = s.isEn;
+    final proceed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(isEn ? 'Verify the tunnel?' : '验证连通性?'),
+        content: Text(
+          isEn
+              ? 'Send a tiny probe to gstatic.com through the tunnel to '
+                  'confirm everything is routed correctly. Takes about 3 s.'
+              : '通过当前节点向 gstatic.com 发一个轻量探针，确认隧道工作正常。'
+                  '大约 3 秒完成。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(isEn ? 'Skip' : '跳过'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(isEn ? 'Run test' : '开始测试'),
+          ),
+        ],
+      ),
+    );
+    // Mark seen regardless — never re-prompt on subsequent connects.
+    await SettingsService.set('hasSeenConnectivityTest', true);
+    if (proceed != true || !mounted) return;
+    await _runConnectivityTest();
+  }
+
+  /// Send a probe to `https://www.gstatic.com/generate_204` through
+  /// mihomo's mixed-port and show a green-or-red result dialog.
+  /// Bypasses the local proxy if mock mode is active (no real tunnel).
+  Future<void> _runConnectivityTest() async {
+    if (!mounted) return;
+    final isEn = S.of(context).isEn;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => Center(
+        child: Material(
+          color: Colors.transparent,
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface,
+                borderRadius: BorderRadius.circular(YLRadius.lg),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: 16),
+                  Text(isEn ? 'Probing…' : '正在探测…'),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    var success = false;
+    var detail = '';
+    final stopwatch = Stopwatch()..start();
+    HttpClient? client;
+    try {
+      client = HttpClient();
+      client.connectionTimeout = const Duration(seconds: 8);
+      // Cascade-bug-aware: set findProxy as a separate statement, NOT
+      // chained via `..`. The Dart parser misattributes the function
+      // type if you do `..findProxy = ... ..connectionTimeout = ...`.
+      final port = CoreManager.instance.mixedPort;
+      if (port > 0 && !CoreManager.instance.isMockMode) {
+        client.findProxy = (_) => 'PROXY 127.0.0.1:$port';
+      }
+      final request = await client
+          .getUrl(Uri.parse('https://www.gstatic.com/generate_204'));
+      request.headers.set('User-Agent', 'YueLink/connectivity-test');
+      final response =
+          await request.close().timeout(const Duration(seconds: 8));
+      await response.drain<void>();
+      stopwatch.stop();
+      success = response.statusCode == 204 || response.statusCode == 200;
+      detail = isEn
+          ? 'HTTP ${response.statusCode} · ${stopwatch.elapsedMilliseconds} ms'
+          : 'HTTP ${response.statusCode}·${stopwatch.elapsedMilliseconds} ms';
+    } catch (e) {
+      stopwatch.stop();
+      detail = e.toString().split('\n').first;
+      if (detail.startsWith('Exception: ')) detail = detail.substring(11);
+      if (detail.length > 100) detail = '${detail.substring(0, 100)}…';
+    } finally {
+      client?.close(force: true);
+    }
+
+    if (!mounted) return;
+    Navigator.pop(context); // close spinner
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: Icon(
+          success ? Icons.check_circle_outline : Icons.error_outline,
+          size: 48,
+          color: success ? Colors.green : Colors.red,
+        ),
+        title: Text(
+          success
+              ? (isEn ? 'Connection works' : '连接正常')
+              : (isEn ? 'Connection failed' : '连接失败'),
+        ),
+        content: Text(detail, textAlign: TextAlign.center),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   /// Guest user tapped Connect with no active profile. Pop a small
