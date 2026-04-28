@@ -296,6 +296,51 @@ class Translations with BaseTranslations<AppLocale, Translations> {
 	/// en: 'Continue'
 	String get vpnPermContinue => 'Continue';
 
+	/// en: 'Allow VPN Access'
+	String get vpnPermIosTitle => 'Allow VPN Access';
+
+	/// en: 'iOS will now ask for permission to add a VPN configuration. This is normal and required for any VPN app.'
+	String get vpnPermIosIntro => 'iOS will now ask for permission to add a VPN configuration. This is normal and required for any VPN app.';
+
+	/// en: 'A system dialog will appear titled "YueLink Would Like to Add VPN Configurations".'
+	String get vpnPermIosStep1 => 'A system dialog will appear titled "YueLink Would Like to Add VPN Configurations".';
+
+	/// en: 'Tap "Allow" to confirm. iOS may ask for your device passcode or Face ID.'
+	String get vpnPermIosStep2 => 'Tap "Allow" to confirm. iOS may ask for your device passcode or Face ID.';
+
+	/// en: 'All traffic stays on your device — YueLink does not send your data to any external server.'
+	String get vpnPermIosStep3 => 'All traffic stays on your device — YueLink does not send your data to any external server.';
+
+	/// en: 'I Understand, Continue'
+	String get vpnPermIosContinue => 'I Understand, Continue';
+
+	/// en: 'Fix macOS Launch Block'
+	String get gatekeeperFixTitle => 'Fix macOS Launch Block';
+
+	/// en: 'Remove Apple's quarantine flag'
+	String get gatekeeperFixSubtitle => 'Remove Apple\'s quarantine flag';
+
+	/// en: 'Repair macOS Gatekeeper'
+	String get gatekeeperFixDialogTitle => 'Repair macOS Gatekeeper';
+
+	/// en: 'macOS attaches a quarantine flag…'
+	String get gatekeeperFixDialogBody => 'macOS attaches a quarantine flag to apps downloaded from the internet, which can cause repeated "YueLink can\'t be opened" warnings on every update. This will remove the flag from /Applications/YueLink.app and ask for your administrator password.';
+
+	/// en: 'Fix Now'
+	String get gatekeeperFixConfirm => 'Fix Now';
+
+	/// en: 'Repairing…'
+	String get gatekeeperFixRunning => 'Repairing… (please complete the password prompt)';
+
+	/// en: 'Repair complete.'
+	String get gatekeeperFixSuccess => 'Repair complete. Future updates will launch without warnings.';
+
+	/// en: 'Repair did not complete.'
+	String get gatekeeperFixFailed => 'Repair did not complete. You can also run the fix-gatekeeper.command script from the DMG.';
+
+	/// en: 'macOS-only'
+	String get gatekeeperFixUnsupported => 'This option is only available on the macOS .app build.';
+
 	/// en: 'Connect first to view proxy nodes'
 	String get notConnectedHintProxy => 'Connect first to view proxy nodes';
 
@@ -2307,6 +2352,21 @@ extension on Translations {
 			'vpnPermTitle' => 'Network Permission Required',
 			'vpnPermBody' => 'YueLink needs to set up a secure tunnel to route your traffic. No personal data is sent to our servers — all processing happens on your device.\n\nTap "Continue" to grant the permission.',
 			'vpnPermContinue' => 'Continue',
+			'vpnPermIosTitle' => 'Allow VPN Access',
+			'vpnPermIosIntro' => 'iOS will now ask for permission to add a VPN configuration. This is normal and required for any VPN app.',
+			'vpnPermIosStep1' => 'A system dialog will appear titled "YueLink Would Like to Add VPN Configurations".',
+			'vpnPermIosStep2' => 'Tap "Allow" to confirm. iOS may ask for your device passcode or Face ID.',
+			'vpnPermIosStep3' => 'All traffic stays on your device — YueLink does not send your data to any external server.',
+			'vpnPermIosContinue' => 'I Understand, Continue',
+			'gatekeeperFixTitle' => 'Fix macOS Launch Block',
+			'gatekeeperFixSubtitle' => 'Remove Apple\'s quarantine flag',
+			'gatekeeperFixDialogTitle' => 'Repair macOS Gatekeeper',
+			'gatekeeperFixDialogBody' => 'macOS attaches a quarantine flag to apps downloaded from the internet, which can cause repeated "YueLink can\'t be opened" warnings on every update. This will remove the flag from /Applications/YueLink.app and ask for your administrator password.',
+			'gatekeeperFixConfirm' => 'Fix Now',
+			'gatekeeperFixRunning' => 'Repairing… (please complete the password prompt)',
+			'gatekeeperFixSuccess' => 'Repair complete. Future updates will launch without warnings.',
+			'gatekeeperFixFailed' => 'Repair did not complete. You can also run the fix-gatekeeper.command script from the DMG.',
+			'gatekeeperFixUnsupported' => 'This option is only available on the macOS .app build.',
 			'notConnectedHintProxy' => 'Connect first to view proxy nodes',
 			'connectToViewProxiesDesc' => 'Connect to the core to view and manage proxies.',
 			'nodesCountLabel' => ({required Object n}) => '${n} Nodes',

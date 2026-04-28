@@ -49,9 +49,10 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         settings.dnsSettings = NEDNSSettings(servers: ["223.5.5.5", "8.8.8.8"])
         // mtu: 1500 matches the physical cellular/Wi-Fi MTU. The earlier
         // 9000 was inherited from mihomo's jumbo-frame default but doesn't
-        // help on iOS because upstream sockets are 1500-bound and the
-        // extension runs under a 15 MB memory cap where we can't afford to
-        // oversize buffers in sing-tun's gvisor stack.
+        // help on iOS because upstream sockets are 1500-bound. Even with
+        // the iOS 15+ ~50 MB extension cap (was ~15 MB on iOS 14), keeping
+        // 1500 still wins — the extra headroom belongs to subscription /
+        // routing tables, not to oversized gvisor buffers per packet.
         settings.mtu = 1500
 
         setTunnelNetworkSettings(settings) { [weak self] error in

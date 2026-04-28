@@ -244,29 +244,14 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
       }
 
       // First-time VPN permission explanation (mobile only).
-      // Shows a friendly dialog BEFORE the system VPN permission popup,
-      // so users understand why the permission is needed.
+      // Shows a friendly explainer BEFORE the system VPN permission popup,
+      // so users understand why the permission is needed and (on iOS)
+      // exactly which native dialog they're about to see.
       if (Platform.isAndroid || Platform.isIOS) {
         final seen = await SettingsService.get<bool>('hasSeenVpnHint') ?? false;
         if (!seen) {
           if (!context.mounted) return;
-          final proceed = await showDialog<bool>(
-            context: context,
-            builder: (ctx) => AlertDialog(
-              title: Text(s.vpnPermTitle),
-              content: Text(s.vpnPermBody),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx, false),
-                  child: Text(s.cancel),
-                ),
-                FilledButton(
-                  onPressed: () => Navigator.pop(ctx, true),
-                  child: Text(s.vpnPermContinue),
-                ),
-              ],
-            ),
-          );
+          final proceed = await _showVpnRationale(context, s);
           if (proceed != true) return;
           await SettingsService.set('hasSeenVpnHint', true);
         }
@@ -283,6 +268,184 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     } finally {
       _busy = false;
     }
+  }
+
+  /// First-connect VPN-permission explainer.
+  ///
+  /// Android: keeps the legacy compact AlertDialog — the OS prompt that
+  /// follows is itself short and self-explanatory ("YueLink wants to set
+  /// up a VPN connection. Allow / Deny"). One screen of context is enough.
+  ///
+  /// iOS: bottom sheet with a 3-step preview of what the user will see,
+  /// because Apple's "YueLink Would Like to Add VPN Configurations"
+  /// dialog is more alarming than Android's and follow-up prompts may
+  /// ask for passcode / Face ID. Walking the user through the steps
+  /// up-front meaningfully cuts the bounce rate at first connect.
+  ///
+  /// Returns `true` if the user agreed to continue, `false` (or null) on
+  /// cancel — caller treats anything-not-true as "abort connect".
+  Future<bool?> _showVpnRationale(BuildContext context, S s) {
+    if (Platform.isIOS) {
+      return showModalBottomSheet<bool>(
+        context: context,
+        isScrollControlled: true,
+        showDragHandle: true,
+        builder: (ctx) => _IosVpnRationaleSheet(s: s),
+      );
+    }
+    return showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(s.vpnPermTitle),
+        content: Text(s.vpnPermBody),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(s.cancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(s.vpnPermContinue),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// iOS-specific VPN-permission explainer. Renders as a tall bottom sheet
+/// (≈70 % screen height) with a 3-step preview of the system dialog the
+/// user is about to see. Kept private to dashboard_page.dart since it has
+/// no other call sites and no reusable surface.
+class _IosVpnRationaleSheet extends StatelessWidget {
+  const _IosVpnRationaleSheet({required this.s});
+
+  final S s;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? Colors.white : YLColors.zinc900;
+    final mutedColor = isDark ? YLColors.zinc400 : YLColors.zinc600;
+
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(24, 4, 24, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: (isDark ? YLColors.zinc700 : YLColors.zinc100),
+                    borderRadius: BorderRadius.circular(YLRadius.md),
+                  ),
+                  child: Icon(
+                    Icons.shield_outlined,
+                    size: 22,
+                    color: textColor,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    s.vpnPermIosTitle,
+                    style: YLText.titleMedium.copyWith(
+                      color: textColor,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              s.vpnPermIosIntro,
+              style: YLText.body.copyWith(color: mutedColor, height: 1.5),
+            ),
+            const SizedBox(height: 20),
+            _Step(index: 1, text: s.vpnPermIosStep1, isDark: isDark),
+            const SizedBox(height: 12),
+            _Step(index: 2, text: s.vpnPermIosStep2, isDark: isDark),
+            const SizedBox(height: 12),
+            _Step(index: 3, text: s.vpnPermIosStep3, isDark: isDark),
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                Expanded(
+                  child: TextButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    child: Text(s.cancel),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  flex: 2,
+                  child: FilledButton(
+                    onPressed: () => Navigator.pop(context, true),
+                    child: Text(s.vpnPermIosContinue),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Step extends StatelessWidget {
+  const _Step({
+    required this.index,
+    required this.text,
+    required this.isDark,
+  });
+
+  final int index;
+  final String text;
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    final accentBg = isDark ? YLColors.zinc700 : YLColors.zinc200;
+    final accentFg = isDark ? Colors.white : YLColors.zinc900;
+    final bodyFg = isDark ? YLColors.zinc200 : YLColors.zinc800;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 24,
+          height: 24,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: accentBg,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(
+            '$index',
+            style: YLText.label.copyWith(
+              color: accentFg,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(
+              text,
+              style: YLText.body.copyWith(color: bodyFg, height: 1.4),
+            ),
+          ),
+        ),
+      ],
+    );
   }
 }
 

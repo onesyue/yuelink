@@ -1197,7 +1197,9 @@ class ConfigTemplate {
     if (!_hasKey(config, 'geodata-loader')) {
       // memconservative matches mihomo wiki recommendation + FlClash default.
       // Lazy-loads GeoIP on first hit (one-time first-match delay, then same
-      // as standard). Critical on iOS PacketTunnel's 15 MB memory cap.
+      // as standard). The iOS PacketTunnel cap is ~50 MB on iOS 15+ (was
+      // ~15 MB on iOS 14), but conservative still wins — large subscriptions
+      // plus Swift/Dart/Go arenas easily eat the extra headroom.
       config += 'geodata-loader: memconservative\n';
     }
     if (!_hasKey(config, 'geo-auto-update')) {
