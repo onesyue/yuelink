@@ -145,11 +145,14 @@ class CoreLifecycleManager {
         }
       }
 
-      // Initial proxy-data fetch is handled by ProxyGroupsNotifier's own
-      // listener on coreStatusProvider — it fires on the stopped/other
-      // → running transition that coreStatusProvider now holds after
-      // CoreManager.start() returns. This keeps lifecycle_manager free
-      // of any modules/ import.
+      // Initial proxy-data fetch is handled by ProxyGroupsNotifier's
+      // `ref.listen<CoreStatus>` (registered in its build()), plus an
+      // immediate refresh in build() when status is already running at
+      // construction time. Together they cover both orderings — listener
+      // registered before the status flip (normal user-press path) and
+      // notifier first watched after the flip already happened
+      // (cold-start auto-connect / resume into running). Keeps
+      // lifecycle_manager free of any modules/ import.
       return true;
     } catch (e, st) {
       debugPrint('[CoreLifecycle] start() error: $e\n$st');

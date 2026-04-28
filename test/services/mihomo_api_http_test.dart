@@ -174,13 +174,15 @@ void main() {
     });
   });
 
-  group('MihomoApi — large-response isolate decode', () {
-    test('payload >20 KB decodes via Isolate.run without throwing',
+  group('MihomoApi — large-response decode', () {
+    test('mid-size payload (~30 KB) decodes inline without throwing',
         () async {
-      // Build a ~30 KB JSON object by stuffing a long string field.
-      // The threshold in mihomo_api.dart is 20 KB (renamed from 50 KB
-      // in v1.0.22 P1-C). Crossing it shifts decode off the UI thread
-      // — round-trip integrity is what we verify here.
+      // Threshold lives in mihomo_api.dart and was raised to 256 KB in
+      // v1.0.23-pre P1-C-fix after the 20 KB knee put the common
+      // `/proxies` payload on the Isolate.run path on every fetch and
+      // intermittently hung Android+Windows release builds. 30 KB is
+      // representative of a real `/proxies` response; the test pins the
+      // round-trip integrity of the inline path.
       final big = 'x' * 30 * 1024;
       final api = MihomoApi(
         client: MockClient((_) async => http.Response(
@@ -193,13 +195,30 @@ void main() {
       expect(result['meta'], 1);
     });
 
-    test('small payload (<20 KB) decodes inline, same outcome', () async {
+    test('small payload decodes inline, same outcome', () async {
       final api = MihomoApi(
         client: MockClient(
             (_) async => http.Response(jsonEncode({'small': 'ok'}), 200)),
       );
       final result = await api.getProxies();
       expect(result['small'], 'ok');
+    });
+
+    test('pathological payload (>256 KB) still decodes via isolate path',
+        () async {
+      // Above the threshold the response is offloaded to Isolate.run.
+      // Verifies the isolate path still round-trips without throwing —
+      // the path is retained for genuinely huge payloads, just no
+      // longer triggered by the typical proxy graph.
+      final huge = 'y' * 300 * 1024;
+      final api = MihomoApi(
+        client: MockClient((_) async => http.Response(
+              jsonEncode({'huge': huge}),
+              200,
+            )),
+      );
+      final result = await api.getProxies();
+      expect(result['huge'], huge);
     });
   });
 

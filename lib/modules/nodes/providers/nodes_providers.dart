@@ -173,6 +173,20 @@ class ProxyGroupsNotifier extends Notifier<List<ProxyGroup>> {
       _emptyRetry?.cancel();
       _emptyRetry = null;
     });
+    // Edge case the listener can't catch: if `build()` runs *after* the
+    // status has already transitioned to running (cold-start auto-
+    // connect, resume-into-running, or any path where the dashboard
+    // first watches proxyGroupsProvider only once the HeroCard rebuilds
+    // with isRunning == true), `ref.listen` will not retroactively
+    // replay the prev→next transition. Without this kick the dashboard
+    // shows '处理中' forever and the Nodes page sits on a
+    // CupertinoActivityIndicator — exact symptom from the v1.0.23-pre
+    // Android + Windows reports (2026-04-28). Microtask defer because
+    // calling refresh() inside build() throws — Notifier state is not
+    // yet returned.
+    if (ref.read(coreStatusProvider) == CoreStatus.running) {
+      Future.microtask(refresh);
+    }
     return [];
   }
 

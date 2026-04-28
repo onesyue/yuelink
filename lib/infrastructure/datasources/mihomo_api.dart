@@ -385,17 +385,24 @@ class MihomoApi {
   }
 
   /// Threshold (bytes) above which JSON decoding is offloaded to a
-  /// background isolate. Was 50 KB, but typical mihomo payloads sit right
-  /// on that line: `/proxies` with 1k nodes ≈ 50–200 KB and `/connections`
-  /// with 500 active conns ≈ 50–150 KB. The old line let those decode on
-  /// the UI thread on low-end Androids and dropped frames.
+  /// background isolate. The 20 KB knee chosen in v1.0.23-pre P1.C
+  /// turned out to put the common `/proxies` payload (50–200 KB for
+  /// users with ~200 inline nodes + 30 rule-providers) on the isolate
+  /// path on every fetch — and `Isolate.run` with a closure-captured
+  /// String body intermittently hung on Android and Windows release
+  /// builds. The wrapper's `catch (_)` in `ProxyRepository.getProxies`
+  /// swallowed the failure silently, leaving `proxyGroupsProvider`
+  /// state at `[]` for the entire session: dashboard stuck on
+  /// '处理中', Nodes tab stuck on the loading spinner.
   ///
-  /// 20 KB is the empirical knee: small ack-style responses (`/version`,
-  /// `/configs`, single-proxy reads) stay sub-1 KB and avoid the isolate-
-  /// spawn cost; the chatty list endpoints reliably cross the line. The
-  /// isolate hand-off itself is ~1 ms on warm Dart, well below a frame
-  /// budget. Keep this in sync with the comment in [_get].
-  static const _kIsolateDecodeThreshold = 20 * 1024;
+  /// 256 KB keeps `/proxies`, `/connections`, single-proxy reads,
+  /// and small ack endpoints all on the main thread. JSON decode of
+  /// 150 KB is ~5–10 ms on a mid-tier Android — comfortably under
+  /// a 16 ms frame budget, and far cheaper than re-shipping a hung
+  /// release. The isolate path is retained only for genuinely
+  /// pathological payloads (>256 KB) where one frame jank beats
+  /// the cost of a spawn.
+  static const _kIsolateDecodeThreshold = 256 * 1024;
 
   Future<Map<String, dynamic>> _get(String path) => _withRetry(() async {
     final resp = await _client
