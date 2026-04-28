@@ -140,15 +140,26 @@ class CoreActions {
   static Future<void> restoreTunDns() => SystemProxyManager.restoreTunDns();
 }
 
+// Most recently observed underlying transport — drives reachability-aware
+// heartbeat cadence. Updated from `VpnService.listenForRevocation`'s
+// `onTransportChanged` callback (Android only — iOS / desktop never flip
+// it). Closed value set: `'wifi'`, `'cellular'`, `'none'`. Default
+// `'wifi'` is the radio-cheap profile, so platforms that never emit a
+// transport signal stay on the shorter heartbeat interval rather than
+// silently degrading to the cellular cadence.
+final lastTransportProvider = StateProvider<String>((ref) => 'wifi');
+
 // ──────────────────────────────────────────────────────────────────────────
 // Core heartbeat — provider wrapper around CoreHeartbeatManager
 // ──────────────────────────────────────────────────────────────────────────
 //
 // Periodically pings the core API while running. Auto-detects crashes and
 // resets state via [resetCoreToStopped]. The provider re-runs whenever
-// [coreStatusProvider] or [appInBackgroundProvider] changes — start()
-// is called on every re-run, which restarts the timer with the new
-// interval (10 s foreground / 60 s background).
+// [coreStatusProvider], [appInBackgroundProvider], or
+// [lastTransportProvider] change — start() is called on every re-run,
+// which restarts the timer with the new interval (15 s Wi-Fi foreground
+// / 30 s cellular foreground / 60 s Wi-Fi background / 120 s cellular
+// background). See `CoreHeartbeatManager._intervalFor` for rationale.
 
 final coreHeartbeatProvider = Provider<void>((ref) {
   final status = ref.watch(coreStatusProvider);
@@ -158,7 +169,8 @@ final coreHeartbeatProvider = Provider<void>((ref) {
   if (manager.isMockMode) return; // mock never crashes
 
   final inBackground = ref.watch(appInBackgroundProvider);
+  final transport = ref.watch(lastTransportProvider);
   final heartbeat = CoreHeartbeatManager(ref);
-  heartbeat.start(inBackground: inBackground);
+  heartbeat.start(inBackground: inBackground, transport: transport);
   ref.onDispose(heartbeat.stop);
 });

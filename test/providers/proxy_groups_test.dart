@@ -6,7 +6,7 @@ import 'package:yuelink/modules/nodes/providers/nodes_providers.dart';
 void main() {
   group('ProxyGroup', () {
     test('basic construction', () {
-      final g = ProxyGroup(
+      const g = ProxyGroup(
         name: 'PROXIES',
         type: 'Selector',
         all: ['HK-01', 'JP-01', 'US-01'],
@@ -20,7 +20,7 @@ void main() {
     });
 
     test('empty group', () {
-      final g = ProxyGroup(
+      const g = ProxyGroup(
         name: 'Empty',
         type: 'URLTest',
         all: [],

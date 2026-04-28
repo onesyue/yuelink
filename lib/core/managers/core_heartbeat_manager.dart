@@ -14,20 +14,22 @@ import '../../shared/app_notifier.dart';
 import '../../shared/event_log.dart';
 import 'system_proxy_manager.dart';
 
-/// Periodic core heartbeat with battery-aware throttling and ProxyGuard.
+/// Periodic core heartbeat with reachability-aware throttling and ProxyGuard.
 ///
 /// Was inlined in `coreHeartbeatProvider` (lib/providers/core_provider.dart)
 /// before the manager split — extracted as a class so the timer + state
 /// machine can be reasoned about (and unit-tested) in isolation.
 ///
-/// Behaviour preserved exactly from the inlined version:
-///   • 10 s interval foreground, 60 s background
-///   • 3 consecutive failures → reset state via [resetCoreToStopped]
-///   • Skips itself while [recoveryInProgressProvider] is true
-///   • Every ~5 min in foreground (30 ticks × 10 s), runs ProxyGuard:
-///     re-verifies the system proxy and restores it if another client
-///     took over. After 1 failed restore, the core is force-stopped to
-///     surface the conflict to the user.
+/// Behaviour:
+///   • Interval depends on background flag AND underlying transport
+///     (see [_intervalFor]). Cellular cadence is 2× Wi-Fi to dodge the
+///     radio-dwell cost that dominates phone battery on always-on VPNs.
+///   • 5 consecutive failures → silent restart attempt; 5 more → reset
+///     state via [resetCoreToStopped].
+///   • Skips itself while [recoveryInProgressProvider] is true.
+///   • ProxyGuard runs on a 30 s wall-clock cadence — independent of
+///     heartbeat interval — so cellular/background heartbeat slowdown
+///     does NOT delay tamper detection from rival proxy clients.
 class CoreHeartbeatManager {
   CoreHeartbeatManager(this.ref);
 
@@ -35,7 +37,10 @@ class CoreHeartbeatManager {
 
   Timer? _timer;
   int _failures = 0;
-  int _proxyCheckTick = 0;
+  // Wall-clock timestamp of the last ProxyGuard pass. Decoupling from the
+  // tick counter lets ProxyGuard stay on its 30 s cadence even when the
+  // heartbeat itself slows to 30/60/120 s on cellular or background.
+  DateTime? _lastProxyCheckAt;
   // Consecutive "set(port) returned false" count in the ProxyGuard path.
   // Reset on any successful restore. Cleared on stop(). Used below to
   // tolerate v2rayN / other clients that momentarily overwrite the
@@ -57,12 +62,40 @@ class CoreHeartbeatManager {
   // Visible for tests.
   static const int failureThreshold = 5;
   static const Duration giveUpCooldown = Duration(seconds: 60);
+  static const Duration proxyGuardCadence = Duration(seconds: 30);
+
+  /// Pick the heartbeat interval given current foreground/background and
+  /// transport state. Cellular is the high-cost case (each radio wake
+  /// drains 5–10× more battery than a Wi-Fi packet); doubling the
+  /// cadence there is the single biggest VPN-app battery win on phones.
+  /// Wi-Fi values are still tight enough to detect a dead core within
+  /// ~1.5 min (5 × 15 s) so auto-recovery semantics stay snappy.
+  ///
+  /// Closed transport values: `'wifi'`, `'cellular'`, `'none'`. Anything
+  /// else (or absence) collapses to the Wi-Fi profile — the cheap
+  /// default keeps the heartbeat responsive on platforms that don't
+  /// surface a transport signal (iOS / desktop never call
+  /// `onTransportChanged`).
+  @visibleForTesting
+  static Duration intervalFor({
+    required bool inBackground,
+    required String transport,
+  }) {
+    final isCellular = transport == 'cellular';
+    if (inBackground) {
+      return Duration(seconds: isCellular ? 120 : 60);
+    }
+    return Duration(seconds: isCellular ? 30 : 15);
+  }
 
   /// Start the heartbeat. Idempotent — repeated calls reset the timer
-  /// (used when [appInBackgroundProvider] flips and the interval changes).
-  void start({required bool inBackground}) {
+  /// (used when background or transport state flips and interval changes).
+  void start({required bool inBackground, String transport = 'wifi'}) {
     _timer?.cancel();
-    final interval = Duration(seconds: inBackground ? 60 : 10);
+    final interval = intervalFor(
+      inBackground: inBackground,
+      transport: transport,
+    );
     _timer = Timer.periodic(interval, (_) => _tick(inBackground: inBackground));
   }
 
@@ -71,7 +104,7 @@ class CoreHeartbeatManager {
     _timer?.cancel();
     _timer = null;
     _failures = 0;
-    _proxyCheckTick = 0;
+    _lastProxyCheckAt = null;
     _proxyRestoreFailures = 0;
     _retriedThisOutage = false;
     _restartInFlight = false;
@@ -212,20 +245,27 @@ class CoreHeartbeatManager {
   /// would also immediately `resetCoreToStopped`, forcing a manual
   /// reconnect.
   ///
-  /// Changes:
-  /// - check cadence 5 min → 30 s (3 × 10 s foreground heartbeat ticks).
-  /// - tolerate up to 3 consecutive `set()` failures before declaring
-  ///   a sticky conflict. A transient overwrite by another client that
-  ///   lets go after a single write (v2rayN's common pattern) gets
-  ///   silently recovered on the next tick; only persistent stealing
-  ///   (another client re-writing continuously) trips the reset path.
+  /// Cadence is now driven by [proxyGuardCadence] wall-clock rather
+  /// than a tick counter — the heartbeat tick interval itself is now
+  /// reachability-aware (15/30/60/120 s), and a tick-based cadence
+  /// would have stretched ProxyGuard to 90 s+ on cellular. Tamper
+  /// detection has to stay tight regardless of radio state.
+  ///
+  /// Tolerates up to 3 consecutive `set()` failures before declaring a
+  /// sticky conflict. A transient overwrite by another client that
+  /// lets go after a single write (v2rayN's common pattern) gets
+  /// silently recovered on the next tick; only persistent stealing
+  /// (another client re-writing continuously) trips the reset path.
   Future<void> _maybeProxyGuard({required bool inBackground}) async {
     if (inBackground) return;
     if (!(Platform.isMacOS || Platform.isWindows || Platform.isLinux)) return;
 
-    _proxyCheckTick++;
-    if (_proxyCheckTick < 3) return; // 3 × 10s = ~30s cadence
-    _proxyCheckTick = 0;
+    final now = DateTime.now();
+    if (_lastProxyCheckAt != null &&
+        now.difference(_lastProxyCheckAt!) < proxyGuardCadence) {
+      return;
+    }
+    _lastProxyCheckAt = now;
 
     final connMode = ref.read(connectionModeProvider);
     if (connMode != 'systemProxy') {

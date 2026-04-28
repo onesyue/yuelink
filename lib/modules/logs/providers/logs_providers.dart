@@ -33,22 +33,42 @@ class LogEntriesNotifier extends Notifier<List<LogEntry>> {
 
     ref.listen(coreStatusProvider, (prev, next) {
       if (next == CoreStatus.running) {
-        _startListening();
+        if (!ref.read(appInBackgroundProvider)) _startListening();
       } else if (next == CoreStatus.stopped) {
         _stopListening();
         state = [];
+      }
+    });
+    // Battery: pause the WebSocket subscription whenever the app is in
+    // background. The Logs page itself isn't visible there, but pre-fix
+    // the stream kept pushing into an in-memory buffer 24/7 — a slow drip
+    // of CPU + radio wakeups for a screen the user can't see. State is
+    // preserved on resume so the user comes back to the entries they
+    // already saw, with newer entries arriving from the moment they're
+    // back. Acceptable trade-off vs always-on.
+    ref.listen(appInBackgroundProvider, (prev, inBg) {
+      final running = ref.read(coreStatusProvider) == CoreStatus.running;
+      if (!running) return;
+      if (inBg) {
+        _stopListening();
+      } else {
+        _startListening();
       }
     });
     // `ref.listen` only fires on CHANGE — if the provider is rebuilt after
     // the core is already running (opening the Logs page mid-session), we
     // must kick off listening ourselves; otherwise the tail stays empty
     // until the next core state change.
-    if (ref.read(coreStatusProvider) == CoreStatus.running) {
+    if (ref.read(coreStatusProvider) == CoreStatus.running &&
+        !ref.read(appInBackgroundProvider)) {
       _startListening();
     }
     // Restart stream when log level changes while core is running
+    // (skip when backgrounded — resume listener will pick the new level up).
     ref.listen(logLevelProvider, (prev, next) {
-      if (prev != next && ref.read(coreStatusProvider) == CoreStatus.running) {
+      if (prev != next &&
+          ref.read(coreStatusProvider) == CoreStatus.running &&
+          !ref.read(appInBackgroundProvider)) {
         _startListening(); // _startListening calls _stopListening first
       }
     });
