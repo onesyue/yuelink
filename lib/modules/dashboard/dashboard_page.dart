@@ -103,6 +103,15 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                         vertical: 24,
                       ),
                       children: [
+                        // ── 0. Guest mode CTA — only shown to users
+                        //     who skipped login (or finished onboarding
+                        //     without one). Hidden once they sign in.
+                        if (ref.watch(authProvider.select((a) => a.isGuest)))
+                          const Padding(
+                            padding: EdgeInsets.only(bottom: 12),
+                            child: RepaintBoundary(child: _GuestLoginBanner()),
+                          ),
+
                         // ── 1. VPN 连接卡 ─────────────────────────────
                         _StaggeredIn(
                           index: 0,
@@ -231,6 +240,16 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
 
       final activeId = ref.read(activeProfileIdProvider);
       if (activeId == null) {
+        // Guest users have no way to sync the YueLink subscription —
+        // toasting "no subscription" lands them in a dead end. Show a
+        // login CTA dialog instead. Users with the official app account
+        // (loggedIn but no profile yet — e.g. fresh-install + sync hasn't
+        // run) keep the original toast since their fix is on the
+        // Profiles tab, not the login page.
+        if (ref.read(authProvider).isGuest && context.mounted) {
+          await _showGuestConnectPrompt(context, ref, s);
+          return;
+        }
         AppNotifier.warning(s.snackNoProfile);
         return;
       }
@@ -267,6 +286,48 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
       }
     } finally {
       _busy = false;
+    }
+  }
+
+  /// Guest user tapped Connect with no active profile. Pop a small
+  /// dialog that explains the dead end and offers a one-tap path to
+  /// the login page (via authProvider.logout(), which the root
+  /// _AuthGate routes to YueAuthPage). Cancel returns to the
+  /// dashboard so the user can keep browsing in guest mode.
+  Future<void> _showGuestConnectPrompt(
+    BuildContext context,
+    WidgetRef ref,
+    S s,
+  ) async {
+    final isEn = s.isEn;
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(isEn ? 'Sign in to use nodes' : '登录后开始使用'),
+        content: Text(
+          isEn
+              ? 'Guest mode lets you explore the app, but connecting to '
+                  'YueLink nodes requires an account. Sign in to sync '
+                  'your subscription, or stay in guest mode and import '
+                  'a third-party subscription manually.'
+              : '游客模式可以浏览 app，但连接悦通节点需要登录账号。'
+                  '登录后会自动同步官方订阅；也可以保持游客模式，'
+                  '手动导入第三方机场订阅。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(s.cancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(isEn ? 'Sign in' : '立即登录'),
+          ),
+        ],
+      ),
+    );
+    if (result == true && context.mounted) {
+      await ref.read(authProvider.notifier).logout();
     }
   }
 
@@ -600,5 +661,110 @@ class _DelayedCurve extends Curve {
     if (t < delay) return 0.0;
     final remapped = (t - delay) / (1.0 - delay);
     return inner.transform(remapped.clamp(0.0, 1.0));
+  }
+}
+
+/// "Login to unlock the full app" banner shown on the dashboard when
+/// the user is in guest mode (skipped login from the auth page or from
+/// onboarding's value-first default path).
+///
+/// Tap → calls `authProvider.logout()` which flips state to
+/// `loggedOut`. The root `_AuthGate` reacts by routing to YueAuthPage,
+/// which is the canonical login surface. Using `logout()` (vs a
+/// dedicated `goToLogin()` method) is intentional: settings already
+/// uses the same indirection for `_GuestLoginCard`, so behaviour stays
+/// consistent across the two entry points.
+class _GuestLoginBanner extends ConsumerWidget {
+  const _GuestLoginBanner();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isEn = S.of(context).isEn;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 14, 8, 14),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+          colors: isDark
+              ? [
+                  YLColors.primary.withValues(alpha: 0.18),
+                  YLColors.primary.withValues(alpha: 0.06),
+                ]
+              : [
+                  YLColors.primaryLight,
+                  YLColors.primaryLight.withValues(alpha: 0.45),
+                ],
+        ),
+        borderRadius: BorderRadius.circular(YLRadius.xl),
+        border: Border.all(
+          color: isDark
+              ? YLColors.primary.withValues(alpha: 0.30)
+              : YLColors.primary.withValues(alpha: 0.20),
+          width: 0.5,
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: isDark
+                  ? YLColors.primary.withValues(alpha: 0.25)
+                  : Colors.white,
+              borderRadius: BorderRadius.circular(YLRadius.md),
+            ),
+            child: Icon(
+              Icons.lock_open_rounded,
+              size: 18,
+              color: isDark ? Colors.white : YLColors.primary,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  isEn
+                      ? 'Browsing as guest'
+                      : '当前为游客模式',
+                  style: YLText.label.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? Colors.white : YLColors.zinc900,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  isEn
+                      ? 'Sign in to sync subscriptions, unlock Emby, and more.'
+                      : '登录以同步订阅、解锁悦视频与更多功能',
+                  style: YLText.caption.copyWith(
+                    color: isDark ? YLColors.zinc300 : YLColors.zinc600,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          TextButton(
+            onPressed: () => ref.read(authProvider.notifier).logout(),
+            style: TextButton.styleFrom(
+              foregroundColor: isDark ? Colors.white : YLColors.primary,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+            ),
+            child: Text(
+              isEn ? 'Sign in' : '立即登录',
+              style: YLText.body.copyWith(fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

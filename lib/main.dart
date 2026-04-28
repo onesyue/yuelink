@@ -1109,11 +1109,23 @@ class _AuthGate extends ConsumerWidget {
       );
     }
 
-    // 1b. Onboarding first — before login, on ALL platforms
+    // 1b. Onboarding first — before login, on ALL platforms.
+    //
+    // Value-first: completing onboarding drops the user into guest mode,
+    // not the login wall. They land on the Dashboard, see the app's
+    // shape (mock or third-party-imported profiles work), and reach the
+    // login prompt either from the Dashboard's guest banner or from
+    // Settings → 前往登录. Users who explicitly logged out of an
+    // existing account still see YueAuthPage (loggedOut branch below)
+    // — that's a clear "I want to switch account" signal we shouldn't
+    // bypass.
     if (!hasSeenOnboarding) {
       return OnboardingPage(
         onComplete: () {
           ref.read(hasSeenOnboardingProvider.notifier).state = true;
+          if (ref.read(authProvider).status == AuthStatus.loggedOut) {
+            ref.read(authProvider.notifier).skipLogin();
+          }
         },
       );
     }
