@@ -178,8 +178,7 @@ extension _DesktopServiceMode on CoreManager {
       // is fully populated, same as the FFI path. See _waitProxiesReady.
       await diag.runStartupStep(steps, 'waitProxies',
           StartupError.apiTimeout, () async {
-        await _waitProxiesReady();
-        return 'ready';
+        return await _waitProxiesReady();
       });
 
       await diag.runStartupStep(steps, 'verify',

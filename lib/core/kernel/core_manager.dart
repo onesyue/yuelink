@@ -551,8 +551,7 @@ class CoreManager {
       // /proxies and painted everything red. See _waitProxiesReady.
       await diag.runStartupStep(steps, 'waitProxies', StartupError.apiTimeout, () async {
         if (isMockMode) return 'skip (mock)';
-        await _waitProxiesReady();
-        return 'ready';
+        return await _waitProxiesReady();
       });
 
       // ── Step 8: verify ─────────────────────────────────────────────
@@ -754,8 +753,7 @@ class CoreManager {
       // PacketTunnel-extension mihomo has the same /version-vs-/proxies
       // gap. See _waitProxiesReady.
       await diag.runStartupStep(steps, 'waitProxies', StartupError.apiTimeout, () async {
-        await _waitProxiesReady();
-        return 'ready';
+        return await _waitProxiesReady();
       });
 
       await _persistPorts();
@@ -1061,23 +1059,37 @@ class CoreManager {
   /// window saw an empty `/proxies` and returned every node as
   /// timed-out, painting the whole group red.
   ///
-  /// Polls 100 ms × 50 attempts = 5 s cap. Larger than `/version`'s
+  /// Polls 100 ms × 150 attempts = 15 s cap. Larger than `/version`'s
   /// readiness window because parse-and-graph-build dominates on huge
-  /// subscriptions; smaller than the user-perceived "didn't start"
-  /// budget. On mock mode, the caller skips this step entirely.
-  Future<void> _waitProxiesReady() async {
-    for (var i = 1; i <= 50; i++) {
+  /// subscriptions; subscriptions with `proxy-providers` that fetch
+  /// from the network can legitimately take 5–10 s before the graph
+  /// is materialised. On mock mode, the caller skips this step entirely.
+  ///
+  /// Soft timeout: if 15 s passes and the graph is still empty, this
+  /// returns `'slow'` instead of throwing. The API is up (otherwise
+  /// `waitApi` would have failed earlier), so the core IS running —
+  /// only the provider sync is pending. Failing startup here was a
+  /// regression: users with valid configs saw `[E007] waitProxies`
+  /// red banners while the app actually worked. The dashboard's own
+  /// async refreshers fill in the graph as soon as it lands.
+  Future<String> _waitProxiesReady() async {
+    final sw = Stopwatch()..start();
+    for (var i = 1; i <= 150; i++) {
       try {
         final payload = await api.getProxies();
         if (isProxiesPayloadReady(payload)) {
-          return;
+          return 'ready (${sw.elapsedMilliseconds}ms, $i attempts)';
         }
       } catch (_) {
         // /proxies may 404/5xx during early init — keep polling.
       }
       await Future.delayed(const Duration(milliseconds: 100));
     }
-    throw Exception('proxies not ready after 50 attempts (~5s)');
+    debugPrint(
+      '[CoreManager] waitProxies: graph still empty after 15s — '
+      'continuing anyway (likely slow proxy-providers / rule-providers)',
+    );
+    return 'slow (provider sync pending after 15s)';
   }
 
   // _findAvailablePort moved to lib/core/kernel/startup_config_builder.dart
