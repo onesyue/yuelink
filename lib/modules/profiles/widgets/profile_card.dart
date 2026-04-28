@@ -247,7 +247,7 @@ class ProfileSwipeDeleteBackground extends StatelessWidget {
           Icon(Icons.delete_outline_rounded, color: Colors.white, size: 22),
           SizedBox(width: 6),
           Text(
-            "删除",
+            '删除',
             style: TextStyle(
               color: Colors.white,
               fontWeight: FontWeight.w600,

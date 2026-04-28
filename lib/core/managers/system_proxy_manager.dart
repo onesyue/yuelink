@@ -623,7 +623,7 @@ class SystemProxyManager {
       try {
         final svc = entry.key;
         final original = entry.value;
-        if (original.contains("any DNS Servers") || original.isEmpty) {
+        if (original.contains('any DNS Servers') || original.isEmpty) {
           await _runWithTimeout(
               'networksetup', ['-setdnsservers', svc, 'Empty']);
         } else {

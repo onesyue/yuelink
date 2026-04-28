@@ -63,6 +63,11 @@ dev_dependencies:
   integration_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  # very_good_analysis: kept as a transitive ruleset reference. We don't
+  # `include:` it from analysis_options.yaml because a wholesale switch
+  # surfaces ~hundreds of pre-existing infos against the existing
+  # codebase; instead we cherry-pick high-value rules (see linter.rules).
+  very_good_analysis: ^9.0.0
   flutter_launcher_icons: ^0.14.4
   build_runner: ^2.4.13
   slang_build_runner: ^4.14.0

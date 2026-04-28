@@ -46,3 +46,16 @@ linter:
     - avoid_unnecessary_containers
     - sized_box_for_whitespace
     - use_build_context_synchronously
+
+    # ── 2026 polish (cherry-picked from very_good_analysis) ──────────
+    # Picked because each is high-signal and zero-or-near-zero violations
+    # in the current codebase. A wholesale switch to
+    # `package:very_good_analysis/analysis_options.yaml` would surface
+    # ~hundreds of pre-existing infos that aren't worth the churn of a
+    # single PR; instead we layer the most valuable rules on top of
+    # flutter_lints and add more in a follow-up if they stay clean.
+    - prefer_single_quotes
+    - unnecessary_null_in_if_null_operators
+    # `unawaited_futures`: skipped — codebase intentionally
+    # fire-and-forgets ~50 sites (toast cleanup, telemetry flush, log
+    # scan, etc.). Adding `unawaited()` everywhere would just be noise.
