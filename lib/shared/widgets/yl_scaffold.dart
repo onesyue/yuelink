@@ -49,6 +49,14 @@ class YLLargeTitleScaffold extends StatelessWidget {
   /// in a `RefreshIndicator` so dragging from the top triggers it.
   final Future<void> Function()? onRefresh;
 
+  /// Maximum content width when the available viewport is wider —
+  /// the scrolling region is centred with empty `Scaffold` background
+  /// on each side. 720dp matches Apple's macOS Music + System
+  /// Settings + most desktop client conventions (Slack, VS Code,
+  /// TG Desktop). Pass `null` to fill the parent (mobile default —
+  /// most phones are <600dp anyway so the constraint has no effect).
+  final double? maxContentWidth;
+
   const YLLargeTitleScaffold({
     super.key,
     required this.title,
@@ -59,6 +67,7 @@ class YLLargeTitleScaffold extends StatelessWidget {
     this.bottomSafe = true,
     this.bottomBar,
     this.onRefresh,
+    this.maxContentWidth = 720,
   });
 
   @override
@@ -132,11 +141,24 @@ class YLLargeTitleScaffold extends StatelessWidget {
         ? body
         : RefreshIndicator(onRefresh: onRefresh!, child: body);
 
+    // Centre + cap the scrollable region on wide viewports so the
+    // page reads like Apple's macOS Music / System Settings rather
+    // than like a stretched mobile list. The two side gutters fall
+    // back to the Scaffold background so the visual seam is invisible.
+    final constrained = maxContentWidth == null
+        ? scrollable
+        : Center(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: maxContentWidth!),
+              child: scrollable,
+            ),
+          );
+
     return Scaffold(
       backgroundColor: bg,
       body: SafeArea(
         bottom: bottomSafe && bottomBar == null,
-        child: scrollable,
+        child: constrained,
       ),
       bottomNavigationBar: bottomBar,
     );
