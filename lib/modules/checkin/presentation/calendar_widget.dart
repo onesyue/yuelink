@@ -4,8 +4,14 @@ import '../../../domain/checkin/sign_calendar_entity.dart';
 import '../../../i18n/app_strings.dart';
 import '../../../theme.dart';
 
-/// 7×N 月历网格。每天用 emoji + 数字双行表达，emoji 表达签到状态：
-/// ✅ 已签 ｜⭐ 补签 ｜⛔ 断签 ｜🔴 今天未签 ｜⏳ 未来 ｜◽ 上月余日
+/// 7×6 month grid for sign-in history.
+///
+/// 2026 redesign (was emoji-per-cell): rounded squares with soft colour
+/// wash for signed / resign-card days, a small icon corner-mark, and a
+/// subtle dot for missed days. Today gets an outline ring in the
+/// status's accent colour. Removes the ◽✅⭐⛔🔴⏳ emoji set, which
+/// rendered inconsistently across vendor emoji fonts (especially on
+/// Samsung & MIUI) and read as AI-template clipart.
 class SignCalendarWidget extends StatelessWidget {
   final SignCalendarMonth data;
   final bool isDark;
@@ -22,58 +28,69 @@ class SignCalendarWidget extends StatelessWidget {
     final weeks = _buildWeeks();
     final byDate = data.byDate;
     final today = data.today;
-    final headerColor = isDark ? YLColors.zinc400 : YLColors.zinc500;
-    final cellTextColor = isDark ? YLColors.zinc300 : YLColors.zinc600;
+    final headerColor = isDark ? YLColors.zinc500 : YLColors.zinc500;
 
     return Column(
       children: [
-        // 周标题
-        Row(
-          children: <String>[
-            s.weekMon, s.weekTue, s.weekWed, s.weekThu,
-            s.weekFri, s.weekSat, s.weekSun,
-          ]
-              .map((w) => Expanded(
-                    child: SizedBox(
-                      height: 22,
-                      child: Center(
-                        child: Text(w),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
+          child: Row(
+            children: <String>[
+              s.weekMon,
+              s.weekTue,
+              s.weekWed,
+              s.weekThu,
+              s.weekFri,
+              s.weekSat,
+              s.weekSun,
+            ]
+                .map(
+                  (w) => Expanded(
+                    child: Center(
+                      child: Text(
+                        w,
+                        style: YLText.caption.copyWith(
+                          color: headerColor,
+                          fontWeight: FontWeight.w500,
+                          letterSpacing: 0.4,
+                          fontSize: 11,
+                        ),
                       ),
                     ),
-                  ))
-              .toList()
-              .map((e) => DefaultTextStyle(
-                    style: YLText.caption.copyWith(color: headerColor),
-                    child: e,
-                  ))
-              .toList(),
+                  ),
+                )
+                .toList(),
+          ),
         ),
         const SizedBox(height: 4),
-        // 6 周
-        ...weeks.map((week) => _WeekRow(
-              week: week,
-              byDate: byDate,
-              today: today,
-              targetMonth: int.tryParse(data.month.split('-').last) ?? today.month,
-              cellTextColor: cellTextColor,
-            )),
+        ...weeks.map(
+          (week) => _WeekRow(
+            week: week,
+            byDate: byDate,
+            today: today,
+            targetMonth:
+                int.tryParse(data.month.split('-').last) ?? today.month,
+            isDark: isDark,
+          ),
+        ),
       ],
     );
   }
 
-  /// 构造 6 周 × 7 天的 DateTime 网格。第 1 行从该月 1 号当周的周一开始。
+  /// Build 6 weeks × 7 days, starting from the Monday of the first row.
   List<List<DateTime>> _buildWeeks() {
     final parts = data.month.split('-');
     final year = int.parse(parts[0]);
     final month = int.parse(parts[1]);
     final first = DateTime(year, month, 1);
-    // 周一为 0；DateTime.weekday 周一=1...周日=7
     final firstWeekday = first.weekday - 1;
     final start = first.subtract(Duration(days: firstWeekday));
 
     final weeks = <List<DateTime>>[];
     for (int w = 0; w < 6; w++) {
-      weeks.add(List.generate(7, (i) => start.add(Duration(days: w * 7 + i))));
+      weeks.add(
+        List.generate(7, (i) => start.add(Duration(days: w * 7 + i))),
+      );
     }
     return weeks;
   }
@@ -84,53 +101,66 @@ class _WeekRow extends StatelessWidget {
   final Map<String, SignDay> byDate;
   final DateTime today;
   final int targetMonth;
-  final Color cellTextColor;
+  final bool isDark;
 
   const _WeekRow({
     required this.week,
     required this.byDate,
     required this.today,
     required this.targetMonth,
-    required this.cellTextColor,
+    required this.isDark,
   });
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
+      padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
         children: week.map((d) {
           final inMonth = d.month == targetMonth;
           if (!inMonth) {
-            return const Expanded(child: _Cell(emoji: '◽', label: '', dim: true));
+            return Expanded(
+              child: _Cell(
+                day: d.day,
+                status: _CellStatus.outOfMonth,
+                isToday: false,
+                isDark: isDark,
+              ),
+            );
           }
           final iso = _iso(d);
           final isToday = _sameDay(d, today);
           final entry = byDate[iso];
-
-          String emoji;
-          if (entry != null) {
-            emoji = entry.isCardResign ? '⭐' : '✅';
-          } else if (isToday) {
-            emoji = '🔴';
-          } else if (d.isAfter(today)) {
-            emoji = '⏳';
-          } else {
-            emoji = '⛔';
-          }
+          final isFuture = d.isAfter(today);
 
           return Expanded(
             child: _Cell(
-              emoji: emoji,
-              label: '${d.day}',
-              dim: false,
-              highlight: isToday,
-              labelColor: cellTextColor,
+              day: d.day,
+              status: _statusFor(
+                entry: entry,
+                isToday: isToday,
+                isFuture: isFuture,
+              ),
+              isToday: isToday,
+              isDark: isDark,
             ),
           );
         }).toList(),
       ),
     );
+  }
+
+  static _CellStatus _statusFor({
+    required SignDay? entry,
+    required bool isToday,
+    required bool isFuture,
+  }) {
+    if (entry != null) {
+      return entry.isCardResign ? _CellStatus.resigned : _CellStatus.signed;
+    }
+    if (isToday) return _CellStatus.todayPending;
+    if (isFuture) return _CellStatus.future;
+    return _CellStatus.missed;
   }
 
   static String _iso(DateTime d) =>
@@ -140,52 +170,146 @@ class _WeekRow extends StatelessWidget {
       a.year == b.year && a.month == b.month && a.day == b.day;
 }
 
+enum _CellStatus { signed, resigned, missed, todayPending, future, outOfMonth }
+
+/// Single day cell. Variant geometry is uniform (rounded square, ~48px);
+/// the visual differentiation comes from background wash + corner mark
+/// + ring for today.
 class _Cell extends StatelessWidget {
-  final String emoji;
-  final String label;
-  final bool dim;
-  final bool highlight;
-  final Color? labelColor;
+  final int day;
+  final _CellStatus status;
+  final bool isToday;
+  final bool isDark;
 
   const _Cell({
-    required this.emoji,
-    required this.label,
-    this.dim = false,
-    this.highlight = false,
-    this.labelColor,
+    required this.day,
+    required this.status,
+    required this.isToday,
+    required this.isDark,
   });
+
+  static const _amber = Color(0xFFF59E0B);
+  static const _danger = Color(0xFFEF4444);
+
+  Color? get _accent {
+    switch (status) {
+      case _CellStatus.signed:
+        return YLColors.connected;
+      case _CellStatus.resigned:
+        return _amber;
+      case _CellStatus.missed:
+        return _danger;
+      case _CellStatus.todayPending:
+        return _danger;
+      case _CellStatus.future:
+      case _CellStatus.outOfMonth:
+        return null;
+    }
+  }
+
+  Color get _bg {
+    switch (status) {
+      case _CellStatus.signed:
+        return YLColors.connected.withValues(alpha: isDark ? 0.16 : 0.10);
+      case _CellStatus.resigned:
+        return _amber.withValues(alpha: isDark ? 0.16 : 0.10);
+      default:
+        return Colors.transparent;
+    }
+  }
+
+  Color get _fg {
+    switch (status) {
+      case _CellStatus.signed:
+      case _CellStatus.resigned:
+      case _CellStatus.todayPending:
+        return isDark ? Colors.white : YLColors.zinc900;
+      case _CellStatus.missed:
+        return isDark ? YLColors.zinc300 : YLColors.zinc700;
+      case _CellStatus.future:
+        return isDark ? YLColors.zinc600 : YLColors.zinc400;
+      case _CellStatus.outOfMonth:
+        return isDark ? YLColors.zinc800 : YLColors.zinc300;
+    }
+  }
+
+  FontWeight get _fw {
+    if (isToday ||
+        status == _CellStatus.signed ||
+        status == _CellStatus.resigned) {
+      return FontWeight.w700;
+    }
+    return FontWeight.w500;
+  }
+
+  IconData? get _cornerIcon {
+    switch (status) {
+      case _CellStatus.signed:
+        return Icons.check_rounded;
+      case _CellStatus.resigned:
+        return Icons.auto_awesome_rounded;
+      default:
+        return null;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 56,
-      margin: const EdgeInsets.all(2),
-      decoration: highlight
-          ? BoxDecoration(
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: const Color(0xFFEF4444).withValues(alpha: 0.5),
-                width: 1.2,
-              ),
-            )
-          : null,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(
-            emoji,
-            style: TextStyle(fontSize: 18, color: dim ? YLColors.zinc400 : null),
+    final ringColor = _accent ?? YLColors.zinc400;
+    return AspectRatio(
+      aspectRatio: 1,
+      child: Padding(
+        padding: const EdgeInsets.all(2),
+        child: Container(
+          decoration: BoxDecoration(
+            color: _bg,
+            borderRadius: BorderRadius.circular(YLRadius.md),
+            border: isToday
+                ? Border.all(
+                    color: ringColor.withValues(alpha: 0.55),
+                    width: 1.4,
+                  )
+                : null,
           ),
-          if (label.isNotEmpty) const SizedBox(height: 2),
-          if (label.isNotEmpty)
-            Text(
-              label,
-              style: YLText.caption.copyWith(
-                color: dim ? YLColors.zinc400 : labelColor,
-                fontSize: 10,
+          child: Stack(
+            children: [
+              Center(
+                child: Text(
+                  '$day',
+                  style: TextStyle(
+                    color: _fg,
+                    fontSize: 13,
+                    fontWeight: _fw,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                    height: 1.0,
+                  ),
+                ),
               ),
-            ),
-        ],
+              if (_cornerIcon != null)
+                Positioned(
+                  top: 3,
+                  right: 3,
+                  child: Icon(_cornerIcon, size: 9, color: _accent),
+                )
+              else if (status == _CellStatus.missed)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 5,
+                  child: Center(
+                    child: Container(
+                      width: 3,
+                      height: 3,
+                      decoration: BoxDecoration(
+                        color: _danger.withValues(alpha: 0.55),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
       ),
     );
   }

@@ -278,19 +278,33 @@ class _CheckinCalendarPageState extends ConsumerState<CheckinCalendarPage> {
   Widget _buildLegend(bool isDark) {
     final s = S.current;
     final color = isDark ? YLColors.zinc400 : YLColors.zinc500;
+    const amber = Color(0xFFF59E0B);
+    const danger = Color(0xFFEF4444);
     return Wrap(
-      spacing: 12,
-      runSpacing: 6,
+      spacing: 14,
+      runSpacing: 8,
       children: <_LegendItem>[
-        _LegendItem(emoji: '✅', text: s.calendarLegendSigned),
-        _LegendItem(emoji: '⭐', text: s.calendarLegendCard),
-        _LegendItem(emoji: '⛔', text: s.calendarLegendMissed),
-        _LegendItem(emoji: '🔴', text: s.calendarLegendTodayMiss),
-        _LegendItem(emoji: '⏳', text: s.calendarLegendFuture),
-      ].map((e) => DefaultTextStyle(
-            style: YLText.caption.copyWith(color: color),
-            child: e,
-          )).toList(),
+        _LegendItem.icon(
+          icon: Icons.check_rounded,
+          color: YLColors.connected,
+          text: s.calendarLegendSigned,
+        ),
+        _LegendItem.icon(
+          icon: Icons.auto_awesome_rounded,
+          color: amber,
+          text: s.calendarLegendCard,
+        ),
+        _LegendItem.dot(color: danger, text: s.calendarLegendMissed),
+        _LegendItem.ring(color: danger, text: s.calendarLegendTodayMiss),
+        _LegendItem.muted(text: s.calendarLegendFuture, isDark: isDark),
+      ]
+          .map(
+            (e) => DefaultTextStyle(
+              style: YLText.caption.copyWith(color: color, fontSize: 11),
+              child: e,
+            ),
+          )
+          .toList(),
     );
   }
 }
@@ -314,29 +328,85 @@ class _MonthHeader extends StatelessWidget {
     final now = DateTime.now();
     final isCurrent =
         viewMonth.year == now.year && viewMonth.month == now.month;
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        IconButton(
-          onPressed: onPrev,
-          icon: const Icon(Icons.chevron_left_rounded),
-          tooltip: s.calendarPrevMonth,
-        ),
-        Text(
-          s.calendarMonthLabel(
-              year: '${viewMonth.year}',
-              month: '${viewMonth.month}'),
-          style: YLText.titleLarge.copyWith(
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              s.calendarMonthLabel(
+                year: '${viewMonth.year}',
+                month: '${viewMonth.month}',
+              ),
+              style: YLText.titleLarge.copyWith(
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.3,
+              ),
+            ),
+          ),
+          _ChevronButton(
+            icon: Icons.chevron_left_rounded,
+            tooltip: s.calendarPrevMonth,
+            onTap: onPrev,
+            isDark: isDark,
+          ),
+          const SizedBox(width: 8),
+          _ChevronButton(
+            icon: Icons.chevron_right_rounded,
+            tooltip: s.calendarNextMonth,
+            onTap: isCurrent ? null : onNext,
+            isDark: isDark,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Compact chevron button — iOS 26-style soft-fill pill, ~32px square.
+/// Disabled state drops opacity instead of returning null so layout
+/// stays stable when the user pages to the latest month.
+class _ChevronButton extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback? onTap;
+  final bool isDark;
+
+  const _ChevronButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+    required this.isDark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onTap != null;
+    final bg = isDark
+        ? Colors.white.withValues(alpha: 0.06)
+        : Colors.black.withValues(alpha: 0.05);
+    final fg = isDark
+        ? Colors.white.withValues(alpha: enabled ? 0.85 : 0.30)
+        : Colors.black.withValues(alpha: enabled ? 0.75 : 0.25);
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(YLRadius.md),
+          child: Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: bg,
+              borderRadius: BorderRadius.circular(YLRadius.md),
+            ),
+            child: Icon(icon, size: 20, color: fg),
           ),
         ),
-        IconButton(
-          onPressed: isCurrent ? null : onNext,
-          icon: const Icon(Icons.chevron_right_rounded),
-          tooltip: s.calendarNextMonth,
-        ),
-      ],
+      ),
     );
   }
 }
@@ -387,18 +457,74 @@ class _StatTile extends StatelessWidget {
   }
 }
 
+/// Legend chip — small swatch + label. Visual variants:
+///   * [_LegendItem.icon]  — colored mini-icon (signed / resigned)
+///   * [_LegendItem.dot]   — small filled dot (missed)
+///   * [_LegendItem.ring]  — outlined ring (today)
+///   * [_LegendItem.muted] — dim placeholder (future / out-of-month)
 class _LegendItem extends StatelessWidget {
-  final String emoji;
+  final Widget swatch;
   final String text;
-  const _LegendItem({required this.emoji, required this.text});
+  const _LegendItem._({required this.swatch, required this.text});
+
+  factory _LegendItem.icon({
+    required IconData icon,
+    required Color color,
+    required String text,
+  }) => _LegendItem._(
+        swatch: Icon(icon, size: 11, color: color),
+        text: text,
+      );
+
+  factory _LegendItem.dot({required Color color, required String text}) =>
+      _LegendItem._(
+        swatch: Container(
+          width: 6,
+          height: 6,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.55),
+            shape: BoxShape.circle,
+          ),
+        ),
+        text: text,
+      );
+
+  factory _LegendItem.ring({required Color color, required String text}) =>
+      _LegendItem._(
+        swatch: Container(
+          width: 11,
+          height: 11,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: color.withValues(alpha: 0.55),
+              width: 1.2,
+            ),
+          ),
+        ),
+        text: text,
+      );
+
+  factory _LegendItem.muted({required String text, required bool isDark}) =>
+      _LegendItem._(
+        swatch: Container(
+          width: 6,
+          height: 6,
+          decoration: BoxDecoration(
+            color: isDark ? YLColors.zinc700 : YLColors.zinc300,
+            shape: BoxShape.circle,
+          ),
+        ),
+        text: text,
+      );
 
   @override
   Widget build(BuildContext context) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(emoji, style: const TextStyle(fontSize: 14)),
-        const SizedBox(width: 4),
+        SizedBox(width: 12, height: 12, child: Center(child: swatch)),
+        const SizedBox(width: 5),
         Text(text),
       ],
     );
