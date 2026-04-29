@@ -58,11 +58,36 @@ class CoreHeartbeatManager {
   // attempts so we don't toast the user every 30 s when the underlying
   // problem (no network, helper down) hasn't gone away.
   DateTime? _lastGiveUpAt;
+  // Stickied cadence params from the most recent [start()] call. Used by
+  // [_scheduleNext] so the self-rescheduling loop knows the "healthy"
+  // cadence to fall back to once [_failures] returns to 0. Updated only by
+  // start() — transport / background flips reach us via provider re-runs.
+  bool _inBackground = false;
+  String _transport = 'wifi';
+  // True between [stop()] and the next [start()]. Guards [_scheduleNext]
+  // so an in-flight tick that resolves after stop() doesn't queue another
+  // fire (the original `Timer.periodic` was self-cancelling on `cancel()`;
+  // the self-rescheduling pattern needs an explicit gate).
+  bool _stopped = true;
 
   // Visible for tests.
-  static const int failureThreshold = 5;
+  //
+  // failureThreshold dropped from 5 → 3 in v1.0.25. With the v1.0.23
+  // reachability-aware cadence (30 s on cellular foreground), 5 × 30 s =
+  // 150 s before silent restart fires — users on 4G/5G perceived this as
+  // "VPN unstable" because connection drops took 2.5 min to auto-recover.
+  // Pairing 3 × the failure-fast interval (5 s) keeps fast-path detection
+  // at ~15 s while the healthy-path radio cadence stays cellular-friendly.
+  static const int failureThreshold = 3;
   static const Duration giveUpCooldown = Duration(seconds: 60);
   static const Duration proxyGuardCadence = Duration(seconds: 30);
+  // Once a heartbeat fails, jump to a tight cadence to confirm the core
+  // is genuinely dead vs a one-off cellular hand-off / DNS flap. Without
+  // this, on cellular we'd wait failureThreshold × 30 s = 90 s — too slow
+  // for "user just hit a node and it didn't respond". Healthy ticks keep
+  // the radio-friendly cadence (intervalFor) for battery.
+  @visibleForTesting
+  static const Duration failureFastInterval = Duration(seconds: 5);
 
   /// Pick the heartbeat interval given current foreground/background and
   /// transport state. Cellular is the high-cost case (each radio wake
@@ -92,15 +117,15 @@ class CoreHeartbeatManager {
   /// (used when background or transport state flips and interval changes).
   void start({required bool inBackground, String transport = 'wifi'}) {
     _timer?.cancel();
-    final interval = intervalFor(
-      inBackground: inBackground,
-      transport: transport,
-    );
-    _timer = Timer.periodic(interval, (_) => _tick(inBackground: inBackground));
+    _stopped = false;
+    _inBackground = inBackground;
+    _transport = transport;
+    _scheduleNext();
   }
 
   /// Stop the heartbeat. Idempotent.
   void stop() {
+    _stopped = true;
     _timer?.cancel();
     _timer = null;
     _failures = 0;
@@ -109,6 +134,26 @@ class CoreHeartbeatManager {
     _retriedThisOutage = false;
     _restartInFlight = false;
     _lastGiveUpAt = null;
+  }
+
+  /// Pick the interval for the next tick — tight `failureFastInterval`
+  /// when there's a pending outage, otherwise the radio-friendly cadence
+  /// from [intervalFor]. The `_failures > 0` branch lets us confirm a
+  /// dead core within ~15 s on cellular instead of waiting 90 s.
+  Duration _currentTickInterval() {
+    if (_failures > 0) return failureFastInterval;
+    return intervalFor(inBackground: _inBackground, transport: _transport);
+  }
+
+  /// Schedule the next tick. Self-rescheduling lets the cadence flip
+  /// between healthy (intervalFor) and outage (failureFastInterval) on
+  /// every heartbeat without external coordination.
+  void _scheduleNext() {
+    if (_stopped) return;
+    _timer = Timer(_currentTickInterval(), () async {
+      await _tick(inBackground: _inBackground);
+      _scheduleNext();
+    });
   }
 
   Future<void> _tick({required bool inBackground}) async {

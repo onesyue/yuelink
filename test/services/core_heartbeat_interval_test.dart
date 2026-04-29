@@ -95,4 +95,30 @@ void main() {
       expect(cellular.inSeconds, wifi.inSeconds * 2);
     });
   });
+
+  // v1.0.25 — fast-confirm cadence after first failure. Without this
+  // tier, cellular-foreground users wait failureThreshold (3) × 30 s =
+  // 90 s before silent restart fires. Once a heartbeat misses, the loop
+  // jumps to 5 s × 3 = 15 s window so dead cores recover quickly.
+  group('CoreHeartbeatManager — failure-fast cadence', () {
+    test('failureThreshold dropped to 3 (was 5 in v1.0.23-24)', () {
+      expect(CoreHeartbeatManager.failureThreshold, 3);
+    });
+
+    test('failureFastInterval is 5 s', () {
+      expect(
+        CoreHeartbeatManager.failureFastInterval,
+        const Duration(seconds: 5),
+      );
+    });
+
+    test('cellular foreground confirm window <= 20 s after first miss', () {
+      // 3 misses × 5 s = 15 s before silent restart. Even with cellular
+      // foreground 30 s healthy cadence, a dead-core outage flips us
+      // onto the fast path immediately after the first miss.
+      const fast = CoreHeartbeatManager.failureFastInterval;
+      final maxConfirmWindow = fast * CoreHeartbeatManager.failureThreshold;
+      expect(maxConfirmWindow.inSeconds, lessThanOrEqualTo(20));
+    });
+  });
 }
