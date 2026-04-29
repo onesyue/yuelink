@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yuelink/domain/checkin/checkin_result_entity.dart';
+import 'package:yuelink/domain/checkin/sign_calendar_entity.dart';
 import 'package:yuelink/infrastructure/checkin/checkin_repository.dart';
 import 'package:yuelink/modules/checkin/providers/checkin_provider.dart';
 import 'package:yuelink/modules/yue_auth/providers/yue_auth_providers.dart';
@@ -23,6 +24,16 @@ class _FakeCheckinRepo implements CheckinRepository {
 
   @override
   Future<CheckinResult?> getCheckinStatus(String token) => statusFuture;
+
+  // Calendar / resign aren't exercised in this dispose-guard test; provide
+  // safe stubs so the class stays concrete.
+  @override
+  Future<SignCalendarMonth?> fetchHistory(String token, {String? month}) async =>
+      null;
+
+  @override
+  Future<ResignResult> resign(String token) async =>
+      const ResignResult(success: false, errorCode: 'unknown');
 }
 
 const _kAlreadyLoggedIn =
