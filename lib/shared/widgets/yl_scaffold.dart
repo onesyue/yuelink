@@ -1,0 +1,144 @@
+import 'package:flutter/material.dart';
+
+import '../../theme.dart';
+
+/// iOS 26-style large title scaffold.
+///
+/// Wraps Material's `SliverAppBar.large` (which already implements the
+/// large-title-collapses-on-scroll behaviour) with YueLink's neutral
+/// surface tokens, removes the default elevation shadow, and lets
+/// callers pass any list of slivers as the body.
+///
+/// ```dart
+/// YLLargeTitleScaffold(
+///   title: '我的',
+///   slivers: [
+///     SliverToBoxAdapter(child: _ProfileHeader()),
+///     SliverList(...),
+///   ],
+/// )
+/// ```
+class YLLargeTitleScaffold extends StatelessWidget {
+  /// Page title — large at top, collapses to small on scroll.
+  final String title;
+
+  /// Optional small subtitle below the small (collapsed) title row.
+  /// Hidden in the large-title state for a cleaner look.
+  final String? subtitle;
+
+  /// Right-aligned action buttons (icons), shown in both states.
+  final List<Widget> actions;
+
+  /// Slivers forming the scrollable body. Don't include the app bar
+  /// itself — the scaffold inserts it as the first sliver.
+  final List<Widget> slivers;
+
+  /// Optional leading widget — defaults to back button when the route
+  /// has a previous page, otherwise nothing.
+  final Widget? leading;
+
+  /// Whether the page should respect the bottom safe area. Tab pages
+  /// owned by the bottom-nav scaffold pass false (the nav handles it).
+  final bool bottomSafe;
+
+  /// Optional fixed bottom widget (e.g. action bar). Painted on top
+  /// of the slivers without scrolling.
+  final Widget? bottomBar;
+
+  /// Pull-to-refresh callback. When non-null the scroll view is wrapped
+  /// in a `RefreshIndicator` so dragging from the top triggers it.
+  final Future<void> Function()? onRefresh;
+
+  const YLLargeTitleScaffold({
+    super.key,
+    required this.title,
+    this.subtitle,
+    this.actions = const [],
+    required this.slivers,
+    this.leading,
+    this.bottomSafe = true,
+    this.bottomBar,
+    this.onRefresh,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bg = isDark ? YLColors.zinc950 : YLColors.zinc100;
+    final fg = isDark ? Colors.white : YLColors.zinc900;
+
+    final body = CustomScrollView(
+      slivers: [
+        SliverAppBar.large(
+          backgroundColor: bg,
+          surfaceTintColor: Colors.transparent,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          pinned: true,
+          stretch: true,
+          centerTitle: false,
+          automaticallyImplyLeading: leading == null,
+          leading: leading,
+          actions: actions,
+          title: Text(
+            title,
+            style: YLText.titleLarge.copyWith(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: fg,
+            ),
+          ),
+          flexibleSpace: FlexibleSpaceBar(
+            titlePadding: const EdgeInsetsDirectional.only(
+              start: YLSpacing.lg,
+              bottom: YLSpacing.md,
+            ),
+            title: Text(
+              title,
+              style: YLText.display.copyWith(
+                fontSize: 32,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.6,
+                color: fg,
+              ),
+            ),
+            collapseMode: CollapseMode.pin,
+          ),
+        ),
+        if (subtitle != null)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(
+                  YLSpacing.lg, 0, YLSpacing.lg, YLSpacing.sm),
+              child: Text(
+                subtitle!,
+                style: YLText.caption.copyWith(
+                  color: isDark ? YLColors.zinc400 : YLColors.zinc500,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+          ),
+        ...slivers,
+        // Bottom inset spacer — pushes the last item above the system
+        // gesture / navigation bar without each caller having to remember.
+        const SliverPadding(
+          padding: EdgeInsets.only(bottom: YLSpacing.xxl),
+        ),
+      ],
+    );
+
+    final scrollable = onRefresh == null
+        ? body
+        : RefreshIndicator(onRefresh: onRefresh!, child: body);
+
+    return Scaffold(
+      backgroundColor: bg,
+      body: SafeArea(
+        bottom: bottomSafe && bottomBar == null,
+        child: scrollable,
+      ),
+      bottomNavigationBar: bottomBar,
+    );
+  }
+}
