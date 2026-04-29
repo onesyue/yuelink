@@ -172,16 +172,20 @@ class YLListTile extends StatelessWidget {
     final subtitleColor = isDark ? YLColors.zinc500 : YLColors.zinc500;
     final disabled = onTap == null;
 
+    // Title size matches Dashboard's `YLText.body` (14pt) so the two
+    // tabs read as the same family. Earlier 16pt was true to iOS
+    // Settings but felt heavy on this app where Dashboard is the
+    // visual anchor. User feedback 2026-04-29.
     final titleStyle = YLText.body.copyWith(
-      fontSize: 16,
+      fontSize: 14,
       fontWeight: FontWeight.w400,
-      letterSpacing: -0.2,
+      letterSpacing: -0.1,
       color: titleColor,
     );
     final subtitleStyle = YLText.caption.copyWith(
-      fontSize: 13,
+      fontSize: 12,
       color: subtitleColor,
-      height: 1.35,
+      height: 1.3,
     );
 
     return Material(
@@ -310,7 +314,7 @@ class _ValueAndChevron extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: YLText.body.copyWith(
-              fontSize: 15,
+              fontSize: 13,
               color: isDark ? YLColors.zinc400 : YLColors.zinc500,
             ),
           ),
@@ -334,7 +338,7 @@ class _ValueLabel extends StatelessWidget {
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
       style: YLText.body.copyWith(
-        fontSize: 15,
+        fontSize: 13,
         color: isDark ? YLColors.zinc400 : YLColors.zinc500,
       ),
     );

@@ -137,9 +137,9 @@ class YLInfoRow extends StatelessWidget {
               label,
               style: labelStyle ??
                   YLText.body.copyWith(
-                    fontSize: 16,
+                    fontSize: 14,
                     fontWeight: FontWeight.w400,
-                    letterSpacing: -0.2,
+                    letterSpacing: -0.1,
                     color: labelColor,
                   ),
             ),
@@ -149,7 +149,7 @@ class YLInfoRow extends StatelessWidget {
               padding: const EdgeInsets.only(right: 6),
               child: Text(
                 value!,
-                style: YLText.body.copyWith(fontSize: 15, color: valueColor),
+                style: YLText.body.copyWith(fontSize: 13, color: valueColor),
               ),
             ),
           ?trailing,
@@ -197,9 +197,9 @@ class YLSettingsRow extends StatelessWidget {
                 Text(
                   title,
                   style: YLText.body.copyWith(
-                    fontSize: 16,
+                    fontSize: 14,
                     fontWeight: FontWeight.w400,
-                    letterSpacing: -0.2,
+                    letterSpacing: -0.1,
                     color: titleColor,
                   ),
                 ),
@@ -208,9 +208,9 @@ class YLSettingsRow extends StatelessWidget {
                   Text(
                     description!,
                     style: YLText.caption.copyWith(
-                      fontSize: 13,
+                      fontSize: 12,
                       color: descColor,
-                      height: 1.35,
+                      height: 1.3,
                     ),
                   ),
                 ],
