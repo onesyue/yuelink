@@ -246,36 +246,31 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // ── Title bar（与我的页统一风格）──────────────────────────────
-          Padding(
-            padding: EdgeInsets.fromLTRB(
-                Navigator.canPop(context) ? 8 : 24,
-                MediaQuery.of(context).padding.top + 16, 8, 12),
-            child: Row(
-              children: [
-                if (Navigator.canPop(context))
+          // ── Compact action bar — title removed per user feedback
+          //    (mine / dashboard also have no top title; bottom-nav
+          //    already labels the tab). Keeps back + refresh actions.
+          SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
+              child: Row(
+                children: [
+                  if (Navigator.canPop(context))
+                    IconButton(
+                      icon: Icon(Icons.arrow_back_ios_new_rounded,
+                          size: 20,
+                          color: isDark ? Colors.white : Colors.black),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  const Spacer(),
                   IconButton(
-                    icon: Icon(Icons.arrow_back_ios_new_rounded,
-                        size: 20, color: isDark ? Colors.white : Colors.black),
-                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.refresh_rounded),
+                    iconSize: 20,
+                    color: EmbyTheme.textSecondary(context),
+                    onPressed: _refresh,
                   ),
-                Text(
-                  S.of(context).navEmby,
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: -0.5,
-                    color: isDark ? Colors.white : Colors.black,
-                  ),
-                ),
-                const Spacer(),
-                IconButton(
-                  icon: const Icon(Icons.refresh_rounded),
-                  iconSize: 20,
-                  color: isDark ? EmbyTheme.textSecondary(context) : EmbyTheme.textSecondary(context),
-                  onPressed: _refresh,
-                ),
-              ],
+                ],
+              ),
             ),
           ),
           // ── 搜索栏（融入 header，无分隔线）──────────────────────────
