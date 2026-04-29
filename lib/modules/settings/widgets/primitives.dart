@@ -15,7 +15,10 @@ import '../../../theme.dart';
 /// adjustment called out in the Batch γ spec — no API redesign beyond
 /// stripping the leading underscore.
 
-/// Section title — matches the dashboard top bar label style.
+/// Section title — paints the all-caps label that introduces a
+/// `SettingsCard` group. Matches `YLSection.header` so old call sites
+/// (settings sub-pages still using SettingsCard) line up visually with
+/// new ones using YLSection.
 class SettingsSectionTitle extends StatelessWidget {
   final String text;
   const SettingsSectionTitle(this.text, {super.key});
@@ -23,27 +26,26 @@ class SettingsSectionTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+      padding: const EdgeInsets.fromLTRB(
+          YLSpacing.md, YLSpacing.lg, YLSpacing.md, YLSpacing.sm),
       child: Text(
         text.toUpperCase(),
-        style: const TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w400,
+        style: YLText.caption.copyWith(
+          fontSize: 11,
+          fontWeight: FontWeight.w500,
+          letterSpacing: 0.6,
           color: YLColors.zinc500,
-          letterSpacing: -0.08,
         ),
       ),
     );
   }
 }
 
-/// Narrower section title variant used by the General Settings sub-page.
-///
-/// Different on purpose from [SettingsSectionTitle]: the sub-page layout
-/// is tighter (4 vs 20 horizontal padding), the label runs at 12/w500
-/// with positive letterSpacing instead of 13/w400 with negative. Kept as
-/// a separate class so sub-page styling can evolve without dragging the
-/// dashboard-style title with it.
+/// Sub-page section title — same visual as [SettingsSectionTitle] but
+/// with tighter horizontal padding, used inside `GeneralSettingsPage` /
+/// `OverwritePage` etc. where the page already has its own outer
+/// padding. Kept as a separate class so sub-page padding can drift
+/// without dragging the main settings title with it.
 class GsGeneralSectionTitle extends StatelessWidget {
   final String text;
   const GsGeneralSectionTitle(this.text, {super.key});
@@ -51,13 +53,14 @@ class GsGeneralSectionTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
+      padding: const EdgeInsets.fromLTRB(
+          YLSpacing.md, YLSpacing.md, YLSpacing.md, YLSpacing.sm),
       child: Text(
         text.toUpperCase(),
-        style: const TextStyle(
-          fontSize: 12,
+        style: YLText.caption.copyWith(
+          fontSize: 11,
           fontWeight: FontWeight.w500,
-          letterSpacing: 0.4,
+          letterSpacing: 0.6,
           color: YLColors.zinc500,
         ),
       ),
@@ -65,7 +68,10 @@ class GsGeneralSectionTitle extends StatelessWidget {
   }
 }
 
-/// Card container matching the dashboard card style.
+/// iOS 26 inset-grouped card container — rounded surface, no border,
+/// no shadow. Visually identical to `YLSection` so old call sites
+/// (sub-pages still using `SettingsCard`) and new ones using
+/// `YLSection` blend without seams.
 class SettingsCard extends StatelessWidget {
   final Widget child;
   const SettingsCard({super.key, required this.child});
@@ -73,25 +79,20 @@ class SettingsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Container(
-      clipBehavior: Clip.hardEdge,
-      decoration: BoxDecoration(
-        color: isDark ? YLColors.zinc800 : Colors.white,
-        borderRadius: BorderRadius.circular(YLRadius.xl),
-        border: Border.all(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.08)
-              : Colors.black.withValues(alpha: 0.08),
-          width: 0.5,
-        ),
-        boxShadow: YLShadow.card(context),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(YLRadius.lg),
+      child: Container(
+        color: isDark ? YLColors.zinc900 : Colors.white,
+        child: child,
       ),
-      child: child,
     );
   }
 }
 
-/// A single settings row with a label on the left and a value or trailing widget on the right.
+/// A single settings row with a label on the left and a value or
+/// trailing widget on the right. Visual anatomy matches `YLListTile`
+/// (16dp horizontal padding, 12dp vertical, 16pt title) so old and new
+/// rows line up when mixed inside the same section.
 class YLInfoRow extends StatelessWidget {
   final String label;
   final String? value;
@@ -116,33 +117,51 @@ class YLInfoRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final labelColor = enabled
-        ? (isDark ? YLColors.zinc200 : YLColors.zinc700)
+        ? (isDark ? Colors.white : YLColors.zinc900)
         : YLColors.zinc400;
     final valueColor = enabled
         ? (isDark ? YLColors.zinc400 : YLColors.zinc500)
         : YLColors.zinc300;
 
     final content = Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(
+          horizontal: YLSpacing.lg, vertical: YLSpacing.md),
       child: Row(
         children: [
           if (leading != null) ...[
             leading!,
-            const SizedBox(width: 12),
+            const SizedBox(width: YLSpacing.md),
           ],
           Expanded(
-            child: Text(label,
-                style: labelStyle ?? YLText.body.copyWith(color: labelColor)),
+            child: Text(
+              label,
+              style: labelStyle ??
+                  YLText.body.copyWith(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w400,
+                    letterSpacing: -0.2,
+                    color: labelColor,
+                  ),
+            ),
           ),
           if (value != null)
-            Text(value!, style: YLText.body.copyWith(color: valueColor)),
+            Padding(
+              padding: const EdgeInsets.only(right: 6),
+              child: Text(
+                value!,
+                style: YLText.body.copyWith(fontSize: 15, color: valueColor),
+              ),
+            ),
           ?trailing,
         ],
       ),
     );
 
     if (onTap != null && enabled) {
-      return InkWell(onTap: onTap, child: content);
+      return Material(
+        color: Colors.transparent,
+        child: InkWell(onTap: onTap, child: content),
+      );
     }
     return Opacity(opacity: enabled ? 1.0 : 0.5, child: content);
   }
@@ -163,22 +182,37 @@ class YLSettingsRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final titleColor = isDark ? YLColors.zinc200 : YLColors.zinc700;
-    final descColor = isDark ? YLColors.zinc500 : YLColors.zinc400;
+    final titleColor = isDark ? Colors.white : YLColors.zinc900;
+    final descColor = isDark ? YLColors.zinc500 : YLColors.zinc500;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      padding: const EdgeInsets.symmetric(
+          horizontal: YLSpacing.lg, vertical: YLSpacing.md),
       child: Row(
         children: [
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: YLText.body.copyWith(color: titleColor)),
+                Text(
+                  title,
+                  style: YLText.body.copyWith(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w400,
+                    letterSpacing: -0.2,
+                    color: titleColor,
+                  ),
+                ),
                 if (description != null) ...[
                   const SizedBox(height: 2),
-                  Text(description!,
-                      style: YLText.caption.copyWith(color: descColor)),
+                  Text(
+                    description!,
+                    style: YLText.caption.copyWith(
+                      fontSize: 13,
+                      color: descColor,
+                      height: 1.35,
+                    ),
+                  ),
                 ],
               ],
             ),
