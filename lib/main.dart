@@ -200,7 +200,8 @@ Future<void> _bootstrap() async {
   // Flutter root never instantiated and the user saw "原生白屏" with no
   // app log to diagnose because the engine wasn't loaded yet.
   //
-  // Post-fix: each blocking storage call has a hard 4 s wall-clock cap,
+  // Post-fix: each blocking storage call has a hard wall-clock cap
+  // (shorter on Android, where no first frame quickly becomes an ANR),
   // and the entire data-gather block is wrapped in a single try/catch
   // with safe defaults pre-declared so any unexpected throw still lets
   // `runApp()` fire with a working override list. Cached token/profile
@@ -208,7 +209,9 @@ Future<void> _bootstrap() async {
   // (P0-4b) re-reads SecureStorage on first run, so a transient hang
   // resolves into the correct logged-in state automatically once disk
   // I/O un-sticks.
-  const bootstrapStorageTimeout = Duration(seconds: 4);
+  final bootstrapStorageTimeout = Platform.isAndroid
+      ? const Duration(milliseconds: 1200)
+      : const Duration(seconds: 4);
   final authService = AuthTokenService.instance;
 
   // Seed cache (never throws — falls back to {} on hang).
@@ -263,8 +266,9 @@ Future<void> _bootstrap() async {
     // `onTimeout: () => null` would conflate the two and permanently
     // demote a logged-in user to the login screen on a transient hang.
     try {
-      savedToken =
-          await authService.getToken().timeout(bootstrapStorageTimeout);
+      savedToken = await authService.getToken().timeout(
+        bootstrapStorageTimeout,
+      );
     } on TimeoutException {
       authBootstrapUncertain = true;
       debugPrint('[Bootstrap] getToken timed out — auth marked uncertain');
@@ -305,9 +309,10 @@ Future<void> _bootstrap() async {
     // Profile fetch is gated on token presence — only one secure-storage
     // read here, and only if we actually need it.
     if (savedToken != null && savedToken.isNotEmpty) {
-      savedProfile = await authService
-          .getCachedProfile()
-          .timeout(bootstrapStorageTimeout, onTimeout: () => null);
+      savedProfile = await authService.getCachedProfile().timeout(
+        bootstrapStorageTimeout,
+        onTimeout: () => null,
+      );
     }
   } catch (e, st) {
     debugPrint(
@@ -467,12 +472,12 @@ Future<void> _bootstrap() async {
           authBootstrapUncertain
               ? null
               : (savedToken != null && savedToken.isNotEmpty)
-                  ? AuthState(
-                      status: AuthStatus.loggedIn,
-                      token: savedToken,
-                      userProfile: savedProfile,
-                    )
-                  : const AuthState(status: AuthStatus.loggedOut),
+              ? AuthState(
+                  status: AuthStatus.loggedIn,
+                  token: savedToken,
+                  userProfile: savedProfile,
+                )
+              : const AuthState(status: AuthStatus.loggedOut),
         ),
       ],
       // TranslationProvider feeds slang's `Translations.of(context)` —
@@ -596,12 +601,24 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
         // Run the recovery check here to detect a surviving Go core immediately
         // instead of waiting up to 10s for the heartbeat.
         if (Platform.isAndroid) {
-          await _resume.run();
+          await _resume.run().timeout(
+            const Duration(seconds: 3),
+            onTimeout: () {
+              debugPrint('[Init] Android resume recovery timed out');
+            },
+          );
           // Mark initial recovery as done so didChangeAppLifecycleState
           // doesn't re-run resume on this same engine-create cycle.
           _initialRecoveryDone = true;
         }
-        await _maybeAutoConnect();
+        await _maybeAutoConnect().timeout(
+          Platform.isAndroid
+              ? const Duration(seconds: 8)
+              : const Duration(seconds: 20),
+          onTimeout: () {
+            debugPrint('[Init] auto-connect timed out');
+          },
+        );
         // Clear the recovery guard AFTER auto-connect completes.
         // This ensures heartbeat and VPN revocation callbacks don't interfere
         // during the entire recovery + auto-connect sequence.
@@ -678,8 +695,10 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
         groups: ref.read(proxyGroupsProvider),
       );
     });
-    _connectionModeTraySub =
-        ref.listenManual(connectionModeProvider, (prev, next) {
+    _connectionModeTraySub = ref.listenManual(connectionModeProvider, (
+      prev,
+      next,
+    ) {
       if (prev == next) return;
       _tray.updateMenu(
         status: ref.read(coreStatusProvider),
@@ -740,8 +759,10 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
     // platform (provider is null on non-iOS) and gated by Platform.isIOS at
     // the dispatch site so we don't accidentally surface the iOS guide on
     // Android even if someone misuses the provider in the future.
-    _entitlementSuspectSub =
-        ref.listenManual(iosEntitlementSuspectProvider, (prev, next) {
+    _entitlementSuspectSub = ref.listenManual(iosEntitlementSuspectProvider, (
+      prev,
+      next,
+    ) {
       if (next == null || next == prev) return;
       if (!Platform.isIOS) return;
       final ctx = navigatorKey.currentContext;
@@ -906,7 +927,6 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
       debugPrint('[Tray] show window: $e');
     }
   }
-
 
   Future<void> _maybeAutoConnect() async {
     // Skip if core is already running (e.g. recovered from Android engine recreate)
@@ -1173,7 +1193,6 @@ class _AuthGate extends ConsumerWidget {
     }
   }
 }
-
 
 // ── Crash logging ─────────────────────────────────────────────────────────────
 

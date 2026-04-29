@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -10,6 +11,7 @@ import 'package:flutter/services.dart';
 /// - Native -> Flutter: receives toggle requests from the Quick Settings tile
 class TileService {
   static const _channel = MethodChannel('com.yueto.yuelink/tile');
+  static const _channelTimeout = Duration(milliseconds: 900);
 
   /// Callback invoked when the user taps the Quick Settings tile.
   /// The app should toggle the VPN connection.
@@ -58,11 +60,15 @@ class TileService {
   }) async {
     if (!Platform.isAndroid) return;
     try {
-      await _channel.invokeMethod('updateTileState', {
-        'active': active,
-        'transition': transition,
-        'subtitle': subtitle,
-      });
+      await _channel
+          .invokeMethod('updateTileState', {
+            'active': active,
+            'transition': transition,
+            'subtitle': subtitle,
+          })
+          .timeout(_channelTimeout);
+    } on TimeoutException {
+      debugPrint('[TileService] updateTileState timed out');
     } on PlatformException catch (e) {
       debugPrint('[TileService] updateTileState failed: $e');
     } catch (e) {
@@ -81,7 +87,9 @@ class TileService {
   static Future<bool> consumePendingToggle() async {
     if (!Platform.isAndroid) return false;
     try {
-      final result = await _channel.invokeMethod<bool>('consumePendingToggle');
+      final result = await _channel
+          .invokeMethod<bool>('consumePendingToggle')
+          .timeout(_channelTimeout, onTimeout: () => false);
       return result == true;
     } catch (e) {
       debugPrint('[TileService] consumePendingToggle error: $e');

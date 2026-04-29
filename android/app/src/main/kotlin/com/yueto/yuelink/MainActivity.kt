@@ -15,8 +15,11 @@ import android.os.IBinder
 import android.os.PowerManager
 import android.provider.Settings
 import android.service.quicksettings.TileService
+import android.util.Log
 import androidx.core.content.FileProvider
 import java.io.File
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.engine.FlutterEngineCache
@@ -47,6 +50,14 @@ class MainActivity : FlutterActivity() {
         private const val TILE_CHANNEL = "com.yueto.yuelink/tile"
         private const val VPN_REQUEST_CODE = 1001
         private const val NOTIFICATION_REQUEST_CODE = 1002
+        private const val TAG_TILE = "YueLinkTile"
+        private val tilePrefsExecutor = Executors.newSingleThreadExecutor { runnable ->
+            Thread(runnable, "YueLinkTilePrefs").apply { isDaemon = true }
+        }
+        private val tileRefreshExecutor = Executors.newSingleThreadExecutor { runnable ->
+            Thread(runnable, "YueLinkTileRefresh").apply { isDaemon = true }
+        }
+        private val tileRefreshQueued = AtomicBoolean(false)
     }
 
     private var vpnPermissionResult: MethodChannel.Result? = null
@@ -294,25 +305,33 @@ class MainActivity : FlutterActivity() {
                     val isActive = call.argument<Boolean>("active") ?: false
                     val transition = call.argument<String?>("transition")
                     val subtitle = call.argument<String?>("subtitle")
-                    updateTilePrefs(isActive, transition, subtitle)
                     result.success(true)
+                    updateTilePrefs(isActive, transition, subtitle)
                 }
                 "consumePendingToggle" -> {
                     // Atomic getAndClear of the pending_toggle flag set by
                     // ProxyTileService when it failed to invoke into a
                     // not-yet-ready engine.
-                    val prefs = getSharedPreferences(
-                        ProxyTileService.PREFS_NAME, MODE_PRIVATE
-                    )
-                    val had = prefs.getBoolean(
-                        ProxyTileService.KEY_PENDING_TOGGLE, false
-                    )
-                    if (had) {
-                        prefs.edit()
-                            .putBoolean(ProxyTileService.KEY_PENDING_TOGGLE, false)
-                            .apply()
+                    tilePrefsExecutor.execute {
+                        val had = try {
+                            val prefs = getSharedPreferences(
+                                ProxyTileService.PREFS_NAME, MODE_PRIVATE
+                            )
+                            val pending = prefs.getBoolean(
+                                ProxyTileService.KEY_PENDING_TOGGLE, false
+                            )
+                            if (pending) {
+                                prefs.edit()
+                                    .putBoolean(ProxyTileService.KEY_PENDING_TOGGLE, false)
+                                    .apply()
+                            }
+                            pending
+                        } catch (e: Throwable) {
+                            Log.w(TAG_TILE, "consumePendingToggle failed", e)
+                            false
+                        }
+                        runOnUiThread { result.success(had) }
                     }
-                    result.success(had)
                 }
                 else -> result.notImplemented()
             }
@@ -346,26 +365,55 @@ class MainActivity : FlutterActivity() {
         transition: String? = null,
         subtitle: String? = null,
     ) {
-        val edit = getSharedPreferences(ProxyTileService.PREFS_NAME, MODE_PRIVATE).edit()
-        edit.putBoolean(ProxyTileService.KEY_VPN_ACTIVE, active)
-        if (transition.isNullOrEmpty()) {
-            edit.remove(ProxyTileService.KEY_IN_TRANSITION)
-        } else {
-            edit.putString(ProxyTileService.KEY_IN_TRANSITION, transition)
+        val appContext = applicationContext
+        tilePrefsExecutor.execute {
+            try {
+                val started = System.currentTimeMillis()
+                val edit = appContext
+                    .getSharedPreferences(ProxyTileService.PREFS_NAME, MODE_PRIVATE)
+                    .edit()
+                edit.putBoolean(ProxyTileService.KEY_VPN_ACTIVE, active)
+                if (transition.isNullOrEmpty()) {
+                    edit.remove(ProxyTileService.KEY_IN_TRANSITION)
+                } else {
+                    edit.putString(ProxyTileService.KEY_IN_TRANSITION, transition)
+                }
+                if (subtitle.isNullOrEmpty()) {
+                    edit.remove(ProxyTileService.KEY_SUBTITLE)
+                } else {
+                    edit.putString(ProxyTileService.KEY_SUBTITLE, subtitle)
+                }
+                edit.apply()
+                val elapsed = System.currentTimeMillis() - started
+                if (elapsed > 250) {
+                    Log.w(TAG_TILE, "tile prefs write took ${elapsed}ms")
+                }
+            } catch (e: Throwable) {
+                Log.w(TAG_TILE, "updateTilePrefs failed", e)
+            }
+            requestTileRefresh(appContext)
         }
-        if (subtitle.isNullOrEmpty()) {
-            edit.remove(ProxyTileService.KEY_SUBTITLE)
-        } else {
-            edit.putString(ProxyTileService.KEY_SUBTITLE, subtitle)
-        }
-        edit.apply()
+    }
 
-        // Request the system to refresh the tile — triggers onStartListening()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            TileService.requestListeningState(
-                this,
-                ComponentName(this, ProxyTileService::class.java)
-            )
+    private fun requestTileRefresh(context: Context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return
+        if (!tileRefreshQueued.compareAndSet(false, true)) return
+        tileRefreshExecutor.execute {
+            val started = System.currentTimeMillis()
+            try {
+                TileService.requestListeningState(
+                    context,
+                    ComponentName(context, ProxyTileService::class.java)
+                )
+            } catch (e: Throwable) {
+                Log.w(TAG_TILE, "requestListeningState failed", e)
+            } finally {
+                val elapsed = System.currentTimeMillis() - started
+                if (elapsed > 500) {
+                    Log.w(TAG_TILE, "requestListeningState took ${elapsed}ms")
+                }
+                tileRefreshQueued.set(false)
+            }
         }
     }
 

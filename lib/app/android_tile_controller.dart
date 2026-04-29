@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/platform/tile_service.dart';
@@ -49,6 +49,7 @@ class AndroidTileController {
   /// Nodes tab so the user lands on something useful instead of the
   /// dashboard.
   final VoidCallback onTilePreferences;
+  bool _pendingToggleDrainStarted = false;
 
   /// Wire up the tile native channel. Idempotent — safe to call once at
   /// app startup. After this returns:
@@ -56,25 +57,37 @@ class AndroidTileController {
   ///   * a long-press fires [onTilePreferences];
   ///   * any toggle queued by the native ProxyTileService while the
   ///     engine was still booting (the headless cold-start path) is
-  ///     drained one microtask later.
+  ///     drained shortly after the first rendered frame.
   void init() {
     if (!Platform.isAndroid) return;
     TileService.init();
     TileService.onToggleRequested = _performToggle;
     TileService.onOpenPreferences = onTilePreferences;
-    // Push current state immediately — the tile may have been added while
-    // the app was closed and its SharedPreferences may be stale.
-    pushState();
-    // Drain a queued toggle from the native ProxyTileService cold-start
-    // path. Microtask defers the work past the current init() so callers
-    // don't have to await; if there's nothing queued it's a single
-    // platform-channel round-trip and a no-op.
-    Future.microtask(() async {
-      if (await TileService.consumePendingToggle()) {
-        debugPrint('[Tile] draining queued toggle from cold-start');
-        await _performToggle();
-      }
+    // Keep Android's input thread clean during cold start. Tile state sync
+    // and queued-toggle drain both cross a platform channel; run them after
+    // the first frame so the Activity can accept input before any OEM tile
+    // service binder work begins.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Future<void>.delayed(const Duration(milliseconds: 300), pushState);
+      unawaited(
+        Future<void>.delayed(
+          const Duration(milliseconds: 500),
+          _drainPendingToggle,
+        ),
+      );
     });
+  }
+
+  Future<void> _drainPendingToggle() async {
+    if (_pendingToggleDrainStarted) return;
+    _pendingToggleDrainStarted = true;
+    try {
+      if (!await TileService.consumePendingToggle()) return;
+      debugPrint('[Tile] draining queued toggle from cold-start');
+      await _performToggle();
+    } catch (e) {
+      debugPrint('[Tile] pending toggle drain failed: $e');
+    }
   }
 
   /// Compute and push the full tile state to native — active flag,
@@ -98,10 +111,12 @@ class AndroidTileController {
         subtitle = loc.isNotEmpty ? '${info.flagEmoji} $loc' : info.flagEmoji;
       }
     }
-    TileService.updateState(
-      active: active,
-      transition: transition,
-      subtitle: subtitle,
+    unawaited(
+      TileService.updateState(
+        active: active,
+        transition: transition,
+        subtitle: subtitle,
+      ),
     );
   }
 
