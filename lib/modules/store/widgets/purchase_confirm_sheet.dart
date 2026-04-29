@@ -459,7 +459,7 @@ class _CouponSection extends StatelessWidget {
                 Icon(
                   expanded
                       ? Icons.keyboard_arrow_up_rounded
-                      : Icons.local_offer_outlined,
+                      : Icons.local_offer_rounded,
                   size: 14,
                   color: YLColors.zinc400,
                 ),

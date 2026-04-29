@@ -699,10 +699,10 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
         children: [
           Icon(
             item.type == 'BoxSet'
-                ? Icons.collections_bookmark_outlined
+                ? Icons.collections_bookmark_rounded
                 : item.type == 'Series'
-                ? Icons.tv_outlined
-                : Icons.movie_outlined,
+                ? Icons.tv_rounded
+                : Icons.movie_rounded,
             color: EmbyTheme.textTertiary(context),
             size: 28,
           ),
@@ -818,7 +818,7 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
-            Icons.inbox_outlined,
+            Icons.inbox_rounded,
             color: EmbyTheme.textTertiary(context),
             size: 28,
           ),

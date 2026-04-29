@@ -619,7 +619,7 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> {
   Widget _posterPlaceholder() {
     return Container(
       color: const Color(0xFF27272A),
-      child: const Icon(Icons.movie_outlined, color: Colors.white24, size: 28),
+      child: const Icon(Icons.movie_rounded, color: Colors.white24, size: 28),
     );
   }
 

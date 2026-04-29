@@ -348,7 +348,7 @@ class _PosterRow extends ConsumerWidget {
               color: isDark ? YLColors.zinc700 : YLColors.zinc200,
               child: Center(
                 child: Icon(
-                  Icons.movie_outlined,
+                  Icons.movie_rounded,
                   size: 28,
                   color: isDark ? YLColors.zinc500 : YLColors.zinc400,
                 ),
@@ -369,7 +369,7 @@ class _PosterRow extends ConsumerWidget {
         padding: const EdgeInsets.symmetric(vertical: 12),
         child: Center(
           child: YLEmptyState(
-            icon: Icons.movie_outlined,
+            icon: Icons.movie_rounded,
             title: S.of(context).embyNoContent,
             size: 72,
           ),
@@ -482,7 +482,7 @@ class _PosterFallback extends StatelessWidget {
       color: isDark ? YLColors.zinc700 : YLColors.zinc200,
       child: Center(
         child: Icon(
-          Icons.movie_outlined,
+          Icons.movie_rounded,
           size: 28,
           color: isDark ? YLColors.zinc500 : YLColors.zinc400,
         ),

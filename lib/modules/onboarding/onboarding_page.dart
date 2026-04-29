@@ -71,7 +71,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
         desc: s.onboardingConnectDesc,
       ),
       _Step(
-        icon: Icons.movie_outlined,
+        icon: Icons.movie_rounded,
         title: s.onboardingNodes,
         desc: s.onboardingNodesDesc,
       ),

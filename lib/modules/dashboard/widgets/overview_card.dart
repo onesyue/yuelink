@@ -63,7 +63,7 @@ class OverviewCard extends ConsumerWidget {
           Row(
             children: [
               Icon(
-                hasProfile ? Icons.description_outlined : Icons.warning_amber_rounded,
+                hasProfile ? Icons.description_rounded : Icons.warning_amber_rounded,
                 size: 14,
                 color: hasProfile ? YLColors.zinc400 : YLColors.connecting,
               ),
@@ -113,7 +113,7 @@ class OverviewCard extends ConsumerWidget {
               ),
               if (hasProfile)
                 _OverviewPill(
-                  icon: Icons.check_circle_outline,
+                  icon: Icons.check_circle_rounded,
                   label: s.dashReadyHint.split('.').first,
                   isDark: isDark,
                 ),
@@ -269,7 +269,7 @@ class _StartupErrorBannerState extends State<StartupErrorBanner> {
                   children: [
                     const Padding(
                       padding: EdgeInsets.only(top: 1),
-                      child: Icon(Icons.error_outline, size: 16, color: Colors.red),
+                      child: Icon(Icons.error_rounded, size: 16, color: Colors.red),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
@@ -315,14 +315,14 @@ class _StartupErrorBannerState extends State<StartupErrorBanner> {
                   // Primary CTA: 前往修复
                   _BannerButton(
                     label: s.goRepair,
-                    icon: Icons.build_outlined,
+                    icon: Icons.build_rounded,
                     onTap: _goToRepair,
                   ),
                   const SizedBox(width: 8),
                   // Secondary: copy report
                   _BannerButton(
                     label: s.copyReport,
-                    icon: Icons.copy_outlined,
+                    icon: Icons.copy_rounded,
                     onTap: () {
                       final text = report?.toDebugString() ?? widget.error;
                       Clipboard.setData(ClipboardData(text: text));

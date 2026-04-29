@@ -17,7 +17,7 @@ import '../../theme.dart';
 ///   children: [
 ///     YLListTile(
 ///       leading: const YLSettingIcon(
-///         icon: Icons.cloud_outlined,
+///         icon: Icons.cloud_rounded,
 ///         color: Color(0xFF3B82F6),
 ///       ),
 ///       title: '订阅管理',

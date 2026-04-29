@@ -110,12 +110,12 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
               ),
             PopupMenuItem(
               value: 'export_all',
-              child: _menuItem(Icons.upload_file_outlined, s.exportAllProfiles),
+              child: _menuItem(Icons.upload_file_rounded, s.exportAllProfiles),
             ),
             PopupMenuItem(
               value: 'import_files',
               child: _menuItem(
-                Icons.file_upload_outlined,
+                Icons.file_upload_rounded,
                 s.importMultipleFiles,
               ),
             ),
@@ -132,7 +132,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
             hasScrollBody: false,
             child: Center(
               child: YLEmptyState(
-                icon: Icons.error_outline,
+                icon: Icons.error_rounded,
                 title: s.loadFailed(e.toString()),
                 action: FilledButton.icon(
                   onPressed: () => ref.read(profilesProvider.notifier).load(),
@@ -148,7 +148,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                 hasScrollBody: false,
                 child: Center(
                   child: YLEmptyState(
-                    icon: Icons.description_outlined,
+                    icon: Icons.description_rounded,
                     title: s.noProfiles,
                     subtitle: s.addSubscriptionHint,
                   ),
@@ -389,7 +389,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                     hintText: fetchingName
                         ? (s.isEn ? 'Fetching name...' : '正在获取名称...')
                         : s.nameHint,
-                    prefixIcon: const Icon(Icons.label_outline),
+                    prefixIcon: const Icon(Icons.label_rounded),
                     suffixIcon: fetchingName
                         ? const Padding(
                             padding: EdgeInsets.all(12),
@@ -535,7 +535,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                 controller: nameCtrl,
                 decoration: InputDecoration(
                   labelText: s.nameLabel,
-                  prefixIcon: const Icon(Icons.label_outline),
+                  prefixIcon: const Icon(Icons.label_rounded),
                 ),
                 textInputAction: TextInputAction.next,
               ),
@@ -674,7 +674,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
             decoration: InputDecoration(
               labelText: s.nameLabel,
               hintText: s.importLocalNameHint,
-              prefixIcon: const Icon(Icons.label_outline),
+              prefixIcon: const Icon(Icons.label_rounded),
             ),
             textInputAction: TextInputAction.done,
             onSubmitted: (v) {

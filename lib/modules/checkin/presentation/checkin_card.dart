@@ -124,7 +124,7 @@ class CheckinCard extends ConsumerWidget {
               visualDensity: VisualDensity.compact,
               onPressed: () => CheckinCalendarPage.push(context),
               icon: const Icon(
-                Icons.calendar_month_outlined,
+                Icons.calendar_month_rounded,
                 size: 20,
                 color: YLColors.zinc400,
               ),

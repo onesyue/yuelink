@@ -198,7 +198,7 @@ class _SplitTunnelSectionState extends ConsumerState<SplitTunnelSection> {
                                 child: Column(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    const Icon(Icons.apps_outlined,
+                                    const Icon(Icons.apps_rounded,
                                         size: 40, color: YLColors.zinc400),
                                     const SizedBox(height: 12),
                                     Text(

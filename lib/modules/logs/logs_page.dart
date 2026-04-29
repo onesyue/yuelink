@@ -106,7 +106,7 @@ class _LogPageState extends ConsumerState<LogPage>
             : null,
         body: Center(
           child: YLEmptyState(
-            icon: Icons.list_alt_outlined,
+            icon: Icons.list_alt_rounded,
             title: s.notConnectedHintLog,
           ),
         ),
@@ -120,7 +120,7 @@ class _LogPageState extends ConsumerState<LogPage>
                 title: Text(s.tabLogs),
                 actions: [
                   IconButton(
-                    icon: const Icon(Icons.file_download_outlined, size: 20),
+                    icon: const Icon(Icons.file_download_rounded, size: 20),
                     tooltip: s.exportLogs,
                     onPressed: () => _exportLogs(context, ref),
                   ),
@@ -328,7 +328,7 @@ class _LogsTabState extends ConsumerState<_LogsTab> {
                 IconButton(
                   onPressed: () =>
                       ref.read(logEntriesProvider.notifier).clear(),
-                  icon: const Icon(Icons.delete_outline, size: 16),
+                  icon: const Icon(Icons.delete_rounded, size: 16),
                   tooltip: s.clearLogs,
                   visualDensity: VisualDensity.compact,
                 ),
@@ -476,7 +476,7 @@ class _RulesTabState extends ConsumerState<_RulesTab> {
             children: [
               Row(
                 children: [
-                  Icon(Icons.rule_folder_outlined,
+                  Icon(Icons.rule_folder_rounded,
                       size: 18,
                       color: Theme.of(context).colorScheme.primary),
                   const SizedBox(width: 8),

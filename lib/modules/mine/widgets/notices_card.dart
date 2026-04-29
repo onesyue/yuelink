@@ -43,7 +43,7 @@ class NoticesCard extends ConsumerWidget {
               Row(
                 children: [
                   Icon(
-                    Icons.campaign_outlined,
+                    Icons.campaign_rounded,
                     size: 16,
                     color: isDark ? YLColors.zinc300 : YLColors.zinc600,
                   ),

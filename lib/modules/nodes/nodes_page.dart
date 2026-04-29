@@ -100,7 +100,7 @@ class _NodesPageState extends ConsumerState<NodesPage> {
                     child: Column(
                       children: [
                         const Icon(
-                          Icons.router_outlined,
+                          Icons.router_rounded,
                           size: 64,
                           color: YLColors.zinc300,
                         ),

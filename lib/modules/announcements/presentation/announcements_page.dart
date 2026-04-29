@@ -53,7 +53,7 @@ class _AnnouncementsPageState extends ConsumerState<AnnouncementsPage> {
               child: Padding(
                 padding: const EdgeInsets.all(YLSpacing.xl),
                 child: YLEmptyState(
-                  icon: Icons.error_outline,
+                  icon: Icons.error_rounded,
                   title: e.toString(),
                   action: FilledButton.icon(
                     onPressed: () {
@@ -73,7 +73,7 @@ class _AnnouncementsPageState extends ConsumerState<AnnouncementsPage> {
                 hasScrollBody: false,
                 child: Center(
                   child: YLEmptyState(
-                    icon: Icons.campaign_outlined,
+                    icon: Icons.campaign_rounded,
                     title: s.dashNoAnnouncements,
                     action: TextButton(
                       onPressed: () {

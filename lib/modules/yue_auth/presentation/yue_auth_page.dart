@@ -124,8 +124,8 @@ class _YueAuthPageState extends ConsumerState<YueAuthPage> {
                   suffix: IconButton(
                     icon: Icon(
                       _obscurePassword
-                          ? Icons.visibility_off_outlined
-                          : Icons.visibility_outlined,
+                          ? Icons.visibility_off_rounded
+                          : Icons.visibility_rounded,
                       size: 18,
                       color: YLColors.zinc400,
                     ),
@@ -149,7 +149,7 @@ class _YueAuthPageState extends ConsumerState<YueAuthPage> {
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.error_outline,
+                        const Icon(Icons.error_rounded,
                             size: 16, color: YLColors.error),
                         const SizedBox(width: 8),
                         Expanded(

@@ -65,7 +65,7 @@ class StorePage extends ConsumerWidget {
       onRefresh: () => ref.read(storePlansProvider.notifier).refresh(),
       actions: [
         IconButton(
-          icon: const Icon(Icons.receipt_long_outlined, size: 22),
+          icon: const Icon(Icons.receipt_long_rounded, size: 22),
           tooltip: isEn ? 'Order History' : '订单记录',
           onPressed: () => Navigator.of(
             context,
@@ -93,7 +93,7 @@ class StorePage extends ConsumerWidget {
               return SliverFillRemaining(
                 child: Center(
                   child: YLEmptyState(
-                    icon: Icons.storefront_outlined,
+                    icon: Icons.storefront_rounded,
                     title: isEn ? 'No plans available' : '暂无可购套餐',
                   ),
                 ),

@@ -57,7 +57,7 @@ class ExitIpCard extends ConsumerWidget {
             Row(
               children: [
                 Icon(
-                  hasInfo ? Icons.shield_rounded : Icons.shield_outlined,
+                  hasInfo ? Icons.shield_rounded : Icons.shield_rounded,
                   size: 13,
                   color: headerIconColor,
                 ),

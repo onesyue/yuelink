@@ -345,7 +345,7 @@ class _EmptyView extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           const Icon(
-            Icons.receipt_long_outlined,
+            Icons.receipt_long_rounded,
             size: 48,
             color: YLColors.zinc300,
           ),

@@ -218,7 +218,7 @@ class _IpHeader extends StatelessWidget {
     if (isLoading) {
       return Row(
         children: [
-          const Icon(Icons.shield_outlined, size: 13, color: YLColors.zinc400),
+          const Icon(Icons.shield_rounded, size: 13, color: YLColors.zinc400),
           const SizedBox(width: 6),
           Text(
             s.exitIpLabel,
@@ -238,7 +238,7 @@ class _IpHeader extends StatelessWidget {
       return Row(
         children: [
           Icon(
-            hasError ? Icons.error_outline_rounded : Icons.shield_outlined,
+            hasError ? Icons.error_outline_rounded : Icons.shield_rounded,
             size: 13,
             color: hasError ? YLColors.error : YLColors.zinc400,
           ),

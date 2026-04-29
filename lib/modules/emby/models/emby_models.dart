@@ -36,15 +36,15 @@ class EmbyLibrary {
   IconData get icon {
     switch (type) {
       case 'movies':
-        return Icons.movie_outlined;
+        return Icons.movie_rounded;
       case 'tvshows':
-        return Icons.tv_outlined;
+        return Icons.tv_rounded;
       case 'music':
-        return Icons.music_note_outlined;
+        return Icons.music_note_rounded;
       case 'boxsets':
-        return Icons.collections_bookmark_outlined;
+        return Icons.collections_bookmark_rounded;
       default:
-        return Icons.folder_outlined;
+        return Icons.folder_rounded;
     }
   }
 

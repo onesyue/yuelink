@@ -256,7 +256,7 @@ class _AwaitingView extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        const Icon(Icons.timer_outlined, size: 56, color: YLColors.zinc400),
+        const Icon(Icons.timer_rounded, size: 56, color: YLColors.zinc400),
         const SizedBox(height: YLSpacing.md),
         Text(
           isEn ? 'Awaiting Payment' : '等待支付',

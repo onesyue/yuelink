@@ -35,7 +35,7 @@ class QuickActions extends ConsumerWidget {
     }
     if (cfg.showSceneMode) {
       actions.add((
-        icon: Icons.theater_comedy_outlined,
+        icon: Icons.theater_comedy_rounded,
         label: s.qaSceneMode,
         onTap: () => SceneModeSheet.show(context),
       ));

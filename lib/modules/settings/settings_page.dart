@@ -303,7 +303,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
         children: [
           YLListTile(
             leading: const YLSettingIcon(
-              icon: Icons.cloud_outlined,
+              icon: Icons.cloud_rounded,
               color: Color(0xFF3B82F6),
             ),
             title: s.mineSubscriptionManage,
@@ -315,7 +315,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
           if (!isGuest) ...[
             YLListTile(
               leading: const YLSettingIcon(
-                icon: Icons.shopping_bag_outlined,
+                icon: Icons.shopping_bag_rounded,
                 color: Color(0xFFEC4899),
               ),
               title: s.mineRenew,
@@ -326,7 +326,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
             ),
             YLListTile(
               leading: const YLSettingIcon(
-                icon: Icons.receipt_long_outlined,
+                icon: Icons.receipt_long_rounded,
                 color: Color(0xFFF59E0B),
               ),
               title: s.storeOrderHistory,
@@ -337,7 +337,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
             ),
             YLListTile(
               leading: const YLSettingIcon(
-                icon: Icons.calendar_month_outlined,
+                icon: Icons.calendar_month_rounded,
                 color: Color(0xFF22C55E),
               ),
               title: s.calendarEntryTitle,
@@ -354,7 +354,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
         children: [
           YLListTile(
             leading: const YLSettingIcon(
-              icon: Icons.settings_outlined,
+              icon: Icons.settings_rounded,
               color: Color(0xFF6B7280),
             ),
             title: s.preferencesLabel,
@@ -376,7 +376,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
           ),
           YLListTile(
             leading: const YLSettingIcon(
-              icon: Icons.build_outlined,
+              icon: Icons.build_rounded,
               color: YLColors.error,
             ),
             title: S.current.repairTitle,
@@ -387,7 +387,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
           ),
           YLListTile(
             leading: const YLSettingIcon(
-              icon: Icons.extension_outlined,
+              icon: Icons.extension_rounded,
               color: Color(0xFF8B5CF6),
             ),
             title: s.modulesLabel,
@@ -437,7 +437,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
           ),
           YLListTile(
             leading: const YLSettingIcon(
-              icon: Icons.lock_outline,
+              icon: Icons.lock_rounded,
               color: Color(0xFF22C55E),
             ),
             title: s.minePrivacyPolicy,
@@ -872,7 +872,7 @@ class _GuestLoginCard extends ConsumerWidget {
         child: Column(
           children: [
             const Icon(
-              Icons.account_circle_outlined,
+              Icons.account_circle_rounded,
               size: 48,
               color: YLColors.zinc400,
             ),

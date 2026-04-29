@@ -195,7 +195,7 @@ class _SuccessPanel extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.check_circle_outline,
+              const Icon(Icons.check_circle_rounded,
                   size: 16, color: YLColors.connected),
               const SizedBox(width: 6),
               Text(
