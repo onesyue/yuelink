@@ -426,18 +426,68 @@ class ProxyGroupsNotifier extends Notifier<List<ProxyGroup>> {
   }
 
   /// Change the selected proxy in a group.
+  ///
+  /// Returns false (never throws) so the calling tile's spinner can always
+  /// reset — earlier versions let `TimeoutException` from a hung PUT bubble
+  /// up, leaving `_isSwitching = true` permanently.
+  ///
+  /// On PUT success we **optimistically** update local `state.now` instead
+  /// of waiting for the next `/proxies` GET to confirm. mihomo applies the
+  /// switch synchronously when it returns 204 — traffic is already on the
+  /// new node before we even hit `await`. Waiting on `refresh()` had two
+  /// nasty failure modes (real-world report, 2026-04-29):
+  ///   1. `getProxies()` fails or times out → `try { } catch (_) { return; }`
+  ///      in [refresh] silently swallows it → state stays at old `now` →
+  ///      UI sticks on the previous selection forever even though traffic
+  ///      already flipped. User-visible: "切换不生效，卡在台湾".
+  ///   2. PUT body decode + GET round-trip = 100–500 ms wall-clock. The
+  ///      spinner spins that whole window for no reason.
+  /// Background `refresh()` reconciles any drift (URLTest groups whose
+  /// `now` mihomo decides itself, etc.) within ~200 ms.
   Future<bool> changeProxy(String groupName, String proxyName) async {
     final manager = CoreManager.instance;
 
     bool ok;
-    if (manager.isMockMode) {
-      ok = await manager.core.changeProxy(groupName, proxyName);
-    } else {
-      ok = await _repo.changeProxy(groupName, proxyName);
+    try {
+      if (manager.isMockMode) {
+        ok = await manager.core.changeProxy(groupName, proxyName);
+      } else {
+        ok = await _repo.changeProxy(groupName, proxyName);
+      }
+    } catch (e) {
+      debugPrint('[ProxyGroups] changeProxy threw: $e');
+      return false;
     }
 
-    if (ok) await refresh();
+    if (ok) {
+      _applyOptimisticSelection(groupName, proxyName);
+      // Fire-and-forget — must not block the caller's spinner reset.
+      unawaited(refresh());
+    }
     return ok;
+  }
+
+  /// Patch the `now` field of [groupName] in local state without touching
+  /// any other group. Used by [changeProxy] right after PUT 204 so the
+  /// check-mark / selection badge follow the user's tap immediately.
+  void _applyOptimisticSelection(String groupName, String proxyName) {
+    if (state.isEmpty) return;
+    var changed = false;
+    final updated = <ProxyGroup>[];
+    for (final g in state) {
+      if (g.name == groupName && g.now != proxyName) {
+        updated.add(ProxyGroup(
+          name: g.name,
+          type: g.type,
+          all: g.all,
+          now: proxyName,
+        ));
+        changed = true;
+      } else {
+        updated.add(g);
+      }
+    }
+    if (changed) state = updated;
   }
 }
 
