@@ -5,31 +5,43 @@
     android:viewportHeight="24"
     android:tint="?attr/colorControlNormal">
   <!--
-    YueLink butterfly / double-ring logo — matches ic_launcher_foreground.
-    Uses stroke rings so the system can tint it for Quick Settings tile.
+    YueLink mark — interlocked rings + cherry-stem V on top.
+    Geometry matches assets/icon.png (launcher foreground): rings centered
+    at x=9 and x=15 (separation 6) with radius 4.2 produce ~28% overlap,
+    same proportion as the brand. The V apex sits at the ring intersection
+    so the stems read as part of the ring crown rather than a separate
+    fork.
+
+    Earlier draft placed the centers at (8.5, 13.5)/(15.5, 13.5) with a
+    filled diamond between them, which read as handcuff cuffs + a key
+    shaft (user feedback 2026-04-29). Removing the diamond and pulling
+    the rings inward fixes that: stroke-only, rounded caps, no fill.
+    System tints the white via colorControlNormal so the tile inherits
+    the QS palette automatically.
   -->
+
   <!-- Left ring -->
   <path
-      android:pathData="M8.5,13.5 m-4.2,0 a4.2,4.2 0,1,1 8.4,0 a4.2,4.2 0,1,1 -8.4,0"
+      android:pathData="M9,13 m-4.2,0 a4.2,4.2 0,1,1 8.4,0 a4.2,4.2 0,1,1 -8.4,0"
       android:strokeColor="#FFFFFF"
-      android:strokeWidth="1.8"
+      android:strokeWidth="2"
+      android:strokeLineCap="round"
       android:fillColor="#00000000"/>
+
   <!-- Right ring -->
   <path
-      android:pathData="M15.5,13.5 m-4.2,0 a4.2,4.2 0,1,1 8.4,0 a4.2,4.2 0,1,1 -8.4,0"
+      android:pathData="M15,13 m-4.2,0 a4.2,4.2 0,1,1 8.4,0 a4.2,4.2 0,1,1 -8.4,0"
       android:strokeColor="#FFFFFF"
-      android:strokeWidth="1.8"
+      android:strokeWidth="2"
+      android:strokeLineCap="round"
       android:fillColor="#00000000"/>
-  <!-- Antennae (V shape) -->
+
+  <!-- Cherry-stem V — apex at top of ring intersection, tips diverge upward -->
   <path
-      android:pathData="M10.5,9.5 L12,5.5 L13.5,9.5"
+      android:pathData="M10.4,4.2 L12,8.8 L13.6,4.2"
       android:strokeColor="#FFFFFF"
-      android:strokeWidth="1.4"
+      android:strokeWidth="1.6"
       android:strokeLineCap="round"
       android:strokeLineJoin="round"
       android:fillColor="#00000000"/>
-  <!-- Center body (small diamond/leaf between rings) -->
-  <path
-      android:pathData="M12,10.5 L12.8,13.5 L12,16.5 L11.2,13.5 Z"
-      android:fillColor="#FFFFFF"/>
 </vector>
