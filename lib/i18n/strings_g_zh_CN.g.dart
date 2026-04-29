@@ -808,6 +808,7 @@ class TranslationsZhCn extends Translations with BaseTranslations<AppLocale, Tra
 	@override String get weekFri => '五';
 	@override String get weekSat => '六';
 	@override String get weekSun => '日';
+	@override String checkinStreakSuffix({required Object n}) => '连签 ${n} 天';
 	@override String get resignTitle => '补签卡';
 	@override String resignDesc({required Object cost}) => '用 ${cost} 积分补回昨天的签到，连签不归零。';
 	@override String get resignCurrentPoints => '当前积分：';
@@ -1622,6 +1623,7 @@ extension on TranslationsZhCn {
 			'weekFri' => '五',
 			'weekSat' => '六',
 			'weekSun' => '日',
+			'checkinStreakSuffix' => ({required Object n}) => '连签 ${n} 天',
 			'resignTitle' => '补签卡',
 			'resignDesc' => ({required Object cost}) => '用 ${cost} 积分补回昨天的签到，连签不归零。',
 			'resignCurrentPoints' => '当前积分：',

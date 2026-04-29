@@ -2270,8 +2270,8 @@ class Translations with BaseTranslations<AppLocale, Translations> {
 	/// en: 'Next month'
 	String get calendarNextMonth => 'Next month';
 
-	/// en: 'Load failed, pull down to retry'
-	String get calendarLoadFailed => 'Load failed, pull down to retry';
+	/// en: 'Load failed — pull to retry'
+	String get calendarLoadFailed => 'Load failed — pull to retry';
 
 	/// en: 'No data'
 	String get calendarEmpty => 'No data';
@@ -2291,8 +2291,8 @@ class Translations with BaseTranslations<AppLocale, Translations> {
 	/// en: 'Bonus'
 	String get calendarMultiplier => 'Bonus';
 
-	/// en: 'Resign with {cost} pts'
-	String calendarBtnResignWithCost({required Object cost}) => 'Resign with ${cost} pts';
+	/// en: 'Resign yesterday · {cost} pts'
+	String calendarBtnResignWithCost({required Object cost}) => 'Resign yesterday · ${cost} pts';
 
 	/// en: 'Close'
 	String get calendarBtnClose => 'Close';
@@ -2327,32 +2327,35 @@ class Translations with BaseTranslations<AppLocale, Translations> {
 	/// en: 'Monthly view · streak rewards · resign with points'
 	String get calendarEntrySubtitle => 'Monthly view · streak rewards · resign with points';
 
-	/// en: 'M'
-	String get weekMon => 'M';
+	/// en: 'Mon'
+	String get weekMon => 'Mon';
 
-	/// en: 'T'
-	String get weekTue => 'T';
+	/// en: 'Tue'
+	String get weekTue => 'Tue';
 
-	/// en: 'W'
-	String get weekWed => 'W';
+	/// en: 'Wed'
+	String get weekWed => 'Wed';
 
-	/// en: 'T'
-	String get weekThu => 'T';
+	/// en: 'Thu'
+	String get weekThu => 'Thu';
 
-	/// en: 'F'
-	String get weekFri => 'F';
+	/// en: 'Fri'
+	String get weekFri => 'Fri';
 
-	/// en: 'S'
-	String get weekSat => 'S';
+	/// en: 'Sat'
+	String get weekSat => 'Sat';
 
-	/// en: 'S'
-	String get weekSun => 'S';
+	/// en: 'Sun'
+	String get weekSun => 'Sun';
+
+	/// en: '{n}-day streak'
+	String checkinStreakSuffix({required Object n}) => '${n}-day streak';
 
 	/// en: 'Resign Card'
 	String get resignTitle => 'Resign Card';
 
-	/// en: 'Spend {cost} points to recover yesterday's sign-in and keep your streak alive.'
-	String resignDesc({required Object cost}) => 'Spend ${cost} points to recover yesterday\'s sign-in and keep your streak alive.';
+	/// en: 'Pay {cost} pts to fill yesterday — your streak stays alive.'
+	String resignDesc({required Object cost}) => 'Pay ${cost} pts to fill yesterday — your streak stays alive.';
 
 	/// en: 'Current points: '
 	String get resignCurrentPoints => 'Current points: ';
@@ -2378,8 +2381,8 @@ class Translations with BaseTranslations<AppLocale, Translations> {
 	/// en: 'YueLink for iOS is sideloaded. The three options have different VPN-availability trade-offs.'
 	String get iosGuideIntro => 'YueLink for iOS is sideloaded. The three options have different VPN-availability trade-offs.';
 
-	/// en: 'VPN process was killed by the system within {seconds}s — most likely caused by TrollStore / unsigned IPA. Please re-install via AltStore / SideStore.'
-	String iosGuideErrorBanner({required Object seconds}) => 'VPN process was killed by the system within ${seconds}s — most likely caused by TrollStore / unsigned IPA. Please re-install via AltStore / SideStore.';
+	/// en: 'VPN dropped within {seconds}s — almost always TrollStore / unsigned IPA. Re-install via AltStore or SideStore to fix.'
+	String iosGuideErrorBanner({required Object seconds}) => 'VPN dropped within ${seconds}s — almost always TrollStore / unsigned IPA. Re-install via AltStore or SideStore to fix.';
 
 	/// en: 'AltStore / SideStore'
 	String get iosGuideMethodAltstoreTitle => 'AltStore / SideStore';
@@ -2408,8 +2411,8 @@ class Translations with BaseTranslations<AppLocale, Translations> {
 	/// en: 'TrollStore'
 	String get iosGuideMethodTrollTitle => 'TrollStore';
 
-	/// en: 'VPN unavailable'
-	String get iosGuideMethodTrollTag => 'VPN unavailable';
+	/// en: 'VPN won't work'
+	String get iosGuideMethodTrollTag => 'VPN won\'t work';
 
 	/// en: '✅ Permanent, no re-signing'
 	String get iosGuideMethodTrollProForever => '✅ Permanent, no re-signing';
@@ -3201,14 +3204,14 @@ extension on Translations {
 			'calendarMonthLabel' => ({required Object year, required Object month}) => '${year}-${month}',
 			'calendarPrevMonth' => 'Previous month',
 			'calendarNextMonth' => 'Next month',
-			'calendarLoadFailed' => 'Load failed, pull down to retry',
+			'calendarLoadFailed' => 'Load failed — pull to retry',
 			'calendarEmpty' => 'No data',
 			'calendarRetry' => 'Retry',
 			'calendarPleaseLogin' => 'Please log in first',
 			'calendarStreakLabel' => 'Streak',
 			'calendarSignedThisMonth' => 'Signed this month',
 			'calendarMultiplier' => 'Bonus',
-			'calendarBtnResignWithCost' => ({required Object cost}) => 'Resign with ${cost} pts',
+			'calendarBtnResignWithCost' => ({required Object cost}) => 'Resign yesterday · ${cost} pts',
 			'calendarBtnClose' => 'Close',
 			'calendarBtnSignedToday' => 'Signed',
 			'calendarLegendSigned' => 'Signed',
@@ -3220,15 +3223,16 @@ extension on Translations {
 			'calendarSuffixOf' => ({required Object total}) => '/${total}',
 			'calendarEntryTitle' => 'Sign-In Calendar',
 			'calendarEntrySubtitle' => 'Monthly view · streak rewards · resign with points',
-			'weekMon' => 'M',
-			'weekTue' => 'T',
-			'weekWed' => 'W',
-			'weekThu' => 'T',
-			'weekFri' => 'F',
-			'weekSat' => 'S',
-			'weekSun' => 'S',
+			'weekMon' => 'Mon',
+			'weekTue' => 'Tue',
+			'weekWed' => 'Wed',
+			'weekThu' => 'Thu',
+			'weekFri' => 'Fri',
+			'weekSat' => 'Sat',
+			'weekSun' => 'Sun',
+			'checkinStreakSuffix' => ({required Object n}) => '${n}-day streak',
 			'resignTitle' => 'Resign Card',
-			'resignDesc' => ({required Object cost}) => 'Spend ${cost} points to recover yesterday\'s sign-in and keep your streak alive.',
+			'resignDesc' => ({required Object cost}) => 'Pay ${cost} pts to fill yesterday — your streak stays alive.',
 			'resignCurrentPoints' => 'Current points: ',
 			'resignNeedPoints' => ({required Object cost}) => 'Need: ${cost} pts',
 			'resignInsufficient' => 'Insufficient points. Earn more via daily check-in or group betting.',
@@ -3237,7 +3241,7 @@ extension on Translations {
 			'iosGuideTitle' => 'iOS Install Guide',
 			'iosGuideEntry' => 'iOS Install Methods',
 			'iosGuideIntro' => 'YueLink for iOS is sideloaded. The three options have different VPN-availability trade-offs.',
-			'iosGuideErrorBanner' => ({required Object seconds}) => 'VPN process was killed by the system within ${seconds}s — most likely caused by TrollStore / unsigned IPA. Please re-install via AltStore / SideStore.',
+			'iosGuideErrorBanner' => ({required Object seconds}) => 'VPN dropped within ${seconds}s — almost always TrollStore / unsigned IPA. Re-install via AltStore or SideStore to fix.',
 			'iosGuideMethodAltstoreTitle' => 'AltStore / SideStore',
 			'iosGuideMethodAltstoreTag' => 'Recommended',
 			'iosGuideMethodAltstoreProVpn' => '✅ Full VPN works (entitlement trusted by system)',
@@ -3247,7 +3251,7 @@ extension on Translations {
 			'iosGuideMethodAltstoreConLimit' => '⚠️ Free Apple ID can hold only 3 apps at once',
 			'iosGuideMethodAltstoreHowto' => 'Install AltServer / SideServer on desktop → install AltStore / SideStore on iPhone → drop YueLink IPA into the desktop tool or import via AltStore → Settings → General → VPN & Device Management → trust the developer cert',
 			'iosGuideMethodTrollTitle' => 'TrollStore',
-			'iosGuideMethodTrollTag' => 'VPN unavailable',
+			'iosGuideMethodTrollTag' => 'VPN won\'t work',
 			'iosGuideMethodTrollProForever' => '✅ Permanent, no re-signing',
 			'iosGuideMethodTrollConVpn' => '🚫 VPN (NetworkExtension) doesn\'t work',
 			'iosGuideMethodTrollConFail' => '🚫 PacketTunnel starts then drops — looks connected but no traffic flows',

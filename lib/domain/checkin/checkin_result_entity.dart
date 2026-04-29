@@ -14,11 +14,15 @@ class CheckinResult {
   /// Whether the user has already checked in today
   final bool alreadyChecked;
 
+  /// Current consecutive sign-in streak. 0 when unknown (older API).
+  final int streak;
+
   const CheckinResult({
     required this.type,
     required this.amount,
     required this.amountText,
     required this.alreadyChecked,
+    this.streak = 0,
   });
 
   factory CheckinResult.fromJson(Map<String, dynamic> json) {
@@ -36,6 +40,7 @@ class CheckinResult {
       amount: amount,
       amountText: amountText,
       alreadyChecked: json['already_checked'] == true,
+      streak: _toInt(json['streak']) ?? 0,
     );
   }
 

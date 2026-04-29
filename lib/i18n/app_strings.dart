@@ -826,6 +826,8 @@ class S {
   String get weekFri => _t.weekFri;
   String get weekSat => _t.weekSat;
   String get weekSun => _t.weekSun;
+  String checkinStreakSuffix({required int n}) =>
+      _t.checkinStreakSuffix(n: n);
 
   String get resignTitle => _t.resignTitle;
   String resignDesc({required String cost}) => _t.resignDesc(cost: cost);

@@ -77,23 +77,38 @@ class CheckinCard extends ConsumerWidget {
                   style: YLText.label.copyWith(fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 2),
-                Text(
-                  state.checkedInOnOtherDevice
-                      ? s.checkinOtherDevice
-                      : state.checkedIn
-                          ? (state.lastResult != null &&
-                                  state.lastResult!.amountText.isNotEmpty &&
-                                  state.lastResult!.amountText != '0 MB'
-                              ? '${s.checkinReward}: ${state.lastResult!.amountText}'
-                              : s.checkinDone)
-                          : s.checkinDesc,
-                  style: YLText.caption.copyWith(
-                    color: state.checkedInOnOtherDevice
-                        ? Colors.orange
-                        : YLColors.zinc500,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                Builder(
+                  builder: (_) {
+                    String text;
+                    if (state.checkedInOnOtherDevice) {
+                      text = s.checkinOtherDevice;
+                    } else if (state.checkedIn) {
+                      final r = state.lastResult;
+                      final hasReward = r != null &&
+                          r.amountText.isNotEmpty &&
+                          r.amountText != '0 MB';
+                      final base = hasReward
+                          ? '${s.checkinReward}: ${r.amountText}'
+                          : s.checkinDone;
+                      // 带 streak 副标尾巴：连签 ≥ 2 天才显示，避免新用户首签 "1 天" 啰嗦
+                      final streak = r?.streak ?? 0;
+                      text = streak >= 2
+                          ? '$base · ${s.checkinStreakSuffix(n: streak)}'
+                          : base;
+                    } else {
+                      text = s.checkinDesc;
+                    }
+                    return Text(
+                      text,
+                      style: YLText.caption.copyWith(
+                        color: state.checkedInOnOtherDevice
+                            ? Colors.orange
+                            : YLColors.zinc500,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    );
+                  },
                 ),
               ],
             ),

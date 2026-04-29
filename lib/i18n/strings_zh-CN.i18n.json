@@ -769,6 +769,7 @@
   "weekFri": "五",
   "weekSat": "六",
   "weekSun": "日",
+  "checkinStreakSuffix": "连签 {n} 天",
 
   "resignTitle": "补签卡",
   "resignDesc": "用 {cost} 积分补回昨天的签到，连签不归零。",
