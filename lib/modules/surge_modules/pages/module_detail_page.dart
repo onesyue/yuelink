@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../i18n/app_strings.dart';
+import '../../../shared/widgets/yl_scaffold.dart';
 import '../../../theme.dart';
 import '../../../domain/surge_modules/module_entity.dart';
 import '../providers/module_provider.dart';
@@ -76,306 +77,329 @@ class _ModuleDetailPageState extends ConsumerState<ModuleDetailPage> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     if (module == null) {
-      return Scaffold(
-        appBar: AppBar(title: Text(s.modulesLabel)),
-        body: const Center(child: Text('Module not found')),
+      return YLLargeTitleScaffold(
+        title: s.modulesLabel,
+        slivers: const [
+          SliverFillRemaining(
+            hasScrollBody: false,
+            child: Center(child: Text('Module not found')),
+          ),
+        ],
       );
     }
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(module.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-        centerTitle: false,
-        actions: [
-          IconButton(
-            icon: _refreshing
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.refresh),
-            tooltip: s.moduleRefresh,
-            onPressed: _refreshing ? null : _refresh,
+    return YLLargeTitleScaffold(
+      title: module.name,
+      actions: [
+        IconButton(
+          icon: _refreshing
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.refresh_rounded),
+          tooltip: s.moduleRefresh,
+          onPressed: _refreshing ? null : _refresh,
+        ),
+        IconButton(
+          icon: const Icon(Icons.delete_rounded),
+          tooltip: s.moduleDelete,
+          onPressed: () => _confirmDelete(context),
+        ),
+      ],
+      slivers: [
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(
+            YLSpacing.lg,
+            0,
+            YLSpacing.lg,
+            YLSpacing.xl,
           ),
-          IconButton(
-            icon: const Icon(Icons.delete_outline),
-            tooltip: s.moduleDelete,
-            onPressed: () => _confirmDelete(context),
-          ),
-        ],
-      ),
-      body: ListView(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        children: [
-          // ── Header ──────────────────────────────────────────────────
-          _SectionCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+          sliver: SliverList(
+            delegate: SliverChildListDelegate([
+              // ── Header ──────────────────────────────────────────────────
+              _SectionCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: Text(
-                        module.name,
-                        style: YLText.titleMedium.copyWith(
-                          color: isDark ? YLColors.zinc100 : YLColors.zinc900,
-                        ),
-                      ),
-                    ),
-                    if (module.versionTag != null)
-                      _Chip(label: 'v${module.versionTag}', isDark: isDark),
-                  ],
-                ),
-                if (module.desc.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    module.desc,
-                    style: YLText.body.copyWith(color: YLColors.zinc500),
-                  ),
-                ],
-                if (module.author != null) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    'by ${module.author}',
-                    style: YLText.caption.copyWith(color: YLColors.zinc400),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          // ── Stats ────────────────────────────────────────────────────
-          _SectionTitle(s.moduleRuleCount),
-          _SectionCard(
-            child: Column(
-              children: [
-                _StatRow(
-                  label: s.moduleRuleCount,
-                  value: module.rules.length.toString(),
-                  isDark: isDark,
-                ),
-                if (module.mitmHostnames.isNotEmpty) ...[
-                  _Divider(isDark: isDark),
-                  _StatRow(
-                    label: 'MITM Hostnames',
-                    value: '${module.mitmHostnames.length}',
-                    isDark: isDark,
-                  ),
-                ],
-                if (module.urlRewrites.isNotEmpty) ...[
-                  _Divider(isDark: isDark),
-                  _StatRow(
-                    label: 'URL Rewrites',
-                    value: '${module.urlRewrites.length}',
-                    isDark: isDark,
-                  ),
-                ],
-                if (module.headerRewrites.isNotEmpty) ...[
-                  _Divider(isDark: isDark),
-                  _StatRow(
-                    label: 'Header Rewrites',
-                    value: '${module.headerRewrites.length}',
-                    isDark: isDark,
-                  ),
-                ],
-                if (module.scripts.isNotEmpty) ...[
-                  _Divider(isDark: isDark),
-                  _StatRow(
-                    label: 'Scripts',
-                    value: '${module.scripts.length}',
-                    isDark: isDark,
-                  ),
-                ],
-                if (module.mapLocals.isNotEmpty) ...[
-                  _Divider(isDark: isDark),
-                  _StatRow(
-                    label: 'Map Local',
-                    value: '${module.mapLocals.length}',
-                    isDark: isDark,
-                  ),
-                ],
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          // ── Active capabilities section ──────────────────────────────
-          if (module.rules.isNotEmpty ||
-              module.mitmHostnames.isNotEmpty ||
-              module.urlRewrites.isNotEmpty ||
-              module.headerRewrites.isNotEmpty) ...[
-            const _SectionTitle('Currently Active'),
-            _SectionCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (module.rules.isNotEmpty) ...[
-                    Text(
-                      '${module.rules.length} routing rules',
-                      style: YLText.body.copyWith(
-                        color: isDark ? YLColors.zinc300 : YLColors.zinc700,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    ...module.rules
-                        .take(5)
-                        .map(
-                          (r) => Padding(
-                            padding: const EdgeInsets.only(bottom: 4),
-                            child: Text(
-                              r.raw,
-                              style: YLText.mono.copyWith(
-                                fontSize: 11,
-                                color: YLColors.zinc500,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            module.name,
+                            style: YLText.titleMedium.copyWith(
+                              color: isDark ? Colors.white : YLColors.zinc900,
                             ),
                           ),
                         ),
-                    if (module.rules.length > 5)
-                      Text(
-                        '… and ${module.rules.length - 5} more',
-                        style: YLText.caption.copyWith(color: YLColors.zinc400),
-                      ),
-                  ],
-                  if (module.mitmHostnames.isNotEmpty) ...[
-                    if (module.rules.isNotEmpty) const SizedBox(height: 10),
-                    _ActiveRow(
-                      icon: Icons.security,
-                      label: 'TLS Interception',
-                      detail: '${module.mitmHostnames.length} hostnames',
-                      isDark: isDark,
-                    ),
-                  ],
-                  if (module.urlRewrites.isNotEmpty) ...[
-                    if (module.rules.isNotEmpty ||
-                        module.mitmHostnames.isNotEmpty)
-                      const SizedBox(height: 10),
-                    _ActiveRow(
-                      icon: Icons.swap_horiz,
-                      label: 'URL Rewrite',
-                      detail: '${module.urlRewrites.length} rules',
-                      isDark: isDark,
-                    ),
-                  ],
-                  if (module.headerRewrites.isNotEmpty) ...[
-                    const SizedBox(height: 10),
-                    _ActiveRow(
-                      icon: Icons.tune,
-                      label: 'Header Rewrite',
-                      detail: '${module.headerRewrites.length} rules',
-                      isDark: isDark,
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-          ],
-
-          // ── Not active section (Scripts / Map Local only) ─────────────
-          if (module.scripts.isNotEmpty ||
-              module.mapLocals.isNotEmpty ||
-              module.unsupportedCounts.panelCount > 0) ...[
-            _SectionTitle(s.moduleNotActive),
-            _SectionCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (module.scripts.isNotEmpty)
-                    _UnsupportedRow(
-                      label:
-                          '${s.moduleScriptDetected}: ${module.scripts.length}',
-                      hint: s.moduleFutureVersion,
-                      isDark: isDark,
-                    ),
-                  if (module.mapLocals.isNotEmpty)
-                    _UnsupportedRow(
-                      label: 'Map Local: ${module.mapLocals.length}',
-                      hint: s.moduleFutureVersion,
-                      isDark: isDark,
-                    ),
-                  if (module.unsupportedCounts.panelCount > 0)
-                    _UnsupportedRow(
-                      label: 'Panels: ${module.unsupportedCounts.panelCount}',
-                      hint: s.moduleFutureVersion,
-                      isDark: isDark,
-                    ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-          ],
-
-          // ── Warnings ─────────────────────────────────────────────────
-          if (module.parseWarnings.isNotEmpty) ...[
-            const _SectionTitle('Parse Warnings'),
-            _SectionCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: module.parseWarnings
-                    .map(
-                      (w) => Padding(
-                        padding: const EdgeInsets.only(bottom: 4),
-                        child: Text(
-                          w,
-                          style: YLText.caption.copyWith(
-                            color: const Color(0xFFF59E0B),
+                        if (module.versionTag != null)
+                          _Chip(
+                            label: 'v${module.versionTag}',
+                            isDark: isDark,
                           ),
+                      ],
+                    ),
+                    if (module.desc.isNotEmpty) ...[
+                      const SizedBox(height: YLSpacing.xs),
+                      Text(
+                        module.desc,
+                        style: YLText.body.copyWith(color: YLColors.zinc500),
+                      ),
+                    ],
+                    if (module.author != null) ...[
+                      const SizedBox(height: YLSpacing.xs),
+                      Text(
+                        'by ${module.author}',
+                        style: YLText.caption.copyWith(
+                          color: YLColors.zinc400,
                         ),
                       ),
-                    )
-                    .toList(),
+                    ],
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
-          ],
+              const SizedBox(height: YLSpacing.md),
 
-          // ── Metadata ─────────────────────────────────────────────────
-          const _SectionTitle('Info'),
-          _SectionCard(
-            child: Column(
-              children: [
-                _MetaRow(
-                  label: 'Source',
-                  value: module.sourceUrl,
-                  isDark: isDark,
-                  monospace: true,
+              // ── Stats ────────────────────────────────────────────────────
+              _SectionTitle(s.moduleRuleCount),
+              _SectionCard(
+                child: Column(
+                  children: [
+                    _StatRow(
+                      label: s.moduleRuleCount,
+                      value: module.rules.length.toString(),
+                      isDark: isDark,
+                    ),
+                    if (module.mitmHostnames.isNotEmpty) ...[
+                      _Divider(isDark: isDark),
+                      _StatRow(
+                        label: 'MITM Hostnames',
+                        value: '${module.mitmHostnames.length}',
+                        isDark: isDark,
+                      ),
+                    ],
+                    if (module.urlRewrites.isNotEmpty) ...[
+                      _Divider(isDark: isDark),
+                      _StatRow(
+                        label: 'URL Rewrites',
+                        value: '${module.urlRewrites.length}',
+                        isDark: isDark,
+                      ),
+                    ],
+                    if (module.headerRewrites.isNotEmpty) ...[
+                      _Divider(isDark: isDark),
+                      _StatRow(
+                        label: 'Header Rewrites',
+                        value: '${module.headerRewrites.length}',
+                        isDark: isDark,
+                      ),
+                    ],
+                    if (module.scripts.isNotEmpty) ...[
+                      _Divider(isDark: isDark),
+                      _StatRow(
+                        label: 'Scripts',
+                        value: '${module.scripts.length}',
+                        isDark: isDark,
+                      ),
+                    ],
+                    if (module.mapLocals.isNotEmpty) ...[
+                      _Divider(isDark: isDark),
+                      _StatRow(
+                        label: 'Map Local',
+                        value: '${module.mapLocals.length}',
+                        isDark: isDark,
+                      ),
+                    ],
+                  ],
                 ),
-                _Divider(isDark: isDark),
-                _MetaRow(
-                  label: 'Last updated',
-                  value: _formatDate(module.updatedAt),
-                  isDark: isDark,
-                ),
-                if (module.lastFetchedAt != null) ...[
-                  _Divider(isDark: isDark),
-                  _MetaRow(
-                    label: 'Last fetched',
-                    value: _formatDate(module.lastFetchedAt!),
-                    isDark: isDark,
+              ),
+              const SizedBox(height: YLSpacing.md),
+
+              // ── Active capabilities section ──────────────────────────────
+              if (module.rules.isNotEmpty ||
+                  module.mitmHostnames.isNotEmpty ||
+                  module.urlRewrites.isNotEmpty ||
+                  module.headerRewrites.isNotEmpty) ...[
+                const _SectionTitle('Currently Active'),
+                _SectionCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (module.rules.isNotEmpty) ...[
+                        Text(
+                          '${module.rules.length} routing rules',
+                          style: YLText.body.copyWith(
+                            color: isDark
+                                ? YLColors.zinc300
+                                : YLColors.zinc700,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(height: YLSpacing.sm),
+                        ...module.rules
+                            .take(5)
+                            .map(
+                              (r) => Padding(
+                                padding: const EdgeInsets.only(bottom: 4),
+                                child: Text(
+                                  r.raw,
+                                  style: YLText.mono.copyWith(
+                                    fontSize: 11,
+                                    color: YLColors.zinc500,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ),
+                        if (module.rules.length > 5)
+                          Text(
+                            '… and ${module.rules.length - 5} more',
+                            style: YLText.caption.copyWith(
+                              color: YLColors.zinc400,
+                            ),
+                          ),
+                      ],
+                      if (module.mitmHostnames.isNotEmpty) ...[
+                        if (module.rules.isNotEmpty)
+                          const SizedBox(height: YLSpacing.sm + 2),
+                        _ActiveRow(
+                          icon: Icons.security,
+                          label: 'TLS Interception',
+                          detail: '${module.mitmHostnames.length} hostnames',
+                          isDark: isDark,
+                        ),
+                      ],
+                      if (module.urlRewrites.isNotEmpty) ...[
+                        if (module.rules.isNotEmpty ||
+                            module.mitmHostnames.isNotEmpty)
+                          const SizedBox(height: YLSpacing.sm + 2),
+                        _ActiveRow(
+                          icon: Icons.swap_horiz,
+                          label: 'URL Rewrite',
+                          detail: '${module.urlRewrites.length} rules',
+                          isDark: isDark,
+                        ),
+                      ],
+                      if (module.headerRewrites.isNotEmpty) ...[
+                        const SizedBox(height: YLSpacing.sm + 2),
+                        _ActiveRow(
+                          icon: Icons.tune,
+                          label: 'Header Rewrite',
+                          detail: '${module.headerRewrites.length} rules',
+                          isDark: isDark,
+                        ),
+                      ],
+                    ],
                   ),
-                ],
-                _Divider(isDark: isDark),
-                _MetaRow(
-                  label: 'Checksum',
-                  value: module.checksum.substring(
-                    0,
-                    module.checksum.length > 8 ? 8 : module.checksum.length,
-                  ),
-                  isDark: isDark,
-                  monospace: true,
                 ),
+                const SizedBox(height: YLSpacing.md),
               ],
-            ),
+
+              // ── Not active section (Scripts / Map Local only) ─────────────
+              if (module.scripts.isNotEmpty ||
+                  module.mapLocals.isNotEmpty ||
+                  module.unsupportedCounts.panelCount > 0) ...[
+                _SectionTitle(s.moduleNotActive),
+                _SectionCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (module.scripts.isNotEmpty)
+                        _UnsupportedRow(
+                          label:
+                              '${s.moduleScriptDetected}: ${module.scripts.length}',
+                          hint: s.moduleFutureVersion,
+                          isDark: isDark,
+                        ),
+                      if (module.mapLocals.isNotEmpty)
+                        _UnsupportedRow(
+                          label: 'Map Local: ${module.mapLocals.length}',
+                          hint: s.moduleFutureVersion,
+                          isDark: isDark,
+                        ),
+                      if (module.unsupportedCounts.panelCount > 0)
+                        _UnsupportedRow(
+                          label:
+                              'Panels: ${module.unsupportedCounts.panelCount}',
+                          hint: s.moduleFutureVersion,
+                          isDark: isDark,
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: YLSpacing.md),
+              ],
+
+              // ── Warnings ─────────────────────────────────────────────────
+              if (module.parseWarnings.isNotEmpty) ...[
+                const _SectionTitle('Parse Warnings'),
+                _SectionCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: module.parseWarnings
+                        .map(
+                          (w) => Padding(
+                            padding: const EdgeInsets.only(bottom: 4),
+                            child: Text(
+                              w,
+                              style: YLText.caption.copyWith(
+                                color: YLColors.connecting,
+                              ),
+                            ),
+                          ),
+                        )
+                        .toList(),
+                  ),
+                ),
+                const SizedBox(height: YLSpacing.md),
+              ],
+
+              // ── Metadata ─────────────────────────────────────────────────
+              const _SectionTitle('Info'),
+              _SectionCard(
+                child: Column(
+                  children: [
+                    _MetaRow(
+                      label: 'Source',
+                      value: module.sourceUrl,
+                      isDark: isDark,
+                      monospace: true,
+                    ),
+                    _Divider(isDark: isDark),
+                    _MetaRow(
+                      label: 'Last updated',
+                      value: _formatDate(module.updatedAt),
+                      isDark: isDark,
+                    ),
+                    if (module.lastFetchedAt != null) ...[
+                      _Divider(isDark: isDark),
+                      _MetaRow(
+                        label: 'Last fetched',
+                        value: _formatDate(module.lastFetchedAt!),
+                        isDark: isDark,
+                      ),
+                    ],
+                    _Divider(isDark: isDark),
+                    _MetaRow(
+                      label: 'Checksum',
+                      value: module.checksum.substring(
+                        0,
+                        module.checksum.length > 8
+                            ? 8
+                            : module.checksum.length,
+                      ),
+                      isDark: isDark,
+                      monospace: true,
+                    ),
+                  ],
+                ),
+              ),
+            ]),
           ),
-          const SizedBox(height: 32),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -396,13 +420,19 @@ class _SectionTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
+      padding: const EdgeInsets.fromLTRB(
+        YLSpacing.xs,
+        0,
+        YLSpacing.xs,
+        YLSpacing.sm,
+      ),
       child: Text(
         text.toUpperCase(),
         style: YLText.caption.copyWith(
+          fontSize: 11,
           letterSpacing: 0,
-          fontWeight: FontWeight.w600,
-          color: YLColors.zinc400,
+          fontWeight: FontWeight.w500,
+          color: YLColors.zinc500,
         ),
       ),
     );
@@ -418,17 +448,16 @@ class _SectionCard extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(YLSpacing.lg),
       decoration: BoxDecoration(
-        color: isDark ? YLColors.zinc800 : Colors.white,
-        borderRadius: BorderRadius.circular(YLRadius.xl),
+        color: isDark ? YLColors.zinc900 : Colors.white,
+        borderRadius: BorderRadius.circular(YLRadius.lg),
         border: Border.all(
           color: isDark
-              ? Colors.white.withValues(alpha: 0.08)
-              : Colors.black.withValues(alpha: 0.08),
+              ? Colors.white.withValues(alpha: 0.06)
+              : Colors.black.withValues(alpha: 0.06),
           width: 0.5,
         ),
-        boxShadow: YLShadow.card(context),
       ),
       child: child,
     );
@@ -448,7 +477,7 @@ class _StatRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      padding: const EdgeInsets.symmetric(vertical: YLSpacing.sm),
       child: Row(
         children: [
           Expanded(
@@ -487,7 +516,7 @@ class _MetaRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      padding: const EdgeInsets.symmetric(vertical: YLSpacing.sm),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -495,7 +524,7 @@ class _MetaRow extends StatelessWidget {
             width: 100,
             child: Text(
               label,
-              style: YLText.caption.copyWith(color: YLColors.zinc400),
+              style: YLText.caption.copyWith(color: YLColors.zinc500),
             ),
           ),
           Expanded(
@@ -504,10 +533,10 @@ class _MetaRow extends StatelessWidget {
               style: monospace
                   ? YLText.mono.copyWith(
                       fontSize: 11,
-                      color: isDark ? YLColors.zinc300 : YLColors.zinc600,
+                      color: isDark ? YLColors.zinc300 : YLColors.zinc700,
                     )
                   : YLText.caption.copyWith(
-                      color: isDark ? YLColors.zinc300 : YLColors.zinc600,
+                      color: isDark ? YLColors.zinc300 : YLColors.zinc700,
                     ),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
@@ -537,7 +566,7 @@ class _ActiveRow extends StatelessWidget {
     return Row(
       children: [
         Icon(icon, size: 14, color: YLColors.connected),
-        const SizedBox(width: 8),
+        const SizedBox(width: YLSpacing.sm),
         Expanded(
           child: Text(
             label,
@@ -565,9 +594,8 @@ class _UnsupportedRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const warningColor = Color(0xFFF59E0B);
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.only(bottom: YLSpacing.sm + 2),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -576,10 +604,10 @@ class _UnsupportedRow extends StatelessWidget {
             child: Icon(
               Icons.warning_amber_rounded,
               size: 14,
-              color: warningColor,
+              color: YLColors.connecting,
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: YLSpacing.sm),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -592,7 +620,7 @@ class _UnsupportedRow extends StatelessWidget {
                 ),
                 Text(
                   hint,
-                  style: YLText.caption.copyWith(color: YLColors.zinc400),
+                  style: YLText.caption.copyWith(color: YLColors.zinc500),
                 ),
               ],
             ),
@@ -611,10 +639,10 @@ class _Divider extends StatelessWidget {
   Widget build(BuildContext context) {
     return Divider(
       height: 1,
-      thickness: 0.5,
+      thickness: 0.33,
       color: isDark
-          ? Colors.white.withValues(alpha: 0.08)
-          : Colors.black.withValues(alpha: 0.08),
+          ? Colors.white.withValues(alpha: 0.06)
+          : Colors.black.withValues(alpha: 0.06),
     );
   }
 }
@@ -627,10 +655,10 @@ class _Chip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: YLSpacing.sm, vertical: 3),
       decoration: BoxDecoration(
-        color: isDark ? YLColors.zinc700 : YLColors.zinc100,
-        borderRadius: BorderRadius.circular(6),
+        color: isDark ? YLColors.zinc800 : YLColors.zinc100,
+        borderRadius: BorderRadius.circular(YLRadius.sm),
       ),
       child: Text(
         label,

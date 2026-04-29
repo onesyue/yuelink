@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/kernel/overwrite_service.dart';
 import '../../../i18n/app_strings.dart';
 import '../../../shared/app_notifier.dart';
-import '../../../core/kernel/overwrite_service.dart';
+import '../../../shared/widgets/yl_scaffold.dart';
+import '../../../theme.dart';
 
 // ── Internal data model ────────────────────────────────────────────────────────
 
@@ -244,36 +246,62 @@ class _OverwritePageState extends State<OverwritePage> {
 
   // ── Body ──────────────────────────────────────────────────────────────────
 
-  Widget _sectionTitle(String text) => Padding(
-    padding: const EdgeInsets.fromLTRB(4, 24, 4, 8),
-    child: Text(
-      text.toUpperCase(),
-      style: const TextStyle(
-        fontSize: 12,
-        fontWeight: FontWeight.w500,
-        letterSpacing: 0,
-        color: Colors.grey,
+  Widget _sectionHeader(String text, {bool first = false}) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        YLSpacing.md,
+        first ? YLSpacing.sm : YLSpacing.lg,
+        YLSpacing.md,
+        YLSpacing.sm,
       ),
-    ),
-  );
+      child: Text(
+        text.toUpperCase(),
+        style: YLText.caption.copyWith(
+          fontSize: 11,
+          fontWeight: FontWeight.w500,
+          letterSpacing: 0,
+          color: YLColors.zinc500,
+        ),
+      ),
+    );
+  }
+
+  BoxDecoration _cardDecoration(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return BoxDecoration(
+      color: isDark ? YLColors.zinc900 : Colors.white,
+      borderRadius: BorderRadius.circular(YLRadius.lg),
+      border: Border.all(
+        color: isDark
+            ? Colors.white.withValues(alpha: 0.06)
+            : Colors.black.withValues(alpha: 0.06),
+        width: 0.5,
+      ),
+    );
+  }
 
   Widget _buildRulesCard(S s, BuildContext context) {
-    return Material(
-      color: Theme.of(context).colorScheme.surfaceContainerLow,
-      borderRadius: BorderRadius.circular(12),
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      decoration: _cardDecoration(context),
       clipBehavior: Clip.antiAlias,
       child: Column(
         children: [
           // Header with add button
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+            padding: const EdgeInsets.fromLTRB(
+              YLSpacing.lg,
+              YLSpacing.sm,
+              YLSpacing.sm,
+              YLSpacing.sm,
+            ),
             child: Row(
               children: [
                 Expanded(
                   child: Text(
                     s.overwriteCustomRulesLabel,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    style: YLText.caption.copyWith(
+                      color: isDark ? YLColors.zinc400 : YLColors.zinc500,
                     ),
                   ),
                 ),
@@ -287,8 +315,13 @@ class _OverwritePageState extends State<OverwritePage> {
           ),
           if (_data.rules.isEmpty)
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 32),
-              child: Text(s.noData, style: const TextStyle(color: Colors.grey)),
+              padding: const EdgeInsets.symmetric(vertical: YLSpacing.xxl),
+              child: Text(
+                s.noData,
+                style: YLText.body.copyWith(
+                  color: isDark ? YLColors.zinc500 : YLColors.zinc400,
+                ),
+              ),
             )
           else
             ReorderableListView.builder(
@@ -307,19 +340,24 @@ class _OverwritePageState extends State<OverwritePage> {
                 return ListTile(
                   key: ValueKey(_data.rules[i] + i.toString()),
                   dense: true,
-                  leading: const Icon(Icons.drag_handle, size: 18),
+                  leading: Icon(
+                    Icons.drag_handle,
+                    size: 18,
+                    color: isDark ? YLColors.zinc500 : YLColors.zinc400,
+                  ),
                   title: Text(
                     _data.rules[i],
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontFamily: 'monospace',
                       fontSize: 12,
+                      color: isDark ? YLColors.zinc200 : YLColors.zinc800,
                     ),
                   ),
                   trailing: IconButton(
                     icon: const Icon(
-                      Icons.delete_outline,
+                      Icons.delete_rounded,
                       size: 18,
-                      color: Colors.red,
+                      color: YLColors.error,
                     ),
                     onPressed: () => setState(() => _data.rules.removeAt(i)),
                   ),
@@ -333,91 +371,121 @@ class _OverwritePageState extends State<OverwritePage> {
   }
 
   Widget _buildExtraYamlCard(S s, BuildContext context) {
-    return Material(
-      color: Theme.of(context).colorScheme.surfaceContainerLow,
-      borderRadius: BorderRadius.circular(12),
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      decoration: _cardDecoration(context),
       clipBehavior: Clip.antiAlias,
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: TextField(
-          controller: _extraCtrl,
-          minLines: 6,
-          maxLines: 18,
-          style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
-          decoration: InputDecoration(
-            border: InputBorder.none,
-            hintText: s.overwriteHintText,
-            isCollapsed: true,
+      padding: const EdgeInsets.all(YLSpacing.md),
+      child: TextField(
+        controller: _extraCtrl,
+        minLines: 6,
+        maxLines: 18,
+        style: TextStyle(
+          fontFamily: 'monospace',
+          fontSize: 13,
+          color: isDark ? YLColors.zinc200 : YLColors.zinc800,
+        ),
+        decoration: InputDecoration(
+          border: InputBorder.none,
+          enabledBorder: InputBorder.none,
+          focusedBorder: InputBorder.none,
+          fillColor: Colors.transparent,
+          filled: false,
+          hintText: s.overwriteHintText,
+          hintStyle: YLText.body.copyWith(
+            fontSize: 13,
+            color: YLColors.zinc500,
           ),
+          isCollapsed: true,
         ),
       ),
     );
   }
 
   Widget _buildAdvancedCard(S s, BuildContext context) {
-    return Material(
-      color: Theme.of(context).colorScheme.surfaceContainerLow,
-      borderRadius: BorderRadius.circular(12),
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      decoration: _cardDecoration(context),
       clipBehavior: Clip.antiAlias,
-      child: ExpansionTile(
-        title: Text(s.overwriteTabAdvanced),
-        subtitle: Text(
-          Localizations.localeOf(context).languageCode == 'en'
-              ? 'Override routing mode and mixed port'
-              : '覆盖路由模式与 Mixed 端口（覆盖偏好设置）',
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
-        ),
-        tilePadding: const EdgeInsets.symmetric(horizontal: 16),
-        childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        children: [
-          // Mode override
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Text(
-              s.overwriteModeLabel,
-              style: Theme.of(
-                context,
-              ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w600),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          title: Text(
+            s.overwriteTabAdvanced,
+            style: YLText.body.copyWith(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: isDark ? Colors.white : YLColors.zinc900,
             ),
           ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            children: [
-              for (final mode in _modes)
-                ChoiceChip(
-                  label: Text(mode.isEmpty ? s.overwriteModeNone : mode),
-                  selected: _data.mode == (mode.isEmpty ? null : mode),
-                  onSelected: (_) => setState(() {
-                    _data.mode = mode.isEmpty ? null : mode;
-                  }),
+          subtitle: Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(
+              Localizations.localeOf(context).languageCode == 'en'
+                  ? 'Override routing mode and mixed port'
+                  : '覆盖路由模式与 Mixed 端口（覆盖偏好设置）',
+              style: YLText.caption.copyWith(
+                color: isDark ? YLColors.zinc400 : YLColors.zinc500,
+              ),
+            ),
+          ),
+          tilePadding: const EdgeInsets.symmetric(horizontal: YLSpacing.lg),
+          childrenPadding: const EdgeInsets.fromLTRB(
+            YLSpacing.lg,
+            0,
+            YLSpacing.lg,
+            YLSpacing.lg,
+          ),
+          children: [
+            // Mode override
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                s.overwriteModeLabel,
+                style: YLText.label.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? Colors.white : YLColors.zinc900,
                 ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          // Mixed-port override
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Text(
-              s.overwritePortLabel,
-              style: Theme.of(
-                context,
-              ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w600),
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _portCtrl,
-            keyboardType: TextInputType.number,
-            decoration: InputDecoration(
-              hintText: s.overwritePortHint,
-              border: const OutlineInputBorder(),
-              isDense: true,
+            const SizedBox(height: YLSpacing.sm),
+            Wrap(
+              spacing: YLSpacing.sm,
+              children: [
+                for (final mode in _modes)
+                  ChoiceChip(
+                    label: Text(mode.isEmpty ? s.overwriteModeNone : mode),
+                    selected: _data.mode == (mode.isEmpty ? null : mode),
+                    onSelected: (_) => setState(() {
+                      _data.mode = mode.isEmpty ? null : mode;
+                    }),
+                  ),
+              ],
             ),
-          ),
-        ],
+            const SizedBox(height: YLSpacing.xl),
+            // Mixed-port override
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                s.overwritePortLabel,
+                style: YLText.label.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? Colors.white : YLColors.zinc900,
+                ),
+              ),
+            ),
+            const SizedBox(height: YLSpacing.sm),
+            TextField(
+              controller: _portCtrl,
+              keyboardType: TextInputType.number,
+              decoration: InputDecoration(
+                hintText: s.overwritePortHint,
+                border: const OutlineInputBorder(),
+                isDense: true,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -433,42 +501,47 @@ class _OverwritePageState extends State<OverwritePage> {
         final confirmed = await _showDiscardDialog(s);
         if (confirmed && mounted) nav.pop();
       },
-      child: Scaffold(
-        appBar: AppBar(
-          leading: const BackButton(),
-          title: Text(s.overwriteTitle),
-          actions: [
-            if (_saving)
-              const Padding(
-                padding: EdgeInsets.all(16),
-                child: SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-              )
-            else
-              TextButton(onPressed: _save, child: Text(s.save)),
-          ],
-        ),
-        body: _loading
-            ? const Center(child: CircularProgressIndicator())
-            : Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 720),
-                  child: ListView(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-                    children: [
-                      _sectionTitle(s.overwriteTabRules),
-                      _buildRulesCard(s, context),
-                      _sectionTitle(s.overwriteExtraYamlLabel),
-                      _buildExtraYamlCard(s, context),
-                      const SizedBox(height: 16),
-                      _buildAdvancedCard(s, context),
-                    ],
-                  ),
-                ),
+      child: YLLargeTitleScaffold(
+        title: s.overwriteTitle,
+        actions: [
+          if (_saving)
+            const Padding(
+              padding: EdgeInsets.all(YLSpacing.lg),
+              child: SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
               ),
+            )
+          else
+            TextButton(onPressed: _save, child: Text(s.save)),
+        ],
+        slivers: [
+          if (_loading)
+            const SliverFillRemaining(
+              hasScrollBody: false,
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(
+                YLSpacing.lg,
+                0,
+                YLSpacing.lg,
+                YLSpacing.xl,
+              ),
+              sliver: SliverList(
+                delegate: SliverChildListDelegate([
+                  _sectionHeader(s.overwriteTabRules, first: true),
+                  _buildRulesCard(s, context),
+                  _sectionHeader(s.overwriteExtraYamlLabel),
+                  _buildExtraYamlCard(s, context),
+                  const SizedBox(height: YLSpacing.lg),
+                  _buildAdvancedCard(s, context),
+                ]),
+              ),
+            ),
+        ],
       ),
     );
   }

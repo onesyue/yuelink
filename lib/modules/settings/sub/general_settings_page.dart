@@ -12,6 +12,7 @@ import '../../../i18n/strings_g.dart';
 import '../../../core/providers/core_provider.dart';
 import '../../../shared/app_notifier.dart';
 import '../../../shared/telemetry.dart';
+import '../../../shared/widgets/yl_scaffold.dart';
 import '../../../theme.dart';
 import '../providers/settings_providers.dart';
 import '../widgets/primitives.dart';
@@ -176,17 +177,13 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
         ? Colors.white.withValues(alpha: 0.06)
         : Colors.black.withValues(alpha: 0.06);
 
-    return Scaffold(
-      appBar: AppBar(
-        leading: const BackButton(),
-        title: Text(s.preferencesLabel),
-      ),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 720),
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
-            children: [
+    return YLLargeTitleScaffold(
+      title: s.preferencesLabel,
+      slivers: [
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(0, 0, 0, YLSpacing.xxl),
+          sliver: SliverList(
+            delegate: SliverChildListDelegate([
               const AppearanceSection(),
 
               // === 连接 / Connection ===
@@ -541,10 +538,10 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
               ],
 
               const PrivacySection(),
-            ],
+            ]),
           ),
         ),
-      ),
+      ],
     );
   }
 }

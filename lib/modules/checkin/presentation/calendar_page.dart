@@ -3,9 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../domain/checkin/sign_calendar_entity.dart';
 import '../../../i18n/app_strings.dart';
+import '../../../shared/widgets/yl_scaffold.dart';
+import '../../../theme.dart';
 import '../../yue_auth/providers/yue_auth_providers.dart';
 import '../providers/checkin_provider.dart';
-import '../../../theme.dart';
 import 'calendar_widget.dart';
 import 'resign_dialog.dart';
 
@@ -106,50 +107,50 @@ class _CheckinCalendarPageState extends ConsumerState<CheckinCalendarPage> {
   Widget build(BuildContext context) {
     final s = S.of(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bg = isDark ? YLColors.zinc950 : YLColors.zinc100;
     final surface = isDark ? YLColors.zinc900 : Colors.white;
     final border = isDark
         ? Colors.white.withValues(alpha: 0.08)
         : Colors.black.withValues(alpha: 0.06);
 
-    return Scaffold(
-      backgroundColor: bg,
-      appBar: AppBar(
-        title: Text(s.calendarTitle),
-        backgroundColor: bg,
-        elevation: 0,
-      ),
-      body: RefreshIndicator(
-        onRefresh: _load,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-          children: [
-            // 月份切换
-            _MonthHeader(
-              viewMonth: _viewMonth,
-              onPrev: _gotoPrev,
-              onNext: _gotoNext,
-              isDark: isDark,
-            ),
-            const SizedBox(height: 12),
-            Container(
-              decoration: BoxDecoration(
-                color: surface,
-                borderRadius: BorderRadius.circular(YLRadius.lg),
-                border: Border.all(color: border, width: 0.5),
+    return YLLargeTitleScaffold(
+      title: s.calendarTitle,
+      onRefresh: _load,
+      slivers: [
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(
+            YLSpacing.lg,
+            0,
+            YLSpacing.lg,
+            YLSpacing.xl,
+          ),
+          sliver: SliverList(
+            delegate: SliverChildListDelegate([
+              _MonthHeader(
+                viewMonth: _viewMonth,
+                onPrev: _gotoPrev,
+                onNext: _gotoNext,
+                isDark: isDark,
               ),
-              padding: const EdgeInsets.all(12),
-              child: _buildBody(isDark),
-            ),
-            const SizedBox(height: 12),
-            _buildSummary(isDark, surface, border),
-            const SizedBox(height: 16),
-            _buildActions(),
-            const SizedBox(height: 12),
-            _buildLegend(isDark),
-          ],
+              const SizedBox(height: YLSpacing.md),
+              Container(
+                decoration: BoxDecoration(
+                  color: surface,
+                  borderRadius: BorderRadius.circular(YLRadius.lg),
+                  border: Border.all(color: border, width: 0.5),
+                ),
+                padding: const EdgeInsets.all(YLSpacing.md),
+                child: _buildBody(isDark),
+              ),
+              const SizedBox(height: YLSpacing.md),
+              _buildSummary(isDark, surface, border),
+              const SizedBox(height: YLSpacing.lg),
+              _buildActions(),
+              const SizedBox(height: YLSpacing.md),
+              _buildLegend(isDark),
+            ]),
+          ),
         ),
-      ),
+      ],
     );
   }
 
@@ -245,7 +246,7 @@ class _CheckinCalendarPageState extends ConsumerState<CheckinCalendarPage> {
           Expanded(
             child: OutlinedButton.icon(
               onPressed: _onResign,
-              icon: const Icon(Icons.replay_outlined, size: 18),
+              icon: const Icon(Icons.replay_rounded, size: 18),
               label: Text(
                 s.calendarBtnResignWithCost(cost: '${data.signCardCost}'),
               ),

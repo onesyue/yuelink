@@ -4,8 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/kernel/core_manager.dart';
 import '../../../i18n/app_strings.dart';
 import '../../../domain/models/proxy_provider.dart';
-import '../providers/proxy_providers_provider.dart';
 import '../../../shared/app_notifier.dart';
+import '../../../shared/widgets/yl_scaffold.dart';
+import '../../../theme.dart';
+import '../providers/proxy_providers_provider.dart';
 
 class ProxyProviderPage extends ConsumerStatefulWidget {
   const ProxyProviderPage({super.key});
@@ -28,50 +30,70 @@ class _ProxyProviderPageState extends ConsumerState<ProxyProviderPage> {
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final providers = ref.watch(proxyProvidersProvider);
 
-    return Scaffold(
-      appBar: AppBar(
-        leading: const BackButton(),
-        title: Text(s.proxyProviderTitle),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.rule_folder_outlined),
-            tooltip: '刷新所有规则集',
-            onPressed: _refreshAllRuleProviders,
-          ),
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            tooltip: s.retry,
-            onPressed: () =>
-                ref.read(proxyProvidersProvider.notifier).refresh(),
-          ),
-        ],
-      ),
-      body: providers.isEmpty
-          ? Center(
-              child: Text(s.proxyProviderEmpty,
-                  style: Theme.of(context).textTheme.bodyMedium))
-          : RefreshIndicator(
-              onRefresh: () async {
-                await ref
-                    .read(proxyProvidersProvider.notifier)
-                    .refresh();
-              },
-              child: ListView.builder(
-                padding: const EdgeInsets.all(12),
-                itemCount: providers.length,
-                itemBuilder: (context, index) {
-                  final p = providers[index];
-                  return _ProviderCard(
-                    provider: p,
-                    isUpdating: _updatingSet.contains(p.name),
-                    onUpdate: () => _updateProvider(p.name),
-                    onHealthCheck: () => _healthCheck(p.name),
-                  );
-                },
+    return YLLargeTitleScaffold(
+      title: s.proxyProviderTitle,
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.rule_folder_rounded),
+          tooltip: '刷新所有规则集',
+          onPressed: _refreshAllRuleProviders,
+        ),
+        IconButton(
+          icon: const Icon(Icons.refresh),
+          tooltip: s.retry,
+          onPressed: () =>
+              ref.read(proxyProvidersProvider.notifier).refresh(),
+        ),
+      ],
+      onRefresh: () async {
+        await ref.read(proxyProvidersProvider.notifier).refresh();
+      },
+      slivers: [
+        if (providers.isEmpty)
+          SliverFillRemaining(
+            hasScrollBody: false,
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(YLSpacing.xl),
+                child: Text(
+                  s.proxyProviderEmpty,
+                  style: YLText.body.copyWith(
+                    color: isDark ? YLColors.zinc500 : YLColors.zinc500,
+                  ),
+                ),
               ),
             ),
+          )
+        else
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(
+              YLSpacing.lg,
+              YLSpacing.sm,
+              YLSpacing.lg,
+              YLSpacing.lg,
+            ),
+            sliver: SliverList(
+              delegate: SliverChildBuilderDelegate(
+                (context, index) {
+                  final p = providers[index];
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: YLSpacing.sm),
+                    child: _ProviderCard(
+                      provider: p,
+                      isUpdating: _updatingSet.contains(p.name),
+                      onUpdate: () => _updateProvider(p.name),
+                      onHealthCheck: () => _healthCheck(p.name),
+                    ),
+                  );
+                },
+                childCount: providers.length,
+              ),
+            ),
+          ),
+      ],
     );
   }
 
@@ -150,91 +172,161 @@ class _ProviderCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final surface = isDark ? YLColors.zinc900 : Colors.white;
+    final border = isDark
+        ? Colors.white.withValues(alpha: 0.06)
+        : Colors.black.withValues(alpha: 0.06);
+    final iconColor = provider.vehicleType == 'HTTP'
+        ? const Color(0xFF3B82F6)
+        : const Color(0xFF14B8A6);
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: ExpansionTile(
-        leading: Icon(
-          provider.vehicleType == 'HTTP'
-              ? Icons.cloud_outlined
-              : Icons.folder_outlined,
-          size: 20,
-          color: Theme.of(context).colorScheme.primary,
-        ),
-        title: Text(provider.name,
-            style: const TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: Row(
-          children: [
-            _VehicleChip(type: provider.vehicleType),
-            const SizedBox(width: 8),
-            Text(
-              s.providerNodeCount(provider.count),
-              style: Theme.of(context).textTheme.bodySmall,
+    return Container(
+      decoration: BoxDecoration(
+        color: surface,
+        borderRadius: BorderRadius.circular(YLRadius.lg),
+        border: Border.all(color: border, width: 0.5),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Theme(
+        // Strip the divider lines that ExpansionTile draws by default —
+        // we render our own via the surrounding container.
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          tilePadding: const EdgeInsets.symmetric(
+            horizontal: YLSpacing.lg,
+            vertical: 0,
+          ),
+          childrenPadding: EdgeInsets.zero,
+          leading: Icon(
+            provider.vehicleType == 'HTTP'
+                ? Icons.cloud_rounded
+                : Icons.folder_rounded,
+            size: 20,
+            color: iconColor,
+          ),
+          title: Text(
+            provider.name,
+            style: YLText.body.copyWith(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: isDark ? Colors.white : YLColors.zinc900,
             ),
-          ],
-        ),
-        trailing: isUpdating
-            ? const SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            : const Icon(Icons.expand_more, size: 20),
-        children: [
-          if (provider.updatedAt != null)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
-              child: Row(
-                children: [
-                  Icon(Icons.access_time,
-                      size: 14,
-                      color: Theme.of(context)
-                          .colorScheme
-                          .onSurfaceVariant),
-                  const SizedBox(width: 4),
-                  Text(
-                    _formatTime(provider.updatedAt!),
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
-              ),
-            ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+          ),
+          subtitle: Padding(
+            padding: const EdgeInsets.only(top: 4),
             child: Row(
               children: [
-                OutlinedButton.icon(
-                  onPressed: isUpdating ? null : onUpdate,
-                  icon: const Icon(Icons.sync, size: 16),
-                  label: Text(s.providerUpdate),
-                ),
-                const SizedBox(width: 8),
-                OutlinedButton.icon(
-                  onPressed: isUpdating ? null : onHealthCheck,
-                  icon: const Icon(Icons.favorite_border, size: 16),
-                  label: Text(s.providerHealthCheck),
+                _VehicleChip(type: provider.vehicleType),
+                const SizedBox(width: YLSpacing.sm),
+                Text(
+                  s.providerNodeCount(provider.count),
+                  style: YLText.caption.copyWith(
+                    color: isDark ? YLColors.zinc400 : YLColors.zinc500,
+                  ),
                 ),
               ],
             ),
           ),
-          if (provider.proxies.isNotEmpty)
+          trailing: isUpdating
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : Icon(
+                  Icons.expand_more,
+                  size: 20,
+                  color: isDark ? YLColors.zinc500 : YLColors.zinc400,
+                ),
+          children: [
+            if (provider.updatedAt != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  YLSpacing.lg,
+                  0,
+                  YLSpacing.lg,
+                  YLSpacing.xs,
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.access_time,
+                      size: 14,
+                      color: isDark ? YLColors.zinc500 : YLColors.zinc400,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      _formatTime(provider.updatedAt!),
+                      style: YLText.caption.copyWith(
+                        color: isDark ? YLColors.zinc400 : YLColors.zinc500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-              child: Wrap(
-                spacing: 6,
-                runSpacing: 4,
-                children: provider.proxies.map((name) {
-                  return Chip(
-                    label: Text(name,
-                        style: const TextStyle(fontSize: 11)),
-                    visualDensity: VisualDensity.compact,
-                    materialTapTargetSize:
-                        MaterialTapTargetSize.shrinkWrap,
-                  );
-                }).toList(),
+              padding: const EdgeInsets.fromLTRB(
+                YLSpacing.md,
+                YLSpacing.xs,
+                YLSpacing.md,
+                YLSpacing.md,
+              ),
+              child: Row(
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: isUpdating ? null : onUpdate,
+                    icon: const Icon(Icons.sync, size: 16),
+                    label: Text(s.providerUpdate),
+                  ),
+                  const SizedBox(width: YLSpacing.sm),
+                  OutlinedButton.icon(
+                    onPressed: isUpdating ? null : onHealthCheck,
+                    icon: const Icon(Icons.favorite_border, size: 16),
+                    label: Text(s.providerHealthCheck),
+                  ),
+                ],
               ),
             ),
-        ],
+            if (provider.proxies.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  YLSpacing.md,
+                  0,
+                  YLSpacing.md,
+                  YLSpacing.md,
+                ),
+                child: Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: provider.proxies.map((name) {
+                    return Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? Colors.white.withValues(alpha: 0.06)
+                            : Colors.black.withValues(alpha: 0.04),
+                        borderRadius:
+                            BorderRadius.circular(YLRadius.sm),
+                      ),
+                      child: Text(
+                        name,
+                        style: YLText.caption.copyWith(
+                          fontSize: 11,
+                          color: isDark
+                              ? YLColors.zinc300
+                              : YLColors.zinc700,
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -255,12 +347,13 @@ class _VehicleChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = type == 'HTTP' ? Colors.blue : Colors.teal;
+    final color =
+        type == 'HTTP' ? const Color(0xFF3B82F6) : const Color(0xFF14B8A6);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: BorderRadius.circular(YLRadius.sm),
       ),
       child: Text(
         type,

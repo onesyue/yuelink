@@ -6,6 +6,9 @@ import 'package:flutter/services.dart';
 import '../../../i18n/app_strings.dart';
 import '../../../shared/app_notifier.dart';
 import '../../../shared/telemetry.dart';
+import '../../../shared/widgets/setting_icon.dart';
+import '../../../shared/widgets/yl_list.dart';
+import '../../../shared/widgets/yl_scaffold.dart';
 import '../../../theme.dart';
 
 /// Read-only view of the last ~50 events recorded by [Telemetry]. Used as a
@@ -22,98 +25,105 @@ class TelemetryPreviewPage extends StatelessWidget {
     final clientId = Telemetry.clientId;
     final sessionId = Telemetry.sessionId;
 
-    return Scaffold(
-      appBar: AppBar(
-        leading: const BackButton(),
-        title: Text(s.telemetryViewEvents),
-      ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _IdRow(
-            label: s.telemetryClientId,
-            value: clientId,
-          ),
-          Divider(
-            height: 1,
-            color: isDark ? YLColors.zinc700 : YLColors.zinc200,
-          ),
-          _IdRow(
-            label: s.telemetrySessionId,
-            value: sessionId,
-          ),
-          Divider(
-            height: 1,
-            color: isDark ? YLColors.zinc700 : YLColors.zinc200,
-          ),
-          Padding(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: Text(
-              s.telemetryEventCount(events.length),
-              style: YLText.caption.copyWith(
-                color: isDark ? YLColors.zinc400 : YLColors.zinc500,
-              ),
-            ),
-          ),
-          Expanded(
-            child: events.isEmpty
-                ? Center(
-                    child: Text(
-                      s.telemetryEmpty,
-                      style: YLText.body.copyWith(color: YLColors.zinc400),
-                    ),
-                  )
-                : ListView.separated(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    itemCount: events.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 6),
-                    itemBuilder: (_, i) => _EventTile(event: events[i]),
+    return YLLargeTitleScaffold(
+      title: s.telemetryViewEvents,
+      slivers: [
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.only(top: YLSpacing.sm),
+            child: YLSection(
+              children: [
+                YLListTile(
+                  leading: const YLSettingIcon(
+                    icon: Icons.fingerprint_rounded,
+                    color: Color(0xFF6366F1),
                   ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _IdRow extends StatelessWidget {
-  final String label;
-  final String value;
-  const _IdRow({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: () {
-        Clipboard.setData(ClipboardData(text: value));
-        AppNotifier.success(S.current.copiedToClipboard);
-      },
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Row(
-          children: [
-            Expanded(
-              flex: 1,
-              child: Text(label, style: YLText.body),
-            ),
-            Expanded(
-              flex: 2,
-              child: Text(
-                value,
-                style: YLText.caption.copyWith(
-                  fontFamily: 'monospace',
-                  color: YLColors.zinc500,
+                  title: s.telemetryClientId,
+                  subtitle: clientId,
+                  trailing: const Icon(
+                    Icons.copy_rounded,
+                    size: 16,
+                    color: YLColors.zinc400,
+                  ),
+                  onTap: () {
+                    Clipboard.setData(ClipboardData(text: clientId));
+                    AppNotifier.success(S.current.copiedToClipboard);
+                  },
                 ),
-                textAlign: TextAlign.right,
-                overflow: TextOverflow.ellipsis,
+                YLListTile(
+                  leading: const YLSettingIcon(
+                    icon: Icons.schedule_rounded,
+                    color: Color(0xFF3B82F6),
+                  ),
+                  title: s.telemetrySessionId,
+                  subtitle: sessionId,
+                  trailing: const Icon(
+                    Icons.copy_rounded,
+                    size: 16,
+                    color: YLColors.zinc400,
+                  ),
+                  onTap: () {
+                    Clipboard.setData(ClipboardData(text: sessionId));
+                    AppNotifier.success(S.current.copiedToClipboard);
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+              YLSpacing.lg + YLSpacing.md,
+              YLSpacing.lg,
+              YLSpacing.lg + YLSpacing.md,
+              YLSpacing.sm,
+            ),
+            child: Text(
+              s.telemetryEventCount(events.length).toUpperCase(),
+              style: YLText.caption.copyWith(
+                color: isDark ? YLColors.zinc500 : YLColors.zinc500,
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                letterSpacing: 0,
               ),
             ),
-            const SizedBox(width: 6),
-            const Icon(Icons.copy_outlined, size: 14, color: YLColors.zinc400),
-          ],
+          ),
         ),
-      ),
+        if (events.isEmpty)
+          SliverFillRemaining(
+            hasScrollBody: false,
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(YLSpacing.xl),
+                child: Text(
+                  s.telemetryEmpty,
+                  style: YLText.body.copyWith(
+                    color: isDark ? YLColors.zinc500 : YLColors.zinc400,
+                  ),
+                ),
+              ),
+            ),
+          )
+        else
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(
+              YLSpacing.lg,
+              0,
+              YLSpacing.lg,
+              YLSpacing.lg,
+            ),
+            sliver: SliverList(
+              delegate: SliverChildBuilderDelegate(
+                (context, i) => Padding(
+                  padding: const EdgeInsets.only(bottom: YLSpacing.sm),
+                  child: _EventTile(event: events[i]),
+                ),
+                childCount: events.length,
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
@@ -125,7 +135,10 @@ class _EventTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bg = isDark ? YLColors.zinc800 : YLColors.zinc100;
+    final bg = isDark ? YLColors.zinc900 : Colors.white;
+    final border = isDark
+        ? Colors.white.withValues(alpha: 0.06)
+        : Colors.black.withValues(alpha: 0.06);
     final name = event['event'] as String? ?? '?';
     final tsMs = event['ts'] as int?;
     final time = tsMs != null
@@ -139,10 +152,14 @@ class _EventTile extends StatelessWidget {
       ..remove('platform')
       ..remove('version');
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: const EdgeInsets.symmetric(
+        horizontal: YLSpacing.md,
+        vertical: YLSpacing.sm + 2,
+      ),
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(YLRadius.md),
+        border: Border.all(color: border, width: 0.5),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -153,15 +170,19 @@ class _EventTile extends StatelessWidget {
                 child: Text(
                   name,
                   style: YLText.body.copyWith(
+                    fontSize: 13,
                     fontWeight: FontWeight.w600,
                     fontFamily: 'monospace',
+                    color: isDark ? Colors.white : YLColors.zinc900,
                   ),
                 ),
               ),
               if (time != null)
                 Text(
                   _fmt(time),
-                  style: YLText.caption.copyWith(color: YLColors.zinc400),
+                  style: YLText.caption.copyWith(
+                    color: isDark ? YLColors.zinc500 : YLColors.zinc400,
+                  ),
                 ),
             ],
           ),

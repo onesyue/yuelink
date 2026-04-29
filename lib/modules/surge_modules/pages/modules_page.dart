@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../i18n/app_strings.dart';
 import '../../../shared/widgets/empty_state.dart';
+import '../../../shared/widgets/yl_scaffold.dart';
 import '../../../theme.dart';
 import '../providers/mitm_provider.dart';
 import '../providers/module_provider.dart';
@@ -28,78 +29,104 @@ class ModulesPage extends ConsumerWidget {
         .where((m) => m.enabled)
         .fold<int>(0, (sum, m) => sum + m.mitmHostnames.length);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(s.modulesLabel),
-        centerTitle: false,
-        actions: [
-          if (state.modules.isNotEmpty)
-            IconButton(
-              icon: const Icon(Icons.add),
-              tooltip: s.moduleAddUrl,
-              onPressed: () => _showAddSheet(context, ref),
-            ),
-        ],
-      ),
-      body: RefreshIndicator(
-        onRefresh: () => ref.read(moduleProvider.notifier).refreshAll(),
-        child: state.isLoading && state.modules.isEmpty
-            ? const Center(child: CircularProgressIndicator())
-            : state.modules.isEmpty
-            ? _EmptyState(onAdd: () => _showAddSheet(context, ref))
-            : ListView(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
-                children: [
-                  // MITM Engine card (always shown when modules exist)
-                  _MitmEngineCard(hasMitmHostnames: totalMitmHostnames > 0),
-                  const SizedBox(height: 12),
+    final List<Widget> bodyChildren = [];
 
-                  // Header summary
-                  if (activeCount > 0) ...[
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: Text(
-                        '$activeCount active module${activeCount > 1 ? 's' : ''} · $totalRules rules injected'
-                        '${totalMitmHostnames > 0 ? ' · $totalMitmHostnames MITM hostnames' : ''}',
-                        style: YLText.caption.copyWith(
-                          color: YLColors.zinc500,
-                          letterSpacing: 0,
-                        ),
-                      ),
-                    ),
-                  ],
-                  // Error banner
-                  if (state.error != null) ...[
-                    _ErrorBanner(error: state.error!),
-                    const SizedBox(height: 12),
-                  ],
-                  // Module list
-                  ...state.modules.map(
-                    (module) => Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: ModuleCard(
-                        module: module,
-                        onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) =>
-                                ModuleDetailPage(moduleId: module.id),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
+    if (state.isLoading && state.modules.isEmpty) {
+      // Centered spinner while initial load is in flight.
+      bodyChildren.add(
+        const Padding(
+          padding: EdgeInsets.symmetric(vertical: YLSpacing.massive),
+          child: Center(child: CircularProgressIndicator()),
+        ),
+      );
+    } else if (state.modules.isEmpty) {
+      bodyChildren.add(
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: YLSpacing.xxl),
+          child: _EmptyState(onAdd: () => _showAddSheet(context, ref)),
+        ),
+      );
+    } else {
+      // MITM Engine card (always shown when modules exist)
+      bodyChildren.add(_MitmEngineCard(hasMitmHostnames: totalMitmHostnames > 0));
+      bodyChildren.add(const SizedBox(height: YLSpacing.md));
+
+      // Header summary
+      if (activeCount > 0) {
+        bodyChildren.add(
+          Padding(
+            padding: const EdgeInsets.only(bottom: YLSpacing.md),
+            child: Text(
+              '$activeCount active module${activeCount > 1 ? 's' : ''} · $totalRules rules injected'
+              '${totalMitmHostnames > 0 ? ' · $totalMitmHostnames MITM hostnames' : ''}',
+              style: YLText.caption.copyWith(
+                color: YLColors.zinc500,
+                letterSpacing: 0,
               ),
-      ),
-      floatingActionButton: state.modules.isEmpty
-          ? null
-          : FloatingActionButton(
-              onPressed: () => _showAddSheet(context, ref),
-              child: const Icon(Icons.add),
             ),
+          ),
+        );
+      }
+
+      // Error banner
+      if (state.error != null) {
+        bodyChildren.add(_ErrorBanner(error: state.error!));
+        bodyChildren.add(const SizedBox(height: YLSpacing.md));
+      }
+
+      // Module list
+      for (final module in state.modules) {
+        bodyChildren.add(
+          Padding(
+            padding: const EdgeInsets.only(bottom: YLSpacing.sm + 2),
+            child: ModuleCard(
+              module: module,
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => ModuleDetailPage(moduleId: module.id),
+                ),
+              ),
+            ),
+          ),
+        );
+      }
+    }
+
+    return Scaffold(
+      // The scaffold backgroung+FAB are managed by YLLargeTitleScaffold's
+      // inner Scaffold; we wrap that one in another to host the FAB.
+      // But to keep things simple we drop the FAB into the scrollable body
+      // by using a Stack via the bottomBar slot — instead, mount FAB on
+      // the outer Scaffold below.
+      body: _ScaffoldWithFab(
+        showFab: state.modules.isNotEmpty,
+        onFabPressed: () => _showAddSheet(context, ref),
+        child: YLLargeTitleScaffold(
+          title: s.modulesLabel,
+          actions: [
+            if (state.modules.isNotEmpty)
+              IconButton(
+                icon: const Icon(Icons.add),
+                tooltip: s.moduleAddUrl,
+                onPressed: () => _showAddSheet(context, ref),
+              ),
+          ],
+          onRefresh: () => ref.read(moduleProvider.notifier).refreshAll(),
+          slivers: [
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(
+                YLSpacing.lg,
+                0,
+                YLSpacing.lg,
+                YLSpacing.xl,
+              ),
+              sliver: SliverList(
+                delegate: SliverChildListDelegate(bodyChildren),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -112,6 +139,40 @@ class ModulesPage extends ConsumerWidget {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (_) => const AddModuleSheet(),
+    );
+  }
+}
+
+/// Overlay scaffold that paints a floating "+" FAB on top of the
+/// large-title scaffold — kept here so we can have a real Scaffold
+/// hosting the FAB without disturbing the YLLargeTitleScaffold's own
+/// background tokens.
+class _ScaffoldWithFab extends StatelessWidget {
+  final bool showFab;
+  final VoidCallback onFabPressed;
+  final Widget child;
+
+  const _ScaffoldWithFab({
+    required this.showFab,
+    required this.onFabPressed,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        Positioned.fill(child: child),
+        if (showFab)
+          Positioned(
+            right: YLSpacing.lg,
+            bottom: YLSpacing.lg,
+            child: FloatingActionButton(
+              onPressed: onFabPressed,
+              child: const Icon(Icons.add),
+            ),
+          ),
+      ],
     );
   }
 }
@@ -141,11 +202,16 @@ class _MitmEngineCard extends ConsumerWidget {
         border: Border.all(
           color: engine.running
               ? YLColors.connected.withValues(alpha: 0.25)
-              : (isDark ? YLColors.zinc800 : YLColors.zinc200),
+              : (isDark
+                    ? Colors.white.withValues(alpha: 0.06)
+                    : Colors.black.withValues(alpha: 0.06)),
           width: 0.5,
         ),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: const EdgeInsets.symmetric(
+        horizontal: YLSpacing.lg,
+        vertical: YLSpacing.md,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -161,7 +227,7 @@ class _MitmEngineCard extends ConsumerWidget {
               Text(
                 s.mitmEngine,
                 style: YLText.label.copyWith(
-                  color: isDark ? YLColors.zinc200 : YLColors.zinc800,
+                  color: isDark ? Colors.white : YLColors.zinc900,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -178,7 +244,7 @@ class _MitmEngineCard extends ConsumerWidget {
 
           // Port info when running
           if (engine.running) ...[
-            const SizedBox(height: 4),
+            const SizedBox(height: YLSpacing.xs),
             Text(
               '${s.mitmEnginePort}: ${engine.port}',
               style: YLText.caption.copyWith(color: YLColors.zinc500),
@@ -194,9 +260,15 @@ class _MitmEngineCard extends ConsumerWidget {
             ),
           ],
 
-          const SizedBox(height: 10),
-          const Divider(height: 1),
-          const SizedBox(height: 10),
+          const SizedBox(height: YLSpacing.sm + 2),
+          Divider(
+            height: 1,
+            thickness: 0.33,
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.06)
+                : Colors.black.withValues(alpha: 0.06),
+          ),
+          const SizedBox(height: YLSpacing.sm + 2),
 
           // Action row
           Row(
@@ -225,27 +297,33 @@ class _MitmEngineCard extends ConsumerWidget {
                   style: OutlinedButton.styleFrom(
                     foregroundColor: engine.running
                         ? YLColors.error
-                        : (isDark ? YLColors.zinc200 : YLColors.zinc800),
+                        : (isDark ? Colors.white : YLColors.zinc900),
                     side: BorderSide(
                       color: engine.running
                           ? YLColors.error.withValues(alpha: 0.4)
-                          : (isDark ? YLColors.zinc700 : YLColors.zinc300),
+                          : (isDark
+                                ? Colors.white.withValues(alpha: 0.12)
+                                : Colors.black.withValues(alpha: 0.12)),
                     ),
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: YLSpacing.sm),
               // Certificate guide button
               OutlinedButton.icon(
                 onPressed: () => Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => const CertGuidePage()),
                 ),
-                icon: const Icon(Icons.verified_user_outlined, size: 16),
+                icon: const Icon(Icons.verified_user_rounded, size: 16),
                 label: Text(s.mitmCertTitle),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: isDark ? YLColors.zinc300 : YLColors.zinc600,
+                  foregroundColor: isDark
+                      ? YLColors.zinc300
+                      : YLColors.zinc600,
                   side: BorderSide(
-                    color: isDark ? YLColors.zinc700 : YLColors.zinc300,
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.12)
+                        : Colors.black.withValues(alpha: 0.12),
                   ),
                 ),
               ),
@@ -254,11 +332,11 @@ class _MitmEngineCard extends ConsumerWidget {
 
           // MITM hostnames hint
           if (hasMitmHostnames && !engine.running) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: YLSpacing.sm),
             Row(
               children: [
                 const Icon(
-                  Icons.info_outline,
+                  Icons.info_rounded,
                   size: 13,
                   color: YLColors.connecting,
                 ),
@@ -290,9 +368,9 @@ class _EmptyState extends StatelessWidget {
 
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(32),
+        padding: const EdgeInsets.all(YLSpacing.xxl),
         child: YLEmptyState(
-          icon: Icons.extension_outlined,
+          icon: Icons.extension_rounded,
           title: s.modulesEmpty,
           subtitle:
               'Add a .sgmodule URL to inject rules\ninto your proxy config.',
@@ -314,7 +392,10 @@ class _ErrorBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      padding: const EdgeInsets.symmetric(
+        horizontal: YLSpacing.lg,
+        vertical: YLSpacing.sm + 2,
+      ),
       decoration: BoxDecoration(
         color: YLColors.error.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(YLRadius.lg),
@@ -325,8 +406,8 @@ class _ErrorBanner extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Icon(Icons.error_outline, size: 16, color: YLColors.error),
-          const SizedBox(width: 8),
+          const Icon(Icons.error_rounded, size: 16, color: YLColors.error),
+          const SizedBox(width: YLSpacing.sm),
           Expanded(
             child: Text(
               error,
