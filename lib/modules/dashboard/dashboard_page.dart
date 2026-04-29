@@ -14,7 +14,6 @@ import '../profiles/providers/profiles_providers.dart';
 import '../../shared/app_notifier.dart';
 import '../../core/kernel/core_manager.dart';
 import '../../infrastructure/repositories/profile_repository.dart';
-import '../connections/providers/connections_providers.dart';
 import '../../theme.dart';
 import '../announcements/providers/announcements_providers.dart';
 import '../mine/providers/account_providers.dart';
@@ -125,7 +124,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                       borderRadius: BorderRadius.circular(YLRadius.lg),
                     ),
                     child: const Icon(
-                      Icons.movie_outlined,
+                      Icons.movie_rounded,
                       color: YLColors.primary,
                       size: 24,
                     ),
@@ -195,15 +194,16 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     final status = ref.watch(displayCoreStatusProvider);
     final isRunning = status == CoreStatus.running;
 
-    // Activate stream providers without triggering Dashboard rebuilds.
-    // These are Provider<void> — they only need to be "kept alive" while
-    // the core is running. Using ref.listen (not ref.watch) ensures the
-    // streams run but don't cause this widget to rebuild every second.
+    // Activate background streams that the dashboard chart / hero card
+    // depends on. `connectionsStreamProvider` is intentionally NOT
+    // activated here — it powers MetricsRow inside the collapsed
+    // data-monitor section, which activates it on demand. Keeping that
+    // websocket paused while the section is closed cuts a 1-Hz main-isolate
+    // wakeup that has no visible consumer on the home screen.
     // coreHeartbeatProvider is watched globally in _YueLinkAppState.
     if (isRunning) {
       ref.listen(trafficStreamProvider, (_, _) {});
       ref.listen(memoryStreamProvider, (_, _) {});
-      ref.listen(connectionsStreamProvider, (_, _) {});
     }
 
     return YLLargeTitleScaffold(
@@ -572,7 +572,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
       context: context,
       builder: (ctx) => AlertDialog(
         icon: Icon(
-          success ? Icons.check_circle_outline : Icons.error_outline,
+          success ? Icons.check_circle_rounded : Icons.error_rounded,
           size: 48,
           color: success ? Colors.green : Colors.red,
         ),
@@ -709,7 +709,7 @@ class _IosVpnRationaleSheet extends StatelessWidget {
                     borderRadius: BorderRadius.circular(YLRadius.md),
                   ),
                   child: Icon(
-                    Icons.shield_outlined,
+                    Icons.shield_rounded,
                     size: 22,
                     color: textColor,
                   ),

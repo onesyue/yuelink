@@ -102,6 +102,16 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <!--
+            Disable Impeller on Android. Reproduced 2026-04-30 on SM-G9860
+            (Adreno 660, Android 13): switching tabs in IndexedStack
+            triggers a 10s main-thread hang and ANR on first paint of the
+            destination page. Skia path renders the same UI without freezing.
+            Reassess once Impeller stabilises on Adreno + Vulkan.
+        -->
+        <meta-data
+            android:name="io.flutter.embedding.android.EnableImpeller"
+            android:value="false" />
     </application>
     <queries>
         <intent>

@@ -21,6 +21,11 @@ class MetricsRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final s = S.of(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    // Activate the connections websocket on demand: only the data-monitor
+    // expansion shows live count, so the stream stays paused while the
+    // section is collapsed (the default). Watching a `Provider<void>`
+    // keeps it alive without causing rebuilds.
+    ref.watch(connectionsStreamProvider);
     final connCount = ref.watch(connectionCountProvider);
     final mem = ref.watch(memoryUsageProvider);
 

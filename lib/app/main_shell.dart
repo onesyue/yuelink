@@ -1,6 +1,8 @@
-import 'dart:ui' show ImageFilter;
+import 'dart:developer' show Timeline;
 
+import 'package:flutter/cupertino.dart' show CupertinoTabBar;
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
@@ -51,14 +53,36 @@ class _MainShellState extends ConsumerState<MainShell> {
   ProviderSubscription? _tileNavSub;
 
   void switchTab(int index) {
+    final alreadyBuilt = _builtTabs[index] == true;
+    Timeline.startSync('MainShell.switchTab[$index] built=$alreadyBuilt');
+    // Always emit so profile builds (used for ANR diagnosis) can see it
+    // in logcat. Cost is one log line per user tab tap — negligible.
+    debugPrint('[MainShell] switchTab $index built=$alreadyBuilt');
+
+    // Step 1: flip the visible index immediately so the user sees a
+    // response. If the destination tab has never been built, IndexedStack
+    // shows SizedBox.shrink for one frame — that single blank frame is
+    // what gives the Choreographer enough budget to dispatch input
+    // instead of accumulating a 5-s queue and triggering ANR.
     setState(() {
       _currentIndex = index;
-      _builtTabs[index] = true;
     });
+    Timeline.finishSync();
+
+    // Step 2: schedule the heavy first-build for the next frame.
+    if (!alreadyBuilt) {
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _builtTabs[index] == true) return;
+        Timeline.startSync('MainShell.firstBuild[$index]');
+        setState(() => _builtTabs[index] = true);
+        Timeline.finishSync();
+      });
+    }
+
     SettingsService.setLastTabIndex(index);
-    SettingsService.setBuiltTabs(
-      _builtTabs.keys.where((k) => _builtTabs[k] == true).toList(),
-    );
+    // (B) Persist only the current tab — see initState comment. We never
+    // want to restore N tabs on the next cold start.
+    SettingsService.setBuiltTabs([index]);
   }
 
   static const _pages = [
@@ -74,13 +98,12 @@ class _MainShellState extends ConsumerState<MainShell> {
     _currentIndex = ref
         .read(initialTabIndexProvider)
         .clamp(0, _pages.length - 1);
-    // Restore previously visited tabs from persistence (Android process restore)
-    final savedTabs = ref.read(initialBuiltTabsProvider);
-    _builtTabs = <int, bool>{
-      for (final i in savedTabs)
-        if (i >= 0 && i < _pages.length) i: true,
-    };
-    _builtTabs[_currentIndex] = true;
+    // (B) Cold-start ANR fix: only mount the current tab. Pre-warming
+    // multiple tabs in a single frame builds 4 heavy pages on the
+    // critical path right after auto-connect — main thread starves and
+    // Android fires ANR before the first proxy_groups push lands.
+    // The "feel" benefit of pre-warming is small; the ANR risk is large.
+    _builtTabs = <int, bool>{_currentIndex: true};
 
     // Listen for one-shot navigation requests from outside the widget
     // tree (currently: Android tile long-press). Reset to null after
@@ -184,14 +207,41 @@ class _MainShellState extends ConsumerState<MainShell> {
           ],
         ),
       ),
-      bottomNavigationBar: _GlassBottomNav(
-        items: mobileItems,
+      // ANR root cause (2026-04-30, SM-G9860 Android 13 / Adreno 660):
+      // _GlassBottomNav rebuilds 4 nested animation widgets per tab tap
+      // (BackdropFilter + AnimatedSwitcher + AnimatedDefaultTextStyle +
+      // AnimatedScale on 4 tabs each). On Adreno 660 this single rebuild
+      // pegged the UI thread at 100% CPU for 10+ s and tripped the
+      // 5-s input-dispatcher ANR. v1.0.25 used CupertinoTabBar without
+      // issue; reverting to it on mobile is the cheapest fix while we
+      // figure out a glass design that doesn't burn the frame budget.
+      bottomNavigationBar: CupertinoTabBar(
         currentIndex: _currentIndex,
         onTap: (i) {
           if (i != _currentIndex) HapticFeedback.selectionClick();
           switchTab(i);
         },
-        isDark: isDark,
+        backgroundColor: Theme.of(
+          context,
+        ).colorScheme.surface.withValues(alpha: 0.92),
+        border: Border(
+          top: BorderSide(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.08)
+                : Colors.black.withValues(alpha: 0.08),
+            width: 0.33,
+          ),
+        ),
+        activeColor: isDark ? Colors.white : YLColors.primary,
+        inactiveColor: YLColors.zinc500,
+        items: [
+          for (final spec in mobileItems)
+            BottomNavigationBarItem(
+              icon: Icon(spec.icon, size: 22),
+              activeIcon: Icon(spec.activeIcon, size: 22),
+              label: spec.label,
+            ),
+        ],
       ),
     );
   }
@@ -210,173 +260,6 @@ class _GlassTabSpec {
   });
 }
 
-/// Cross-platform glass bottom bar. iOS / desktop get live backdrop blur;
-/// Android gets a stable translucent material fallback. Telegram exposes
-/// interface-effect controls for the same reason: glass should never outrank
-/// responsiveness or battery life.
-class _GlassBottomNav extends StatelessWidget {
-  final List<_GlassTabSpec> items;
-  final int currentIndex;
-  final ValueChanged<int> onTap;
-  final bool isDark;
-
-  const _GlassBottomNav({
-    required this.items,
-    required this.currentIndex,
-    required this.onTap,
-    required this.isDark,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final bottomInset = MediaQuery.viewPaddingOf(context).bottom;
-    final useLiveBackdrop =
-        Theme.of(context).platform != TargetPlatform.android &&
-        !MediaQuery.of(context).disableAnimations;
-    final glassColor = isDark
-        ? YLColors.zinc950.withValues(alpha: useLiveBackdrop ? 0.86 : 1)
-        : YLColors.zinc100.withValues(alpha: useLiveBackdrop ? 0.88 : 1);
-    final borderColor = isDark
-        ? Colors.white.withValues(alpha: 0.06)
-        : Colors.black.withValues(alpha: 0.06);
-    const blurSigma = 24.0;
-
-    final bar = DecoratedBox(
-      decoration: BoxDecoration(
-        color: glassColor,
-        border: Border(top: BorderSide(color: borderColor, width: 0.33)),
-      ),
-      child: SafeArea(
-        top: false,
-        child: SizedBox(
-          height: 58,
-          child: Padding(
-            padding: EdgeInsets.only(top: 4, bottom: bottomInset > 0 ? 0 : 6),
-            child: Row(
-              children: [
-                for (int i = 0; i < items.length; i++)
-                  Expanded(
-                    child: _GlassTabButton(
-                      spec: items[i],
-                      isActive: i == currentIndex,
-                      isDark: isDark,
-                      onTap: () => onTap(i),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-
-    return ClipRect(
-      child: useLiveBackdrop
-          ? BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
-              child: bar,
-            )
-          : bar,
-    );
-  }
-}
-
-/// One slot of [_GlassBottomNav]. Active state animates: outline→filled
-/// icon swap with overshoot scale, label colour + weight crossfade, and
-/// a subtle press-scale on tap-down. No text-only fallback variant —
-/// labels are always shown so the bar reads consistently across locales.
-class _GlassTabButton extends StatefulWidget {
-  final _GlassTabSpec spec;
-  final bool isActive;
-  final bool isDark;
-  final VoidCallback onTap;
-
-  const _GlassTabButton({
-    required this.spec,
-    required this.isActive,
-    required this.isDark,
-    required this.onTap,
-  });
-
-  @override
-  State<_GlassTabButton> createState() => _GlassTabButtonState();
-}
-
-class _GlassTabButtonState extends State<_GlassTabButton> {
-  bool _pressed = false;
-
-  Color get _activeColor => widget.isDark ? Colors.white : YLColors.primary;
-  Color get _inactiveColor =>
-      widget.isDark ? YLColors.zinc500 : YLColors.zinc500;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = widget.isActive ? _activeColor : _inactiveColor;
-    final iconData = widget.isActive
-        ? widget.spec.activeIcon
-        : widget.spec.icon;
-
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTapDown: (_) => setState(() => _pressed = true),
-      onTapCancel: () => setState(() => _pressed = false),
-      onTapUp: (_) => setState(() => _pressed = false),
-      onTap: widget.onTap,
-      child: AnimatedScale(
-        scale: _pressed ? 0.92 : 1.0,
-        duration: const Duration(milliseconds: 140),
-        curve: Curves.easeOut,
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SizedBox(
-                height: 24,
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 260),
-                  switchInCurve: Curves.easeOutBack,
-                  switchOutCurve: Curves.easeInCubic,
-                  transitionBuilder: (child, anim) {
-                    return ScaleTransition(
-                      scale: Tween<double>(begin: 0.55, end: 1.0).animate(
-                        CurvedAnimation(
-                          parent: anim,
-                          curve: Curves.easeOutBack,
-                        ),
-                      ),
-                      child: FadeTransition(opacity: anim, child: child),
-                    );
-                  },
-                  child: Icon(
-                    iconData,
-                    key: ValueKey('${widget.spec.label}-${widget.isActive}'),
-                    size: 22,
-                    color: color,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 2),
-              AnimatedDefaultTextStyle(
-                duration: const Duration(milliseconds: 220),
-                curve: Curves.easeOut,
-                style: TextStyle(
-                  fontSize: 10.5,
-                  height: 1.1,
-                  color: color,
-                  fontWeight: widget.isActive
-                      ? FontWeight.w600
-                      : FontWeight.w500,
-                  letterSpacing: 0,
-                ),
-                child: Text(widget.spec.label),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 // ── Sidebar ────────────────────────────────────────────────────────────────────
 
