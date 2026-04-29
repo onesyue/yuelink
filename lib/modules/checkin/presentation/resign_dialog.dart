@@ -3,9 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../domain/checkin/sign_calendar_entity.dart';
 import '../../../i18n/app_strings.dart';
-import '../../../infrastructure/checkin/checkin_repository.dart';
 import '../../../shared/app_notifier.dart';
 import '../../yue_auth/providers/yue_auth_providers.dart';
+import '../providers/checkin_provider.dart';
 import '../../../theme.dart';
 
 /// 补签卡确认弹窗。在用户从日历卡片点「⭐ 用 X 积分补昨天」时弹出。
@@ -53,7 +53,9 @@ class _ResignDialogState extends ConsumerState<ResignDialog> {
       return;
     }
 
-    final repo = CheckinRepository();
+    // 走 provider 拿 mihomo-proxy-aware 实例（与 checkin / fetchHistory 一致），
+    // 直接 new 在中国境内会被 GFW 拦死 yue.yuebao.website 导致永远 loading。
+    final repo = ref.read(checkinRepositoryProvider);
     final result = await repo.resign(token);
     if (!mounted) return;
 

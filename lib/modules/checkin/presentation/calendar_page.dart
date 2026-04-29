@@ -3,8 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../domain/checkin/sign_calendar_entity.dart';
 import '../../../i18n/app_strings.dart';
-import '../../../infrastructure/checkin/checkin_repository.dart';
 import '../../yue_auth/providers/yue_auth_providers.dart';
+import '../providers/checkin_provider.dart';
 import '../../../theme.dart';
 import 'calendar_widget.dart';
 import 'resign_dialog.dart';
@@ -59,7 +59,11 @@ class _CheckinCalendarPageState extends ConsumerState<CheckinCalendarPage> {
 
     final monthStr =
         '${_viewMonth.year.toString().padLeft(4, '0')}-${_viewMonth.month.toString().padLeft(2, '0')}';
-    final data = await CheckinRepository().fetchHistory(token, month: monthStr);
+    // 必须走 checkinRepositoryProvider 拿 mihomo-proxy-aware 实例 —— 直接 new 出来
+    // 的 CheckinRepository 不带 proxyPort，在中国境内会被 GFW 拦截 yue.yuebao.website
+    // 导致永远 loading（签到 POST 走 provider 没事，新加的日历 GET 没复用provider 直接挂）。
+    final repo = ref.read(checkinRepositoryProvider);
+    final data = await repo.fetchHistory(token, month: monthStr);
     if (!mounted) return;
     setState(() {
       _data = data;
