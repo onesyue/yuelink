@@ -744,11 +744,10 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
       if (!Platform.isIOS) return;
       final ctx = navigatorKey.currentContext;
       if (ctx == null || !ctx.mounted) return;
+      final secs = (next.elapsedMs / 1000).toStringAsFixed(1);
       IOSInstallGuidePage.push(
         ctx,
-        errorContext:
-            'VPN 进程在 ${(next.elapsedMs / 1000).toStringAsFixed(1)} 秒内被系统中止 — '
-            '极有可能是 iOS 巨魔 / 未签名 IPA 安装造成。请改用 AltStore / SideStore 自签后重新安装。',
+        errorContext: S.current.iosGuideErrorBanner(seconds: secs),
       );
     });
   }

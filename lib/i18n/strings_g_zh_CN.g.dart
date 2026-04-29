@@ -778,6 +778,69 @@ class TranslationsZhCn extends Translations with BaseTranslations<AppLocale, Tra
 	@override String get telemetrySessionId => '本次会话 ID';
 	@override String telemetryEventCount({required Object n}) => '最近 ${n} 条';
 	@override String get telemetryEmpty => '暂无事件';
+	@override String get calendarTitle => '签到日历';
+	@override String calendarMonthLabel({required Object year, required Object month}) => '${year} 年 ${month} 月';
+	@override String get calendarPrevMonth => '上个月';
+	@override String get calendarNextMonth => '下个月';
+	@override String get calendarLoadFailed => '加载失败，下拉重试';
+	@override String get calendarEmpty => '暂无数据';
+	@override String get calendarRetry => '重试';
+	@override String get calendarPleaseLogin => '请先登录';
+	@override String get calendarStreakLabel => '连续签到';
+	@override String get calendarSignedThisMonth => '本月已签';
+	@override String get calendarMultiplier => '加成';
+	@override String calendarBtnResignWithCost({required Object cost}) => '用 ${cost} 积分补昨天';
+	@override String get calendarBtnClose => '关闭';
+	@override String get calendarBtnSignedToday => '已签到';
+	@override String get calendarLegendSigned => '已签';
+	@override String get calendarLegendCard => '补签';
+	@override String get calendarLegendMissed => '断签';
+	@override String get calendarLegendTodayMiss => '今天未签';
+	@override String get calendarLegendFuture => '未来';
+	@override String get calendarUnit => '天';
+	@override String calendarSuffixOf({required Object total}) => '/${total}';
+	@override String get calendarEntryTitle => '签到日历';
+	@override String get calendarEntrySubtitle => '看月历 · 连签里程碑 · 用积分补签';
+	@override String get weekMon => '一';
+	@override String get weekTue => '二';
+	@override String get weekWed => '三';
+	@override String get weekThu => '四';
+	@override String get weekFri => '五';
+	@override String get weekSat => '六';
+	@override String get weekSun => '日';
+	@override String get resignTitle => '补签卡';
+	@override String resignDesc({required Object cost}) => '用 ${cost} 积分补回昨天的签到，连签不归零。';
+	@override String get resignCurrentPoints => '当前积分：';
+	@override String resignNeedPoints({required Object cost}) => '需要：${cost} 积分';
+	@override String get resignInsufficient => '积分不足，可以参加群里竞猜或每日签到攒积分';
+	@override String get resignCancel => '取消';
+	@override String get resignConfirm => '补签';
+	@override String get iosGuideTitle => 'iOS 安装方式';
+	@override String get iosGuideEntry => 'iOS 安装方式';
+	@override String get iosGuideIntro => 'iOS 上的 YueLink 通过侧载安装。三种方式各有取舍，连接 VPN 的可用性差异很大。';
+	@override String iosGuideErrorBanner({required Object seconds}) => 'VPN 进程在 ${seconds} 秒内被系统中止 — 极有可能是 iOS 巨魔 / 未签名 IPA 安装造成。请改用 AltStore / SideStore 自签后重新安装。';
+	@override String get iosGuideMethodAltstoreTitle => 'AltStore / SideStore';
+	@override String get iosGuideMethodAltstoreTag => '推荐';
+	@override String get iosGuideMethodAltstoreProVpn => '✅ VPN 完全可用（系统信任 entitlement）';
+	@override String get iosGuideMethodAltstoreProFree => '✅ 免费，用 Apple ID 自签';
+	@override String get iosGuideMethodAltstoreProDevice => '✅ 支持各代设备';
+	@override String get iosGuideMethodAltstoreCon7d => '⚠️ 自签 7 天到期，到期前需重签（电脑端 AltServer / SideServer）';
+	@override String get iosGuideMethodAltstoreConLimit => '⚠️ 一个免费 Apple ID 同时只能装 3 个 App';
+	@override String get iosGuideMethodAltstoreHowto => '电脑端装 AltServer / SideServer → iPhone 装 AltStore / SideStore App → 把 YueLink IPA 拖入电脑端工具或 AltStore 内导入 → 设置 → 通用 → VPN 与设备管理 → 信任开发者证书';
+	@override String get iosGuideMethodTrollTitle => 'TrollStore（巨魔）';
+	@override String get iosGuideMethodTrollTag => '不推荐用 VPN';
+	@override String get iosGuideMethodTrollProForever => '✅ 安装后永久有效，不需要重签';
+	@override String get iosGuideMethodTrollConVpn => '🚫 VPN（NetworkExtension）几乎不工作';
+	@override String get iosGuideMethodTrollConFail => '🚫 系统启动 PacketTunnel 后立刻丢弃，表现为「提示连接成功但实际无网络」';
+	@override String get iosGuideMethodTrollConDevice => '🚫 仅特定旧版 iOS 漏洞设备能装';
+	@override String get iosGuideMethodTrollHowto => '巨魔利用系统漏洞绕过签名校验，但 NetworkExtension 仍依赖 Apple 签发的 Provisioning Profile —— 巨魔安装的 IPA 拿不到这条信任链，系统会让 PacketTunnel 进程「看起来启动」但不放行任何包。\n\n如果你只用 YueLink 看 Emby 等不需要 VPN 的功能，巨魔可用；需要代理上网请改用 AltStore / SideStore。';
+	@override String get iosGuideMethodIpaTitle => 'IPA 直装 / 第三方分发';
+	@override String get iosGuideMethodIpaTag => '风险';
+	@override String get iosGuideMethodIpaProSigned => '✅ 部分商业证书签名版本可用';
+	@override String get iosGuideMethodIpaConRevoke => '⚠️ 商业证书随时可能被 Apple 撤销，撤销后整批闪退';
+	@override String get iosGuideMethodIpaConTamper => '⚠️ 第三方分发渠道存在篡改风险';
+	@override String get iosGuideMethodIpaHowto => '只接受官方 GitHub Releases 提供的 IPA 自行签名安装，不要使用来路不明的「已签名」安装包。';
+	@override String get iosGuideAck => '我知道了';
 }
 
 /// The flat map containing all translations for locale <zh-CN>.
@@ -1300,6 +1363,8 @@ extension on TranslationsZhCn {
 			'storeOrderHistory' => '订单记录',
 			'storeOrderNo' => '订单号',
 			'storeOrderDate' => '下单时间',
+			_ => null,
+		} ?? switch (path) {
 			'storeNoOrders' => '暂无订单记录',
 			'storeOrderDetail' => '订单详情',
 			'storeOrderStatusPending' => '待支付',
@@ -1315,8 +1380,6 @@ extension on TranslationsZhCn {
 			'noNetworkConnection' => '网络连接不可用',
 			'dashGreeting' => '你好',
 			'dashGreetingReturning' => '欢迎回来',
-			_ => null,
-		} ?? switch (path) {
 			'dashNoAnnouncements' => '暂无公告',
 			'dashViewAll' => '查看全部',
 			'dashNoPlan' => '暂无套餐信息',
@@ -1529,6 +1592,69 @@ extension on TranslationsZhCn {
 			'telemetrySessionId' => '本次会话 ID',
 			'telemetryEventCount' => ({required Object n}) => '最近 ${n} 条',
 			'telemetryEmpty' => '暂无事件',
+			'calendarTitle' => '签到日历',
+			'calendarMonthLabel' => ({required Object year, required Object month}) => '${year} 年 ${month} 月',
+			'calendarPrevMonth' => '上个月',
+			'calendarNextMonth' => '下个月',
+			'calendarLoadFailed' => '加载失败，下拉重试',
+			'calendarEmpty' => '暂无数据',
+			'calendarRetry' => '重试',
+			'calendarPleaseLogin' => '请先登录',
+			'calendarStreakLabel' => '连续签到',
+			'calendarSignedThisMonth' => '本月已签',
+			'calendarMultiplier' => '加成',
+			'calendarBtnResignWithCost' => ({required Object cost}) => '用 ${cost} 积分补昨天',
+			'calendarBtnClose' => '关闭',
+			'calendarBtnSignedToday' => '已签到',
+			'calendarLegendSigned' => '已签',
+			'calendarLegendCard' => '补签',
+			'calendarLegendMissed' => '断签',
+			'calendarLegendTodayMiss' => '今天未签',
+			'calendarLegendFuture' => '未来',
+			'calendarUnit' => '天',
+			'calendarSuffixOf' => ({required Object total}) => '/${total}',
+			'calendarEntryTitle' => '签到日历',
+			'calendarEntrySubtitle' => '看月历 · 连签里程碑 · 用积分补签',
+			'weekMon' => '一',
+			'weekTue' => '二',
+			'weekWed' => '三',
+			'weekThu' => '四',
+			'weekFri' => '五',
+			'weekSat' => '六',
+			'weekSun' => '日',
+			'resignTitle' => '补签卡',
+			'resignDesc' => ({required Object cost}) => '用 ${cost} 积分补回昨天的签到，连签不归零。',
+			'resignCurrentPoints' => '当前积分：',
+			'resignNeedPoints' => ({required Object cost}) => '需要：${cost} 积分',
+			'resignInsufficient' => '积分不足，可以参加群里竞猜或每日签到攒积分',
+			'resignCancel' => '取消',
+			'resignConfirm' => '补签',
+			'iosGuideTitle' => 'iOS 安装方式',
+			'iosGuideEntry' => 'iOS 安装方式',
+			'iosGuideIntro' => 'iOS 上的 YueLink 通过侧载安装。三种方式各有取舍，连接 VPN 的可用性差异很大。',
+			'iosGuideErrorBanner' => ({required Object seconds}) => 'VPN 进程在 ${seconds} 秒内被系统中止 — 极有可能是 iOS 巨魔 / 未签名 IPA 安装造成。请改用 AltStore / SideStore 自签后重新安装。',
+			'iosGuideMethodAltstoreTitle' => 'AltStore / SideStore',
+			'iosGuideMethodAltstoreTag' => '推荐',
+			'iosGuideMethodAltstoreProVpn' => '✅ VPN 完全可用（系统信任 entitlement）',
+			'iosGuideMethodAltstoreProFree' => '✅ 免费，用 Apple ID 自签',
+			'iosGuideMethodAltstoreProDevice' => '✅ 支持各代设备',
+			'iosGuideMethodAltstoreCon7d' => '⚠️ 自签 7 天到期，到期前需重签（电脑端 AltServer / SideServer）',
+			'iosGuideMethodAltstoreConLimit' => '⚠️ 一个免费 Apple ID 同时只能装 3 个 App',
+			'iosGuideMethodAltstoreHowto' => '电脑端装 AltServer / SideServer → iPhone 装 AltStore / SideStore App → 把 YueLink IPA 拖入电脑端工具或 AltStore 内导入 → 设置 → 通用 → VPN 与设备管理 → 信任开发者证书',
+			'iosGuideMethodTrollTitle' => 'TrollStore（巨魔）',
+			'iosGuideMethodTrollTag' => '不推荐用 VPN',
+			'iosGuideMethodTrollProForever' => '✅ 安装后永久有效，不需要重签',
+			'iosGuideMethodTrollConVpn' => '🚫 VPN（NetworkExtension）几乎不工作',
+			'iosGuideMethodTrollConFail' => '🚫 系统启动 PacketTunnel 后立刻丢弃，表现为「提示连接成功但实际无网络」',
+			'iosGuideMethodTrollConDevice' => '🚫 仅特定旧版 iOS 漏洞设备能装',
+			'iosGuideMethodTrollHowto' => '巨魔利用系统漏洞绕过签名校验，但 NetworkExtension 仍依赖 Apple 签发的 Provisioning Profile —— 巨魔安装的 IPA 拿不到这条信任链，系统会让 PacketTunnel 进程「看起来启动」但不放行任何包。\n\n如果你只用 YueLink 看 Emby 等不需要 VPN 的功能，巨魔可用；需要代理上网请改用 AltStore / SideStore。',
+			'iosGuideMethodIpaTitle' => 'IPA 直装 / 第三方分发',
+			'iosGuideMethodIpaTag' => '风险',
+			'iosGuideMethodIpaProSigned' => '✅ 部分商业证书签名版本可用',
+			'iosGuideMethodIpaConRevoke' => '⚠️ 商业证书随时可能被 Apple 撤销，撤销后整批闪退',
+			'iosGuideMethodIpaConTamper' => '⚠️ 第三方分发渠道存在篡改风险',
+			'iosGuideMethodIpaHowto' => '只接受官方 GitHub Releases 提供的 IPA 自行签名安装，不要使用来路不明的「已签名」安装包。',
+			'iosGuideAck' => '我知道了',
 			_ => null,
 		};
 	}

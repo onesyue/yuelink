@@ -5,6 +5,7 @@ import '../../../i18n/app_strings.dart';
 import '../../../modules/yue_auth/providers/yue_auth_providers.dart';
 import '../../../theme.dart';
 import '../providers/checkin_provider.dart';
+import 'calendar_page.dart';
 
 /// Compact check-in card for the Dashboard page.
 ///
@@ -97,6 +98,24 @@ class CheckinCard extends ConsumerWidget {
               ],
             ),
           ),
+
+          // ── 看日历入口（已签 / 已在其他设备签到时都显示，方便用户查月历） ──
+          if (state.checkedIn || state.checkedInOnOtherDevice)
+            IconButton(
+              tooltip: s.calendarTitle,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(
+                  minWidth: 36, minHeight: 36),
+              visualDensity: VisualDensity.compact,
+              onPressed: () => CheckinCalendarPage.push(context),
+              icon: const Icon(
+                Icons.calendar_month_outlined,
+                size: 20,
+                color: YLColors.zinc400,
+              ),
+            ),
+          if (state.checkedIn || state.checkedInOnOtherDevice)
+            const SizedBox(width: 4),
 
           // ── Button / Badge ────────────────────────────────────────
           if (state.checkedInOnOtherDevice)

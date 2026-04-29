@@ -355,7 +355,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                             Divider(
                                 height: 1, thickness: 0.5, color: dividerColor),
                             YLInfoRow(
-                              label: '签到日历',
+                              label: s.calendarEntryTitle,
                               leading: const YLSettingIcon(
                                   icon: Icons.calendar_month_outlined,
                                   color: Color(0xFF22C55E)),
@@ -524,7 +524,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                           ],
                           if (Platform.isIOS) ...[
                             YLInfoRow(
-                              label: 'iOS 安装方式',
+                              label: s.iosGuideEntry,
                               leading: const YLSettingIcon(
                                   icon: Icons.phone_iphone,
                                   color: Color(0xFF8E8E93)),

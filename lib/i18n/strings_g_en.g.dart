@@ -323,22 +323,22 @@ class Translations with BaseTranslations<AppLocale, Translations> {
 	/// en: 'Repair macOS Gatekeeper'
 	String get gatekeeperFixDialogTitle => 'Repair macOS Gatekeeper';
 
-	/// en: 'macOS attaches a quarantine flag…'
+	/// en: 'macOS attaches a quarantine flag to apps downloaded from the internet, which can cause repeated "YueLink can't be opened" warnings on every update. This will remove the flag from /Applications/YueLink.app and ask for your administrator password.'
 	String get gatekeeperFixDialogBody => 'macOS attaches a quarantine flag to apps downloaded from the internet, which can cause repeated "YueLink can\'t be opened" warnings on every update. This will remove the flag from /Applications/YueLink.app and ask for your administrator password.';
 
 	/// en: 'Fix Now'
 	String get gatekeeperFixConfirm => 'Fix Now';
 
-	/// en: 'Repairing…'
+	/// en: 'Repairing… (please complete the password prompt)'
 	String get gatekeeperFixRunning => 'Repairing… (please complete the password prompt)';
 
-	/// en: 'Repair complete.'
+	/// en: 'Repair complete. Future updates will launch without warnings.'
 	String get gatekeeperFixSuccess => 'Repair complete. Future updates will launch without warnings.';
 
-	/// en: 'Repair did not complete.'
+	/// en: 'Repair did not complete. You can also run the fix-gatekeeper.command script from the DMG.'
 	String get gatekeeperFixFailed => 'Repair did not complete. You can also run the fix-gatekeeper.command script from the DMG.';
 
-	/// en: 'macOS-only'
+	/// en: 'This option is only available on the macOS .app build.'
 	String get gatekeeperFixUnsupported => 'This option is only available on the macOS .app build.';
 
 	/// en: 'Connect first to view proxy nodes'
@@ -2257,6 +2257,195 @@ class Translations with BaseTranslations<AppLocale, Translations> {
 
 	/// en: 'No events recorded'
 	String get telemetryEmpty => 'No events recorded';
+
+	/// en: 'Sign-In Calendar'
+	String get calendarTitle => 'Sign-In Calendar';
+
+	/// en: '{year}-{month}'
+	String calendarMonthLabel({required Object year, required Object month}) => '${year}-${month}';
+
+	/// en: 'Previous month'
+	String get calendarPrevMonth => 'Previous month';
+
+	/// en: 'Next month'
+	String get calendarNextMonth => 'Next month';
+
+	/// en: 'Load failed, pull down to retry'
+	String get calendarLoadFailed => 'Load failed, pull down to retry';
+
+	/// en: 'No data'
+	String get calendarEmpty => 'No data';
+
+	/// en: 'Retry'
+	String get calendarRetry => 'Retry';
+
+	/// en: 'Please log in first'
+	String get calendarPleaseLogin => 'Please log in first';
+
+	/// en: 'Streak'
+	String get calendarStreakLabel => 'Streak';
+
+	/// en: 'Signed this month'
+	String get calendarSignedThisMonth => 'Signed this month';
+
+	/// en: 'Bonus'
+	String get calendarMultiplier => 'Bonus';
+
+	/// en: 'Resign with {cost} pts'
+	String calendarBtnResignWithCost({required Object cost}) => 'Resign with ${cost} pts';
+
+	/// en: 'Close'
+	String get calendarBtnClose => 'Close';
+
+	/// en: 'Signed'
+	String get calendarBtnSignedToday => 'Signed';
+
+	/// en: 'Signed'
+	String get calendarLegendSigned => 'Signed';
+
+	/// en: 'Card'
+	String get calendarLegendCard => 'Card';
+
+	/// en: 'Missed'
+	String get calendarLegendMissed => 'Missed';
+
+	/// en: 'Today (not yet)'
+	String get calendarLegendTodayMiss => 'Today (not yet)';
+
+	/// en: 'Future'
+	String get calendarLegendFuture => 'Future';
+
+	/// en: 'd'
+	String get calendarUnit => 'd';
+
+	/// en: '/{total}'
+	String calendarSuffixOf({required Object total}) => '/${total}';
+
+	/// en: 'Sign-In Calendar'
+	String get calendarEntryTitle => 'Sign-In Calendar';
+
+	/// en: 'Monthly view · streak rewards · resign with points'
+	String get calendarEntrySubtitle => 'Monthly view · streak rewards · resign with points';
+
+	/// en: 'M'
+	String get weekMon => 'M';
+
+	/// en: 'T'
+	String get weekTue => 'T';
+
+	/// en: 'W'
+	String get weekWed => 'W';
+
+	/// en: 'T'
+	String get weekThu => 'T';
+
+	/// en: 'F'
+	String get weekFri => 'F';
+
+	/// en: 'S'
+	String get weekSat => 'S';
+
+	/// en: 'S'
+	String get weekSun => 'S';
+
+	/// en: 'Resign Card'
+	String get resignTitle => 'Resign Card';
+
+	/// en: 'Spend {cost} points to recover yesterday's sign-in and keep your streak alive.'
+	String resignDesc({required Object cost}) => 'Spend ${cost} points to recover yesterday\'s sign-in and keep your streak alive.';
+
+	/// en: 'Current points: '
+	String get resignCurrentPoints => 'Current points: ';
+
+	/// en: 'Need: {cost} pts'
+	String resignNeedPoints({required Object cost}) => 'Need: ${cost} pts';
+
+	/// en: 'Insufficient points. Earn more via daily check-in or group betting.'
+	String get resignInsufficient => 'Insufficient points. Earn more via daily check-in or group betting.';
+
+	/// en: 'Cancel'
+	String get resignCancel => 'Cancel';
+
+	/// en: 'Resign'
+	String get resignConfirm => 'Resign';
+
+	/// en: 'iOS Install Guide'
+	String get iosGuideTitle => 'iOS Install Guide';
+
+	/// en: 'iOS Install Methods'
+	String get iosGuideEntry => 'iOS Install Methods';
+
+	/// en: 'YueLink for iOS is sideloaded. The three options have different VPN-availability trade-offs.'
+	String get iosGuideIntro => 'YueLink for iOS is sideloaded. The three options have different VPN-availability trade-offs.';
+
+	/// en: 'VPN process was killed by the system within {seconds}s — most likely caused by TrollStore / unsigned IPA. Please re-install via AltStore / SideStore.'
+	String iosGuideErrorBanner({required Object seconds}) => 'VPN process was killed by the system within ${seconds}s — most likely caused by TrollStore / unsigned IPA. Please re-install via AltStore / SideStore.';
+
+	/// en: 'AltStore / SideStore'
+	String get iosGuideMethodAltstoreTitle => 'AltStore / SideStore';
+
+	/// en: 'Recommended'
+	String get iosGuideMethodAltstoreTag => 'Recommended';
+
+	/// en: '✅ Full VPN works (entitlement trusted by system)'
+	String get iosGuideMethodAltstoreProVpn => '✅ Full VPN works (entitlement trusted by system)';
+
+	/// en: '✅ Free, signed with your Apple ID'
+	String get iosGuideMethodAltstoreProFree => '✅ Free, signed with your Apple ID';
+
+	/// en: '✅ Supports all device generations'
+	String get iosGuideMethodAltstoreProDevice => '✅ Supports all device generations';
+
+	/// en: '⚠️ 7-day re-sign required (AltServer / SideServer on desktop)'
+	String get iosGuideMethodAltstoreCon7d => '⚠️ 7-day re-sign required (AltServer / SideServer on desktop)';
+
+	/// en: '⚠️ Free Apple ID can hold only 3 apps at once'
+	String get iosGuideMethodAltstoreConLimit => '⚠️ Free Apple ID can hold only 3 apps at once';
+
+	/// en: 'Install AltServer / SideServer on desktop → install AltStore / SideStore on iPhone → drop YueLink IPA into the desktop tool or import via AltStore → Settings → General → VPN & Device Management → trust the developer cert'
+	String get iosGuideMethodAltstoreHowto => 'Install AltServer / SideServer on desktop → install AltStore / SideStore on iPhone → drop YueLink IPA into the desktop tool or import via AltStore → Settings → General → VPN & Device Management → trust the developer cert';
+
+	/// en: 'TrollStore'
+	String get iosGuideMethodTrollTitle => 'TrollStore';
+
+	/// en: 'VPN unavailable'
+	String get iosGuideMethodTrollTag => 'VPN unavailable';
+
+	/// en: '✅ Permanent, no re-signing'
+	String get iosGuideMethodTrollProForever => '✅ Permanent, no re-signing';
+
+	/// en: '🚫 VPN (NetworkExtension) doesn't work'
+	String get iosGuideMethodTrollConVpn => '🚫 VPN (NetworkExtension) doesn\'t work';
+
+	/// en: '🚫 PacketTunnel starts then drops — looks connected but no traffic flows'
+	String get iosGuideMethodTrollConFail => '🚫 PacketTunnel starts then drops — looks connected but no traffic flows';
+
+	/// en: '🚫 Only specific older-iOS exploit-eligible devices'
+	String get iosGuideMethodTrollConDevice => '🚫 Only specific older-iOS exploit-eligible devices';
+
+	/// en: 'TrollStore bypasses signature checks via a CoreTrust bug, but NetworkExtension still requires an Apple-issued provisioning profile. TrollStore IPAs lack this trust chain — the system starts PacketTunnel but blocks all packets. Fine if you only use YueLink for non-VPN features (e.g. Emby). For proxying, switch to AltStore / SideStore.'
+	String get iosGuideMethodTrollHowto => 'TrollStore bypasses signature checks via a CoreTrust bug, but NetworkExtension still requires an Apple-issued provisioning profile. TrollStore IPAs lack this trust chain — the system starts PacketTunnel but blocks all packets.\n\nFine if you only use YueLink for non-VPN features (e.g. Emby). For proxying, switch to AltStore / SideStore.';
+
+	/// en: 'Direct IPA / 3rd-party distribution'
+	String get iosGuideMethodIpaTitle => 'Direct IPA / 3rd-party distribution';
+
+	/// en: 'Risky'
+	String get iosGuideMethodIpaTag => 'Risky';
+
+	/// en: '✅ Some commercially-signed builds work'
+	String get iosGuideMethodIpaProSigned => '✅ Some commercially-signed builds work';
+
+	/// en: '⚠️ Apple may revoke commercial certs anytime, crashing all installs'
+	String get iosGuideMethodIpaConRevoke => '⚠️ Apple may revoke commercial certs anytime, crashing all installs';
+
+	/// en: '⚠️ 3rd-party distribution channels can tamper with the binary'
+	String get iosGuideMethodIpaConTamper => '⚠️ 3rd-party distribution channels can tamper with the binary';
+
+	/// en: 'Only sign and install IPAs from the official GitHub Releases. Avoid pre-signed installs from unknown sources.'
+	String get iosGuideMethodIpaHowto => 'Only sign and install IPAs from the official GitHub Releases. Avoid pre-signed installs from unknown sources.';
+
+	/// en: 'Got it'
+	String get iosGuideAck => 'Got it';
 }
 
 /// The flat map containing all translations for locale <en>.
@@ -2779,6 +2968,8 @@ extension on Translations {
 			'storeOrderHistory' => 'Order History',
 			'storeOrderNo' => 'Order No.',
 			'storeOrderDate' => 'Date',
+			_ => null,
+		} ?? switch (path) {
 			'storeNoOrders' => 'No orders yet',
 			'storeOrderDetail' => 'Order Detail',
 			'storeOrderStatusPending' => 'Pending',
@@ -2794,8 +2985,6 @@ extension on Translations {
 			'noNetworkConnection' => 'No network connection',
 			'dashGreeting' => 'Hello',
 			'dashGreetingReturning' => 'Welcome back',
-			_ => null,
-		} ?? switch (path) {
 			'dashNoAnnouncements' => 'No announcements',
 			'dashViewAll' => 'View all',
 			'dashNoPlan' => 'No plan info',
@@ -3008,6 +3197,69 @@ extension on Translations {
 			'telemetrySessionId' => 'Session ID',
 			'telemetryEventCount' => ({required Object n}) => 'Last ${n} events',
 			'telemetryEmpty' => 'No events recorded',
+			'calendarTitle' => 'Sign-In Calendar',
+			'calendarMonthLabel' => ({required Object year, required Object month}) => '${year}-${month}',
+			'calendarPrevMonth' => 'Previous month',
+			'calendarNextMonth' => 'Next month',
+			'calendarLoadFailed' => 'Load failed, pull down to retry',
+			'calendarEmpty' => 'No data',
+			'calendarRetry' => 'Retry',
+			'calendarPleaseLogin' => 'Please log in first',
+			'calendarStreakLabel' => 'Streak',
+			'calendarSignedThisMonth' => 'Signed this month',
+			'calendarMultiplier' => 'Bonus',
+			'calendarBtnResignWithCost' => ({required Object cost}) => 'Resign with ${cost} pts',
+			'calendarBtnClose' => 'Close',
+			'calendarBtnSignedToday' => 'Signed',
+			'calendarLegendSigned' => 'Signed',
+			'calendarLegendCard' => 'Card',
+			'calendarLegendMissed' => 'Missed',
+			'calendarLegendTodayMiss' => 'Today (not yet)',
+			'calendarLegendFuture' => 'Future',
+			'calendarUnit' => 'd',
+			'calendarSuffixOf' => ({required Object total}) => '/${total}',
+			'calendarEntryTitle' => 'Sign-In Calendar',
+			'calendarEntrySubtitle' => 'Monthly view · streak rewards · resign with points',
+			'weekMon' => 'M',
+			'weekTue' => 'T',
+			'weekWed' => 'W',
+			'weekThu' => 'T',
+			'weekFri' => 'F',
+			'weekSat' => 'S',
+			'weekSun' => 'S',
+			'resignTitle' => 'Resign Card',
+			'resignDesc' => ({required Object cost}) => 'Spend ${cost} points to recover yesterday\'s sign-in and keep your streak alive.',
+			'resignCurrentPoints' => 'Current points: ',
+			'resignNeedPoints' => ({required Object cost}) => 'Need: ${cost} pts',
+			'resignInsufficient' => 'Insufficient points. Earn more via daily check-in or group betting.',
+			'resignCancel' => 'Cancel',
+			'resignConfirm' => 'Resign',
+			'iosGuideTitle' => 'iOS Install Guide',
+			'iosGuideEntry' => 'iOS Install Methods',
+			'iosGuideIntro' => 'YueLink for iOS is sideloaded. The three options have different VPN-availability trade-offs.',
+			'iosGuideErrorBanner' => ({required Object seconds}) => 'VPN process was killed by the system within ${seconds}s — most likely caused by TrollStore / unsigned IPA. Please re-install via AltStore / SideStore.',
+			'iosGuideMethodAltstoreTitle' => 'AltStore / SideStore',
+			'iosGuideMethodAltstoreTag' => 'Recommended',
+			'iosGuideMethodAltstoreProVpn' => '✅ Full VPN works (entitlement trusted by system)',
+			'iosGuideMethodAltstoreProFree' => '✅ Free, signed with your Apple ID',
+			'iosGuideMethodAltstoreProDevice' => '✅ Supports all device generations',
+			'iosGuideMethodAltstoreCon7d' => '⚠️ 7-day re-sign required (AltServer / SideServer on desktop)',
+			'iosGuideMethodAltstoreConLimit' => '⚠️ Free Apple ID can hold only 3 apps at once',
+			'iosGuideMethodAltstoreHowto' => 'Install AltServer / SideServer on desktop → install AltStore / SideStore on iPhone → drop YueLink IPA into the desktop tool or import via AltStore → Settings → General → VPN & Device Management → trust the developer cert',
+			'iosGuideMethodTrollTitle' => 'TrollStore',
+			'iosGuideMethodTrollTag' => 'VPN unavailable',
+			'iosGuideMethodTrollProForever' => '✅ Permanent, no re-signing',
+			'iosGuideMethodTrollConVpn' => '🚫 VPN (NetworkExtension) doesn\'t work',
+			'iosGuideMethodTrollConFail' => '🚫 PacketTunnel starts then drops — looks connected but no traffic flows',
+			'iosGuideMethodTrollConDevice' => '🚫 Only specific older-iOS exploit-eligible devices',
+			'iosGuideMethodTrollHowto' => 'TrollStore bypasses signature checks via a CoreTrust bug, but NetworkExtension still requires an Apple-issued provisioning profile. TrollStore IPAs lack this trust chain — the system starts PacketTunnel but blocks all packets.\n\nFine if you only use YueLink for non-VPN features (e.g. Emby). For proxying, switch to AltStore / SideStore.',
+			'iosGuideMethodIpaTitle' => 'Direct IPA / 3rd-party distribution',
+			'iosGuideMethodIpaTag' => 'Risky',
+			'iosGuideMethodIpaProSigned' => '✅ Some commercially-signed builds work',
+			'iosGuideMethodIpaConRevoke' => '⚠️ Apple may revoke commercial certs anytime, crashing all installs',
+			'iosGuideMethodIpaConTamper' => '⚠️ 3rd-party distribution channels can tamper with the binary',
+			'iosGuideMethodIpaHowto' => 'Only sign and install IPAs from the official GitHub Releases. Avoid pre-signed installs from unknown sources.',
+			'iosGuideAck' => 'Got it',
 			_ => null,
 		};
 	}

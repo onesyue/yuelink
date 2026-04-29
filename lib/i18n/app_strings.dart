@@ -790,4 +790,79 @@ class S {
   String get telemetrySessionId => _t.telemetrySessionId;
   String telemetryEventCount(int n) => _t.telemetryEventCount(n: n);
   String get telemetryEmpty => _t.telemetryEmpty;
+
+  // ── 签到日历 / 补签卡 / iOS 安装方式（2026-04-29） ────────────
+  String get calendarTitle => _t.calendarTitle;
+  String calendarMonthLabel({required String year, required String month}) =>
+      _t.calendarMonthLabel(year: year, month: month);
+  String get calendarPrevMonth => _t.calendarPrevMonth;
+  String get calendarNextMonth => _t.calendarNextMonth;
+  String get calendarLoadFailed => _t.calendarLoadFailed;
+  String get calendarEmpty => _t.calendarEmpty;
+  String get calendarRetry => _t.calendarRetry;
+  String get calendarPleaseLogin => _t.calendarPleaseLogin;
+  String get calendarStreakLabel => _t.calendarStreakLabel;
+  String get calendarSignedThisMonth => _t.calendarSignedThisMonth;
+  String get calendarMultiplier => _t.calendarMultiplier;
+  String calendarBtnResignWithCost({required String cost}) =>
+      _t.calendarBtnResignWithCost(cost: cost);
+  String get calendarBtnClose => _t.calendarBtnClose;
+  String get calendarBtnSignedToday => _t.calendarBtnSignedToday;
+  String get calendarLegendSigned => _t.calendarLegendSigned;
+  String get calendarLegendCard => _t.calendarLegendCard;
+  String get calendarLegendMissed => _t.calendarLegendMissed;
+  String get calendarLegendTodayMiss => _t.calendarLegendTodayMiss;
+  String get calendarLegendFuture => _t.calendarLegendFuture;
+  String get calendarUnit => _t.calendarUnit;
+  String calendarSuffixOf({required String total}) =>
+      _t.calendarSuffixOf(total: total);
+  String get calendarEntryTitle => _t.calendarEntryTitle;
+  String get calendarEntrySubtitle => _t.calendarEntrySubtitle;
+
+  String get weekMon => _t.weekMon;
+  String get weekTue => _t.weekTue;
+  String get weekWed => _t.weekWed;
+  String get weekThu => _t.weekThu;
+  String get weekFri => _t.weekFri;
+  String get weekSat => _t.weekSat;
+  String get weekSun => _t.weekSun;
+
+  String get resignTitle => _t.resignTitle;
+  String resignDesc({required String cost}) => _t.resignDesc(cost: cost);
+  String get resignCurrentPoints => _t.resignCurrentPoints;
+  String resignNeedPoints({required String cost}) =>
+      _t.resignNeedPoints(cost: cost);
+  String get resignInsufficient => _t.resignInsufficient;
+  String get resignCancel => _t.resignCancel;
+  String get resignConfirm => _t.resignConfirm;
+
+  String get iosGuideTitle => _t.iosGuideTitle;
+  String get iosGuideEntry => _t.iosGuideEntry;
+  String get iosGuideIntro => _t.iosGuideIntro;
+  String iosGuideErrorBanner({required String seconds}) =>
+      _t.iosGuideErrorBanner(seconds: seconds);
+  String get iosGuideMethodAltstoreTitle => _t.iosGuideMethodAltstoreTitle;
+  String get iosGuideMethodAltstoreTag => _t.iosGuideMethodAltstoreTag;
+  String get iosGuideMethodAltstoreProVpn => _t.iosGuideMethodAltstoreProVpn;
+  String get iosGuideMethodAltstoreProFree => _t.iosGuideMethodAltstoreProFree;
+  String get iosGuideMethodAltstoreProDevice =>
+      _t.iosGuideMethodAltstoreProDevice;
+  String get iosGuideMethodAltstoreCon7d => _t.iosGuideMethodAltstoreCon7d;
+  String get iosGuideMethodAltstoreConLimit =>
+      _t.iosGuideMethodAltstoreConLimit;
+  String get iosGuideMethodAltstoreHowto => _t.iosGuideMethodAltstoreHowto;
+  String get iosGuideMethodTrollTitle => _t.iosGuideMethodTrollTitle;
+  String get iosGuideMethodTrollTag => _t.iosGuideMethodTrollTag;
+  String get iosGuideMethodTrollProForever => _t.iosGuideMethodTrollProForever;
+  String get iosGuideMethodTrollConVpn => _t.iosGuideMethodTrollConVpn;
+  String get iosGuideMethodTrollConFail => _t.iosGuideMethodTrollConFail;
+  String get iosGuideMethodTrollConDevice => _t.iosGuideMethodTrollConDevice;
+  String get iosGuideMethodTrollHowto => _t.iosGuideMethodTrollHowto;
+  String get iosGuideMethodIpaTitle => _t.iosGuideMethodIpaTitle;
+  String get iosGuideMethodIpaTag => _t.iosGuideMethodIpaTag;
+  String get iosGuideMethodIpaProSigned => _t.iosGuideMethodIpaProSigned;
+  String get iosGuideMethodIpaConRevoke => _t.iosGuideMethodIpaConRevoke;
+  String get iosGuideMethodIpaConTamper => _t.iosGuideMethodIpaConTamper;
+  String get iosGuideMethodIpaHowto => _t.iosGuideMethodIpaHowto;
+  String get iosGuideAck => _t.iosGuideAck;
 }

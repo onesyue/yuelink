@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../domain/checkin/sign_calendar_entity.dart';
+import '../../../i18n/app_strings.dart';
 import '../../../infrastructure/checkin/checkin_repository.dart';
 import '../../yue_auth/providers/yue_auth_providers.dart';
 import '../../../theme.dart';
@@ -51,7 +52,7 @@ class _CheckinCalendarPageState extends ConsumerState<CheckinCalendarPage> {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = '请先登录';
+        _error = S.current.calendarPleaseLogin;
       });
       return;
     }
@@ -63,7 +64,7 @@ class _CheckinCalendarPageState extends ConsumerState<CheckinCalendarPage> {
     setState(() {
       _data = data;
       _loading = false;
-      _error = data == null ? '加载失败，下拉重试' : null;
+      _error = data == null ? S.current.calendarLoadFailed : null;
     });
   }
 
@@ -86,9 +87,11 @@ class _CheckinCalendarPageState extends ConsumerState<CheckinCalendarPage> {
   Future<void> _onResign() async {
     final data = _data;
     if (data == null) return;
-    // 取积分：从已有 user_account / xboard 状态——这里简化，直接传 0 让用户感知"未知"
-    // resign 后端会做最终积分校验，dialog 仅作 UX 提示。
-    final result = await ResignDialog.show(context, currentPoints: data.streak * 0);
+    final result = await ResignDialog.show(
+      context,
+      currentPoints: data.gamblingPoints,
+      cost: data.signCardCost,
+    );
     if (!mounted) return;
     if (result?.success == true) {
       _load();
@@ -97,6 +100,7 @@ class _CheckinCalendarPageState extends ConsumerState<CheckinCalendarPage> {
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bg = isDark ? YLColors.zinc950 : YLColors.zinc100;
     final surface = isDark ? YLColors.zinc900 : Colors.white;
@@ -107,7 +111,7 @@ class _CheckinCalendarPageState extends ConsumerState<CheckinCalendarPage> {
     return Scaffold(
       backgroundColor: bg,
       appBar: AppBar(
-        title: const Text('签到日历'),
+        title: Text(s.calendarTitle),
         backgroundColor: bg,
         elevation: 0,
       ),
@@ -162,7 +166,7 @@ class _CheckinCalendarPageState extends ConsumerState<CheckinCalendarPage> {
               const SizedBox(height: 12),
               FilledButton(
                 onPressed: _load,
-                child: const Text('重试'),
+                child: Text(S.current.calendarRetry),
               ),
             ],
           ),
@@ -170,9 +174,9 @@ class _CheckinCalendarPageState extends ConsumerState<CheckinCalendarPage> {
       );
     }
     if (_data == null) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 32),
-        child: Center(child: Text('暂无数据')),
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 32),
+        child: Center(child: Text(S.current.calendarEmpty)),
       );
     }
     return SignCalendarWidget(data: _data!, isDark: isDark);
@@ -183,6 +187,7 @@ class _CheckinCalendarPageState extends ConsumerState<CheckinCalendarPage> {
     if (data == null) return const SizedBox.shrink();
     final signedDays = data.days.length;
 
+    final s = S.current;
     return Container(
       decoration: BoxDecoration(
         color: surface,
@@ -194,9 +199,9 @@ class _CheckinCalendarPageState extends ConsumerState<CheckinCalendarPage> {
         children: [
           Expanded(
             child: _StatTile(
-              label: '连续签到',
+              label: s.calendarStreakLabel,
               value: '${data.streak}',
-              suffix: '天',
+              suffix: s.calendarUnit,
               color: const Color(0xFFEF4444),
             ),
           ),
@@ -207,9 +212,9 @@ class _CheckinCalendarPageState extends ConsumerState<CheckinCalendarPage> {
           ),
           Expanded(
             child: _StatTile(
-              label: '本月已签',
+              label: s.calendarSignedThisMonth,
               value: '$signedDays',
-              suffix: '/${data.daysInMonth}',
+              suffix: s.calendarSuffixOf(total: '${data.daysInMonth}'),
             ),
           ),
           Container(
@@ -219,7 +224,7 @@ class _CheckinCalendarPageState extends ConsumerState<CheckinCalendarPage> {
           ),
           Expanded(
             child: _StatTile(
-              label: '加成',
+              label: s.calendarMultiplier,
               value: '×${data.multiplier.toStringAsFixed(1)}'
                   .replaceAll(RegExp(r'\.0$'), ''),
             ),
@@ -233,6 +238,7 @@ class _CheckinCalendarPageState extends ConsumerState<CheckinCalendarPage> {
     final data = _data;
     if (data == null) return const SizedBox.shrink();
 
+    final s = S.current;
     final canResign = !data.todaySigned;
 
     return Row(
@@ -242,7 +248,8 @@ class _CheckinCalendarPageState extends ConsumerState<CheckinCalendarPage> {
             child: OutlinedButton.icon(
               onPressed: _onResign,
               icon: const Icon(Icons.replay_outlined, size: 18),
-              label: const Text('用 25 积分补昨天'),
+              label: Text(
+                  s.calendarBtnResignWithCost(cost: '${data.signCardCost}')),
               style: OutlinedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 14),
               ),
@@ -254,7 +261,7 @@ class _CheckinCalendarPageState extends ConsumerState<CheckinCalendarPage> {
           child: FilledButton.icon(
             onPressed: () => Navigator.of(context).maybePop(),
             icon: const Icon(Icons.check_rounded, size: 18),
-            label: Text(canResign ? '关闭' : '已签到'),
+            label: Text(canResign ? s.calendarBtnClose : s.calendarBtnSignedToday),
             style: FilledButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 14),
             ),
@@ -265,16 +272,17 @@ class _CheckinCalendarPageState extends ConsumerState<CheckinCalendarPage> {
   }
 
   Widget _buildLegend(bool isDark) {
+    final s = S.current;
     final color = isDark ? YLColors.zinc400 : YLColors.zinc500;
     return Wrap(
       spacing: 12,
       runSpacing: 6,
-      children: const [
-        _LegendItem(emoji: '✅', text: '已签'),
-        _LegendItem(emoji: '⭐', text: '补签'),
-        _LegendItem(emoji: '⛔', text: '断签'),
-        _LegendItem(emoji: '🔴', text: '今天未签'),
-        _LegendItem(emoji: '⏳', text: '未来'),
+      children: <_LegendItem>[
+        _LegendItem(emoji: '✅', text: s.calendarLegendSigned),
+        _LegendItem(emoji: '⭐', text: s.calendarLegendCard),
+        _LegendItem(emoji: '⛔', text: s.calendarLegendMissed),
+        _LegendItem(emoji: '🔴', text: s.calendarLegendTodayMiss),
+        _LegendItem(emoji: '⏳', text: s.calendarLegendFuture),
       ].map((e) => DefaultTextStyle(
             style: YLText.caption.copyWith(color: color),
             child: e,
@@ -298,6 +306,7 @@ class _MonthHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     final now = DateTime.now();
     final isCurrent =
         viewMonth.year == now.year && viewMonth.month == now.month;
@@ -307,10 +316,12 @@ class _MonthHeader extends StatelessWidget {
         IconButton(
           onPressed: onPrev,
           icon: const Icon(Icons.chevron_left_rounded),
-          tooltip: '上个月',
+          tooltip: s.calendarPrevMonth,
         ),
         Text(
-          '${viewMonth.year} 年 ${viewMonth.month} 月',
+          s.calendarMonthLabel(
+              year: '${viewMonth.year}',
+              month: '${viewMonth.month}'),
           style: YLText.titleLarge.copyWith(
             fontSize: 18,
             fontWeight: FontWeight.w600,
@@ -319,7 +330,7 @@ class _MonthHeader extends StatelessWidget {
         IconButton(
           onPressed: isCurrent ? null : onNext,
           icon: const Icon(Icons.chevron_right_rounded),
-          tooltip: '下个月',
+          tooltip: s.calendarNextMonth,
         ),
       ],
     );

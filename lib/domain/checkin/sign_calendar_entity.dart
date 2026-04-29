@@ -45,6 +45,14 @@ class SignCalendarMonth {
   final bool todaySigned;
   final int streak;
   final double multiplier;
+
+  /// 用户当前竞猜积分（同源 user_account.gambling_points），随日历一起返回，
+  /// 避免补签弹窗再发一次请求。
+  final int gamblingPoints;
+
+  /// 补签卡价格（积分）。后端权威，前端不再硬编码。
+  final int signCardCost;
+
   final List<SignDay> days;
 
   const SignCalendarMonth({
@@ -55,6 +63,8 @@ class SignCalendarMonth {
     required this.streak,
     required this.multiplier,
     required this.days,
+    this.gamblingPoints = 0,
+    this.signCardCost = 25,
   });
 
   /// 用 ISO date string 索引每天，O(1) 查询。
@@ -74,6 +84,8 @@ class SignCalendarMonth {
       todaySigned: j['today_signed'] == true,
       streak: j['streak'] as int? ?? 0,
       multiplier: (j['multiplier'] as num?)?.toDouble() ?? 1.0,
+      gamblingPoints: j['gambling_points'] as int? ?? 0,
+      signCardCost: j['sign_card_cost'] as int? ?? 25,
       days: daysJson
           .map((e) => SignDay.fromJson((e as Map).cast<String, dynamic>()))
           .toList(),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../domain/checkin/sign_calendar_entity.dart';
+import '../../../i18n/app_strings.dart';
 import '../../../theme.dart';
 
 /// 7×N 月历网格。每天用 emoji + 数字双行表达，emoji 表达签到状态：
@@ -17,6 +18,7 @@ class SignCalendarWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     final weeks = _buildWeeks();
     final byDate = data.byDate;
     final today = data.today;
@@ -27,7 +29,10 @@ class SignCalendarWidget extends StatelessWidget {
       children: [
         // 周标题
         Row(
-          children: const ['一', '二', '三', '四', '五', '六', '日']
+          children: <String>[
+            s.weekMon, s.weekTue, s.weekWed, s.weekThu,
+            s.weekFri, s.weekSat, s.weekSun,
+          ]
               .map((w) => Expanded(
                     child: SizedBox(
                       height: 22,

@@ -2,33 +2,36 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../domain/checkin/sign_calendar_entity.dart';
+import '../../../i18n/app_strings.dart';
 import '../../../infrastructure/checkin/checkin_repository.dart';
 import '../../../shared/app_notifier.dart';
 import '../../yue_auth/providers/yue_auth_providers.dart';
 import '../../../theme.dart';
 
-const int kSignCardCost = 25;
-
-/// 补签卡确认弹窗。在用户从日历卡片点「⭐ 用 25 积分补昨天」时弹出。
-/// 显示价格 + 当前积分（若可获取）+ 二次确认按钮。
+/// 补签卡确认弹窗。在用户从日历卡片点「⭐ 用 X 积分补昨天」时弹出。
+/// 显示价格 + 当前积分 + 二次确认按钮。积分和价格由 caller 从 calendar
+/// 数据传入（`SignCalendarMonth.gamblingPoints` / `signCardCost`）。
 class ResignDialog extends ConsumerStatefulWidget {
   final int currentPoints;
+  final int cost;
   final void Function(ResignResult)? onResult;
 
   const ResignDialog({
     super.key,
     required this.currentPoints,
+    required this.cost,
     this.onResult,
   });
 
   static Future<ResignResult?> show(
     BuildContext context, {
     required int currentPoints,
+    int cost = 25,
   }) async {
     return await showDialog<ResignResult>(
       context: context,
       barrierDismissible: false,
-      builder: (_) => ResignDialog(currentPoints: currentPoints),
+      builder: (_) => ResignDialog(currentPoints: currentPoints, cost: cost),
     );
   }
 
@@ -45,7 +48,7 @@ class _ResignDialogState extends ConsumerState<ResignDialog> {
 
     final token = ref.read(authProvider).token;
     if (token == null || token.isEmpty) {
-      AppNotifier.warning('请先登录');
+      AppNotifier.warning(S.current.calendarPleaseLogin);
       if (mounted) Navigator.of(context).pop();
       return;
     }
@@ -64,16 +67,17 @@ class _ResignDialogState extends ConsumerState<ResignDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final canAfford = widget.currentPoints >= kSignCardCost;
+    final canAfford = widget.currentPoints >= widget.cost;
 
     return AlertDialog(
-      title: const Text('补签卡'),
+      title: Text(s.resignTitle),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('用 25 积分补回昨天的签到，连签不归零。', style: YLText.body),
+          Text(s.resignDesc(cost: '${widget.cost}'), style: YLText.body),
           const SizedBox(height: 12),
           Container(
             padding: const EdgeInsets.all(12),
@@ -85,7 +89,7 @@ class _ResignDialogState extends ConsumerState<ResignDialog> {
             ),
             child: Row(
               children: [
-                const Text('当前积分：', style: YLText.caption),
+                Text(s.resignCurrentPoints, style: YLText.caption),
                 Text(
                   '${widget.currentPoints}',
                   style: YLText.body.copyWith(
@@ -94,30 +98,28 @@ class _ResignDialogState extends ConsumerState<ResignDialog> {
                   ),
                 ),
                 const Spacer(),
-                const Text('需要：25 积分', style: YLText.caption),
+                Text(s.resignNeedPoints(cost: '${widget.cost}'),
+                    style: YLText.caption),
               ],
             ),
           ),
           if (!canAfford) ...[
             const SizedBox(height: 8),
-            const Text(
-              '积分不足，可以参加群里竞猜或每日签到攒积分',
-              style: YLText.caption,
-            ),
+            Text(s.resignInsufficient, style: YLText.caption),
           ],
         ],
       ),
       actions: [
         TextButton(
           onPressed: _loading ? null : () => Navigator.of(context).pop(),
-          child: const Text('取消'),
+          child: Text(s.resignCancel),
         ),
         FilledButton(
           onPressed: _loading || !canAfford ? null : _confirm,
           child: _loading
               ? const SizedBox(
                   width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-              : const Text('补签'),
+              : Text(s.resignConfirm),
         ),
       ],
     );

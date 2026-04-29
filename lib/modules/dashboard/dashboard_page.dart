@@ -22,6 +22,7 @@ import 'widgets/live_status_card.dart';
 import 'widgets/metrics_row.dart';
 import 'widgets/carrier_card.dart';
 import '../checkin/presentation/checkin_card.dart';
+import '../checkin/presentation/calendar_entry_card.dart';
 import '../checkin/providers/checkin_provider.dart';
 import 'widgets/hero_card.dart';
 import 'widgets/quick_actions.dart';
@@ -294,9 +295,18 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
 
                         const SizedBox(height: 12),
 
-                        // ── 5. 数据监控（折叠）───────────────────────
+                        // ── 5.5 签到日历入口（与签到/Emby 平级） ──────
                         const _StaggeredIn(
                           index: 6,
+                          child: RepaintBoundary(
+                              child: CheckinCalendarEntryCard()),
+                        ),
+
+                        const SizedBox(height: 12),
+
+                        // ── 6. 数据监控（折叠）───────────────────────
+                        const _StaggeredIn(
+                          index: 7,
                           child: RepaintBoundary(child: _TrafficSection()),
                         ),
 

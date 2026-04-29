@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../i18n/app_strings.dart';
 import '../../theme.dart';
 
 /// iOS 安装方式说明页 — 在两种场景下出现：
@@ -34,7 +35,7 @@ class IOSInstallGuidePage extends StatelessWidget {
     return Scaffold(
       backgroundColor: bg,
       appBar: AppBar(
-        title: const Text('iOS 安装方式'),
+        title: Text(S.of(context).iosGuideTitle),
         backgroundColor: bg,
         elevation: 0,
       ),
@@ -46,75 +47,59 @@ class IOSInstallGuidePage extends StatelessWidget {
             children: [
               if (errorContext != null) _ErrorBanner(message: errorContext!),
               if (errorContext != null) const SizedBox(height: 16),
-              const Text(
-                'iOS 上的 YueLink 通过侧载安装。三种方式各有取舍，连接 VPN 的可用性差异很大。',
-                style: YLText.body,
-              ),
+              Text(S.of(context).iosGuideIntro, style: YLText.body),
               const SizedBox(height: 20),
               _MethodCard(
                 surface: surface,
                 isDark: isDark,
-                title: 'AltStore / SideStore',
-                tag: '推荐',
+                title: S.of(context).iosGuideMethodAltstoreTitle,
+                tag: S.of(context).iosGuideMethodAltstoreTag,
                 tagColor: const Color(0xFF22C55E),
-                pros: const [
-                  '✅ VPN 完全可用（系统信任 entitlement）',
-                  '✅ 免费，用 Apple ID 自签',
-                  '✅ 支持各代设备',
+                pros: [
+                  S.of(context).iosGuideMethodAltstoreProVpn,
+                  S.of(context).iosGuideMethodAltstoreProFree,
+                  S.of(context).iosGuideMethodAltstoreProDevice,
                 ],
-                cons: const [
-                  '⚠️ 自签 7 天到期，到期前需重签（电脑端 AltServer / SideServer）',
-                  '⚠️ 一个免费 Apple ID 同时只能装 3 个 App',
+                cons: [
+                  S.of(context).iosGuideMethodAltstoreCon7d,
+                  S.of(context).iosGuideMethodAltstoreConLimit,
                 ],
-                howto:
-                    '电脑端装 AltServer / SideServer → iPhone 装 AltStore / SideStore App → '
-                    '把 YueLink IPA 拖入电脑端工具或 AltStore 内导入 → 设置 → 通用 → '
-                    'VPN 与设备管理 → 信任开发者证书',
+                howto: S.of(context).iosGuideMethodAltstoreHowto,
               ),
               const SizedBox(height: 12),
               _MethodCard(
                 surface: surface,
                 isDark: isDark,
-                title: 'TrollStore（巨魔）',
-                tag: '不推荐用 VPN',
+                title: S.of(context).iosGuideMethodTrollTitle,
+                tag: S.of(context).iosGuideMethodTrollTag,
                 tagColor: const Color(0xFFEF4444),
-                pros: const [
-                  '✅ 安装后永久有效，不需要重签',
+                pros: [S.of(context).iosGuideMethodTrollProForever],
+                cons: [
+                  S.of(context).iosGuideMethodTrollConVpn,
+                  S.of(context).iosGuideMethodTrollConFail,
+                  S.of(context).iosGuideMethodTrollConDevice,
                 ],
-                cons: const [
-                  '🚫 VPN（NetworkExtension）几乎不工作',
-                  '🚫 系统启动 PacketTunnel 后立刻丢弃，表现为"提示连接成功但实际无网络"',
-                  '🚫 仅特定旧版 iOS 漏洞设备能装',
-                ],
-                howto:
-                    '巨魔利用系统漏洞绕过签名校验，但 NetworkExtension 仍依赖 Apple '
-                    '签发的 Provisioning Profile —— 巨魔安装的 IPA 拿不到这条信任链，'
-                    '系统会让 PacketTunnel 进程"看起来启动"但不放行任何包。'
-                    '\n\n如果你只用 YueLink 看 Emby 等不需要 VPN 的功能，巨魔可用；'
-                    '需要代理上网请改用 AltStore / SideStore。',
+                howto: S.of(context).iosGuideMethodTrollHowto,
               ),
               const SizedBox(height: 12),
               _MethodCard(
                 surface: surface,
                 isDark: isDark,
-                title: 'IPA 直装 / 第三方分发',
-                tag: '风险',
+                title: S.of(context).iosGuideMethodIpaTitle,
+                tag: S.of(context).iosGuideMethodIpaTag,
                 tagColor: const Color(0xFFF59E0B),
-                pros: const [
-                  '✅ 部分商业证书签名版本可用',
+                pros: [S.of(context).iosGuideMethodIpaProSigned],
+                cons: [
+                  S.of(context).iosGuideMethodIpaConRevoke,
+                  S.of(context).iosGuideMethodIpaConTamper,
                 ],
-                cons: const [
-                  '⚠️ 商业证书随时可能被 Apple 撤销，撤销后整批闪退',
-                  '⚠️ 第三方分发渠道存在篡改风险',
-                ],
-                howto: '只接受官方 GitHub Releases 提供的 IPA 自行签名安装，'
-                    '不要使用来路不明的"已签名"安装包。',
+                howto: S.of(context).iosGuideMethodIpaHowto,
               ),
               const SizedBox(height: 24),
               FilledButton.icon(
                 onPressed: () => Navigator.of(context).maybePop(),
                 icon: const Icon(Icons.check_rounded),
-                label: const Text('我知道了'),
+                label: Text(S.of(context).iosGuideAck),
                 style: FilledButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 14),
                 ),
