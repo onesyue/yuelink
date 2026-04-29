@@ -169,11 +169,10 @@ class _MainShellState extends ConsumerState<MainShell> {
       ),
     ];
 
-    // extendBody=true so the body content scrolls behind the bottom bar;
-    // BackdropFilter then has something real to blur (otherwise the bar
-    // would be a translucent layer over solid Scaffold background — no
-    // glass at all). Pages already use SafeArea / scroll views that
-    // tolerate the bottom inset.
+    // extendBody all platforms — every platform paints a real
+    // BackdropFilter behind the bar, so body content needs to scroll
+    // through. Android uses a much smaller sigma to stay within the
+    // frame budget; see _GlassBottomNav for the platform table.
     return Scaffold(
       extendBody: true,
       body: RepaintBoundary(
@@ -213,9 +212,20 @@ class _GlassTabSpec {
 
 /// Cross-platform glass bottom bar — translucent material with a real
 /// `BackdropFilter` blur, springy icon swap, and tracking text-weight
-/// transition on the active tab. Replaces `CupertinoTabBar` so Android
-/// and Windows also get the frosted-glass look (CupertinoTabBar is
-/// iOS-only-feeling on Material).
+/// transition on the active tab. Sigma is platform-tuned so every
+/// target gets the frosted look without burning the frame budget.
+///
+/// Sigma table:
+///   * iOS / macOS / Windows / Linux — 24 (matches toast, headroom on
+///     every desktop GPU and on Apple Metal).
+///   * Android — 8 (Impeller Android re-rasterises the scene under a
+///     BackdropFilter; gaussian-blur cost grows ~O(σ²), so 30→8 cuts
+///     work ~14× and stays within the frame cap on mid-tier devices).
+///     Visually weaker than 24 but still reads as frosted glass — TG
+///     and Apple Music use comparable values on Android. Real-world
+///     report 2026-04-29: sigma 30 ANR'd app at startup on a mid-tier
+///     Android — the value below is the largest one that survived in
+///     manual testing.
 class _GlassBottomNav extends StatelessWidget {
   final List<_GlassTabSpec> items;
   final int currentIndex;
@@ -232,19 +242,25 @@ class _GlassBottomNav extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.viewPaddingOf(context).bottom;
-    final glassColor = isDark
-        ? Colors.black.withValues(alpha: 0.55)
-        : Colors.white.withValues(alpha: 0.65);
+    final isAndroid = Theme.of(context).platform == TargetPlatform.android;
+    // Lighter tint on Android — the smaller blur sigma needs more
+    // alpha-tint help to read as glass instead of "transparent panel
+    // with smeared content under it".
+    final glassColor = isAndroid
+        ? (isDark
+            ? Colors.black.withValues(alpha: 0.70)
+            : Colors.white.withValues(alpha: 0.78))
+        : (isDark
+            ? Colors.black.withValues(alpha: 0.55)
+            : Colors.white.withValues(alpha: 0.65));
     final borderColor = isDark
         ? Colors.white.withValues(alpha: 0.06)
         : Colors.black.withValues(alpha: 0.06);
+    final blurSigma = isAndroid ? 8.0 : 24.0;
 
     return ClipRect(
       child: BackdropFilter(
-        // 30/30 sigma is the Apple-native threshold where wallpaper
-        // detail is lost but colour bleed stays — TG uses ~25, Apple
-        // Music ~30. Going higher banded on low-end Android.
-        filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+        filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
         child: DecoratedBox(
           decoration: BoxDecoration(
             color: glassColor,
