@@ -100,15 +100,17 @@ class _AnnouncementsPageState extends ConsumerState<AnnouncementsPage> {
 
             return SliverPadding(
               padding: const EdgeInsets.fromLTRB(
-                  YLSpacing.lg, 0, YLSpacing.lg, 0),
+                YLSpacing.lg,
+                0,
+                YLSpacing.lg,
+                0,
+              ),
               sliver: SliverList.separated(
                 itemCount: list.length,
                 separatorBuilder: (_, _) =>
                     const SizedBox(height: YLSpacing.md),
-                itemBuilder: (context, i) => _AnnouncementTile(
-                  item: list[i],
-                  isDark: isDark,
-                ),
+                itemBuilder: (context, i) =>
+                    _AnnouncementTile(item: list[i], isDark: isDark),
               ),
             );
           },
@@ -170,61 +172,60 @@ class _AnnouncementTileState extends ConsumerState<_AnnouncementTile> {
             ),
           ),
           child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                // Unread dot
-                if (!isRead) ...[
-                  Container(
-                    width: 7,
-                    height: 7,
-                    margin: const EdgeInsets.only(right: 7),
-                    decoration: const BoxDecoration(
-                      color: YLColors.connected,
-                      shape: BoxShape.circle,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  // Unread dot
+                  if (!isRead) ...[
+                    Container(
+                      width: 7,
+                      height: 7,
+                      margin: const EdgeInsets.only(right: 7),
+                      decoration: const BoxDecoration(
+                        color: YLColors.connected,
+                        shape: BoxShape.circle,
+                      ),
                     ),
+                  ],
+                  Expanded(
+                    child: Text(
+                      item.title,
+                      style: YLText.titleMedium.copyWith(
+                        fontWeight: isRead ? FontWeight.w500 : FontWeight.w700,
+                      ),
+                      maxLines: _expanded ? null : 1,
+                      overflow: _expanded ? null : TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Icon(
+                    _expanded ? Icons.expand_less : Icons.expand_more,
+                    size: 18,
+                    color: YLColors.zinc400,
                   ),
                 ],
-                Expanded(
-                  child: Text(
-                    item.title,
-                    style: YLText.titleMedium.copyWith(
-                      fontWeight:
-                          isRead ? FontWeight.w500 : FontWeight.w700,
-                    ),
-                    maxLines: _expanded ? null : 1,
-                    overflow:
-                        _expanded ? null : TextOverflow.ellipsis,
-                  ),
-                ),
-                const SizedBox(width: 4),
-                Icon(
-                  _expanded ? Icons.expand_less : Icons.expand_more,
-                  size: 18,
-                  color: YLColors.zinc400,
+              ),
+              if (dateStr != null) ...[
+                const SizedBox(height: 3),
+                Text(
+                  dateStr,
+                  style: YLText.caption.copyWith(color: YLColors.zinc400),
                 ),
               ],
-            ),
-            if (dateStr != null) ...[
-              const SizedBox(height: 3),
-              Text(dateStr,
-                  style:
-                      YLText.caption.copyWith(color: YLColors.zinc400)),
+              if (_expanded && item.content.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Divider(
+                  height: 1,
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.06)
+                      : Colors.black.withValues(alpha: 0.06),
+                ),
+                const SizedBox(height: 10),
+                RichContent(content: item.content),
+              ],
             ],
-            if (_expanded && item.content.isNotEmpty) ...[
-              const SizedBox(height: 10),
-              Divider(
-                height: 1,
-                color: isDark
-                    ? Colors.white.withValues(alpha: 0.06)
-                    : Colors.black.withValues(alpha: 0.06),
-              ),
-              const SizedBox(height: 10),
-              RichContent(content: item.content),
-            ],
-          ],
-        ),
+          ),
         ),
       ),
     );

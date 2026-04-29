@@ -45,6 +45,12 @@ class YLLargeTitleScaffold extends StatelessWidget {
   /// of the slivers without scrolling.
   final Widget? bottomBar;
 
+  /// Whether to insert the large title app bar.
+  ///
+  /// Main tab pages set this to false because the bottom tab bar already
+  /// labels the current area; route-level pages keep the large title.
+  final bool showTitleBar;
+
   /// Pull-to-refresh callback. When non-null the scroll view is wrapped
   /// in a `RefreshIndicator` so dragging from the top triggers it.
   final Future<void> Function()? onRefresh;
@@ -66,6 +72,7 @@ class YLLargeTitleScaffold extends StatelessWidget {
     this.leading,
     this.bottomSafe = true,
     this.bottomBar,
+    this.showTitleBar = true,
     this.onRefresh,
     this.maxContentWidth = 720,
   });
@@ -78,47 +85,52 @@ class YLLargeTitleScaffold extends StatelessWidget {
 
     final body = CustomScrollView(
       slivers: [
-        SliverAppBar.large(
-          backgroundColor: bg,
-          surfaceTintColor: Colors.transparent,
-          elevation: 0,
-          scrolledUnderElevation: 0,
-          pinned: true,
-          stretch: true,
-          centerTitle: false,
-          automaticallyImplyLeading: leading == null,
-          leading: leading,
-          actions: actions,
-          title: Text(
-            title,
-            style: YLText.titleLarge.copyWith(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: fg,
-            ),
-          ),
-          flexibleSpace: FlexibleSpaceBar(
-            titlePadding: const EdgeInsetsDirectional.only(
-              start: YLSpacing.lg,
-              bottom: YLSpacing.md,
-            ),
+        if (showTitleBar)
+          SliverAppBar.large(
+            backgroundColor: bg,
+            surfaceTintColor: Colors.transparent,
+            elevation: 0,
+            scrolledUnderElevation: 0,
+            pinned: true,
+            stretch: true,
+            centerTitle: false,
+            automaticallyImplyLeading: leading == null,
+            leading: leading,
+            actions: actions,
             title: Text(
               title,
-              style: YLText.display.copyWith(
-                fontSize: 32,
-                fontWeight: FontWeight.w700,
-                letterSpacing: -0.6,
+              style: YLText.titleLarge.copyWith(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
                 color: fg,
               ),
             ),
-            collapseMode: CollapseMode.pin,
+            flexibleSpace: FlexibleSpaceBar(
+              titlePadding: const EdgeInsetsDirectional.only(
+                start: YLSpacing.lg,
+                bottom: YLSpacing.md,
+              ),
+              title: Text(
+                title,
+                style: YLText.display.copyWith(
+                  fontSize: 32,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0,
+                  color: fg,
+                ),
+              ),
+              collapseMode: CollapseMode.pin,
+            ),
           ),
-        ),
-        if (subtitle != null)
+        if (showTitleBar && subtitle != null)
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(
-                  YLSpacing.lg, 0, YLSpacing.lg, YLSpacing.sm),
+                YLSpacing.lg,
+                0,
+                YLSpacing.lg,
+                YLSpacing.sm,
+              ),
               child: Text(
                 subtitle!,
                 style: YLText.caption.copyWith(
@@ -131,9 +143,7 @@ class YLLargeTitleScaffold extends StatelessWidget {
         ...slivers,
         // Bottom inset spacer — pushes the last item above the system
         // gesture / navigation bar without each caller having to remember.
-        const SliverPadding(
-          padding: EdgeInsets.only(bottom: YLSpacing.xxl),
-        ),
+        const SliverPadding(padding: EdgeInsets.only(bottom: YLSpacing.xxl)),
       ],
     );
 

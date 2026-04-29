@@ -4,8 +4,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 
-import '../../../core/kernel/core_manager.dart';
 import '../../../i18n/app_strings.dart';
+import '../emby_client.dart';
 
 /// Netflix-style unified settings panel for the Emby player.
 ///
@@ -46,7 +46,8 @@ class EmbyPlayerSettingsPanel extends StatefulWidget {
   });
 
   @override
-  State<EmbyPlayerSettingsPanel> createState() => _EmbyPlayerSettingsPanelState();
+  State<EmbyPlayerSettingsPanel> createState() =>
+      _EmbyPlayerSettingsPanelState();
 }
 
 class _EmbyPlayerSettingsPanelState extends State<EmbyPlayerSettingsPanel>
@@ -57,7 +58,11 @@ class _EmbyPlayerSettingsPanelState extends State<EmbyPlayerSettingsPanel>
   @override
   void initState() {
     super.initState();
-    _tab = TabController(length: 3, vsync: this, initialIndex: widget.initialTab);
+    _tab = TabController(
+      length: 3,
+      vsync: this,
+      initialIndex: widget.initialTab,
+    );
     _currentSize = widget.subtitleFontSize;
   }
 
@@ -92,8 +97,10 @@ class _EmbyPlayerSettingsPanelState extends State<EmbyPlayerSettingsPanel>
             indicatorColor: Colors.red,
             labelColor: Colors.white,
             unselectedLabelColor: Colors.white54,
-            labelStyle:
-                const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+            labelStyle: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
             unselectedLabelStyle: const TextStyle(fontSize: 14),
             dividerHeight: 0.5,
             dividerColor: Colors.white12,
@@ -125,7 +132,11 @@ class _EmbyPlayerSettingsPanelState extends State<EmbyPlayerSettingsPanel>
     final real = embedded.length > 2 ? embedded.sublist(2) : <AudioTrack>[];
     if (real.isEmpty) {
       return Center(
-          child: Text(S.current.embyNoAudioTrack, style: const TextStyle(color: Colors.white38)));
+        child: Text(
+          S.current.embyNoAudioTrack,
+          style: const TextStyle(color: Colors.white38),
+        ),
+      );
     }
     return ListView.builder(
       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -170,8 +181,7 @@ class _EmbyPlayerSettingsPanelState extends State<EmbyPlayerSettingsPanel>
         // Track selection.
         _PlayerOptionTile(
           label: S.current.close,
-          selected:
-              widget.player.state.track.subtitle == SubtitleTrack.no(),
+          selected: widget.player.state.track.subtitle == SubtitleTrack.no(),
           onTap: () {
             widget.player.setSubtitleTrack(SubtitleTrack.no());
             Navigator.pop(context);
@@ -187,18 +197,19 @@ class _EmbyPlayerSettingsPanelState extends State<EmbyPlayerSettingsPanel>
             },
           ),
         if (widget.embySubs.isEmpty)
-          for (int i = 2;
-              i < widget.player.state.tracks.subtitle.length;
-              i++)
+          for (int i = 2; i < widget.player.state.tracks.subtitle.length; i++)
             _PlayerOptionTile(
-              label: widget.player.state.tracks.subtitle[i].title ??
+              label:
+                  widget.player.state.tracks.subtitle[i].title ??
                   widget.player.state.tracks.subtitle[i].language ??
                   '字幕 ${i - 1}',
-              selected: widget.player.state.track.subtitle ==
+              selected:
+                  widget.player.state.track.subtitle ==
                   widget.player.state.tracks.subtitle[i],
               onTap: () {
-                widget.player
-                    .setSubtitleTrack(widget.player.state.tracks.subtitle[i]);
+                widget.player.setSubtitleTrack(
+                  widget.player.state.tracks.subtitle[i],
+                );
                 Navigator.pop(context);
               },
             ),
@@ -207,38 +218,46 @@ class _EmbyPlayerSettingsPanelState extends State<EmbyPlayerSettingsPanel>
           padding: const EdgeInsets.fromLTRB(24, 20, 24, 4),
           child: Row(
             children: [
-              Text(S.current.embySubtitleSize,
-                  style: const TextStyle(color: Colors.white54, fontSize: 12)),
+              Text(
+                S.current.embySubtitleSize,
+                style: const TextStyle(color: Colors.white54, fontSize: 12),
+              ),
               const SizedBox(width: 16),
-              ...sizes.entries.map((e) => Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: GestureDetector(
-                      onTap: () {
-                        widget.onSubtitleSizeChanged(e.value);
-                        setState(() => _currentSize = e.value);
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
+              ...sizes.entries.map(
+                (e) => Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: GestureDetector(
+                    onTap: () {
+                      widget.onSubtitleSizeChanged(e.value);
+                      setState(() => _currentSize = e.value);
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _currentSize == e.value
+                            ? Colors.red
+                            : Colors.white12,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        e.key,
+                        style: TextStyle(
                           color: _currentSize == e.value
-                              ? Colors.red
-                              : Colors.white12,
-                          borderRadius: BorderRadius.circular(6),
+                              ? Colors.white
+                              : Colors.white54,
+                          fontSize: 13,
+                          fontWeight: _currentSize == e.value
+                              ? FontWeight.w600
+                              : FontWeight.normal,
                         ),
-                        child: Text(e.key,
-                            style: TextStyle(
-                              color: _currentSize == e.value
-                                  ? Colors.white
-                                  : Colors.white54,
-                              fontSize: 13,
-                              fontWeight: _currentSize == e.value
-                                  ? FontWeight.w600
-                                  : FontWeight.normal,
-                            )),
                       ),
                     ),
-                  )),
+                  ),
+                ),
+              ),
             ],
           ),
         ),
@@ -262,7 +281,13 @@ class _EmbyPlayerSettingsPanelState extends State<EmbyPlayerSettingsPanel>
     final codec = (sub['Codec'] as String?) ?? 'srt';
 
     // 图片字幕（PGS/VOBSUB）用 mpv 内嵌轨道切换
-    final bitmapCodecs = {'pgssub', 'dvdsub', 'hdmv_pgs_subtitle', 'dvd_subtitle', 'sup'};
+    final bitmapCodecs = {
+      'pgssub',
+      'dvdsub',
+      'hdmv_pgs_subtitle',
+      'dvd_subtitle',
+      'sup',
+    };
     if (bitmapCodecs.contains(codec.toLowerCase())) {
       // 匹配 mpv 内嵌字幕轨（跳过前2个系统轨）
       final embedded = widget.player.state.tracks.subtitle;
@@ -284,9 +309,11 @@ class _EmbyPlayerSettingsPanelState extends State<EmbyPlayerSettingsPanel>
     try {
       final client = HttpClient();
       client.connectionTimeout = const Duration(seconds: 10);
-      final proxyPort = CoreManager.instance.mixedPort;
-      if (proxyPort > 0) {
+      final proxyPort = EmbyClient.activeProxyPort;
+      if (proxyPort != null) {
         client.findProxy = (_) => 'PROXY 127.0.0.1:$proxyPort';
+      } else {
+        client.findProxy = (_) => 'DIRECT';
       }
       client.badCertificateCallback = (_, _, _) => true;
       try {
@@ -294,13 +321,17 @@ class _EmbyPlayerSettingsPanelState extends State<EmbyPlayerSettingsPanel>
         request.headers.set('X-Emby-Authorization', authHeader);
         final response = await request.close();
         if (response.statusCode == 200) {
-          final data = await response.transform(const Utf8Decoder(allowMalformed: true)).join();
+          final data = await response
+              .transform(const Utf8Decoder(allowMalformed: true))
+              .join();
           if (data.isNotEmpty && !data.contains('<!DOCTYPE')) {
-            await widget.player.setSubtitleTrack(SubtitleTrack.data(
-              data,
-              title: sub['Title'] as String? ?? '',
-              language: sub['Language'] as String?,
-            ));
+            await widget.player.setSubtitleTrack(
+              SubtitleTrack.data(
+                data,
+                title: sub['Title'] as String? ?? '',
+                language: sub['Language'] as String?,
+              ),
+            );
             return;
           }
         }
@@ -322,14 +353,16 @@ class _EmbyPlayerSettingsPanelState extends State<EmbyPlayerSettingsPanel>
     return ListView(
       padding: const EdgeInsets.symmetric(vertical: 8),
       children: speeds
-          .map((r) => _PlayerOptionTile(
-                label: r == 1.0 ? '正常' : '${r}x',
-                selected: widget.currentRate == r,
-                onTap: () {
-                  widget.onRateChanged(r);
-                  Navigator.pop(context);
-                },
-              ))
+          .map(
+            (r) => _PlayerOptionTile(
+              label: r == 1.0 ? '正常' : '${r}x',
+              selected: widget.currentRate == r,
+              onTap: () {
+                widget.onRateChanged(r);
+                Navigator.pop(context);
+              },
+            ),
+          )
           .toList(),
     );
   }
@@ -366,13 +399,14 @@ class _PlayerOptionTile extends StatelessWidget {
             ),
             const SizedBox(width: 14),
             Expanded(
-              child: Text(label,
-                  style: TextStyle(
-                    color: selected ? Colors.white : Colors.white70,
-                    fontSize: 15,
-                    fontWeight:
-                        selected ? FontWeight.w600 : FontWeight.normal,
-                  )),
+              child: Text(
+                label,
+                style: TextStyle(
+                  color: selected ? Colors.white : Colors.white70,
+                  fontSize: 15,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+                ),
+              ),
             ),
             if (selected)
               const Icon(Icons.check_rounded, color: Colors.white, size: 20),

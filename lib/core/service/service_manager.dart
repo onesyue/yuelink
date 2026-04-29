@@ -108,10 +108,10 @@ class ServiceManager {
     // null) used to surface as startService throwing "auth token is
     // missing" 4ms into the startup pipeline. Treating that state as "not
     // installed" lets the UI offer a fresh install that recreates both.
-    final result = await Process.run(
-      'sc',
-      ['query', AppConstants.desktopServiceName],
-    );
+    final result = await Process.run('sc', [
+      'query',
+      AppConstants.desktopServiceName,
+    ]);
     if (result.exitCode != 0) return false;
     final token = await SettingsService.getServiceAuthToken();
     return token != null && token.isNotEmpty;
@@ -154,7 +154,8 @@ class ServiceManager {
   static Future<void> install() async {
     if (!isSupported) {
       throw UnsupportedError(
-          'Desktop service mode is only available on macOS, Windows and Linux');
+        'Desktop service mode is only available on macOS, Windows and Linux',
+      );
     }
 
     // Confined Linux runtimes (Flatpak / Snap / AppImage) either forbid or
@@ -179,10 +180,7 @@ class ServiceManager {
     final ownerUid = _currentUid();
     final appSupport = await getApplicationSupportDirectory();
     final tempBase = Directory.systemTemp.path;
-    final allowedHomeDirs = <String>[
-      appSupport.path,
-      tempBase,
-    ];
+    final allowedHomeDirs = <String>[appSupport.path, tempBase];
 
     // Windows still needs a token for HTTP loopback. macOS/Linux don't.
     String? token;
@@ -223,12 +221,12 @@ class ServiceManager {
       final configFile = File('${tempDir.path}/service-config.json');
       await configFile.writeAsString(
         const JsonEncoder.withIndent('  ').convert({
-          if (token != null) 'token': token,
+          'token': ?token,
           if (Platform.isWindows) ...{
             'listen_host': AppConstants.serviceListenHost,
             'listen_port': AppConstants.serviceListenPort,
           },
-          if (socketPath != null) 'socket_path': socketPath,
+          'socket_path': ?socketPath,
           'owner_uid': ownerUid,
           'allowed_home_dirs': allowedHomeDirs,
           'mihomo_path': mihomoInstallPath,
@@ -294,7 +292,8 @@ class ServiceManager {
     final binaries = await _resolveSourceBinaries();
 
     if (Platform.isMacOS) {
-      final script = '''
+      final script =
+          '''
 #!/bin/sh
 set -eu
 launchctl bootout system/${AppConstants.desktopServiceLabel} >/dev/null 2>&1 || true
@@ -320,7 +319,8 @@ launchctl kickstart -k system/${AppConstants.desktopServiceLabel}
         }
       }
     } else if (Platform.isLinux) {
-      final script = '''
+      final script =
+          '''
 #!/bin/sh
 set -eu
 systemctl stop ${AppConstants.desktopServiceLabel} >/dev/null 2>&1 || true
@@ -343,7 +343,8 @@ systemctl restart ${AppConstants.desktopServiceLabel}
         }
       }
     } else if (Platform.isWindows) {
-      final script = r'''
+      final script =
+          r'''
 $ErrorActionPreference = "Stop"
 $serviceName = '__SERVICE_NAME__'
 Stop-Service -Name $serviceName -Force -ErrorAction SilentlyContinue
@@ -352,11 +353,23 @@ Copy-Item -Force __HELPER_SRC__ __HELPER_DST__
 Copy-Item -Force __MIHOMO_SRC__ __MIHOMO_DST__
 Start-Service -Name $serviceName
 '''
-          .replaceAll('__SERVICE_NAME__', AppConstants.desktopServiceName)
-          .replaceAll('__HELPER_SRC__', _powershellQuoted(binaries.helperPath))
-          .replaceAll('__HELPER_DST__', _powershellQuoted(_windowsInstalledHelperPath))
-          .replaceAll('__MIHOMO_SRC__', _powershellQuoted(binaries.mihomoPath))
-          .replaceAll('__MIHOMO_DST__', _powershellQuoted(_windowsInstalledMihomoPath));
+              .replaceAll('__SERVICE_NAME__', AppConstants.desktopServiceName)
+              .replaceAll(
+                '__HELPER_SRC__',
+                _powershellQuoted(binaries.helperPath),
+              )
+              .replaceAll(
+                '__HELPER_DST__',
+                _powershellQuoted(_windowsInstalledHelperPath),
+              )
+              .replaceAll(
+                '__MIHOMO_SRC__',
+                _powershellQuoted(binaries.mihomoPath),
+              )
+              .replaceAll(
+                '__MIHOMO_DST__',
+                _powershellQuoted(_windowsInstalledMihomoPath),
+              );
       final tempDir = await Directory.systemTemp.createTemp('yuelink_update_');
       try {
         final scriptFile = File('${tempDir.path}/update_service.ps1');
@@ -478,8 +491,10 @@ Start-Service -Name $serviceName
       // rely on the user guessing. Most common failures: Intel Mac DMG
       // shipped without amd64 build, or `flutter build macos` skipped the
       // "Bundle native libs" Xcode phase.
-      EventLog.write('[Service] binaries missing. helper_tried=${helperCandidates.join("|")} '
-          'mihomo_tried=${mihomoCandidates.join("|")}');
+      EventLog.write(
+        '[Service] binaries missing. helper_tried=${helperCandidates.join("|")} '
+        'mihomo_tried=${mihomoCandidates.join("|")}',
+      );
       final helperHint = helperPath.isEmpty ? 'yuelink-service-helper' : null;
       final mihomoHint = mihomoPath.isEmpty ? 'yuelink-mihomo' : null;
       final missing = [helperHint, mihomoHint].whereType<String>().join(' + ');
@@ -490,10 +505,7 @@ Start-Service -Name $serviceName
       );
     }
 
-    return _ServiceBinaries(
-      helperPath: helperPath,
-      mihomoPath: mihomoPath,
-    );
+    return _ServiceBinaries(helperPath: helperPath, mihomoPath: mihomoPath);
   }
 
   static Future<void> _waitUntilReachable() async {
@@ -525,12 +537,17 @@ Start-Service -Name $serviceName
     // Is the service/daemon even registered?
     if (Platform.isWindows) {
       try {
-        final r = await Process.run(
-          'sc', ['query', AppConstants.desktopServiceName],
-        ).timeout(const Duration(seconds: 2));
-        final line = r.stdout.toString().split('\n')
-            .firstWhere((l) => l.toUpperCase().contains('STATE'),
-                orElse: () => '<no STATE line>');
+        final r = await Process.run('sc', [
+          'query',
+          AppConstants.desktopServiceName,
+        ]).timeout(const Duration(seconds: 2));
+        final line = r.stdout
+            .toString()
+            .split('\n')
+            .firstWhere(
+              (l) => l.toUpperCase().contains('STATE'),
+              orElse: () => '<no STATE line>',
+            );
         parts.add('sc=${line.trim()}');
       } catch (e) {
         parts.add('sc_probe_err=$e');
@@ -538,11 +555,16 @@ Start-Service -Name $serviceName
     } else if (Platform.isMacOS) {
       try {
         final r = await Process.run('launchctl', [
-          'print', 'system/${AppConstants.desktopServiceLabel}',
+          'print',
+          'system/${AppConstants.desktopServiceLabel}',
         ]).timeout(const Duration(seconds: 2));
-        final state = r.stdout.toString().split('\n')
-            .firstWhere((l) => l.contains('state ='),
-                orElse: () => '<no state line>');
+        final state = r.stdout
+            .toString()
+            .split('\n')
+            .firstWhere(
+              (l) => l.contains('state ='),
+              orElse: () => '<no state line>',
+            );
         parts.add('launchctl=${state.trim()}');
       } catch (e) {
         parts.add('launchctl_probe_err=$e');
@@ -550,7 +572,8 @@ Start-Service -Name $serviceName
     } else if (Platform.isLinux) {
       try {
         final r = await Process.run('systemctl', [
-          'is-active', AppConstants.desktopServiceName,
+          'is-active',
+          AppConstants.desktopServiceName,
         ]).timeout(const Duration(seconds: 2));
         parts.add('systemctl=${r.stdout.toString().trim()}');
       } catch (e) {
@@ -563,8 +586,8 @@ Start-Service -Name $serviceName
     final logPath = Platform.isWindows
         ? _windowsInstalledHelperLogPath
         : Platform.isMacOS
-            ? _macInstalledHelperLogPath
-            : _linuxInstalledHelperLogPath;
+        ? _macInstalledHelperLogPath
+        : _linuxInstalledHelperLogPath;
     try {
       final logFile = File(logPath);
       if (logFile.existsSync()) {
@@ -597,9 +620,11 @@ Start-Service -Name $serviceName
     final command =
         'do shell script "${_appleScriptEscape('/bin/sh ${_shellQuote(scriptPath)}')}" with administrator privileges';
     final result = await Process.run('osascript', ['-e', command]);
-    EventLog.write('[Service] osascript exit=${result.exitCode} '
-        'stdout=${_truncateForLog('${result.stdout}')} '
-        'stderr=${_truncateForLog('${result.stderr}')}');
+    EventLog.write(
+      '[Service] osascript exit=${result.exitCode} '
+      'stdout=${_truncateForLog('${result.stdout}')} '
+      'stderr=${_truncateForLog('${result.stderr}')}',
+    );
     if (result.exitCode != 0) {
       throw ProcessException(
         'osascript',
@@ -623,7 +648,8 @@ Start-Service -Name $serviceName
     final transcriptPath =
         '${Directory.systemTemp.path}\\yuelink_elev_${DateTime.now().millisecondsSinceEpoch}.log';
 
-    final launcher = r'''
+    final launcher =
+        r'''
 $ErrorActionPreference = "Stop"
 $scriptPath = __SCRIPT__
 $transcriptPath = __TRANSCRIPT__
@@ -661,13 +687,14 @@ try {
   exit 1
 }
 '''
-        .replaceAll('__SCRIPT__', _powershellQuoted(scriptPath))
-        .replaceAll('__TRANSCRIPT__', _powershellQuoted(transcriptPath));
+            .replaceAll('__SCRIPT__', _powershellQuoted(scriptPath))
+            .replaceAll('__TRANSCRIPT__', _powershellQuoted(transcriptPath));
 
-    final result = await Process.run(
-      'powershell',
-      ['-NoProfile', '-Command', launcher],
-    );
+    final result = await Process.run('powershell', [
+      '-NoProfile',
+      '-Command',
+      launcher,
+    ]);
 
     // Read back transcript then delete it. Both launcher's own
     // stdout/stderr AND the elevated child's transcript go into event.log
@@ -677,18 +704,20 @@ try {
     final transcript = _readAndDelete(transcriptPath);
     final launcherOut = '${result.stdout}';
     final launcherErr = '${result.stderr}';
-    EventLog.write('[Service] elevated exit=${result.exitCode} '
-        'launcher_err=${_truncateForLog(launcherErr)} '
-        'launcher_out=${_truncateForLog(launcherOut)} '
-        'transcript=${_truncateForLog(transcript)}');
+    EventLog.write(
+      '[Service] elevated exit=${result.exitCode} '
+      'launcher_err=${_truncateForLog(launcherErr)} '
+      'launcher_out=${_truncateForLog(launcherOut)} '
+      'transcript=${_truncateForLog(transcript)}',
+    );
 
     if (result.exitCode != 0) {
       final detail = launcherErr.trim().isNotEmpty
           ? launcherErr.trim()
           : (transcript.trim().isNotEmpty
-              ? transcript.trim()
-              : 'Elevated PowerShell exited ${result.exitCode} '
-                  '(no transcript — UAC may have been cancelled)');
+                ? transcript.trim()
+                : 'Elevated PowerShell exited ${result.exitCode} '
+                      '(no transcript — UAC may have been cancelled)');
       throw ProcessException(
         'powershell',
         ['-NoProfile', '-Command', launcher],
@@ -838,11 +867,17 @@ Start-Service -Name $serviceName
         .replaceAll('__MIHOMO_SRC__', _powershellQuoted(mihomoSource))
         .replaceAll('__CONFIG_SRC__', _powershellQuoted(configSource))
         .replaceAll(
-            '__HELPER_DST__', _powershellQuoted(_windowsInstalledHelperPath))
+          '__HELPER_DST__',
+          _powershellQuoted(_windowsInstalledHelperPath),
+        )
         .replaceAll(
-            '__MIHOMO_DST__', _powershellQuoted(_windowsInstalledMihomoPath))
+          '__MIHOMO_DST__',
+          _powershellQuoted(_windowsInstalledMihomoPath),
+        )
         .replaceAll(
-            '__CONFIG_DST__', _powershellQuoted(_windowsInstalledConfigPath));
+          '__CONFIG_DST__',
+          _powershellQuoted(_windowsInstalledConfigPath),
+        );
   }
 
   static String _windowsUninstallScript() {
@@ -1014,7 +1049,9 @@ rm -rf ${_shellQuote(_linuxServiceDir)}
       // Caller can't distinguish "script produced empty output" from
       // "we failed to read it" without this line. Keep the message short —
       // event.log is tailed by the desktop repair page.
-      EventLog.write('[ServiceManager] readAndDelete failed: path=$path err=$e');
+      EventLog.write(
+        '[ServiceManager] readAndDelete failed: path=$path err=$e',
+      );
       return '';
     }
   }
@@ -1032,11 +1069,12 @@ rm -rf ${_shellQuote(_linuxServiceDir)}
     // Try pkexec first (graphical sudo), fallback to sudo
     for (final elevator in ['pkexec', 'sudo']) {
       try {
-        final result =
-            await Process.run(elevator, ['/bin/sh', scriptPath]);
-        EventLog.write('[Service] $elevator exit=${result.exitCode} '
-            'stdout=${_truncateForLog('${result.stdout}')} '
-            'stderr=${_truncateForLog('${result.stderr}')}');
+        final result = await Process.run(elevator, ['/bin/sh', scriptPath]);
+        EventLog.write(
+          '[Service] $elevator exit=${result.exitCode} '
+          'stdout=${_truncateForLog('${result.stdout}')} '
+          'stderr=${_truncateForLog('${result.stderr}')}',
+        );
         if (result.exitCode == 0) return;
         if (elevator == 'pkexec') continue; // try sudo next
         throw ProcessException(
@@ -1049,7 +1087,9 @@ rm -rf ${_shellQuote(_linuxServiceDir)}
         );
       } catch (e) {
         if (elevator == 'pkexec') {
-          EventLog.write('[Service] pkexec unavailable, falling back to sudo err=$e');
+          EventLog.write(
+            '[Service] pkexec unavailable, falling back to sudo err=$e',
+          );
           continue;
         }
         rethrow;
@@ -1062,8 +1102,5 @@ class _ServiceBinaries {
   final String helperPath;
   final String mihomoPath;
 
-  const _ServiceBinaries({
-    required this.helperPath,
-    required this.mihomoPath,
-  });
+  const _ServiceBinaries({required this.helperPath, required this.mihomoPath});
 }

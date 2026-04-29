@@ -18,24 +18,16 @@ import android.service.quicksettings.TileService
 import androidx.core.content.FileProvider
 import java.io.File
 import io.flutter.embedding.android.FlutterActivity
-import io.flutter.embedding.android.RenderMode
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.engine.FlutterEngineCache
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
 
-    // Use texture render mode to avoid the black-frame flash / ghost shadow
-    // that appears when returning from background with the default surface mode.
-    // Surface mode destroys and recreates the EGL surface on pause/resume;
-    // texture mode keeps the Flutter texture alive, giving a smooth transition.
-    override fun getRenderMode(): RenderMode = RenderMode.texture
-
     /**
-     * Reuse the shared FlutterEngine pre-warmed by MainApplication so the
-     * UI and the Quick Settings tile share a single engine (one CoreManager,
-     * no Go-core race). Returns null and falls back to the default engine
-     * creation only if the cache is empty for some reason.
+     * Reuse the shared FlutterEngine once MainActivity has created and cached
+     * it. Returning null on first launch lets FlutterActivity build a normal
+     * Activity-attached engine with plugins registered in the right order.
      */
     override fun provideFlutterEngine(context: Context): FlutterEngine? {
         return FlutterEngineCache.getInstance().get(MainApplication.SHARED_ENGINE_ID)
@@ -43,16 +35,8 @@ class MainActivity : FlutterActivity() {
     }
 
     /**
-     * Tell FlutterActivity which cached engine ID to attach to. Without
-     * this, FlutterActivity ignores provideFlutterEngine in some builds
-     * because it tracks engines by ID.
-     */
-    override fun getCachedEngineId(): String? = MainApplication.SHARED_ENGINE_ID
-
-    /**
-     * The shared engine is owned by the Application — must NOT be destroyed
-     * when the activity finishes, otherwise the tile loses its target and
-     * subsequent toggles fall back to launching the activity again.
+     * Keep the lazily cached engine alive after the Activity is destroyed so
+     * the Quick Settings tile can invoke it while the UI is not visible.
      */
     override fun shouldDestroyEngineWithHost(): Boolean = false
 
@@ -147,6 +131,10 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        FlutterEngineCache.getInstance().put(
+            MainApplication.SHARED_ENGINE_ID,
+            flutterEngine,
+        )
 
         // ── VPN channel ───────────────────────────────────────────────────────
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, VPN_CHANNEL)

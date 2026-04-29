@@ -80,27 +80,27 @@ class _OrderHistoryPageState extends ConsumerState<OrderHistoryPage>
             final notifier = ref.read(orderHistoryProvider.notifier);
             return SliverPadding(
               padding: const EdgeInsets.fromLTRB(
-                  YLSpacing.lg, YLSpacing.sm, YLSpacing.lg, 0),
+                YLSpacing.lg,
+                YLSpacing.sm,
+                YLSpacing.lg,
+                0,
+              ),
               sliver: SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (context, i) {
-                    if (i == orders.length) {
-                      return _LoadMoreFooter(notifier: notifier, isEn: isEn);
-                    }
-                    final order = orders[i];
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: YLSpacing.sm),
-                      child: _OrderItem(
-                        order: order,
-                        isDark: isDark,
-                        isEn: isEn,
-                        onTap: () =>
-                            _showDetail(context, order, isDark, isEn),
-                      ),
-                    );
-                  },
-                  childCount: orders.length + 1,
-                ),
+                delegate: SliverChildBuilderDelegate((context, i) {
+                  if (i == orders.length) {
+                    return _LoadMoreFooter(notifier: notifier, isEn: isEn);
+                  }
+                  final order = orders[i];
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: YLSpacing.sm),
+                    child: _OrderItem(
+                      order: order,
+                      isDark: isDark,
+                      isEn: isEn,
+                      onTap: () => _showDetail(context, order, isDark, isEn),
+                    ),
+                  );
+                }, childCount: orders.length + 1),
               ),
             );
           },

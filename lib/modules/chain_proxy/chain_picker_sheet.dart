@@ -32,8 +32,7 @@ class ChainPickerSheet extends ConsumerStatefulWidget {
         builder: (context, _) => Container(
           decoration: BoxDecoration(
             color: Theme.of(context).scaffoldBackgroundColor,
-            borderRadius:
-                const BorderRadius.vertical(top: Radius.circular(20)),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
           ),
           child: ChainPickerSheet(groups: groups),
         ),
@@ -42,8 +41,7 @@ class ChainPickerSheet extends ConsumerStatefulWidget {
   }
 
   @override
-  ConsumerState<ChainPickerSheet> createState() =>
-      _ChainPickerSheetState();
+  ConsumerState<ChainPickerSheet> createState() => _ChainPickerSheetState();
 }
 
 class _ChainPickerSheetState extends ConsumerState<ChainPickerSheet> {
@@ -61,7 +59,8 @@ class _ChainPickerSheetState extends ConsumerState<ChainPickerSheet> {
     final s = S.of(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final chainNodes = ref.watch(
-        chainProxyProvider.select((c) => c.nodes.toSet()));
+      chainProxyProvider.select((c) => c.nodes.toSet()),
+    );
 
     // Build filtered item list
     final q = _query.trim().toLowerCase();
@@ -89,8 +88,7 @@ class _ChainPickerSheetState extends ConsumerState<ChainPickerSheet> {
       }
     }
 
-    final hasResults =
-        filteredGroups.isNotEmpty || nodesByGroup.isNotEmpty;
+    final hasResults = filteredGroups.isNotEmpty || nodesByGroup.isNotEmpty;
 
     return Column(
       children: [
@@ -109,16 +107,18 @@ class _ChainPickerSheetState extends ConsumerState<ChainPickerSheet> {
 
         // Header
         Padding(
-          padding:
-              const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
           child: Row(
             children: [
               Text(s.chainPickerTitle, style: YLText.titleMedium),
               const Spacer(),
               GestureDetector(
                 onTap: () => Navigator.pop(context),
-                child: const Icon(Icons.close_rounded,
-                    size: 20, color: YLColors.zinc400),
+                child: const Icon(
+                  Icons.close_rounded,
+                  size: 20,
+                  color: YLColors.zinc400,
+                ),
               ),
             ],
           ),
@@ -126,8 +126,7 @@ class _ChainPickerSheetState extends ConsumerState<ChainPickerSheet> {
 
         // Search bar
         Padding(
-          padding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: TextField(
             controller: _searchCtrl,
             autofocus: false,
@@ -135,26 +134,32 @@ class _ChainPickerSheetState extends ConsumerState<ChainPickerSheet> {
             style: YLText.body,
             decoration: InputDecoration(
               hintText: s.chainPickerSearch,
-              hintStyle:
-                  YLText.body.copyWith(color: YLColors.zinc400),
-              prefixIcon: const Icon(Icons.search_rounded,
-                  size: 18, color: YLColors.zinc400),
+              hintStyle: YLText.body.copyWith(color: YLColors.zinc400),
+              prefixIcon: const Icon(
+                Icons.search_rounded,
+                size: 18,
+                color: YLColors.zinc400,
+              ),
               suffixIcon: _query.isNotEmpty
                   ? GestureDetector(
                       onTap: () {
                         _searchCtrl.clear();
                         setState(() => _query = '');
                       },
-                      child: const Icon(Icons.close_rounded,
-                          size: 16, color: YLColors.zinc400),
+                      child: const Icon(
+                        Icons.close_rounded,
+                        size: 16,
+                        color: YLColors.zinc400,
+                      ),
                     )
                   : null,
               isDense: true,
               contentPadding: const EdgeInsets.symmetric(
-                  vertical: 10, horizontal: 12),
+                vertical: 10,
+                horizontal: 12,
+              ),
               filled: true,
-              fillColor:
-                  isDark ? YLColors.zinc800 : YLColors.zinc100,
+              fillColor: isDark ? YLColors.zinc800 : YLColors.zinc100,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(YLRadius.md),
                 borderSide: BorderSide.none,
@@ -176,7 +181,10 @@ class _ChainPickerSheetState extends ConsumerState<ChainPickerSheet> {
                 )
               : ListView(
                   padding: const EdgeInsets.only(
-                      left: 16, right: 16, bottom: 24),
+                    left: 16,
+                    right: 16,
+                    bottom: 24,
+                  ),
                   children: [
                     // ── Groups ────────────────────────────────────────
                     if (filteredGroups.isNotEmpty) ...[
@@ -203,12 +211,16 @@ class _ChainPickerSheetState extends ConsumerState<ChainPickerSheet> {
                         if (nodesByGroup.length > 1 || q.isEmpty)
                           Padding(
                             padding: const EdgeInsets.only(
-                                left: 4, top: 6, bottom: 2),
+                              left: 4,
+                              top: 6,
+                              bottom: 2,
+                            ),
                             child: Text(
                               entry.groupName,
                               style: YLText.caption.copyWith(
-                                  color: YLColors.zinc500,
-                                  fontWeight: FontWeight.w600),
+                                color: YLColors.zinc500,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
                         for (final nodeName in entry.nodes)
@@ -225,8 +237,7 @@ class _ChainPickerSheetState extends ConsumerState<ChainPickerSheet> {
                     ],
 
                     // ── Other subscriptions ──────────────────────
-                    ..._buildCrossProfileSection(
-                        ref, chainNodes, isDark, q),
+                    ..._buildCrossProfileSection(ref, chainNodes, isDark, q),
                   ],
                 ),
         ),
@@ -236,7 +247,11 @@ class _ChainPickerSheetState extends ConsumerState<ChainPickerSheet> {
 
   /// Build the "其他订阅" section showing nodes from non-active profiles.
   List<Widget> _buildCrossProfileSection(
-      WidgetRef ref, Set<String> chainNodes, bool isDark, String q) {
+    WidgetRef ref,
+    Set<String> chainNodes,
+    bool isDark,
+    String q,
+  ) {
     final crossAsync = ref.watch(crossProfileNodesProvider);
     return crossAsync.when(
       loading: () => const [],
@@ -251,28 +266,33 @@ class _ChainPickerSheetState extends ConsumerState<ChainPickerSheet> {
           final filtered = q.isEmpty
               ? entry.nodeNames
               : entry.nodeNames
-                  .where((n) => n.toLowerCase().contains(q))
-                  .toList();
+                    .where((n) => n.toLowerCase().contains(q))
+                    .toList();
           if (filtered.isEmpty) continue;
-          widgets.add(Padding(
-            padding: const EdgeInsets.only(left: 4, top: 6, bottom: 2),
-            child: Text(
-              entry.profileName,
-              style: YLText.caption.copyWith(
+          widgets.add(
+            Padding(
+              padding: const EdgeInsets.only(left: 4, top: 6, bottom: 2),
+              child: Text(
+                entry.profileName,
+                style: YLText.caption.copyWith(
                   color: Colors.orange.shade400,
-                  fontWeight: FontWeight.w600),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
-          ));
+          );
           for (final nodeName in filtered) {
-            widgets.add(_PickerItem(
-              icon: Icons.language_rounded,
-              iconColor: Colors.orange.shade300,
-              name: nodeName,
-              subtitle: entry.profileName,
-              inChain: chainNodes.contains(nodeName),
-              isDark: isDark,
-              onTap: () => _toggleExternal(nodeName, entry.profileId),
-            ));
+            widgets.add(
+              _PickerItem(
+                icon: Icons.language_rounded,
+                iconColor: Colors.orange.shade300,
+                name: nodeName,
+                subtitle: entry.profileName,
+                inChain: chainNodes.contains(nodeName),
+                isDark: isDark,
+                onTap: () => _toggleExternal(nodeName, entry.profileId),
+              ),
+            );
           }
         }
         return widgets;
@@ -326,7 +346,7 @@ class _SectionHeader extends StatelessWidget {
         style: YLText.caption.copyWith(
           color: YLColors.zinc400,
           fontWeight: FontWeight.w700,
-          letterSpacing: 0.5,
+          letterSpacing: 0,
         ),
       ),
     );
@@ -362,73 +382,81 @@ class _PickerItem extends StatelessWidget {
       child: Material(
         color: inChain
             ? (isDark
-                ? YLColors.zinc700.withValues(alpha: 0.4)
-                : YLColors.zinc50)
+                  ? YLColors.zinc700.withValues(alpha: 0.4)
+                  : YLColors.zinc50)
             : (isDark ? YLColors.zinc800 : Colors.white),
         borderRadius: radius,
         child: InkWell(
           onTap: onTap,
           borderRadius: radius,
           child: Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
               borderRadius: radius,
               border: Border.all(
                 color: inChain
                     ? (isDark
-                        ? Colors.white.withValues(alpha: 0.06)
-                        : Colors.black.withValues(alpha: 0.06))
+                          ? Colors.white.withValues(alpha: 0.06)
+                          : Colors.black.withValues(alpha: 0.06))
                     : (isDark
-                        ? Colors.white.withValues(alpha: 0.08)
-                        : Colors.black.withValues(alpha: 0.06)),
+                          ? Colors.white.withValues(alpha: 0.08)
+                          : Colors.black.withValues(alpha: 0.06)),
                 width: 0.5,
               ),
             ),
             child: Row(
-          children: [
-            Icon(icon,
-                size: 15,
-                color: inChain
-                    ? YLColors.zinc500.withValues(alpha: 0.5)
-                    : iconColor),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    name,
-                    style: YLText.body.copyWith(
-                      color: inChain
-                          ? YLColors.zinc400
-                          : (isDark ? Colors.white : YLColors.zinc900),
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+              children: [
+                Icon(
+                  icon,
+                  size: 15,
+                  color: inChain
+                      ? YLColors.zinc500.withValues(alpha: 0.5)
+                      : iconColor,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        name,
+                        style: YLText.body.copyWith(
+                          color: inChain
+                              ? YLColors.zinc400
+                              : (isDark ? Colors.white : YLColors.zinc900),
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (subtitle != null && subtitle!.isNotEmpty)
+                        Text(
+                          subtitle!,
+                          style: YLText.caption.copyWith(
+                            fontSize: 10,
+                            color: YLColors.zinc500,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                    ],
                   ),
-                  if (subtitle != null && subtitle!.isNotEmpty)
-                    Text(
-                      subtitle!,
-                      style: YLText.caption
-                          .copyWith(fontSize: 10, color: YLColors.zinc500),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                ],
-              ),
+                ),
+                const SizedBox(width: 8),
+                if (inChain)
+                  Icon(
+                    Icons.remove_circle_rounded,
+                    size: 16,
+                    color: YLColors.error.withValues(alpha: 0.7),
+                  )
+                else
+                  Icon(
+                    Icons.add_rounded,
+                    size: 16,
+                    color: isDark ? YLColors.zinc500 : YLColors.zinc400,
+                  ),
+              ],
             ),
-            const SizedBox(width: 8),
-            if (inChain)
-              Icon(Icons.remove_circle_rounded,
-                  size: 16, color: YLColors.error.withValues(alpha: 0.7))
-            else
-              Icon(Icons.add_rounded,
-                  size: 16,
-                  color: isDark ? YLColors.zinc500 : YLColors.zinc400),
-          ],
-        ),
           ),
         ),
       ),

@@ -49,8 +49,10 @@ class _ConnectionRepairPageState extends ConsumerState<ConnectionRepairPage> {
       final buffer = StringBuffer();
       buffer.writeln('YueLink diagnostic bundle');
       buffer.writeln('Generated: ${DateTime.now().toIso8601String()}');
-      buffer.writeln('Platform: ${Platform.operatingSystem} '
-          '${Platform.operatingSystemVersion}');
+      buffer.writeln(
+        'Platform: ${Platform.operatingSystem} '
+        '${Platform.operatingSystemVersion}',
+      );
       buffer.writeln();
       var found = 0;
       for (final name in sources) {
@@ -162,7 +164,9 @@ class _ConnectionRepairPageState extends ConsumerState<ConnectionRepairPage> {
         }
       }
     } catch (e) {
-      if (mounted) AppNotifier.error('$label ${S.current.repairActionFailed}: $e');
+      if (mounted) {
+        AppNotifier.error('$label ${S.current.repairActionFailed}: $e');
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -185,9 +189,10 @@ class _ConnectionRepairPageState extends ConsumerState<ConnectionRepairPage> {
         padding: const EdgeInsets.all(16),
         children: [
           // ── Status ──
-          _Card(isDark: isDark, children: [
-            _StatusRow(isDark: isDark),
-          ]),
+          _Card(
+            isDark: isDark,
+            children: [_StatusRow(isDark: isDark)],
+          ),
           const SizedBox(height: 16),
 
           // ── One-click full repair (主 CTA 置顶) ─────────────────────
@@ -197,24 +202,27 @@ class _ConnectionRepairPageState extends ConsumerState<ConnectionRepairPage> {
               onPressed: _busy
                   ? null
                   : () => _run('一键修复', () async {
-                        if (Platform.isIOS) {
-                          await VpnService.resetVpnProfile();
-                          await VpnService.clearAppGroupConfig();
-                        }
-                        final token = ref.read(authProvider).token;
-                        if (token != null) {
-                          await ref
-                              .read(authProvider.notifier)
-                              .syncSubscription();
-                        }
-                        return true;
-                      }),
+                      if (Platform.isIOS) {
+                        await VpnService.resetVpnProfile();
+                        await VpnService.clearAppGroupConfig();
+                      }
+                      final token = ref.read(authProvider).token;
+                      if (token != null) {
+                        await ref
+                            .read(authProvider.notifier)
+                            .syncSubscription();
+                      }
+                      return true;
+                    }),
               icon: _busy
                   ? const SizedBox(
                       width: 16,
                       height: 16,
                       child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white))
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
                   : const Icon(Icons.auto_fix_high_rounded, size: 18),
               label: Text(_busy ? s.repairRunning : s.repairOneClick),
               style: FilledButton.styleFrom(
@@ -222,7 +230,8 @@ class _ConnectionRepairPageState extends ConsumerState<ConnectionRepairPage> {
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(YLRadius.lg)),
+                  borderRadius: BorderRadius.circular(YLRadius.lg),
+                ),
               ),
             ),
           ),
@@ -238,184 +247,199 @@ class _ConnectionRepairPageState extends ConsumerState<ConnectionRepairPage> {
           // ── Repair actions（单项修复）──
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
-            child: Text(s.repairTools.toUpperCase(),
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w400,
-                  color: YLColors.zinc500,
-                  letterSpacing: -0.08,
-                )),
+            child: Text(
+              s.repairTools.toUpperCase(),
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w400,
+                color: YLColors.zinc500,
+                letterSpacing: 0,
+              ),
+            ),
           ),
-          _Card(isDark: isDark, children: [
-            _ActionRow(
-              icon: Icons.restart_alt_rounded,
-              label: s.repairRestartCore,
-              subtitle: s.repairRestartCoreHint,
-              isDark: isDark,
-              busy: _busy,
-              onTap: () => _restartCore(),
-            ),
-            Divider(height: 1, color: divColor),
-            if (Platform.isIOS) ...[
+          _Card(
+            isDark: isDark,
+            children: [
               _ActionRow(
-                icon: Icons.vpn_key_outlined,
-                label: s.repairRebuildVpn,
-                subtitle: s.repairRebuildVpnHint,
+                icon: Icons.restart_alt_rounded,
+                label: s.repairRestartCore,
+                subtitle: s.repairRestartCoreHint,
                 isDark: isDark,
                 busy: _busy,
-                onTap: () => _run(s.repairRebuildVpn, () async {
-                  final ok = await VpnService.resetVpnProfile();
-                  return ok;
-                }),
+                onTap: () => _restartCore(),
               ),
               Divider(height: 1, color: divColor),
+              if (Platform.isIOS) ...[
+                _ActionRow(
+                  icon: Icons.vpn_key_outlined,
+                  label: s.repairRebuildVpn,
+                  subtitle: s.repairRebuildVpnHint,
+                  isDark: isDark,
+                  busy: _busy,
+                  onTap: () => _run(s.repairRebuildVpn, () async {
+                    final ok = await VpnService.resetVpnProfile();
+                    return ok;
+                  }),
+                ),
+                Divider(height: 1, color: divColor),
+                _ActionRow(
+                  icon: Icons.delete_sweep_outlined,
+                  label: s.repairClearTunnel,
+                  subtitle: s.repairClearTunnelHint,
+                  isDark: isDark,
+                  busy: _busy,
+                  onTap: () => _run('清除配置', () async {
+                    final ok = await VpnService.clearAppGroupConfig();
+                    return ok;
+                  }),
+                ),
+                Divider(height: 1, color: divColor),
+              ],
               _ActionRow(
-                icon: Icons.delete_sweep_outlined,
-                label: s.repairClearTunnel,
-                subtitle: s.repairClearTunnelHint,
+                icon: Icons.sync_outlined,
+                label: s.repairResync,
+                subtitle: s.repairResyncHint,
                 isDark: isDark,
                 busy: _busy,
-                onTap: () => _run('清除配置', () async {
-                  final ok = await VpnService.clearAppGroupConfig();
-                  return ok;
-                }),
-              ),
-              Divider(height: 1, color: divColor),
-            ],
-            _ActionRow(
-              icon: Icons.sync_outlined,
-              label: s.repairResync,
-              subtitle: s.repairResyncHint,
-              isDark: isDark,
-              busy: _busy,
-              onTap: () => _run('同步订阅', () async {
-                final token = ref.read(authProvider).token;
-                if (token == null) {
-                  AppNotifier.error(s.repairNeedLogin);
-                  return false;
-                }
-                await ref.read(authProvider.notifier).syncSubscription();
-                return true;
-              }),
-            ),
-            Divider(height: 1, color: divColor),
-            _ActionRow(
-              icon: Icons.cleaning_services_outlined,
-              label: s.repairClearCache,
-              subtitle: s.repairClearCacheHint,
-              isDark: isDark,
-              busy: _busy,
-              onTap: () => _run('清除缓存', () async {
-                final appDir = await getApplicationSupportDirectory();
-                final targets = [
-                  'config.yaml',
-                  'startup_report.json',
-                  'core.log',
-                  'crash.log',
-                  'event.log',
-                ];
-                for (final name in targets) {
-                  final f = File('${appDir.path}/$name');
-                  if (f.existsSync()) f.deleteSync();
-                }
-                return true;
-              }),
-            ),
-            if (Platform.isAndroid) ...[
-              Divider(height: 1, color: divColor),
-              _ActionRow(
-                icon: Icons.battery_saver_rounded,
-                label: '加入电池优化白名单',
-                subtitle: 'Xiaomi / Huawei / OPPO 等厂商 Doze 休眠会杀掉 VPN',
-                isDark: isDark,
-                busy: _busy,
-                onTap: () => _run('申请白名单', () async {
-                  final already =
-                      await VpnService.isBatteryOptimizationIgnored();
-                  if (already) {
-                    AppNotifier.success('已在白名单中');
-                    return true;
+                onTap: () => _run('同步订阅', () async {
+                  final token = ref.read(authProvider).token;
+                  if (token == null) {
+                    AppNotifier.error(s.repairNeedLogin);
+                    return false;
                   }
-                  // In-app rationale BEFORE the OS prompt. Android's
-                  // system dialog is short and uncontextualised
-                  // ("Allow YueLink to ignore battery optimizations?")
-                  // — without this explainer users have no reason to
-                  // trust the request. Showing the rationale here, on
-                  // a user-initiated action surface (settings →
-                  // connection repair), avoids the anti-pattern of
-                  // surfacing the prompt at first launch.
-                  if (!context.mounted) return false;
-                  final proceed = await showDialog<bool>(
-                    context: context,
-                    builder: (ctx) => AlertDialog(
-                      title: const Text('授予电池豁免?'),
-                      content: const Text(
-                        '小米、华为、OPPO 等国产厂商默认 30 分钟后会杀掉后台 VPN '
-                        '服务，导致连接突然中断。\n\n'
-                        '系统接下来会弹一个权限对话框：\n'
-                        '«允许 YueLink 不进行电池优化吗?»\n\n'
-                        '点「允许」后，YueLink 才能在息屏 / 长时间后台时保持 '
-                        'VPN 隧道不被强制关闭。\n\n'
-                        '此设置不会显著增加耗电 — VPN 的能耗主要来自心跳，'
-                        'YueLink 已根据 Wi-Fi / 蜂窝自动调节。',
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(ctx, false),
-                          child: const Text('取消'),
-                        ),
-                        FilledButton(
-                          onPressed: () => Navigator.pop(ctx, true),
-                          child: const Text('继续'),
-                        ),
-                      ],
-                    ),
-                  );
-                  if (proceed != true) return false;
-                  return VpnService.requestIgnoreBatteryOptimization();
+                  await ref.read(authProvider.notifier).syncSubscription();
+                  return true;
                 }),
               ),
+              Divider(height: 1, color: divColor),
+              _ActionRow(
+                icon: Icons.cleaning_services_outlined,
+                label: s.repairClearCache,
+                subtitle: s.repairClearCacheHint,
+                isDark: isDark,
+                busy: _busy,
+                onTap: () => _run('清除缓存', () async {
+                  final appDir = await getApplicationSupportDirectory();
+                  final targets = [
+                    'config.yaml',
+                    'startup_report.json',
+                    'core.log',
+                    'crash.log',
+                    'event.log',
+                  ];
+                  for (final name in targets) {
+                    final f = File('${appDir.path}/$name');
+                    if (f.existsSync()) f.deleteSync();
+                  }
+                  return true;
+                }),
+              ),
+              if (Platform.isAndroid) ...[
+                Divider(height: 1, color: divColor),
+                _ActionRow(
+                  icon: Icons.battery_saver_rounded,
+                  label: '加入电池优化白名单',
+                  subtitle: 'Xiaomi / Huawei / OPPO 等厂商 Doze 休眠会杀掉 VPN',
+                  isDark: isDark,
+                  busy: _busy,
+                  onTap: () => _run('申请白名单', () async {
+                    final already =
+                        await VpnService.isBatteryOptimizationIgnored();
+                    if (already) {
+                      AppNotifier.success('已在白名单中');
+                      return true;
+                    }
+                    // In-app rationale BEFORE the OS prompt. Android's
+                    // system dialog is short and uncontextualised
+                    // ("Allow YueLink to ignore battery optimizations?")
+                    // — without this explainer users have no reason to
+                    // trust the request. Showing the rationale here, on
+                    // a user-initiated action surface (settings →
+                    // connection repair), avoids the anti-pattern of
+                    // surfacing the prompt at first launch.
+                    if (!context.mounted) return false;
+                    final proceed = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        title: const Text('授予电池豁免?'),
+                        content: const Text(
+                          '小米、华为、OPPO 等国产厂商默认 30 分钟后会杀掉后台 VPN '
+                          '服务，导致连接突然中断。\n\n'
+                          '系统接下来会弹一个权限对话框：\n'
+                          '«允许 YueLink 不进行电池优化吗?»\n\n'
+                          '点「允许」后，YueLink 才能在息屏 / 长时间后台时保持 '
+                          'VPN 隧道不被强制关闭。\n\n'
+                          '此设置不会显著增加耗电 — VPN 的能耗主要来自心跳，'
+                          'YueLink 已根据 Wi-Fi / 蜂窝自动调节。',
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx, false),
+                            child: const Text('取消'),
+                          ),
+                          FilledButton(
+                            onPressed: () => Navigator.pop(ctx, true),
+                            child: const Text('继续'),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (proceed != true) return false;
+                    return VpnService.requestIgnoreBatteryOptimization();
+                  }),
+                ),
+              ],
             ],
-          ]),
+          ),
           const SizedBox(height: 8),
 
           // ── Diagnostics (merged: network probes + startup report) ──
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
-            child: Text(S.current.diagnosticsLabel.toUpperCase(),
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w400,
-                  color: YLColors.zinc500,
-                  letterSpacing: -0.08,
-                )),
+            child: Text(
+              S.current.diagnosticsLabel.toUpperCase(),
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w400,
+                color: YLColors.zinc500,
+                letterSpacing: 0,
+              ),
+            ),
           ),
           _NetworkDiagnostics(isDark: isDark),
           const SizedBox(height: 10),
-          _Card(isDark: isDark, children: [
-            _ActionRow(
-              icon: Icons.bug_report_outlined,
-              label: s.viewStartupReport,
-              subtitle: S.current.diagnosticsHint,
-              isDark: isDark,
-              busy: false,
-              trailing: const Icon(Icons.chevron_right,
-                  size: 18, color: YLColors.zinc400),
-              onTap: () => Navigator.push(context,
-                  MaterialPageRoute(builder: (_) => const StartupReportPage())),
-            ),
-            Divider(height: 1, color: divColor),
-            _ActionRow(
-              icon: Icons.file_download_outlined,
-              label: s.exportLogs,
-              subtitle: Localizations.localeOf(context).languageCode == 'en'
-                  ? 'Bundle core/crash/event logs into one file'
-                  : '打包核心 / 崩溃 / 事件日志为单个文件',
-              isDark: isDark,
-              busy: _busy,
-              onTap: _exportDiagnosticLogs,
-            ),
-          ]),
+          _Card(
+            isDark: isDark,
+            children: [
+              _ActionRow(
+                icon: Icons.bug_report_outlined,
+                label: s.viewStartupReport,
+                subtitle: S.current.diagnosticsHint,
+                isDark: isDark,
+                busy: false,
+                trailing: const Icon(
+                  Icons.chevron_right,
+                  size: 18,
+                  color: YLColors.zinc400,
+                ),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const StartupReportPage()),
+                ),
+              ),
+              Divider(height: 1, color: divColor),
+              _ActionRow(
+                icon: Icons.file_download_outlined,
+                label: s.exportLogs,
+                subtitle: Localizations.localeOf(context).languageCode == 'en'
+                    ? 'Bundle core/crash/event logs into one file'
+                    : '打包核心 / 崩溃 / 事件日志为单个文件',
+                isDark: isDark,
+                busy: _busy,
+                onTap: _exportDiagnosticLogs,
+              ),
+            ],
+          ),
           const SizedBox(height: 24),
         ],
       ),
@@ -443,13 +467,13 @@ class _StatusRow extends StatelessWidget {
             running
                 ? Icons.check_circle_rounded
                 : lastResult == false
-                    ? Icons.error_rounded
-                    : Icons.radio_button_unchecked_rounded,
+                ? Icons.error_rounded
+                : Icons.radio_button_unchecked_rounded,
             color: running
                 ? YLColors.connected
                 : lastResult == false
-                    ? Colors.red
-                    : YLColors.zinc400,
+                ? Colors.red
+                : YLColors.zinc400,
             size: 20,
           ),
           const SizedBox(width: 10),
@@ -458,10 +482,11 @@ class _StatusRow extends StatelessWidget {
               running
                   ? '连接正常'
                   : lastResult == false
-                      ? '上次连接失败: ${report?.failureSummary ?? "未知错误"}'
-                      : '未连接',
+                  ? '上次连接失败: ${report?.failureSummary ?? "未知错误"}'
+                  : '未连接',
               style: YLText.body.copyWith(
-                  color: isDark ? YLColors.zinc200 : YLColors.zinc700),
+                color: isDark ? YLColors.zinc200 : YLColors.zinc700,
+              ),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
@@ -527,22 +552,28 @@ class _ActionRow extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Row(
           children: [
-            Icon(icon,
-                size: 20,
-                color: isDark ? YLColors.zinc300 : YLColors.zinc600),
+            Icon(
+              icon,
+              size: 20,
+              color: isDark ? YLColors.zinc300 : YLColors.zinc600,
+            ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(label,
-                      style: YLText.body.copyWith(
-                          fontWeight: FontWeight.w500,
-                          color:
-                              isDark ? YLColors.zinc200 : YLColors.zinc700)),
+                  Text(
+                    label,
+                    style: YLText.body.copyWith(
+                      fontWeight: FontWeight.w500,
+                      color: isDark ? YLColors.zinc200 : YLColors.zinc700,
+                    ),
+                  ),
                   const SizedBox(height: 2),
-                  Text(subtitle,
-                      style: YLText.caption.copyWith(color: YLColors.zinc400)),
+                  Text(
+                    subtitle,
+                    style: YLText.caption.copyWith(color: YLColors.zinc400),
+                  ),
                 ],
               ),
             ),
@@ -576,7 +607,11 @@ class _DiagResult {
   final _DiagStatus status;
   final int? latencyMs;
   final String? error;
-  const _DiagResult({this.status = _DiagStatus.idle, this.latencyMs, this.error});
+  const _DiagResult({
+    this.status = _DiagStatus.idle,
+    this.latencyMs,
+    this.error,
+  });
 }
 
 class _NetworkDiagnostics extends StatefulWidget {
@@ -588,7 +623,10 @@ class _NetworkDiagnostics extends StatefulWidget {
 }
 
 class _NetworkDiagnosticsState extends State<_NetworkDiagnostics> {
-  List<_DiagResult> _results = List.filled(_kDiagEndpoints.length, const _DiagResult());
+  List<_DiagResult> _results = List.filled(
+    _kDiagEndpoints.length,
+    const _DiagResult(),
+  );
   bool _testing = false;
 
   Future<void> _runDiagnostics() async {
@@ -621,7 +659,9 @@ class _NetworkDiagnosticsState extends State<_NetworkDiagnostics> {
     try {
       final sw = Stopwatch()..start();
       final request = await client.getUrl(Uri.parse(url));
-      final response = await request.close().timeout(const Duration(seconds: 5));
+      final response = await request.close().timeout(
+        const Duration(seconds: 5),
+      );
       sw.stop();
       // Drain the response body
       await response.drain<void>();
@@ -640,7 +680,10 @@ class _NetworkDiagnosticsState extends State<_NetworkDiagnostics> {
       if (msg.contains('TimeoutException')) {
         return const _DiagResult(status: _DiagStatus.failed, error: '超时');
       }
-      return _DiagResult(status: _DiagStatus.failed, error: msg.length > 40 ? '${msg.substring(0, 40)}...' : msg);
+      return _DiagResult(
+        status: _DiagStatus.failed,
+        error: msg.length > 40 ? '${msg.substring(0, 40)}...' : msg,
+      );
     } finally {
       client.close();
     }
@@ -649,90 +692,118 @@ class _NetworkDiagnosticsState extends State<_NetworkDiagnostics> {
   @override
   Widget build(BuildContext context) {
     final isDark = widget.isDark;
-    return _Card(isDark: isDark, children: [
-      Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-        child: Row(
-          children: [
-            Icon(Icons.network_check_outlined,
-                size: 20,
-                color: isDark ? YLColors.zinc300 : YLColors.zinc600),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(S.current.networkDiagnostics,
-                  style: YLText.body.copyWith(
-                      fontWeight: FontWeight.w500,
-                      color: isDark ? YLColors.zinc200 : YLColors.zinc700)),
-            ),
-            TextButton(
-              onPressed: _testing ? null : _runDiagnostics,
-              child: Text(
-                _testing ? '检测中...' : '开始检测',
-                style: YLText.caption.copyWith(
-                    color: _testing ? YLColors.zinc400 : YLColors.zinc600,
-                    fontWeight: FontWeight.w500),
-              ),
-            ),
-          ],
-        ),
-      ),
-      for (var i = 0; i < _kDiagEndpoints.length; i++) ...[
-        Divider(
-          height: 1,
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.06)
-              : Colors.black.withValues(alpha: 0.06),
-        ),
+    return _Card(
+      isDark: isDark,
+      children: [
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
           child: Row(
             children: [
-              _diagIcon(_results[i].status),
-              const SizedBox(width: 10),
+              Icon(
+                Icons.network_check_outlined,
+                size: 20,
+                color: isDark ? YLColors.zinc300 : YLColors.zinc600,
+              ),
+              const SizedBox(width: 12),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(_kDiagEndpoints[i].label,
-                        style: YLText.caption.copyWith(
-                            fontWeight: FontWeight.w500,
-                            color: isDark ? YLColors.zinc200 : YLColors.zinc700)),
-                    Text(
-                      _diagSubtitle(_results[i]),
-                      style: YLText.caption.copyWith(
-                          color: YLColors.zinc400, fontSize: 11),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
+                child: Text(
+                  S.current.networkDiagnostics,
+                  style: YLText.body.copyWith(
+                    fontWeight: FontWeight.w500,
+                    color: isDark ? YLColors.zinc200 : YLColors.zinc700,
+                  ),
                 ),
               ),
-              if (_results[i].latencyMs != null)
-                Text('${_results[i].latencyMs}ms',
-                    style: YLText.caption.copyWith(
-                        color: _results[i].status == _DiagStatus.success
-                            ? YLColors.connected
-                            : Colors.red,
-                        fontWeight: FontWeight.w600)),
+              TextButton(
+                onPressed: _testing ? null : _runDiagnostics,
+                child: Text(
+                  _testing ? '检测中...' : '开始检测',
+                  style: YLText.caption.copyWith(
+                    color: _testing ? YLColors.zinc400 : YLColors.zinc600,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
             ],
           ),
         ),
+        for (var i = 0; i < _kDiagEndpoints.length; i++) ...[
+          Divider(
+            height: 1,
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.06)
+                : Colors.black.withValues(alpha: 0.06),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            child: Row(
+              children: [
+                _diagIcon(_results[i].status),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _kDiagEndpoints[i].label,
+                        style: YLText.caption.copyWith(
+                          fontWeight: FontWeight.w500,
+                          color: isDark ? YLColors.zinc200 : YLColors.zinc700,
+                        ),
+                      ),
+                      Text(
+                        _diagSubtitle(_results[i]),
+                        style: YLText.caption.copyWith(
+                          color: YLColors.zinc400,
+                          fontSize: 11,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                if (_results[i].latencyMs != null)
+                  Text(
+                    '${_results[i].latencyMs}ms',
+                    style: YLText.caption.copyWith(
+                      color: _results[i].status == _DiagStatus.success
+                          ? YLColors.connected
+                          : Colors.red,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
       ],
-    ]);
+    );
   }
 
   Widget _diagIcon(_DiagStatus status) {
     switch (status) {
       case _DiagStatus.idle:
-        return const Icon(Icons.circle_outlined, size: 16, color: YLColors.zinc400);
+        return const Icon(
+          Icons.circle_outlined,
+          size: 16,
+          color: YLColors.zinc400,
+        );
       case _DiagStatus.testing:
         return const SizedBox(
           width: 16,
           height: 16,
-          child: CircularProgressIndicator(strokeWidth: 2, color: YLColors.zinc400),
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            color: YLColors.zinc400,
+          ),
         );
       case _DiagStatus.success:
-        return const Icon(Icons.check_circle_rounded, size: 16, color: YLColors.connected);
+        return const Icon(
+          Icons.check_circle_rounded,
+          size: 16,
+          color: YLColors.connected,
+        );
       case _DiagStatus.failed:
         return const Icon(Icons.cancel_rounded, size: 16, color: Colors.red);
     }

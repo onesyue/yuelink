@@ -303,7 +303,7 @@ class _IpHeader extends StatelessWidget {
                   fontWeight: FontWeight.w700,
                   fontFeatures: const [FontFeature.tabularFigures()],
                   color: isDark ? Colors.white : YLColors.zinc900,
-                  letterSpacing: 0.3,
+                  letterSpacing: 0,
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,

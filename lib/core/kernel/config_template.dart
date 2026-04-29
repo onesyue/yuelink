@@ -1567,9 +1567,7 @@ class ConfigTemplate {
     final inlineRe = RegExp(
       r'^(' + entryIndentEsc + r')([\w.\-]+):\s*\{([^}]*)\}(\s*)$',
     );
-    final blockHeadRe = RegExp(
-      r'^(' + entryIndentEsc + r')([\w.\-]+):\s*$',
-    );
+    final blockHeadRe = RegExp(r'^(' + entryIndentEsc + r')([\w.\-]+):\s*$');
     // A `proxy:` key can appear either as the first key after `{`
     // (`{ proxy: DIRECT, ... }`) or after a comma — anchoring to those
     // boundaries avoids false-positives like `path: ./proxies/...`
@@ -1593,15 +1591,14 @@ class ConfigTemplate {
           // Strip a single trailing comma + whitespace so the result
           // doesn't end with `, , proxy: DIRECT }`. Leading whitespace
           // inside `{...}` is preserved so the diff stays minimal.
-          final cleanedInner =
-              inner.replaceAll(RegExp(r',?\s*$'), '');
+          final cleanedInner = inner.replaceAll(RegExp(r',?\s*$'), '');
           final trimmedLeft = cleanedInner.trimLeft();
           final newInner = trimmedLeft.isEmpty
               ? ' proxy: DIRECT '
               : ' ${cleanedInner.trimLeft()}, proxy: DIRECT ';
           out.add(
             '${inline.group(1)}${inline.group(2)}: '
-            '{${newInner}}${inline.group(4)}',
+            '{$newInner}${inline.group(4)}',
           );
           changed = true;
         }
@@ -1658,7 +1655,7 @@ class ConfigTemplate {
           // sits flush with its siblings.
           final childIndent =
               RegExp(r'^[ \t]+').firstMatch(realChildren.first)?.group(0) ??
-                  ('$entryIndent  ');
+              ('$entryIndent  ');
           out.addAll(children.sublist(0, lastReal + 1));
           out.add('${childIndent}proxy: DIRECT');
           out.addAll(children.sublist(lastReal + 1));

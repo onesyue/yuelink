@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 
 import '../../i18n/app_strings.dart';
+import '../../shared/friendly_error.dart';
 import 'emby_client.dart';
 import 'emby_detail_page.dart';
 import 'emby_theme.dart';
 import 'library_grid_pages.dart';
 import 'models/emby_models.dart';
-
 
 // ── Netflix-style Media Page ─────────────────────────────────────────────────
 
@@ -86,9 +86,20 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
       if (!mounted) return;
       setState(() {
         _loadingLibs = false;
-        _error = '${S.current.embyGetFailed}\n$e';
+        _error = '${S.current.embyGetFailed}\n${_friendlyMediaError(e)}';
       });
     }
+  }
+
+  String _friendlyMediaError(Object e) {
+    final raw = e.toString().toLowerCase();
+    if (raw.contains('127.0.0.1') &&
+        (raw.contains('connection refused') ||
+            raw.contains('errno = 111') ||
+            raw.contains('errno = 61'))) {
+      return S.current.mineEmbyNeedsVpn;
+    }
+    return friendlyError(e);
   }
 
   /// Track libraries where the primary preview query returned empty so we
@@ -109,7 +120,8 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
           'Limit': '20',
           'SortBy': 'SortName',
           'SortOrder': 'Ascending',
-          'Fields': 'ImageTags,BackdropImageTags,Overview,CommunityRating,Genres,ChildCount',
+          'Fields':
+              'ImageTags,BackdropImageTags,Overview,CommunityRating,Genres,ChildCount',
           'IncludeItemTypes': 'BoxSet',
         });
       } else {
@@ -118,7 +130,8 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
           'Limit': '20',
           'SortBy': 'DateCreated,SortName',
           'SortOrder': 'Descending',
-          'Fields': 'ImageTags,BackdropImageTags,Overview,CommunityRating,Genres,RunTimeTicks',
+          'Fields':
+              'ImageTags,BackdropImageTags,Overview,CommunityRating,Genres,RunTimeTicks',
           'Recursive': 'true',
           'IncludeItemTypes': lib.includeItemTypes,
         });
@@ -131,7 +144,8 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
             'Limit': '20',
             'SortBy': 'DateCreated,SortName',
             'SortOrder': 'Descending',
-            'Fields': 'ImageTags,BackdropImageTags,Overview,CommunityRating,Genres,RunTimeTicks',
+            'Fields':
+                'ImageTags,BackdropImageTags,Overview,CommunityRating,Genres,RunTimeTicks',
             'Recursive': 'true',
           });
         }
@@ -155,7 +169,10 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
     }
   }
 
-  Future<List<EmbyItem>> _fetchItems(String parentId, Map<String, String> extra) async {
+  Future<List<EmbyItem>> _fetchItems(
+    String parentId,
+    Map<String, String> extra,
+  ) async {
     final data = await _api.get('/emby/Users/${widget.userId}/Items', {
       'parentId': parentId,
       ...extra,
@@ -239,8 +256,11 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
     final dividerColor = isDark
         ? Colors.white.withValues(alpha: 0.08)
         : Colors.black.withValues(alpha: 0.08);
-    final hasContent = !_loadingLibs && _error == null &&
-        _libraries != null && _libraries!.isNotEmpty;
+    final hasContent =
+        !_loadingLibs &&
+        _error == null &&
+        _libraries != null &&
+        _libraries!.isNotEmpty;
 
     return Scaffold(
       body: Column(
@@ -252,24 +272,39 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
           SafeArea(
             bottom: false,
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
-              child: Row(
-                children: [
-                  if (Navigator.canPop(context))
-                    IconButton(
-                      icon: Icon(Icons.arrow_back_ios_new_rounded,
+              padding: const EdgeInsets.fromLTRB(12, 2, 12, 2),
+              child: SizedBox(
+                height: 44,
+                child: Row(
+                  children: [
+                    if (Navigator.canPop(context))
+                      IconButton(
+                        constraints: const BoxConstraints.tightFor(
+                          width: 40,
+                          height: 40,
+                        ),
+                        padding: EdgeInsets.zero,
+                        icon: Icon(
+                          Icons.arrow_back_ios_new_rounded,
                           size: 20,
-                          color: isDark ? Colors.white : Colors.black),
-                      onPressed: () => Navigator.pop(context),
+                          color: isDark ? Colors.white : Colors.black,
+                        ),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    const Spacer(),
+                    IconButton(
+                      constraints: const BoxConstraints.tightFor(
+                        width: 40,
+                        height: 40,
+                      ),
+                      padding: EdgeInsets.zero,
+                      icon: const Icon(Icons.refresh_rounded),
+                      iconSize: 20,
+                      color: EmbyTheme.textSecondary(context),
+                      onPressed: _refresh,
                     ),
-                  const Spacer(),
-                  IconButton(
-                    icon: const Icon(Icons.refresh_rounded),
-                    iconSize: 20,
-                    color: EmbyTheme.textSecondary(context),
-                    onPressed: _refresh,
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -288,8 +323,10 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
     if (_error != null) return _buildError(_error!);
     if (_libraries == null || _libraries!.isEmpty) {
       return Center(
-        child: Text(S.of(context).embyNoLibrary,
-            style: TextStyle(color: EmbyTheme.textSecondary(context))),
+        child: Text(
+          S.of(context).embyNoLibrary,
+          style: TextStyle(color: EmbyTheme.textSecondary(context)),
+        ),
       );
     }
     return _query.isNotEmpty ? _buildSearchResults() : _buildNetflixRows();
@@ -314,8 +351,9 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
       if (!lib.isMediaLibrary) continue;
       final items = _previewCache[lib.id];
       if (items != null) {
-        final candidate = items.where((i) => i.hasBackdrop).firstOrNull
-            ?? items.where((i) => i.hasPoster).firstOrNull;
+        final candidate =
+            items.where((i) => i.hasBackdrop).firstOrNull ??
+            items.where((i) => i.hasPoster).firstOrNull;
         if (candidate != null && heroItem == null) heroItem = candidate;
       }
     }
@@ -410,22 +448,38 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
                   Row(
                     children: [
                       if (item.year != null)
-                        Text('${item.year}',
-                            style: const TextStyle(
-                                color: Colors.white70, fontSize: 13)),
+                        Text(
+                          '${item.year}',
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 13,
+                          ),
+                        ),
                       if (item.year != null && item.rating != null)
-                        const Text('  ·  ',
-                            style: TextStyle(color: Colors.white38)),
+                        const Text(
+                          '  ·  ',
+                          style: TextStyle(color: Colors.white38),
+                        ),
                       if (item.rating != null)
-                        Text('★ ${item.rating!.toStringAsFixed(1)}',
-                            style: const TextStyle(
-                                color: Colors.amber, fontSize: 13)),
+                        Text(
+                          '★ ${item.rating!.toStringAsFixed(1)}',
+                          style: const TextStyle(
+                            color: Colors.amber,
+                            fontSize: 13,
+                          ),
+                        ),
                       if (item.runtimeLabel.isNotEmpty) ...[
-                        const Text('  ·  ',
-                            style: TextStyle(color: Colors.white38)),
-                        Text(item.runtimeLabel,
-                            style: const TextStyle(
-                                color: Colors.white70, fontSize: 13)),
+                        const Text(
+                          '  ·  ',
+                          style: TextStyle(color: Colors.white38),
+                        ),
+                        Text(
+                          item.runtimeLabel,
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 13,
+                          ),
+                        ),
                       ],
                     ],
                   ),
@@ -434,7 +488,10 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
                     Text(
                       item.overview!,
                       style: const TextStyle(
-                          color: Colors.white60, fontSize: 12, height: 1.4),
+                        color: Colors.white60,
+                        fontSize: 12,
+                        height: 1.4,
+                      ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -451,9 +508,12 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
                         backgroundColor: Colors.white,
                         foregroundColor: Colors.black,
                         textStyle: const TextStyle(
-                            fontSize: 13, fontWeight: FontWeight.w600),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
                         shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(6)),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
                       ),
                     ),
                   ),
@@ -484,8 +544,7 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
           padding: const EdgeInsets.fromLTRB(16, 20, 12, 10),
           child: Row(
             children: [
-              Icon(lib.icon,
-                  size: 16, color: EmbyTheme.textSecondary(context)),
+              Icon(lib.icon, size: 16, color: EmbyTheme.textSecondary(context)),
               const SizedBox(width: 6),
               Text(
                 lib.name,
@@ -502,12 +561,18 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(S.current.viewAll,
-                          style: TextStyle(
-                              color: EmbyTheme.textSecondary(context),
-                              fontSize: 13)),
-                      Icon(Icons.chevron_right_rounded,
-                          size: 18, color: EmbyTheme.textSecondary(context)),
+                      Text(
+                        S.current.viewAll,
+                        style: TextStyle(
+                          color: EmbyTheme.textSecondary(context),
+                          fontSize: 13,
+                        ),
+                      ),
+                      Icon(
+                        Icons.chevron_right_rounded,
+                        size: 18,
+                        color: EmbyTheme.textSecondary(context),
+                      ),
                     ],
                   ),
                 ),
@@ -520,17 +585,17 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
           child: loading
               ? _buildRowSkeleton()
               : hasError
-                  ? _buildRowError(lib)
-                  : !hasItems
-                      ? _buildRowEmpty()
-                  : ListView.separated(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      itemCount: items.length,
-                      separatorBuilder: (_, _) => const SizedBox(width: 10),
-                      itemBuilder: (_, i) =>
-                          _buildRowPoster(items[i], height: rowHeight),
-                    ),
+              ? _buildRowError(lib)
+              : !hasItems
+              ? _buildRowEmpty()
+              : ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  itemCount: items.length,
+                  separatorBuilder: (_, _) => const SizedBox(width: 10),
+                  itemBuilder: (_, i) =>
+                      _buildRowPoster(items[i], height: rowHeight),
+                ),
         ),
       ],
     );
@@ -565,8 +630,10 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
                 right: 0,
                 bottom: 0,
                 child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 8,
+                  ),
                   decoration: const BoxDecoration(
                     gradient: LinearGradient(
                       begin: Alignment.bottomCenter,
@@ -594,15 +661,22 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
                       Row(
                         children: [
                           if (item.year != null)
-                            Text('${item.year}',
-                                style: const TextStyle(
-                                    color: Colors.white54, fontSize: 10)),
+                            Text(
+                              '${item.year}',
+                              style: const TextStyle(
+                                color: Colors.white54,
+                                fontSize: 10,
+                              ),
+                            ),
                           if (item.rating != null) ...[
-                            if (item.year != null)
-                              const SizedBox(width: 6),
-                            Text('★${item.rating!.toStringAsFixed(1)}',
-                                style: const TextStyle(
-                                    color: Colors.amber, fontSize: 10)),
+                            if (item.year != null) const SizedBox(width: 6),
+                            Text(
+                              '★${item.rating!.toStringAsFixed(1)}',
+                              style: const TextStyle(
+                                color: Colors.amber,
+                                fontSize: 10,
+                              ),
+                            ),
                           ],
                         ],
                       ),
@@ -627,8 +701,8 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
             item.type == 'BoxSet'
                 ? Icons.collections_bookmark_outlined
                 : item.type == 'Series'
-                    ? Icons.tv_outlined
-                    : Icons.movie_outlined,
+                ? Icons.tv_outlined
+                : Icons.movie_outlined,
             color: EmbyTheme.textTertiary(context),
             size: 28,
           ),
@@ -638,7 +712,9 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
             child: Text(
               item.name,
               style: TextStyle(
-                  color: EmbyTheme.textTertiary(context), fontSize: 10),
+                color: EmbyTheme.textTertiary(context),
+                fontSize: 10,
+              ),
               textAlign: TextAlign.center,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
@@ -657,23 +733,33 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
       child: TextField(
         controller: _searchController,
         onChanged: (v) => setState(() => _query = v),
-        style:
-            TextStyle(color: EmbyTheme.textPrimary(context), fontSize: 13),
+        style: TextStyle(color: EmbyTheme.textPrimary(context), fontSize: 13),
         decoration: InputDecoration(
           hintText: S.current.embySearchHint,
           hintStyle: TextStyle(
-              color: EmbyTheme.textSecondary(context), fontSize: 13),
-          prefixIcon: Icon(Icons.search_rounded,
-              color: EmbyTheme.textSecondary(context), size: 16),
-          prefixIconConstraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+            color: EmbyTheme.textSecondary(context),
+            fontSize: 13,
+          ),
+          prefixIcon: Icon(
+            Icons.search_rounded,
+            color: EmbyTheme.textSecondary(context),
+            size: 16,
+          ),
+          prefixIconConstraints: const BoxConstraints(
+            minWidth: 36,
+            minHeight: 36,
+          ),
           suffixIcon: _query.isNotEmpty
               ? GestureDetector(
                   onTap: () {
                     _searchController.clear();
                     setState(() => _query = '');
                   },
-                  child: Icon(Icons.close_rounded,
-                      color: EmbyTheme.textSecondary(context), size: 16),
+                  child: Icon(
+                    Icons.close_rounded,
+                    color: EmbyTheme.textSecondary(context),
+                    size: 16,
+                  ),
                 )
               : null,
           filled: true,
@@ -697,18 +783,20 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
     }
     if (results.isEmpty) {
       return Center(
-        child: Text(S.current.embyNoResults,
-            style: TextStyle(color: EmbyTheme.textTertiary(context))),
+        child: Text(
+          S.current.embyNoResults,
+          style: TextStyle(color: EmbyTheme.textTertiary(context)),
+        ),
       );
     }
     final screenWidth = MediaQuery.of(context).size.width;
     final cols = screenWidth > 1200
         ? 7
         : screenWidth > 900
-            ? 5
-            : screenWidth > 600
-                ? 4
-                : 3;
+        ? 5
+        : screenWidth > 600
+        ? 4
+        : 3;
     return GridView.builder(
       padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
@@ -729,12 +817,19 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.inbox_outlined,
-              color: EmbyTheme.textTertiary(context), size: 28),
+          Icon(
+            Icons.inbox_outlined,
+            color: EmbyTheme.textTertiary(context),
+            size: 28,
+          ),
           const SizedBox(height: 6),
-          Text(S.current.embyNoContent,
-              style: TextStyle(
-                  color: EmbyTheme.textTertiary(context), fontSize: 12)),
+          Text(
+            S.current.embyNoContent,
+            style: TextStyle(
+              color: EmbyTheme.textTertiary(context),
+              fontSize: 12,
+            ),
+          ),
         ],
       ),
     );
@@ -745,12 +840,19 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.error_outline_rounded,
-              color: EmbyTheme.textTertiary(context), size: 28),
+          Icon(
+            Icons.error_outline_rounded,
+            color: EmbyTheme.textTertiary(context),
+            size: 28,
+          ),
           const SizedBox(height: 6),
-          Text(S.of(context).embyLoadFailed,
-              style: TextStyle(
-                  color: EmbyTheme.textTertiary(context), fontSize: 12)),
+          Text(
+            S.of(context).embyLoadFailed,
+            style: TextStyle(
+              color: EmbyTheme.textTertiary(context),
+              fontSize: 12,
+            ),
+          ),
           const SizedBox(height: 8),
           GestureDetector(
             onTap: () {
@@ -758,11 +860,14 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
               _previewError.remove(lib.id);
               _loadPreview(lib);
             },
-            child: Text(S.of(context).embyTapRetry,
-                style: TextStyle(
-                    color: EmbyTheme.textSecondary(context),
-                    fontSize: 12,
-                    decoration: TextDecoration.underline)),
+            child: Text(
+              S.of(context).embyTapRetry,
+              style: TextStyle(
+                color: EmbyTheme.textSecondary(context),
+                fontSize: 12,
+                decoration: TextDecoration.underline,
+              ),
+            ),
           ),
         ],
       ),
@@ -783,11 +888,13 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 18, 16, 8),
             child: Container(
-                width: 80,
-                height: 16,
-                decoration: BoxDecoration(
-                    color: shimmer,
-                    borderRadius: BorderRadius.circular(4))),
+              width: 80,
+              height: 16,
+              decoration: BoxDecoration(
+                color: shimmer,
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
           ),
           SizedBox(
             height: 180,
@@ -799,8 +906,9 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
               itemBuilder: (_, _) => Container(
                 width: 120,
                 decoration: BoxDecoration(
-                    color: shimmer,
-                    borderRadius: BorderRadius.circular(6)),
+                  color: shimmer,
+                  borderRadius: BorderRadius.circular(6),
+                ),
               ),
             ),
           ),
@@ -821,7 +929,9 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
       itemBuilder: (_, _) => Container(
         width: 120,
         decoration: BoxDecoration(
-            color: shimmer, borderRadius: BorderRadius.circular(6)),
+          color: shimmer,
+          borderRadius: BorderRadius.circular(6),
+        ),
       ),
     );
   }
@@ -833,12 +943,17 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.wifi_off_rounded,
-                color: EmbyTheme.textTertiary(context), size: 48),
+            Icon(
+              Icons.wifi_off_rounded,
+              color: EmbyTheme.textTertiary(context),
+              size: 48,
+            ),
             const SizedBox(height: 16),
-            Text(message,
-                style: TextStyle(color: EmbyTheme.textSecondary(context)),
-                textAlign: TextAlign.center),
+            Text(
+              message,
+              style: TextStyle(color: EmbyTheme.textSecondary(context)),
+              textAlign: TextAlign.center,
+            ),
             const SizedBox(height: 24),
             OutlinedButton(
               onPressed: _loadLibraries,

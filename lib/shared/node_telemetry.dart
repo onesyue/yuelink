@@ -11,20 +11,16 @@ import 'telemetry.dart';
 /// server can aggregate real-user metrics without ever receiving the
 /// server IP / port / obfuscation parameters in plain text.
 ///
-/// Fingerprint inputs capture "what makes the node connectable":
-///   - hy2       : type, server, port, sni
-///   - vless     : + flow, pubkey, short-id, ws path
-///   - trojan/vmess: + ws path
-/// Pure cosmetic changes (display name, tag) do NOT alter the fingerprint,
-/// so node renames on the panel do not reset aggregated history.
+/// v2 fingerprint input order is intentionally shared with server-side
+/// identity code:
 ///
-/// IP rotation DOES change the fingerprint. The server-side identity layer
-/// pins history across rotations via an fp→identity table so continuity is
-/// preserved even when the panel cycles IPs.
+///   type | server | port | uuid/password | sni/host | node_id
+///
+/// The uuid/password is used only as local hash input and is never uploaded.
 class NodeTelemetry {
   NodeTelemetry._();
 
-  static const _fpAlgorithmVersion = 1;
+  static const _fpAlgorithmVersion = 2;
 
   /// In-memory `name → fp` map, populated on [recordInventory] so later
   /// URL-test / connect events can look up fingerprints by the string
@@ -32,6 +28,7 @@ class NodeTelemetry {
   /// the next subscription sync overwrites the entire map.
   static final Map<String, String> _nameToFp = {};
   static final Map<String, String> _nameToType = {};
+  static final Map<String, Map<String, dynamic>> _nameToMeta = {};
 
   /// Lookup a fingerprint by mihomo node name. Returns null when the node
   /// wasn't part of the most-recent inventory (e.g. edge case during a
@@ -41,69 +38,56 @@ class NodeTelemetry {
   /// Lookup the protocol type for a node name (hy2 / vless / trojan / …).
   static String? typeForName(String name) => _nameToType[name];
 
+  /// Lookup the sanitized identity metadata used by node events.
+  static Map<String, dynamic>? metadataForName(String name) {
+    final meta = _nameToMeta[name];
+    return meta == null ? null : Map<String, dynamic>.unmodifiable(meta);
+  }
+
+  static void resetForTest() {
+    _nameToFp.clear();
+    _nameToType.clear();
+    _nameToMeta.clear();
+  }
+
   /// Compute the 16-hex fingerprint for a mihomo proxy entry.
   static String fingerprint(Map<String, dynamic> proxy) {
-    String s(String key) {
-      final v = proxy[key];
-      return v == null ? '' : v.toString();
-    }
-
-    final type = s('type').toLowerCase();
     final parts = <String>[
-      'v$_fpAlgorithmVersion',
-      type,
-      s('server'),
-      s('port'),
+      _nodeType(proxy),
+      _string(proxy, 'server'),
+      _string(proxy, 'port'),
+      _credential(proxy),
+      _sniOrHost(proxy),
+      _nodeId(proxy),
     ];
 
-    switch (type) {
-      case 'hysteria2':
-      case 'hy2':
-        parts.addAll([s('sni'), s('password')]);
-        break;
-      case 'vless':
-        parts.addAll([
-          s('sni'),
-          s('flow'),
-          s('client-fingerprint'),
-          proxy['reality-opts'] is Map
-              ? (proxy['reality-opts'] as Map)['public-key']?.toString() ?? ''
-              : '',
-          proxy['reality-opts'] is Map
-              ? (proxy['reality-opts'] as Map)['short-id']?.toString() ?? ''
-              : '',
-          proxy['ws-opts'] is Map
-              ? (proxy['ws-opts'] as Map)['path']?.toString() ?? ''
-              : '',
-        ]);
-        break;
-      case 'trojan':
-      case 'vmess':
-        parts.addAll([
-          s('sni'),
-          proxy['ws-opts'] is Map
-              ? (proxy['ws-opts'] as Map)['path']?.toString() ?? ''
-              : '',
-        ]);
-        break;
-      case 'ss':
-      case 'shadowsocks':
-        parts.add(s('cipher'));
-        break;
-    }
-
-    final digest = sha1.convert(utf8.encode(parts.join('|')));
+    final digest = sha256.convert(utf8.encode(parts.join('|')));
     return digest.toString().substring(0, 16);
   }
 
   /// Normalize a proxy into the inventory row schema — only fp + classifying
   /// metadata, never raw server/port/sni.
   static Map<String, dynamic> inventoryRow(Map<String, dynamic> proxy) {
-    return {
+    return _metadata(proxy);
+  }
+
+  static Map<String, dynamic> _metadata(Map<String, dynamic> proxy) {
+    final label = _firstString(proxy, const ['label', 'name']);
+    final region = _region(proxy);
+    final xbServerId = _xbServerId(proxy);
+    final sid = _sid(proxy, fallbackLabel: label);
+    final row = <String, dynamic>{
       'fp': fingerprint(proxy),
-      'type': (proxy['type'] ?? '').toString().toLowerCase(),
-      'region': _guessRegion((proxy['name'] ?? '').toString()),
+      'type': _nodeType(proxy),
     };
+    if (xbServerId != null) {
+      row['xb_server_id'] = xbServerId;
+    } else if (sid != null && sid.isNotEmpty) {
+      row['sid'] = sid;
+    }
+    if (region.isNotEmpty) row['region'] = region;
+    if (label.isNotEmpty) row['label'] = label;
+    return row;
   }
 
   /// Record the post-sync node catalog. Sent once per subscription update.
@@ -115,11 +99,14 @@ class NodeTelemetry {
     // reasons unrelated to uploading events.
     _nameToFp.clear();
     _nameToType.clear();
+    _nameToMeta.clear();
     for (final p in proxies) {
       final name = (p['name'] ?? '').toString();
       if (name.isEmpty) continue;
-      _nameToFp[name] = fingerprint(p);
-      _nameToType[name] = (p['type'] ?? '').toString().toLowerCase();
+      final meta = _metadata(p);
+      _nameToFp[name] = meta['fp'] as String;
+      _nameToType[name] = meta['type'] as String;
+      _nameToMeta[name] = meta;
     }
     if (!Telemetry.isEnabled || proxies.isEmpty) return;
     final rows = proxies.map(inventoryRow).toList();
@@ -186,8 +173,12 @@ class NodeTelemetry {
   static void recordUrlTest({
     required String fp,
     required String type,
+    int? xbServerId,
+    String? sid,
+    String? region,
     required int delayMs,
     required bool ok,
+    String? reason,
   }) {
     if (!Telemetry.isEnabled) return;
     Telemetry.event(
@@ -197,6 +188,10 @@ class NodeTelemetry {
         'type': type.toLowerCase(),
         'delay_ms': delayMs.clamp(0, 60000),
         'ok': ok,
+        'xb_server_id': ?xbServerId,
+        if (sid != null && sid.isNotEmpty) 'sid': sid,
+        if (region != null && region.isNotEmpty) 'region': region,
+        if (reason != null && reason.isNotEmpty) 'reason': reason,
       },
     );
   }
@@ -208,16 +203,23 @@ class NodeTelemetry {
   static void recordUrlTestByName({
     required String name,
     required int delayMs,
+    String? reason,
   }) {
-    final fp = _nameToFp[name];
-    final type = _nameToType[name];
+    final meta = _nameToMeta[name];
+    final fp = meta?['fp'] as String? ?? _nameToFp[name];
+    final type = meta?['type'] as String? ?? _nameToType[name];
     if (fp == null || type == null) return;
+    final ok = delayMs > 0 && delayMs < 10000;
     recordUrlTest(
       fp: fp,
       type: type,
-      delayMs: delayMs,
+      xbServerId: meta?['xb_server_id'] as int?,
+      sid: meta?['sid'] as String?,
+      region: meta?['region'] as String?,
+      delayMs: delayMs > 0 ? delayMs : 5000,
       // mihomo returns 0 for unreachable; clamp to ok=false there.
-      ok: delayMs > 0 && delayMs < 10000,
+      ok: ok,
+      reason: ok ? null : (reason ?? _urlTestFailureReason(delayMs)),
     );
   }
 
@@ -254,19 +256,161 @@ class NodeTelemetry {
     );
   }
 
+  static String _nodeType(Map<dynamic, dynamic> proxy) {
+    final raw = _string(proxy, 'type').toLowerCase();
+    return raw == 'hy2' ? 'hysteria2' : raw;
+  }
+
+  static String _credential(Map<dynamic, dynamic> proxy) {
+    final type = _nodeType(proxy);
+    if (type == 'vless' || type == 'vmess') {
+      return _firstString(proxy, const ['uuid', 'password', 'passwd']);
+    }
+    return _firstString(proxy, const ['password', 'passwd', 'uuid']);
+  }
+
+  static String _sniOrHost(Map<dynamic, dynamic> proxy) {
+    final direct = _firstString(proxy, const [
+      'sni',
+      'servername',
+      'server-name',
+      'host',
+    ]);
+    if (direct.isNotEmpty) return direct;
+
+    final wsOpts = _map(proxy, 'ws-opts') ?? _map(proxy, 'wsOpts');
+    final headers = wsOpts == null ? null : _map(wsOpts, 'headers');
+    final host = headers == null
+        ? ''
+        : _firstString(headers, const ['Host', 'host', 'HOST']);
+    if (host.isNotEmpty) return host;
+
+    final httpOpts = _map(proxy, 'http-opts') ?? _map(proxy, 'httpOpts');
+    final httpHeaders = httpOpts == null ? null : _map(httpOpts, 'headers');
+    return httpHeaders == null
+        ? ''
+        : _firstString(httpHeaders, const ['Host', 'host', 'HOST']);
+  }
+
+  static String _nodeId(Map<dynamic, dynamic> proxy) {
+    final id = _firstString(proxy, const [
+      'node_id',
+      'node-id',
+      'nodeId',
+      'xb_server_id',
+      'xb-server-id',
+      'xbServerId',
+      'server_id',
+      'server-id',
+      'serverId',
+    ]);
+    if (id.isNotEmpty) return id;
+    return _firstString(proxy, const ['sid', 'server_sid', 'serverSid']);
+  }
+
+  static int? _xbServerId(Map<dynamic, dynamic> proxy) {
+    for (final key in const [
+      'xb_server_id',
+      'xb-server-id',
+      'xbServerId',
+      'server_id',
+      'server-id',
+      'serverId',
+      'node_id',
+      'node-id',
+      'nodeId',
+    ]) {
+      final parsed = _parseInt(proxy[key]);
+      if (parsed != null) return parsed;
+    }
+    return null;
+  }
+
+  static int? _parseInt(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    final text = value.toString().trim();
+    if (text.isEmpty) return null;
+    return int.tryParse(text) ?? double.tryParse(text)?.toInt();
+  }
+
+  static String? _sid(
+    Map<dynamic, dynamic> proxy, {
+    required String fallbackLabel,
+  }) {
+    final explicit = _firstString(proxy, const [
+      'sid',
+      'server_sid',
+      'server-sid',
+      'serverSid',
+      'node_sid',
+      'node-sid',
+      'nodeSid',
+    ]);
+    if (explicit.isNotEmpty) return explicit;
+    final id = _nodeId(proxy);
+    if (id.isNotEmpty && _parseInt(id) == null) return id;
+    return fallbackLabel.isEmpty ? null : fallbackLabel;
+  }
+
+  static String _region(Map<dynamic, dynamic> proxy) {
+    final explicit = _firstString(proxy, const [
+      'region',
+      'country_code',
+      'country-code',
+      'countryCode',
+      'country',
+      'cc',
+    ]).toUpperCase();
+    if (explicit.isNotEmpty) return explicit;
+    return _guessRegion(_string(proxy, 'name'));
+  }
+
+  static String _urlTestFailureReason(int delayMs) {
+    if (delayMs <= 0) return 'timeout';
+    if (delayMs >= 10000) return 'timeout';
+    return 'failed';
+  }
+
+  static Map<dynamic, dynamic>? _map(Map<dynamic, dynamic> proxy, String key) {
+    final value = proxy[key];
+    return value is Map ? value : null;
+  }
+
+  static String _firstString(Map<dynamic, dynamic> proxy, List<String> keys) {
+    for (final key in keys) {
+      final value = _string(proxy, key);
+      if (value.isNotEmpty) return value;
+    }
+    return '';
+  }
+
+  static String _string(Map<dynamic, dynamic> proxy, String key) {
+    final value = proxy[key];
+    if (value == null) return '';
+    final text = value.toString().trim();
+    return text;
+  }
+
   /// Coarse region hint based on flag emojis + common tokens.
   static String _guessRegion(String name) {
     final lower = name.toLowerCase();
-    if (name.contains('🇭🇰') || lower.contains('hk') || lower.contains('hong')) {
+    if (name.contains('🇭🇰') ||
+        lower.contains('hk') ||
+        lower.contains('hong')) {
       return 'HK';
     }
-    if (name.contains('🇺🇸') || lower.contains('us ') || lower.contains('美国')) {
+    if (name.contains('🇺🇸') ||
+        lower.contains('us ') ||
+        lower.contains('美国')) {
       return 'US';
     }
     if (name.contains('🇯🇵') || lower.contains('jp') || lower.contains('日本')) {
       return 'JP';
     }
-    if (name.contains('🇸🇬') || lower.contains('sg') ||
+    if (name.contains('🇸🇬') ||
+        lower.contains('sg') ||
         lower.contains('新加坡')) {
       return 'SG';
     }

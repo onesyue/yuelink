@@ -15,9 +15,9 @@ class NetworkBadge extends StatelessWidget {
       width: 36,
       height: 36,
       decoration: BoxDecoration(
-        color: color.withValues(alpha:0.15),
+        color: color.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(YLRadius.md),
-        border: Border.all(color: color.withValues(alpha:0.3), width: 1),
+        border: Border.all(color: color.withValues(alpha: 0.3), width: 1),
       ),
       alignment: Alignment.center,
       child: Text(
@@ -25,7 +25,7 @@ class NetworkBadge extends StatelessWidget {
         style: TextStyle(
           fontSize: 10,
           fontWeight: FontWeight.w800,
-          letterSpacing: 0.5,
+          letterSpacing: 0,
           color: color,
         ),
       ),

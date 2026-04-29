@@ -7,10 +7,10 @@ import '../../../core/kernel/overwrite_service.dart';
 // ── Internal data model ────────────────────────────────────────────────────────
 
 class _OverwriteData {
-  String? mode;       // null = no override
-  String? mixedPort;  // null = no override
+  String? mode; // null = no override
+  String? mixedPort; // null = no override
   List<String> rules; // custom rules to prepend
-  String extraYaml;   // raw additional YAML for anything else
+  String extraYaml; // raw additional YAML for anything else
 
   _OverwriteData({
     this.mode,
@@ -24,17 +24,22 @@ class _OverwriteData {
     String? mixedPort;
     final rules = <String>[];
 
-    final modeMatch =
-        RegExp(r'^mode:\s*(\S+)', multiLine: true).firstMatch(yaml);
+    final modeMatch = RegExp(
+      r'^mode:\s*(\S+)',
+      multiLine: true,
+    ).firstMatch(yaml);
     if (modeMatch != null) mode = modeMatch.group(1);
 
-    final portMatch =
-        RegExp(r'^mixed-port:\s*(\d+)', multiLine: true).firstMatch(yaml);
+    final portMatch = RegExp(
+      r'^mixed-port:\s*(\d+)',
+      multiLine: true,
+    ).firstMatch(yaml);
     if (portMatch != null) mixedPort = portMatch.group(1);
 
-    final rulesMatch =
-        RegExp(r'^rules:\n((?:[ \t]+-[^\n]*\n?)*)', multiLine: true)
-            .firstMatch(yaml);
+    final rulesMatch = RegExp(
+      r'^rules:\n((?:[ \t]+-[^\n]*\n?)*)',
+      multiLine: true,
+    ).firstMatch(yaml);
     if (rulesMatch != null) {
       for (final line in rulesMatch.group(1)!.split('\n')) {
         final trimmed = line.trim();
@@ -46,14 +51,19 @@ class _OverwriteData {
 
     final extra = yaml
         .replaceAll(RegExp(r'^mode:\s*\S+[ \t]*\n?', multiLine: true), '')
+        .replaceAll(RegExp(r'^mixed-port:\s*\d+[ \t]*\n?', multiLine: true), '')
         .replaceAll(
-            RegExp(r'^mixed-port:\s*\d+[ \t]*\n?', multiLine: true), '')
-        .replaceAll(
-            RegExp(r'^rules:\n(?:[ \t]+-[^\n]*\n?)*', multiLine: true), '')
+          RegExp(r'^rules:\n(?:[ \t]+-[^\n]*\n?)*', multiLine: true),
+          '',
+        )
         .trim();
 
     return _OverwriteData(
-        mode: mode, mixedPort: mixedPort, rules: rules, extraYaml: extra);
+      mode: mode,
+      mixedPort: mixedPort,
+      rules: rules,
+      extraYaml: extra,
+    );
   }
 
   String toYaml() {
@@ -113,11 +123,11 @@ class _OverwritePageState extends State<OverwritePage> {
   }
 
   _OverwriteData _snapshotCurrent() => _OverwriteData(
-        mode: _data.mode,
-        mixedPort: _portCtrl.text.trim().isEmpty ? null : _portCtrl.text.trim(),
-        rules: List.from(_data.rules),
-        extraYaml: _extraCtrl.text.trim(),
-      );
+    mode: _data.mode,
+    mixedPort: _portCtrl.text.trim().isEmpty ? null : _portCtrl.text.trim(),
+    rules: List.from(_data.rules),
+    extraYaml: _extraCtrl.text.trim(),
+  );
 
   @override
   void initState() {
@@ -199,11 +209,13 @@ class _OverwritePageState extends State<OverwritePage> {
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.of(ctx).pop(null),
-              child: Text(s.cancel)),
+            onPressed: () => Navigator.of(ctx).pop(null),
+            child: Text(s.cancel),
+          ),
           FilledButton(
-              onPressed: () => Navigator.of(ctx).pop(ctrl.text),
-              child: Text(s.confirm)),
+            onPressed: () => Navigator.of(ctx).pop(ctrl.text),
+            child: Text(s.confirm),
+          ),
         ],
       ),
     ).whenComplete(ctrl.dispose);
@@ -217,11 +229,13 @@ class _OverwritePageState extends State<OverwritePage> {
         content: Text(s.unsavedChangesBody),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: Text(s.stayOnPage)),
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(s.stayOnPage),
+          ),
           FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: Text(s.discardAndLeave)),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(s.discardAndLeave),
+          ),
         ],
       ),
     );
@@ -231,17 +245,17 @@ class _OverwritePageState extends State<OverwritePage> {
   // ── Body ──────────────────────────────────────────────────────────────────
 
   Widget _sectionTitle(String text) => Padding(
-        padding: const EdgeInsets.fromLTRB(4, 24, 4, 8),
-        child: Text(
-          text.toUpperCase(),
-          style: const TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-            letterSpacing: 0.4,
-            color: Colors.grey,
-          ),
-        ),
-      );
+    padding: const EdgeInsets.fromLTRB(4, 24, 4, 8),
+    child: Text(
+      text.toUpperCase(),
+      style: const TextStyle(
+        fontSize: 12,
+        fontWeight: FontWeight.w500,
+        letterSpacing: 0,
+        color: Colors.grey,
+      ),
+    ),
+  );
 
   Widget _buildRulesCard(S s, BuildContext context) {
     return Material(
@@ -259,9 +273,8 @@ class _OverwritePageState extends State<OverwritePage> {
                   child: Text(
                     s.overwriteCustomRulesLabel,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color:
-                              Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ),
                 TextButton.icon(
@@ -275,8 +288,7 @@ class _OverwritePageState extends State<OverwritePage> {
           if (_data.rules.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 32),
-              child: Text(s.noData,
-                  style: const TextStyle(color: Colors.grey)),
+              child: Text(s.noData, style: const TextStyle(color: Colors.grey)),
             )
           else
             ReorderableListView.builder(
@@ -299,13 +311,17 @@ class _OverwritePageState extends State<OverwritePage> {
                   title: Text(
                     _data.rules[i],
                     style: const TextStyle(
-                        fontFamily: 'monospace', fontSize: 12),
+                      fontFamily: 'monospace',
+                      fontSize: 12,
+                    ),
                   ),
                   trailing: IconButton(
-                    icon: const Icon(Icons.delete_outline,
-                        size: 18, color: Colors.red),
-                    onPressed: () =>
-                        setState(() => _data.rules.removeAt(i)),
+                    icon: const Icon(
+                      Icons.delete_outline,
+                      size: 18,
+                      color: Colors.red,
+                    ),
+                    onPressed: () => setState(() => _data.rules.removeAt(i)),
                   ),
                   onTap: () => _editRule(s, i),
                 );
@@ -350,8 +366,8 @@ class _OverwritePageState extends State<OverwritePage> {
               ? 'Override routing mode and mixed port'
               : '覆盖路由模式与 Mixed 端口（覆盖偏好设置）',
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
         tilePadding: const EdgeInsets.symmetric(horizontal: 16),
         childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -359,11 +375,12 @@ class _OverwritePageState extends State<OverwritePage> {
           // Mode override
           Align(
             alignment: Alignment.centerLeft,
-            child: Text(s.overwriteModeLabel,
-                style: Theme.of(context)
-                    .textTheme
-                    .labelLarge
-                    ?.copyWith(fontWeight: FontWeight.w600)),
+            child: Text(
+              s.overwriteModeLabel,
+              style: Theme.of(
+                context,
+              ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w600),
+            ),
           ),
           const SizedBox(height: 8),
           Wrap(
@@ -383,11 +400,12 @@ class _OverwritePageState extends State<OverwritePage> {
           // Mixed-port override
           Align(
             alignment: Alignment.centerLeft,
-            child: Text(s.overwritePortLabel,
-                style: Theme.of(context)
-                    .textTheme
-                    .labelLarge
-                    ?.copyWith(fontWeight: FontWeight.w600)),
+            child: Text(
+              s.overwritePortLabel,
+              style: Theme.of(
+                context,
+              ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w600),
+            ),
           ),
           const SizedBox(height: 8),
           TextField(
@@ -424,9 +442,10 @@ class _OverwritePageState extends State<OverwritePage> {
               const Padding(
                 padding: EdgeInsets.all(16),
                 child: SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2)),
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
               )
             else
               TextButton(onPressed: _save, child: Text(s.save)),

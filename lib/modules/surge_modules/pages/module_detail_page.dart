@@ -56,9 +56,7 @@ class _ModuleDetailPageState extends ConsumerState<ModuleDetailPage> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style: FilledButton.styleFrom(
-              backgroundColor: YLColors.error,
-            ),
+            style: FilledButton.styleFrom(backgroundColor: YLColors.error),
             child: Text(s.confirm),
           ),
         ],
@@ -94,7 +92,8 @@ class _ModuleDetailPageState extends ConsumerState<ModuleDetailPage> {
                 ? const SizedBox(
                     width: 18,
                     height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2))
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
                 : const Icon(Icons.refresh),
             tooltip: s.moduleRefresh,
             onPressed: _refreshing ? null : _refresh,
@@ -125,10 +124,7 @@ class _ModuleDetailPageState extends ConsumerState<ModuleDetailPage> {
                       ),
                     ),
                     if (module.versionTag != null)
-                      _Chip(
-                        label: 'v${module.versionTag}',
-                        isDark: isDark,
-                      ),
+                      _Chip(label: 'v${module.versionTag}', isDark: isDark),
                   ],
                 ),
                 if (module.desc.isNotEmpty) ...[
@@ -224,20 +220,22 @@ class _ModuleDetailPageState extends ConsumerState<ModuleDetailPage> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    ...module.rules.take(5).map(
-                      (r) => Padding(
-                        padding: const EdgeInsets.only(bottom: 4),
-                        child: Text(
-                          r.raw,
-                          style: YLText.mono.copyWith(
-                            fontSize: 11,
-                            color: YLColors.zinc500,
+                    ...module.rules
+                        .take(5)
+                        .map(
+                          (r) => Padding(
+                            padding: const EdgeInsets.only(bottom: 4),
+                            child: Text(
+                              r.raw,
+                              style: YLText.mono.copyWith(
+                                fontSize: 11,
+                                color: YLColors.zinc500,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
                         ),
-                      ),
-                    ),
                     if (module.rules.length > 5)
                       Text(
                         '… and ${module.rules.length - 5} more',
@@ -254,7 +252,8 @@ class _ModuleDetailPageState extends ConsumerState<ModuleDetailPage> {
                     ),
                   ],
                   if (module.urlRewrites.isNotEmpty) ...[
-                    if (module.rules.isNotEmpty || module.mitmHostnames.isNotEmpty)
+                    if (module.rules.isNotEmpty ||
+                        module.mitmHostnames.isNotEmpty)
                       const SizedBox(height: 10),
                     _ActiveRow(
                       icon: Icons.swap_horiz,
@@ -289,7 +288,8 @@ class _ModuleDetailPageState extends ConsumerState<ModuleDetailPage> {
                 children: [
                   if (module.scripts.isNotEmpty)
                     _UnsupportedRow(
-                      label: '${s.moduleScriptDetected}: ${module.scripts.length}',
+                      label:
+                          '${s.moduleScriptDetected}: ${module.scripts.length}',
                       hint: s.moduleFutureVersion,
                       isDark: isDark,
                     ),
@@ -400,7 +400,7 @@ class _SectionTitle extends StatelessWidget {
       child: Text(
         text.toUpperCase(),
         style: YLText.caption.copyWith(
-          letterSpacing: 1.2,
+          letterSpacing: 0,
           fontWeight: FontWeight.w600,
           color: YLColors.zinc400,
         ),
@@ -439,8 +439,11 @@ class _StatRow extends StatelessWidget {
   final String label;
   final String value;
   final bool isDark;
-  const _StatRow(
-      {required this.label, required this.value, required this.isDark});
+  const _StatRow({
+    required this.label,
+    required this.value,
+    required this.isDark,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -543,10 +546,7 @@ class _ActiveRow extends StatelessWidget {
             ),
           ),
         ),
-        Text(
-          detail,
-          style: YLText.caption.copyWith(color: YLColors.zinc400),
-        ),
+        Text(detail, style: YLText.caption.copyWith(color: YLColors.zinc400)),
       ],
     );
   }
@@ -573,8 +573,11 @@ class _UnsupportedRow extends StatelessWidget {
         children: [
           const Padding(
             padding: EdgeInsets.only(top: 1),
-            child: Icon(Icons.warning_amber_rounded,
-                size: 14, color: warningColor),
+            child: Icon(
+              Icons.warning_amber_rounded,
+              size: 14,
+              color: warningColor,
+            ),
           ),
           const SizedBox(width: 8),
           Expanded(

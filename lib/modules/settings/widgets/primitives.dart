@@ -27,13 +27,17 @@ class SettingsSectionTitle extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(
-          YLSpacing.md, YLSpacing.lg, YLSpacing.md, YLSpacing.sm),
+        YLSpacing.md,
+        YLSpacing.lg,
+        YLSpacing.md,
+        YLSpacing.sm,
+      ),
       child: Text(
         text.toUpperCase(),
         style: YLText.caption.copyWith(
           fontSize: 11,
           fontWeight: FontWeight.w500,
-          letterSpacing: 0.6,
+          letterSpacing: 0,
           color: YLColors.zinc500,
         ),
       ),
@@ -54,13 +58,17 @@ class GsGeneralSectionTitle extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(
-          YLSpacing.md, YLSpacing.md, YLSpacing.md, YLSpacing.sm),
+        YLSpacing.md,
+        YLSpacing.md,
+        YLSpacing.md,
+        YLSpacing.sm,
+      ),
       child: Text(
         text.toUpperCase(),
         style: YLText.caption.copyWith(
           fontSize: 11,
           fontWeight: FontWeight.w500,
-          letterSpacing: 0.6,
+          letterSpacing: 0,
           color: YLColors.zinc500,
         ),
       ),
@@ -125,7 +133,9 @@ class YLInfoRow extends StatelessWidget {
 
     final content = Padding(
       padding: const EdgeInsets.symmetric(
-          horizontal: YLSpacing.lg, vertical: YLSpacing.md),
+        horizontal: YLSpacing.lg,
+        vertical: YLSpacing.md,
+      ),
       child: Row(
         children: [
           if (leading != null) ...[
@@ -135,11 +145,12 @@ class YLInfoRow extends StatelessWidget {
           Expanded(
             child: Text(
               label,
-              style: labelStyle ??
+              style:
+                  labelStyle ??
                   YLText.body.copyWith(
                     fontSize: 14,
                     fontWeight: FontWeight.w400,
-                    letterSpacing: -0.1,
+                    letterSpacing: 0,
                     color: labelColor,
                   ),
             ),
@@ -187,7 +198,9 @@ class YLSettingsRow extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.symmetric(
-          horizontal: YLSpacing.lg, vertical: YLSpacing.md),
+        horizontal: YLSpacing.lg,
+        vertical: YLSpacing.md,
+      ),
       child: Row(
         children: [
           Expanded(
@@ -199,7 +212,7 @@ class YLSettingsRow extends StatelessWidget {
                   style: YLText.body.copyWith(
                     fontSize: 14,
                     fontWeight: FontWeight.w400,
-                    letterSpacing: -0.1,
+                    letterSpacing: 0,
                     color: titleColor,
                   ),
                 ),

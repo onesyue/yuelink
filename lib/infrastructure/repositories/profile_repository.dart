@@ -426,7 +426,8 @@ class ProfileRepository {
 
   /// Extract the `proxies:` list from a config YAML and record a
   /// `node_inventory` telemetry event (no raw server/port leaves the
-  /// device — [NodeTelemetry] reduces each proxy to `{fp, type, region}`).
+  /// device — [NodeTelemetry] reduces each proxy to fp + safe identity
+  /// metadata).
   /// Silently no-ops on parse failure so we never break sync.
   void _recordInventoryFromConfig(String yaml) {
     try {

@@ -25,6 +25,7 @@ import '../updater/update_checker.dart';
 import '../../shared/rich_content.dart';
 import '../../shared/widgets/setting_icon.dart';
 import '../../shared/widgets/yl_list.dart';
+import '../../shared/widgets/yl_scaffold.dart';
 import '../../theme.dart';
 import 'widgets/primitives.dart';
 import '../../domain/account/account_overview.dart';
@@ -110,8 +111,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                       child: SingleChildScrollView(
                         child: RichContent(
                           content: info.releaseNotes,
-                          textStyle:
-                              YLText.body.copyWith(color: YLColors.zinc500),
+                          textStyle: YLText.body.copyWith(
+                            color: YLColors.zinc500,
+                          ),
                         ),
                       ),
                     ),
@@ -119,7 +121,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                   ],
                   if (downloading) ...[
                     LinearProgressIndicator(
-                        value: progress > 0 ? progress : null),
+                      value: progress > 0 ? progress : null,
+                    ),
                     const SizedBox(height: 8),
                     Text(
                       progress > 0
@@ -129,8 +132,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                     ),
                   ],
                   if (error != null) ...[
-                    Text(error!,
-                        style: YLText.caption.copyWith(color: YLColors.error)),
+                    Text(
+                      error!,
+                      style: YLText.caption.copyWith(color: YLColors.error),
+                    ),
                   ],
                 ],
               ),
@@ -184,8 +189,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                     Navigator.pop(ctx);
                     final uri = Uri.parse(info.releaseUrl);
                     if (await canLaunchUrl(uri)) {
-                      await launchUrl(uri,
-                          mode: LaunchMode.externalApplication);
+                      await launchUrl(
+                        uri,
+                        mode: LaunchMode.externalApplication,
+                      );
                     }
                   },
                   child: Text(s.updateDownload),
@@ -226,8 +233,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
         // xdg-open is the universal entry point on Linux desktops.
         final result = await Process.run('xdg-open', [path]);
         if (result.exitCode != 0) {
-          throw ProcessException('xdg-open', [path],
-              result.stderr.toString().trim(), result.exitCode);
+          throw ProcessException(
+            'xdg-open',
+            [path],
+            result.stderr.toString().trim(),
+            result.exitCode,
+          );
         }
         AppNotifier.success(s.updateInstalling);
         return;
@@ -270,7 +281,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
       // ── Profile cluster ────────────────────────────────────────
       Padding(
         padding: const EdgeInsets.fromLTRB(
-            YLSpacing.lg, 0, YLSpacing.lg, YLSpacing.md),
+          YLSpacing.lg,
+          0,
+          YLSpacing.lg,
+          YLSpacing.md,
+        ),
         child: (isGuest || isLoggedOut)
             ? _GuestLoginCard(isDark: isDark)
             : Column(
@@ -293,9 +308,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
             ),
             title: s.mineSubscriptionManage,
             trailing: YLListTrailing.chevron(),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const ProfilePage()),
-            ),
+            onTap: () => Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => const ProfilePage())),
           ),
           if (!isGuest) ...[
             YLListTile(
@@ -305,9 +320,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
               ),
               title: s.mineRenew,
               trailing: YLListTrailing.chevron(),
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const StorePage()),
-              ),
+              onTap: () => Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const StorePage())),
             ),
             YLListTile(
               leading: const YLSettingIcon(
@@ -355,9 +370,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
             ),
             title: s.overwriteTitle,
             trailing: YLListTrailing.chevron(),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const OverwritePage()),
-            ),
+            onTap: () => Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => const OverwritePage())),
           ),
           YLListTile(
             leading: const YLSettingIcon(
@@ -367,8 +382,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
             title: S.current.repairTitle,
             trailing: YLListTrailing.chevron(),
             onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(
-                  builder: (_) => const ConnectionRepairPage()),
+              MaterialPageRoute(builder: (_) => const ConnectionRepairPage()),
             ),
           ),
           YLListTile(
@@ -380,9 +394,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
             trailing: moduleCount > 0
                 ? YLListTrailing.value('$moduleCount')
                 : YLListTrailing.chevron(),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const ModulesPage()),
-            ),
+            onTap: () => Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => const ModulesPage())),
           ),
         ],
       ),
@@ -430,12 +444,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
             trailing: YLListTrailing.chevron(),
             onTap: () {
               const tosUrl = 'https://yue.to/tos.html';
-              Navigator.of(context).push(MaterialPageRoute(
-                builder: (_) => InAppWebPage(
-                  title: s.minePrivacyPolicy,
-                  url: tosUrl,
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) =>
+                      InAppWebPage(title: s.minePrivacyPolicy, url: tosUrl),
                 ),
-              ));
+              );
             },
           ),
           YLListTile(
@@ -455,26 +469,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
       ),
     ];
 
-    // No large "我的" title — Dashboard has none either, the bottom-tab
-    // label already tells the user which tab they're on. Layout matches
-    // Dashboard: `Scaffold + SafeArea(bottom:false) + LayoutBuilder +
-    // ListView` with horizontal padding that centres the content at
-    // 720dp on wider viewports (desktop / tablet).
-    return Scaffold(
-      body: SafeArea(
-        bottom: false,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final hPad = constraints.maxWidth > 720 + 48
-                ? (constraints.maxWidth - 720) / 2
-                : 0.0;
-            return ListView(
-              padding: EdgeInsets.fromLTRB(hPad, YLSpacing.lg, hPad, YLSpacing.xxl),
-              children: children,
-            );
-          },
-        ),
-      ),
+    return YLLargeTitleScaffold(
+      title: s.navMine,
+      bottomSafe: false,
+      maxContentWidth: 768,
+      showTitleBar: false,
+      slivers: [SliverList(delegate: SliverChildListDelegate(children))],
     );
   }
 
@@ -504,27 +504,27 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
       onTap: _checkingUpdate
           ? null
           : _pendingUpdate != null
-              ? () => _showUpdateDialog(context, _pendingUpdate!)
-              : () async {
-                  setState(() => _checkingUpdate = true);
-                  final info =
-                      await UpdateChecker.instance.check(ignoreSkipped: true);
-                  if (!mounted) return;
-                  setState(() {
-                    _pendingUpdate = info;
-                    _checkingUpdate = false;
-                  });
-                  if (info == null) {
-                    AppNotifier.info(s.alreadyLatest);
-                  } else if (mounted) {
-                    // ignore: use_build_context_synchronously
-                    _showUpdateDialog(context, info);
-                  }
-                },
+          ? () => _showUpdateDialog(context, _pendingUpdate!)
+          : () async {
+              setState(() => _checkingUpdate = true);
+              final info = await UpdateChecker.instance.check(
+                ignoreSkipped: true,
+              );
+              if (!mounted) return;
+              setState(() {
+                _pendingUpdate = info;
+                _checkingUpdate = false;
+              });
+              if (info == null) {
+                AppNotifier.info(s.alreadyLatest);
+              } else if (mounted) {
+                // ignore: use_build_context_synchronously
+                _showUpdateDialog(context, info);
+              }
+            },
     );
   }
 }
-
 
 /// Apple Settings 风格 profile row — 头像+邮箱+套餐标签。精简，不含按钮。
 class _ProfileRow extends ConsumerWidget {
@@ -560,9 +560,10 @@ class _ProfileRow extends ConsumerWidget {
                           ? email[0].toUpperCase()
                           : '?',
                       style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                          color: isDark ? YLColors.zinc300 : YLColors.zinc600),
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        color: isDark ? YLColors.zinc300 : YLColors.zinc600,
+                      ),
                     ),
                   ),
                 ),
@@ -571,35 +572,43 @@ class _ProfileRow extends ConsumerWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(email,
-                          style: YLText.titleMedium.copyWith(
-                              fontWeight: FontWeight.w600,
-                              color: isDark ? Colors.white : YLColors.zinc900),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis),
+                      Text(
+                        email,
+                        style: YLText.titleMedium.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? Colors.white : YLColors.zinc900,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                       const SizedBox(height: 3),
                       Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 2),
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
                           color: isDark ? YLColors.zinc700 : YLColors.zinc100,
                           borderRadius: BorderRadius.circular(YLRadius.sm),
                         ),
-                        child: Text(plan,
-                            style: YLText.caption.copyWith(
-                                fontWeight: FontWeight.w500,
-                                color: isDark
-                                    ? YLColors.zinc300
-                                    : YLColors.zinc600)),
+                        child: Text(
+                          plan,
+                          style: YLText.caption.copyWith(
+                            fontWeight: FontWeight.w500,
+                            color: isDark ? YLColors.zinc300 : YLColors.zinc600,
+                          ),
+                        ),
                       ),
                     ],
                   ),
                 ),
                 // 改密码 + 退出登录 小图标
                 IconButton(
-                  icon: Icon(Icons.lock_outline_rounded,
-                      size: 18,
-                      color: isDark ? YLColors.zinc400 : YLColors.zinc500),
+                  icon: Icon(
+                    Icons.lock_outline_rounded,
+                    size: 18,
+                    color: isDark ? YLColors.zinc400 : YLColors.zinc500,
+                  ),
                   tooltip: S.current.mineChangePassword,
                   onPressed: () {
                     final s = S.of(context);
@@ -609,24 +618,31 @@ class _ProfileRow extends ConsumerWidget {
                       context: context,
                       builder: (ctx) => AlertDialog(
                         title: Text(s.mineChangePassword),
-                        content:
-                            Column(mainAxisSize: MainAxisSize.min, children: [
-                          TextField(
+                        content: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            TextField(
                               controller: oldPwCtrl,
                               obscureText: true,
-                              decoration:
-                                  InputDecoration(labelText: s.oldPassword)),
-                          const SizedBox(height: 12),
-                          TextField(
+                              decoration: InputDecoration(
+                                labelText: s.oldPassword,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            TextField(
                               controller: newPwCtrl,
                               obscureText: true,
-                              decoration:
-                                  InputDecoration(labelText: s.newPassword)),
-                        ]),
+                              decoration: InputDecoration(
+                                labelText: s.newPassword,
+                              ),
+                            ),
+                          ],
+                        ),
                         actions: [
                           TextButton(
-                              onPressed: () => Navigator.pop(ctx),
-                              child: Text(s.cancel)),
+                            onPressed: () => Navigator.pop(ctx),
+                            child: Text(s.cancel),
+                          ),
                           FilledButton(
                             onPressed: () async {
                               final oldPw = oldPwCtrl.text.trim();
@@ -639,9 +655,10 @@ class _ProfileRow extends ConsumerWidget {
                                 await ref
                                     .read(businessXboardApiProvider)
                                     .changePassword(
-                                        token: token,
-                                        oldPassword: oldPw,
-                                        newPassword: newPw);
+                                      token: token,
+                                      oldPassword: oldPw,
+                                      newPassword: newPw,
+                                    );
                                 AppNotifier.success(s.passwordChangedSuccess);
                               } catch (_) {
                                 AppNotifier.error(s.passwordChangeFailed);
@@ -658,8 +675,11 @@ class _ProfileRow extends ConsumerWidget {
                   },
                 ),
                 IconButton(
-                  icon: Icon(Icons.logout_rounded,
-                      size: 18, color: YLColors.error.withValues(alpha: 0.7)),
+                  icon: Icon(
+                    Icons.logout_rounded,
+                    size: 18,
+                    color: YLColors.error.withValues(alpha: 0.7),
+                  ),
                   tooltip: S.current.authLogout,
                   onPressed: () {
                     final s = S.of(context);
@@ -670,15 +690,17 @@ class _ProfileRow extends ConsumerWidget {
                         content: Text(s.authLogoutConfirm),
                         actions: [
                           TextButton(
-                              onPressed: () => Navigator.pop(ctx),
-                              child: Text(s.cancel)),
+                            onPressed: () => Navigator.pop(ctx),
+                            child: Text(s.cancel),
+                          ),
                           FilledButton(
                             onPressed: () {
                               Navigator.pop(ctx);
                               ref.read(authProvider.notifier).logout();
                             },
                             style: FilledButton.styleFrom(
-                                backgroundColor: YLColors.error),
+                              backgroundColor: YLColors.error,
+                            ),
                             child: Text(s.authLogout),
                           ),
                         ],
@@ -717,12 +739,12 @@ class _MineTrafficSection extends ConsumerWidget {
     final expiryStr = overview == null
         ? '--'
         : overview.expireAt == null
-            ? '永久有效'
-            : overview.daysRemaining == null || overview.daysRemaining! < 0
-                ? '已过期'
-                : overview.daysRemaining == 0
-                    ? '今日到期'
-                    : '${overview.daysRemaining} 天后到期';
+        ? '永久有效'
+        : overview.daysRemaining == null || overview.daysRemaining! < 0
+        ? '已过期'
+        : overview.daysRemaining == 0
+        ? '今日到期'
+        : '${overview.daysRemaining} 天后到期';
 
     return SettingsCard(
       child: Padding(
@@ -731,16 +753,21 @@ class _MineTrafficSection extends ConsumerWidget {
           children: [
             Row(
               children: [
-                Text(S.current.trafficUsedTotal,
-                    style: YLText.caption.copyWith(color: YLColors.zinc500)),
+                Text(
+                  S.current.trafficUsedTotal,
+                  style: YLText.caption.copyWith(color: YLColors.zinc500),
+                ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text('$usedStr / $totalStr',
-                      style: YLText.label.copyWith(
-                          fontWeight: FontWeight.w600,
-                          color: isDark ? Colors.white : YLColors.zinc900),
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.end),
+                  child: Text(
+                    '$usedStr / $totalStr',
+                    style: YLText.label.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? Colors.white : YLColors.zinc900,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.end,
+                  ),
                 ),
               ],
             ),
@@ -755,8 +782,8 @@ class _MineTrafficSection extends ConsumerWidget {
                   usageRatio < 0.6
                       ? const Color(0xFF22C55E)
                       : usageRatio < 0.85
-                          ? Colors.orange
-                          : Colors.red,
+                      ? Colors.orange
+                      : Colors.red,
                 ),
               ),
             ),
@@ -764,21 +791,26 @@ class _MineTrafficSection extends ConsumerWidget {
             Row(
               children: [
                 Expanded(
-                  child: Text('${S.current.trafficRemaining} $remainStr',
-                      style: YLText.caption.copyWith(color: YLColors.zinc500),
-                      overflow: TextOverflow.ellipsis),
+                  child: Text(
+                    '${S.current.trafficRemaining} $remainStr',
+                    style: YLText.caption.copyWith(color: YLColors.zinc500),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text(expiryStr,
-                      style: YLText.caption.copyWith(
-                        color: overview != null &&
-                                (overview.daysRemaining ?? 999) <= 7
-                            ? Colors.orange
-                            : YLColors.zinc500,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.end),
+                  child: Text(
+                    expiryStr,
+                    style: YLText.caption.copyWith(
+                      color:
+                          overview != null &&
+                              (overview.daysRemaining ?? 999) <= 7
+                          ? Colors.orange
+                          : YLColors.zinc500,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.end,
+                  ),
                 ),
               ],
             ),
@@ -839,8 +871,11 @@ class _GuestLoginCard extends ConsumerWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
         child: Column(
           children: [
-            const Icon(Icons.account_circle_outlined,
-                size: 48, color: YLColors.zinc400),
+            const Icon(
+              Icons.account_circle_outlined,
+              size: 48,
+              color: YLColors.zinc400,
+            ),
             const SizedBox(height: 12),
             Text(
               isEn ? 'Not logged in' : '未登录',
@@ -871,5 +906,3 @@ class _GuestLoginCard extends ConsumerWidget {
 
 // Primitive widgets (SettingsSectionTitle / SettingsCard / YLInfoRow /
 // YLSettingsRow) live in `widgets/primitives.dart`.
-
-

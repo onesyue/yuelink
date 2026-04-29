@@ -209,11 +209,7 @@ class _CheckinCalendarPageState extends ConsumerState<CheckinCalendarPage> {
               color: const Color(0xFFEF4444),
             ),
           ),
-          Container(
-            width: 1,
-            height: 36,
-            color: border,
-          ),
+          Container(width: 1, height: 36, color: border),
           Expanded(
             child: _StatTile(
               label: s.calendarSignedThisMonth,
@@ -221,16 +217,14 @@ class _CheckinCalendarPageState extends ConsumerState<CheckinCalendarPage> {
               suffix: s.calendarSuffixOf(total: '${data.daysInMonth}'),
             ),
           ),
-          Container(
-            width: 1,
-            height: 36,
-            color: border,
-          ),
+          Container(width: 1, height: 36, color: border),
           Expanded(
             child: _StatTile(
               label: s.calendarMultiplier,
-              value: '×${data.multiplier.toStringAsFixed(1)}'
-                  .replaceAll(RegExp(r'\.0$'), ''),
+              value: '×${data.multiplier.toStringAsFixed(1)}'.replaceAll(
+                RegExp(r'\.0$'),
+                '',
+              ),
             ),
           ),
         ],
@@ -253,7 +247,8 @@ class _CheckinCalendarPageState extends ConsumerState<CheckinCalendarPage> {
               onPressed: _onResign,
               icon: const Icon(Icons.replay_outlined, size: 18),
               label: Text(
-                  s.calendarBtnResignWithCost(cost: '${data.signCardCost}')),
+                s.calendarBtnResignWithCost(cost: '${data.signCardCost}'),
+              ),
               style: OutlinedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 14),
               ),
@@ -265,7 +260,9 @@ class _CheckinCalendarPageState extends ConsumerState<CheckinCalendarPage> {
           child: FilledButton.icon(
             onPressed: () => Navigator.of(context).maybePop(),
             icon: const Icon(Icons.check_rounded, size: 18),
-            label: Text(canResign ? s.calendarBtnClose : s.calendarBtnSignedToday),
+            label: Text(
+              canResign ? s.calendarBtnClose : s.calendarBtnSignedToday,
+            ),
             style: FilledButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 14),
             ),
@@ -283,28 +280,32 @@ class _CheckinCalendarPageState extends ConsumerState<CheckinCalendarPage> {
     return Wrap(
       spacing: 14,
       runSpacing: 8,
-      children: <_LegendItem>[
-        _LegendItem.icon(
-          icon: Icons.check_rounded,
-          color: YLColors.connected,
-          text: s.calendarLegendSigned,
-        ),
-        _LegendItem.icon(
-          icon: Icons.auto_awesome_rounded,
-          color: amber,
-          text: s.calendarLegendCard,
-        ),
-        _LegendItem.dot(color: danger, text: s.calendarLegendMissed),
-        _LegendItem.ring(color: danger, text: s.calendarLegendTodayMiss),
-        _LegendItem.muted(text: s.calendarLegendFuture, isDark: isDark),
-      ]
-          .map(
-            (e) => DefaultTextStyle(
-              style: YLText.caption.copyWith(color: color, fontSize: 11),
-              child: e,
-            ),
-          )
-          .toList(),
+      children:
+          <_LegendItem>[
+                _LegendItem.icon(
+                  icon: Icons.check_rounded,
+                  color: YLColors.connected,
+                  text: s.calendarLegendSigned,
+                ),
+                _LegendItem.icon(
+                  icon: Icons.auto_awesome_rounded,
+                  color: amber,
+                  text: s.calendarLegendCard,
+                ),
+                _LegendItem.dot(color: danger, text: s.calendarLegendMissed),
+                _LegendItem.ring(
+                  color: danger,
+                  text: s.calendarLegendTodayMiss,
+                ),
+                _LegendItem.muted(text: s.calendarLegendFuture, isDark: isDark),
+              ]
+              .map(
+                (e) => DefaultTextStyle(
+                  style: YLText.caption.copyWith(color: color, fontSize: 11),
+                  child: e,
+                ),
+              )
+              .toList(),
     );
   }
 }
@@ -341,7 +342,7 @@ class _MonthHeader extends StatelessWidget {
               style: YLText.titleLarge.copyWith(
                 fontSize: 22,
                 fontWeight: FontWeight.w700,
-                letterSpacing: -0.3,
+                letterSpacing: 0,
               ),
             ),
           ),
@@ -428,10 +429,7 @@ class _StatTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Text(
-          label,
-          style: YLText.caption.copyWith(color: YLColors.zinc500),
-        ),
+        Text(label, style: YLText.caption.copyWith(color: YLColors.zinc500)),
         const SizedBox(height: 4),
         RichText(
           text: TextSpan(
@@ -472,9 +470,9 @@ class _LegendItem extends StatelessWidget {
     required Color color,
     required String text,
   }) => _LegendItem._(
-        swatch: Icon(icon, size: 11, color: color),
-        text: text,
-      );
+    swatch: Icon(icon, size: 11, color: color),
+    text: text,
+  );
 
   factory _LegendItem.dot({required Color color, required String text}) =>
       _LegendItem._(

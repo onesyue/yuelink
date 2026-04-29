@@ -173,7 +173,7 @@ Map<String, dynamic>? buildRelayReportFields({
     if (lastRelayResult != null && lastRelayResult.skipReason != null)
       'skipReason': lastRelayResult.skipReason,
     if (lastSelectedKind != null) 'selectedKind': lastSelectedKind.name,
-    if (lastSelectedReason != null) 'selectedReason': lastSelectedReason,
+    'selectedReason': ?lastSelectedReason,
   };
 }
 

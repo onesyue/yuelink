@@ -6,7 +6,6 @@ import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
-import '../../core/kernel/core_manager.dart';
 import '../../i18n/app_strings.dart';
 import 'emby_client.dart';
 import 'widgets/player_settings_panel.dart';
@@ -46,7 +45,8 @@ class EmbyPlayerPage extends StatefulWidget {
   State<EmbyPlayerPage> createState() => _EmbyPlayerPageState();
 }
 
-class _EmbyPlayerPageState extends State<EmbyPlayerPage> with WidgetsBindingObserver {
+class _EmbyPlayerPageState extends State<EmbyPlayerPage>
+    with WidgetsBindingObserver {
   // Session-wide subtitle font size (persists while app is running).
   static double _savedFontSize = 40.0;
 
@@ -75,8 +75,9 @@ class _EmbyPlayerPageState extends State<EmbyPlayerPage> with WidgetsBindingObse
   bool _locked = false;
 
   // Emby playback-session tracking.
-  final String _sessionId =
-      DateTime.now().millisecondsSinceEpoch.toRadixString(36);
+  final String _sessionId = DateTime.now().millisecondsSinceEpoch.toRadixString(
+    36,
+  );
   bool _playbackStarted = false;
 
   List<Map<String, dynamic>> _embyAudio = [];
@@ -111,7 +112,9 @@ class _EmbyPlayerPageState extends State<EmbyPlayerPage> with WidgetsBindingObse
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     // 后台最小化时自动进入小窗播放（paused = 真正离开，inactive 会被通知栏触发）
-    if (state == AppLifecycleState.paused && Platform.isAndroid && _player.state.playing) {
+    if (state == AppLifecycleState.paused &&
+        Platform.isAndroid &&
+        _player.state.playing) {
       _pipChannel.invokeMethod('enterPip', {'width': 16, 'height': 9});
     }
   }
@@ -149,9 +152,9 @@ class _EmbyPlayerPageState extends State<EmbyPlayerPage> with WidgetsBindingObse
 
   Future<void> _setupAndPlay() async {
     try {
-      final mixedPort = CoreManager.instance.mixedPort;
+      final mixedPort = EmbyClient.activeProxyPort;
       final np = _player.platform as NativePlayer;
-      if (mixedPort > 0) {
+      if (mixedPort != null) {
         await np.setProperty('http-proxy', 'http://127.0.0.1:$mixedPort');
       }
       await np.setProperty('tls-verify', 'no');
@@ -163,12 +166,17 @@ class _EmbyPlayerPageState extends State<EmbyPlayerPage> with WidgetsBindingObse
       await np.setProperty('demuxer-max-back-bytes', '50MiB');
       await np.setProperty('hr-seek', 'yes');
       await np.setProperty('hr-seek-framedrop', 'yes');
-      await _player.open(Media(widget.streamUrl, httpHeaders: {
-        'X-Emby-Authorization':
-            'MediaBrowser Client="YueLink", Device="Flutter", '
+      await _player.open(
+        Media(
+          widget.streamUrl,
+          httpHeaders: {
+            'X-Emby-Authorization':
+                'MediaBrowser Client="YueLink", Device="Flutter", '
                 'DeviceId="yuelink-flutter", Version="1.0", '
                 'Token="${widget.accessToken}"',
-      }));
+          },
+        ),
+      );
       _bufferingSub = _player.stream.buffering.listen((b) {
         if (mounted && _loading && !b) setState(() => _loading = false);
       });
@@ -179,7 +187,12 @@ class _EmbyPlayerPageState extends State<EmbyPlayerPage> with WidgetsBindingObse
       _checkResume();
       _startProgressReporting();
     } catch (e) {
-      if (mounted) setState(() { _loading = false; _error = '$e'; });
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _error = '$e';
+        });
+      }
     }
   }
 
@@ -199,7 +212,9 @@ class _EmbyPlayerPageState extends State<EmbyPlayerPage> with WidgetsBindingObse
       if (posSeconds < 30) return;
       // Skip if already near the end (> 95% played).
       final totalTicks = data['RunTimeTicks'] as int?;
-      if (totalTicks != null && totalTicks > 0 && posTicks / totalTicks > 0.95) {
+      if (totalTicks != null &&
+          totalTicks > 0 &&
+          posTicks / totalTicks > 0.95) {
         return;
       }
       if (!mounted) return;
@@ -208,22 +223,31 @@ class _EmbyPlayerPageState extends State<EmbyPlayerPage> with WidgetsBindingObse
         barrierDismissible: false,
         builder: (_) => AlertDialog(
           backgroundColor: const Color(0xFF1C1C1E),
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          title: Text(S.current.embyResumeTitle,
-              style: const TextStyle(color: Colors.white, fontSize: 16)),
-          content: Text(_formatPosition(posSeconds),
-              style: const TextStyle(color: Colors.white70)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          title: Text(
+            S.current.embyResumeTitle,
+            style: const TextStyle(color: Colors.white, fontSize: 16),
+          ),
+          content: Text(
+            _formatPosition(posSeconds),
+            style: const TextStyle(color: Colors.white70),
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: Text(S.current.embyRestartBtn,
-                  style: const TextStyle(color: Colors.white54)),
+              child: Text(
+                S.current.embyRestartBtn,
+                style: const TextStyle(color: Colors.white54),
+              ),
             ),
             TextButton(
               onPressed: () => Navigator.pop(context, true),
-              child:
-                  Text(S.current.embyContinueBtn, style: const TextStyle(color: Colors.redAccent)),
+              child: Text(
+                S.current.embyContinueBtn,
+                style: const TextStyle(color: Colors.redAccent),
+              ),
             ),
           ],
         ),
@@ -304,12 +328,14 @@ class _EmbyPlayerPageState extends State<EmbyPlayerPage> with WidgetsBindingObse
 
   Future<void> _fetchMediaStreams() async {
     try {
-      final info = await _api.get('/emby/Items/${widget.itemId}',
-          {'Fields': 'MediaSources'});
+      final info = await _api.get('/emby/Items/${widget.itemId}', {
+        'Fields': 'MediaSources',
+      });
       final sources = info['MediaSources'] as List<dynamic>?;
       if (sources == null || sources.isEmpty) return;
-      final streams = (sources.first
-              as Map<String, dynamic>)['MediaStreams'] as List<dynamic>? ??
+      final streams =
+          (sources.first as Map<String, dynamic>)['MediaStreams']
+              as List<dynamic>? ??
           [];
       if (!mounted) return;
       setState(() {
@@ -388,12 +414,18 @@ class _EmbyPlayerPageState extends State<EmbyPlayerPage> with WidgetsBindingObse
   void _onLongPressStart() {
     _savedRate = _playbackRate;
     _player.setRate(2.0);
-    setState(() { _longPressSpeed = true; _playbackRate = 2.0; });
+    setState(() {
+      _longPressSpeed = true;
+      _playbackRate = 2.0;
+    });
   }
 
   void _onLongPressEnd() {
     _player.setRate(_savedRate);
-    setState(() { _longPressSpeed = false; _playbackRate = _savedRate; });
+    setState(() {
+      _longPressSpeed = false;
+      _playbackRate = _savedRate;
+    });
   }
 
   // 快速切字幕（CC 按钮 → 直接打开字幕 Tab）
@@ -434,11 +466,22 @@ class _EmbyPlayerPageState extends State<EmbyPlayerPage> with WidgetsBindingObse
         backgroundColor: Colors.black,
         body: Stack(
           children: [
-            Video(controller: _controller, controls: NoVideoControls,
-                fit: _currentFit, subtitleViewConfiguration: _subtitleConfig()),
-            Positioned.fill(child: GestureDetector(onTap: () {}, behavior: HitTestBehavior.opaque)),
+            Video(
+              controller: _controller,
+              controls: NoVideoControls,
+              fit: _currentFit,
+              subtitleViewConfiguration: _subtitleConfig(),
+            ),
+            Positioned.fill(
+              child: GestureDetector(
+                onTap: () {},
+                behavior: HitTestBehavior.opaque,
+              ),
+            ),
             Positioned(
-              right: 20, top: 0, bottom: 0,
+              right: 20,
+              top: 0,
+              bottom: 0,
               child: Center(
                 child: Container(
                   decoration: BoxDecoration(
@@ -446,7 +489,11 @@ class _EmbyPlayerPageState extends State<EmbyPlayerPage> with WidgetsBindingObse
                     borderRadius: BorderRadius.circular(24),
                   ),
                   child: IconButton(
-                    icon: const Icon(Icons.lock_rounded, color: Colors.white70, size: 28),
+                    icon: const Icon(
+                      Icons.lock_rounded,
+                      color: Colors.white70,
+                      size: 28,
+                    ),
                     onPressed: _toggleLock,
                   ),
                 ),
@@ -476,7 +523,11 @@ class _EmbyPlayerPageState extends State<EmbyPlayerPage> with WidgetsBindingObse
             // ── 顶栏 ──
             topButtonBar: [
               IconButton(
-                icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 20),
+                icon: const Icon(
+                  Icons.arrow_back_ios_new_rounded,
+                  color: Colors.white,
+                  size: 20,
+                ),
                 onPressed: () => Navigator.pop(context),
               ),
               const SizedBox(width: 4),
@@ -485,37 +536,69 @@ class _EmbyPlayerPageState extends State<EmbyPlayerPage> with WidgetsBindingObse
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(widget.title,
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 15),
-                        maxLines: 1, overflow: TextOverflow.ellipsis),
+                    Text(
+                      widget.title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 15,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     if (widget.subtitle != null)
-                      Text(widget.subtitle!,
-                          style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                      Text(
+                        widget.subtitle!,
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 12,
+                        ),
+                      ),
                   ],
                 ),
               ),
               // 倍速标签（非 1x 或长按加速时显示）
               if (_playbackRate != 1.0)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
                   margin: const EdgeInsets.only(right: 4),
-                  decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(4)),
-                  child: Text(_longPressSpeed ? '▶▶ 2x' : '${_playbackRate}x',
-                      style: const TextStyle(color: Colors.white, fontSize: 11)),
+                  decoration: BoxDecoration(
+                    color: Colors.white24,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    _longPressSpeed ? '▶▶ 2x' : '${_playbackRate}x',
+                    style: const TextStyle(color: Colors.white, fontSize: 11),
+                  ),
                 ),
               // 画面比例（纯图标，YouTube 风格）
               IconButton(
-                icon: const Icon(Icons.aspect_ratio_rounded, color: Colors.white, size: 22),
+                icon: const Icon(
+                  Icons.aspect_ratio_rounded,
+                  color: Colors.white,
+                  size: 22,
+                ),
                 onPressed: _cycleFitWithToast,
               ),
               // CC 字幕快捷按钮
               IconButton(
-                icon: const Icon(Icons.closed_caption_rounded, color: Colors.white, size: 22),
+                icon: const Icon(
+                  Icons.closed_caption_rounded,
+                  color: Colors.white,
+                  size: 22,
+                ),
                 onPressed: _quickSubtitle,
               ),
               // 设置
               IconButton(
-                icon: const Icon(Icons.tune_rounded, color: Colors.white, size: 22),
+                icon: const Icon(
+                  Icons.tune_rounded,
+                  color: Colors.white,
+                  size: 22,
+                ),
                 onPressed: _showSettings,
               ),
             ],
@@ -523,14 +606,22 @@ class _EmbyPlayerPageState extends State<EmbyPlayerPage> with WidgetsBindingObse
             primaryButtonBar: [
               const Spacer(),
               IconButton(
-                icon: const Icon(Icons.replay_10_rounded, color: Colors.white, size: 36),
+                icon: const Icon(
+                  Icons.replay_10_rounded,
+                  color: Colors.white,
+                  size: 36,
+                ),
                 onPressed: _skipBackward,
               ),
               const SizedBox(width: 32),
               const MaterialPlayOrPauseButton(iconSize: 56.0),
               const SizedBox(width: 32),
               IconButton(
-                icon: const Icon(Icons.forward_10_rounded, color: Colors.white, size: 36),
+                icon: const Icon(
+                  Icons.forward_10_rounded,
+                  color: Colors.white,
+                  size: 36,
+                ),
                 onPressed: _skipForward,
               ),
               const Spacer(),
@@ -539,18 +630,30 @@ class _EmbyPlayerPageState extends State<EmbyPlayerPage> with WidgetsBindingObse
             bottomButtonBar: [
               if (widget.onPrevious != null)
                 IconButton(
-                  icon: const Icon(Icons.skip_previous_rounded, color: Colors.white, size: 24),
+                  icon: const Icon(
+                    Icons.skip_previous_rounded,
+                    color: Colors.white,
+                    size: 24,
+                  ),
                   onPressed: widget.onPrevious,
                 ),
               if (widget.onNext != null)
                 IconButton(
-                  icon: const Icon(Icons.skip_next_rounded, color: Colors.white, size: 24),
+                  icon: const Icon(
+                    Icons.skip_next_rounded,
+                    color: Colors.white,
+                    size: 24,
+                  ),
                   onPressed: widget.onNext,
                 ),
               const MaterialPositionIndicator(),
               const Spacer(),
               IconButton(
-                icon: const Icon(Icons.lock_open_rounded, color: Colors.white54, size: 20),
+                icon: const Icon(
+                  Icons.lock_open_rounded,
+                  color: Colors.white54,
+                  size: 20,
+                ),
                 onPressed: _toggleLock,
               ),
             ],
@@ -560,7 +663,11 @@ class _EmbyPlayerPageState extends State<EmbyPlayerPage> with WidgetsBindingObse
             seekBarThumbColor: Colors.red,
             seekBarThumbSize: 14.0,
             seekBarHeight: 3.5,
-            seekBarMargin: const EdgeInsets.only(bottom: 56, left: 16, right: 16),
+            seekBarMargin: const EdgeInsets.only(
+              bottom: 56,
+              left: 16,
+              right: 16,
+            ),
           ),
           fullscreen: const MaterialVideoControlsThemeData(
             volumeGesture: true,
@@ -569,23 +676,40 @@ class _EmbyPlayerPageState extends State<EmbyPlayerPage> with WidgetsBindingObse
           ),
           child: Stack(
             children: [
-              Video(controller: _controller, controls: MaterialVideoControls,
-                  fit: _currentFit, subtitleViewConfiguration: _subtitleConfig()),
+              Video(
+                controller: _controller,
+                controls: MaterialVideoControls,
+                fit: _currentFit,
+                subtitleViewConfiguration: _subtitleConfig(),
+              ),
               if (_loading)
-                const IgnorePointer(child: Center(child: CircularProgressIndicator(color: Colors.white54))),
+                const IgnorePointer(
+                  child: Center(
+                    child: CircularProgressIndicator(color: Colors.white54),
+                  ),
+                ),
               if (_error != null) _buildError(),
               // 画面比例 Toast（YouTube 风格，中央短暂显示）
               if (_fitToast != null)
                 IgnorePointer(
                   child: Center(
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 10,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.black54,
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: Text(_fitToast!,
-                          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
+                      child: Text(
+                        _fitToast!,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -596,13 +720,22 @@ class _EmbyPlayerPageState extends State<EmbyPlayerPage> with WidgetsBindingObse
                     alignment: Alignment.topCenter,
                     child: Container(
                       margin: const EdgeInsets.only(top: 60),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.black54,
                         borderRadius: BorderRadius.circular(6),
                       ),
-                      child: Text(S.current.embySpeedUp,
-                          style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500)),
+                      child: Text(
+                        S.current.embySpeedUp,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -614,14 +747,15 @@ class _EmbyPlayerPageState extends State<EmbyPlayerPage> with WidgetsBindingObse
   }
 
   SubtitleViewConfiguration _subtitleConfig() => SubtitleViewConfiguration(
-        style: TextStyle(
-            fontSize: _subtitleFontSize,
-            color: Colors.white,
-            backgroundColor: const Color(0x99000000),
-            height: 1.4),
-        textAlign: TextAlign.center,
-        padding: const EdgeInsets.fromLTRB(24, 0, 24, 60),
-      );
+    style: TextStyle(
+      fontSize: _subtitleFontSize,
+      color: Colors.white,
+      backgroundColor: const Color(0x99000000),
+      height: 1.4,
+    ),
+    textAlign: TextAlign.center,
+    padding: const EdgeInsets.fromLTRB(24, 0, 24, 60),
+  );
 
   Widget _buildError() {
     return Center(
@@ -630,24 +764,35 @@ class _EmbyPlayerPageState extends State<EmbyPlayerPage> with WidgetsBindingObse
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.error_outline_rounded,
-                color: Colors.white38, size: 48),
+            const Icon(
+              Icons.error_outline_rounded,
+              color: Colors.white38,
+              size: 48,
+            ),
             const SizedBox(height: 16),
-            Text(S.current.embyPlayFailed,
-                style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w500)),
+            Text(
+              S.current.embyPlayFailed,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
             const SizedBox(height: 8),
-            Text(_error!,
-                style: const TextStyle(color: Colors.white54, fontSize: 11),
-                textAlign: TextAlign.center,
-                maxLines: 4,
-                overflow: TextOverflow.ellipsis),
+            Text(
+              _error!,
+              style: const TextStyle(color: Colors.white54, fontSize: 11),
+              textAlign: TextAlign.center,
+              maxLines: 4,
+              overflow: TextOverflow.ellipsis,
+            ),
             const SizedBox(height: 24),
             OutlinedButton(
               onPressed: () {
-                setState(() { _loading = true; _error = null; });
+                setState(() {
+                  _loading = true;
+                  _error = null;
+                });
                 _setupAndPlay();
               },
               style: OutlinedButton.styleFrom(
@@ -662,4 +807,3 @@ class _EmbyPlayerPageState extends State<EmbyPlayerPage> with WidgetsBindingObse
     );
   }
 }
-

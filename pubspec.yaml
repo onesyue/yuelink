@@ -1,7 +1,7 @@
 name: yuelink
 description: "YueLink - Cross-platform proxy client by Yue.to"
 publish_to: 'none'
-version: 1.0.27+127
+version: 1.1.0+128
 
 environment:
   # Lower bound is set by the hardest active (transitive) dependency:
@@ -50,7 +50,6 @@ dependencies:
   volume_controller: ^3.4.4
   flutter_widget_from_html_core: ^0.17.2
   mobile_scanner: ^7.2.0
-  google_fonts: ^8.0.2
   # Material You — pull system dynamic color palette on Android 12+.
   dynamic_color: ^1.7.0
   # Skeleton loaders (shimmer) to replace CircularProgressIndicator

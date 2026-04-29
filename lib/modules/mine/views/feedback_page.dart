@@ -44,10 +44,9 @@ class _FeedbackPageState extends State<FeedbackPage> {
         final request = await client.postUrl(uri);
         request.headers.set('Content-Type', 'application/json');
         request.headers.set('Accept', 'application/json');
-        request.write(jsonEncode({
-          'content': text,
-          'contact': _contactCtrl.text.trim(),
-        }));
+        request.write(
+          jsonEncode({'content': text, 'contact': _contactCtrl.text.trim()}),
+        );
         final response = await request.close();
         await response.drain();
         if (!mounted) return;
@@ -79,12 +78,17 @@ class _FeedbackPageState extends State<FeedbackPage> {
       slivers: [
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(
-              YLSpacing.lg, 0, YLSpacing.lg, YLSpacing.xl),
+            YLSpacing.lg,
+            0,
+            YLSpacing.lg,
+            YLSpacing.xl,
+          ),
           sliver: SliverList(
             delegate: SliverChildListDelegate([
               _SectionLabel(
-                  isEn ? 'Describe your issue or suggestion' : '描述你遇到的问题或建议',
-                  isDark: isDark),
+                isEn ? 'Describe your issue or suggestion' : '描述你遇到的问题或建议',
+                isDark: isDark,
+              ),
               const SizedBox(height: YLSpacing.sm),
               _FieldShell(
                 isDark: isDark,
@@ -98,19 +102,23 @@ class _FeedbackPageState extends State<FeedbackPage> {
                   ),
                   decoration: InputDecoration(
                     hintText: s.feedbackHint,
-                    hintStyle: YLText.body
-                        .copyWith(color: YLColors.zinc400, fontSize: 15),
+                    hintStyle: YLText.body.copyWith(
+                      color: YLColors.zinc400,
+                      fontSize: 15,
+                    ),
                     border: InputBorder.none,
                     contentPadding: const EdgeInsets.all(YLSpacing.md),
-                    counterStyle:
-                        YLText.caption.copyWith(color: YLColors.zinc500),
+                    counterStyle: YLText.caption.copyWith(
+                      color: YLColors.zinc500,
+                    ),
                   ),
                 ),
               ),
               const SizedBox(height: YLSpacing.lg),
               _SectionLabel(
-                  isEn ? 'Contact info (optional)' : '联系方式（选填）',
-                  isDark: isDark),
+                isEn ? 'Contact info (optional)' : '联系方式（选填）',
+                isDark: isDark,
+              ),
               const SizedBox(height: YLSpacing.sm),
               _FieldShell(
                 isDark: isDark,
@@ -122,8 +130,10 @@ class _FeedbackPageState extends State<FeedbackPage> {
                   ),
                   decoration: InputDecoration(
                     hintText: s.feedbackContactHint,
-                    hintStyle: YLText.body
-                        .copyWith(color: YLColors.zinc400, fontSize: 15),
+                    hintStyle: YLText.body.copyWith(
+                      color: YLColors.zinc400,
+                      fontSize: 15,
+                    ),
                     border: InputBorder.none,
                     contentPadding: const EdgeInsets.all(YLSpacing.md),
                   ),
@@ -136,10 +146,8 @@ class _FeedbackPageState extends State<FeedbackPage> {
                 child: FilledButton(
                   onPressed: _submitting ? null : _submit,
                   style: FilledButton.styleFrom(
-                    backgroundColor:
-                        isDark ? Colors.white : YLColors.zinc900,
-                    foregroundColor:
-                        isDark ? YLColors.zinc900 : Colors.white,
+                    backgroundColor: isDark ? Colors.white : YLColors.zinc900,
+                    foregroundColor: isDark ? YLColors.zinc900 : Colors.white,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(YLRadius.lg),
                     ),
@@ -180,7 +188,7 @@ class _SectionLabel extends StatelessWidget {
           fontSize: 13,
           fontWeight: FontWeight.w500,
           color: isDark ? YLColors.zinc400 : YLColors.zinc500,
-          letterSpacing: -0.05,
+          letterSpacing: 0,
         ),
       ),
     );

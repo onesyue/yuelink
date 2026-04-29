@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
+import '../core/providers/core_runtime_providers.dart';
 import '../core/storage/settings_service.dart';
 import '../i18n/app_strings.dart';
 import '../modules/dashboard/dashboard_page.dart';
@@ -169,12 +170,11 @@ class _MainShellState extends ConsumerState<MainShell> {
       ),
     ];
 
-    // extendBody all platforms — every platform paints a real
-    // BackdropFilter behind the bar, so body content needs to scroll
-    // through. Android uses a much smaller sigma to stay within the
-    // frame budget; see _GlassBottomNav for the platform table.
+    // Let the tab bar participate in layout instead of floating over
+    // content. This keeps the last card / row reachable on phones while
+    // still giving the bar a light material finish.
     return Scaffold(
-      extendBody: true,
+      extendBody: false,
       body: RepaintBoundary(
         child: IndexedStack(
           index: _currentIndex,
@@ -210,22 +210,10 @@ class _GlassTabSpec {
   });
 }
 
-/// Cross-platform glass bottom bar — translucent material with a real
-/// `BackdropFilter` blur, springy icon swap, and tracking text-weight
-/// transition on the active tab. Sigma is platform-tuned so every
-/// target gets the frosted look without burning the frame budget.
-///
-/// Sigma table:
-///   * iOS / macOS / Windows / Linux — 24 (matches toast, headroom on
-///     every desktop GPU and on Apple Metal).
-///   * Android — 8 (Impeller Android re-rasterises the scene under a
-///     BackdropFilter; gaussian-blur cost grows ~O(σ²), so 30→8 cuts
-///     work ~14× and stays within the frame cap on mid-tier devices).
-///     Visually weaker than 24 but still reads as frosted glass — TG
-///     and Apple Music use comparable values on Android. Real-world
-///     report 2026-04-29: sigma 30 ANR'd app at startup on a mid-tier
-///     Android — the value below is the largest one that survived in
-///     manual testing.
+/// Cross-platform glass bottom bar. iOS / desktop get live backdrop blur;
+/// Android gets a stable translucent material fallback. Telegram exposes
+/// interface-effect controls for the same reason: glass should never outrank
+/// responsiveness or battery life.
 class _GlassBottomNav extends StatelessWidget {
   final List<_GlassTabSpec> items;
   final int currentIndex;
@@ -242,59 +230,53 @@ class _GlassBottomNav extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.viewPaddingOf(context).bottom;
-    final isAndroid = Theme.of(context).platform == TargetPlatform.android;
-    // Lighter tint on Android — the smaller blur sigma needs more
-    // alpha-tint help to read as glass instead of "transparent panel
-    // with smeared content under it".
-    final glassColor = isAndroid
-        ? (isDark
-            ? Colors.black.withValues(alpha: 0.70)
-            : Colors.white.withValues(alpha: 0.78))
-        : (isDark
-            ? Colors.black.withValues(alpha: 0.55)
-            : Colors.white.withValues(alpha: 0.65));
+    final useLiveBackdrop =
+        Theme.of(context).platform != TargetPlatform.android &&
+        !MediaQuery.of(context).disableAnimations;
+    final glassColor = isDark
+        ? YLColors.zinc950.withValues(alpha: useLiveBackdrop ? 0.86 : 1)
+        : YLColors.zinc100.withValues(alpha: useLiveBackdrop ? 0.88 : 1);
     final borderColor = isDark
         ? Colors.white.withValues(alpha: 0.06)
         : Colors.black.withValues(alpha: 0.06);
-    final blurSigma = isAndroid ? 8.0 : 24.0;
+    const blurSigma = 24.0;
 
-    return ClipRect(
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: glassColor,
-            border: Border(
-              top: BorderSide(color: borderColor, width: 0.33),
-            ),
-          ),
-          child: SafeArea(
-            top: false,
-            child: SizedBox(
-              height: 58,
-              child: Padding(
-                padding: EdgeInsets.only(
-                  top: 4,
-                  bottom: bottomInset > 0 ? 0 : 6,
-                ),
-                child: Row(
-                  children: [
-                    for (int i = 0; i < items.length; i++)
-                      Expanded(
-                        child: _GlassTabButton(
-                          spec: items[i],
-                          isActive: i == currentIndex,
-                          isDark: isDark,
-                          onTap: () => onTap(i),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
+    final bar = DecoratedBox(
+      decoration: BoxDecoration(
+        color: glassColor,
+        border: Border(top: BorderSide(color: borderColor, width: 0.33)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: SizedBox(
+          height: 58,
+          child: Padding(
+            padding: EdgeInsets.only(top: 4, bottom: bottomInset > 0 ? 0 : 6),
+            child: Row(
+              children: [
+                for (int i = 0; i < items.length; i++)
+                  Expanded(
+                    child: _GlassTabButton(
+                      spec: items[i],
+                      isActive: i == currentIndex,
+                      isDark: isDark,
+                      onTap: () => onTap(i),
+                    ),
+                  ),
+              ],
             ),
           ),
         ),
       ),
+    );
+
+    return ClipRect(
+      child: useLiveBackdrop
+          ? BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
+              child: bar,
+            )
+          : bar,
     );
   }
 }
@@ -323,16 +305,16 @@ class _GlassTabButton extends StatefulWidget {
 class _GlassTabButtonState extends State<_GlassTabButton> {
   bool _pressed = false;
 
-  Color get _activeColor =>
-      widget.isDark ? Colors.white : YLColors.primary;
+  Color get _activeColor => widget.isDark ? Colors.white : YLColors.primary;
   Color get _inactiveColor =>
       widget.isDark ? YLColors.zinc500 : YLColors.zinc500;
 
   @override
   Widget build(BuildContext context) {
     final color = widget.isActive ? _activeColor : _inactiveColor;
-    final iconData =
-        widget.isActive ? widget.spec.activeIcon : widget.spec.icon;
+    final iconData = widget.isActive
+        ? widget.spec.activeIcon
+        : widget.spec.icon;
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -367,9 +349,7 @@ class _GlassTabButtonState extends State<_GlassTabButton> {
                   },
                   child: Icon(
                     iconData,
-                    key: ValueKey(
-                      '${widget.spec.label}-${widget.isActive}',
-                    ),
+                    key: ValueKey('${widget.spec.label}-${widget.isActive}'),
                     size: 22,
                     color: color,
                   ),
@@ -383,9 +363,10 @@ class _GlassTabButtonState extends State<_GlassTabButton> {
                   fontSize: 10.5,
                   height: 1.1,
                   color: color,
-                  fontWeight:
-                      widget.isActive ? FontWeight.w600 : FontWeight.w500,
-                  letterSpacing: 0.1,
+                  fontWeight: widget.isActive
+                      ? FontWeight.w600
+                      : FontWeight.w500,
+                  letterSpacing: 0,
                 ),
                 child: Text(widget.spec.label),
               ),
@@ -578,6 +559,7 @@ class _EmbyTabPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final s = S.of(context);
+    final coreStatus = ref.watch(displayCoreStatusProvider);
     final emby = ref.watch(embyProvider);
     return emby.when(
       loading: () =>
@@ -602,6 +584,13 @@ class _EmbyTabPage extends ConsumerWidget {
         if (info == null || !info.hasAccess) {
           return Scaffold(body: Center(child: Text(s.mineEmbyNoAccess)));
         }
+        if (coreStatus != CoreStatus.running) {
+          return _EmbyNeedsConnectionPage(
+            status: coreStatus,
+            onOpenHome: () =>
+                MainShell.switchToTab(context, MainShell.tabDashboard),
+          );
+        }
         if (info.hasNativeAccess) {
           return EmbyMediaPage(
             serverUrl: info.serverBaseUrl!,
@@ -612,6 +601,68 @@ class _EmbyTabPage extends ConsumerWidget {
         }
         return EmbyWebPage(url: info.launchUrl!);
       },
+    );
+  }
+}
+
+class _EmbyNeedsConnectionPage extends StatelessWidget {
+  final CoreStatus status;
+  final VoidCallback onOpenHome;
+
+  const _EmbyNeedsConnectionPage({
+    required this.status,
+    required this.onOpenHome,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final s = S.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isTransitioning =
+        status == CoreStatus.starting || status == CoreStatus.stopping;
+
+    return Scaffold(
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: Padding(
+              padding: const EdgeInsets.all(YLSpacing.xl),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.wifi_off_rounded,
+                    size: 52,
+                    color: isDark ? YLColors.zinc500 : YLColors.zinc400,
+                  ),
+                  const SizedBox(height: YLSpacing.lg),
+                  Text(
+                    s.mineEmbyNeedsVpn,
+                    textAlign: TextAlign.center,
+                    style: YLText.titleMedium.copyWith(
+                      color: isDark ? Colors.white : YLColors.zinc900,
+                    ),
+                  ),
+                  const SizedBox(height: YLSpacing.sm),
+                  Text(
+                    '连接后会通过当前节点访问媒体库，避免请求打到未启动的 127.0.0.1 本地代理。',
+                    textAlign: TextAlign.center,
+                    style: YLText.body.copyWith(
+                      color: isDark ? YLColors.zinc400 : YLColors.zinc500,
+                    ),
+                  ),
+                  const SizedBox(height: YLSpacing.xl),
+                  FilledButton(
+                    onPressed: isTransitioning ? null : onOpenHome,
+                    child: Text(isTransitioning ? '正在切换连接状态' : '去首页开启保护'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

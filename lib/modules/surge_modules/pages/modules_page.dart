@@ -46,52 +46,53 @@ class ModulesPage extends ConsumerWidget {
         child: state.isLoading && state.modules.isEmpty
             ? const Center(child: CircularProgressIndicator())
             : state.modules.isEmpty
-                ? _EmptyState(onAdd: () => _showAddSheet(context, ref))
-                : ListView(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 12),
-                    children: [
-                      // MITM Engine card (always shown when modules exist)
-                      _MitmEngineCard(
-                          hasMitmHostnames: totalMitmHostnames > 0),
-                      const SizedBox(height: 12),
+            ? _EmptyState(onAdd: () => _showAddSheet(context, ref))
+            : ListView(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
+                children: [
+                  // MITM Engine card (always shown when modules exist)
+                  _MitmEngineCard(hasMitmHostnames: totalMitmHostnames > 0),
+                  const SizedBox(height: 12),
 
-                      // Header summary
-                      if (activeCount > 0) ...[
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: Text(
-                            '$activeCount active module${activeCount > 1 ? 's' : ''} · $totalRules rules injected'
-                            '${totalMitmHostnames > 0 ? ' · $totalMitmHostnames MITM hostnames' : ''}',
-                            style: YLText.caption.copyWith(
-                              color: YLColors.zinc500,
-                              letterSpacing: 0.3,
-                            ),
-                          ),
+                  // Header summary
+                  if (activeCount > 0) ...[
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Text(
+                        '$activeCount active module${activeCount > 1 ? 's' : ''} · $totalRules rules injected'
+                        '${totalMitmHostnames > 0 ? ' · $totalMitmHostnames MITM hostnames' : ''}',
+                        style: YLText.caption.copyWith(
+                          color: YLColors.zinc500,
+                          letterSpacing: 0,
                         ),
-                      ],
-                      // Error banner
-                      if (state.error != null) ...[
-                        _ErrorBanner(error: state.error!),
-                        const SizedBox(height: 12),
-                      ],
-                      // Module list
-                      ...state.modules.map(
-                        (module) => Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
-                          child: ModuleCard(
-                            module: module,
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) =>
-                                    ModuleDetailPage(moduleId: module.id),
-                              ),
-                            ),
+                      ),
+                    ),
+                  ],
+                  // Error banner
+                  if (state.error != null) ...[
+                    _ErrorBanner(error: state.error!),
+                    const SizedBox(height: 12),
+                  ],
+                  // Module list
+                  ...state.modules.map(
+                    (module) => Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: ModuleCard(
+                        module: module,
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                ModuleDetailPage(moduleId: module.id),
                           ),
                         ),
                       ),
-                    ],
+                    ),
                   ),
+                ],
+              ),
       ),
       floatingActionButton: state.modules.isEmpty
           ? null
@@ -129,8 +130,9 @@ class _MitmEngineCard extends ConsumerWidget {
     final engine = mitm.engine;
 
     final statusColor = engine.running ? YLColors.connected : YLColors.zinc400;
-    final statusLabel =
-        engine.running ? s.mitmEngineRunning : s.mitmEngineStopped;
+    final statusLabel = engine.running
+        ? s.mitmEngineRunning
+        : s.mitmEngineStopped;
 
     return Container(
       decoration: BoxDecoration(
@@ -150,8 +152,11 @@ class _MitmEngineCard extends ConsumerWidget {
           // Title row
           Row(
             children: [
-              Icon(Icons.security, size: 16,
-                  color: isDark ? YLColors.zinc300 : YLColors.zinc700),
+              Icon(
+                Icons.security,
+                size: 16,
+                color: isDark ? YLColors.zinc300 : YLColors.zinc700,
+              ),
               const SizedBox(width: 6),
               Text(
                 s.mitmEngine,
@@ -164,8 +169,10 @@ class _MitmEngineCard extends ConsumerWidget {
               // Status dot + label
               YLStatusDot(color: statusColor),
               const SizedBox(width: 4),
-              Text(statusLabel,
-                  style: YLText.caption.copyWith(color: statusColor)),
+              Text(
+                statusLabel,
+                style: YLText.caption.copyWith(color: statusColor),
+              ),
             ],
           ),
 
@@ -200,17 +207,21 @@ class _MitmEngineCard extends ConsumerWidget {
                   onPressed: mitm.isLoading
                       ? null
                       : () => engine.running
-                          ? ref.read(mitmProvider.notifier).stopEngine()
-                          : ref.read(mitmProvider.notifier).startEngine(),
+                            ? ref.read(mitmProvider.notifier).stopEngine()
+                            : ref.read(mitmProvider.notifier).startEngine(),
                   icon: mitm.isLoading
                       ? const SizedBox(
                           width: 14,
                           height: 14,
-                          child: CircularProgressIndicator(strokeWidth: 2))
-                      : Icon(engine.running ? Icons.stop : Icons.play_arrow,
-                          size: 16),
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Icon(
+                          engine.running ? Icons.stop : Icons.play_arrow,
+                          size: 16,
+                        ),
                   label: Text(
-                      engine.running ? s.mitmEngineStop : s.mitmEngineStart),
+                    engine.running ? s.mitmEngineStop : s.mitmEngineStart,
+                  ),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: engine.running
                         ? YLColors.error
@@ -232,8 +243,7 @@ class _MitmEngineCard extends ConsumerWidget {
                 icon: const Icon(Icons.verified_user_outlined, size: 16),
                 label: Text(s.mitmCertTitle),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor:
-                      isDark ? YLColors.zinc300 : YLColors.zinc600,
+                  foregroundColor: isDark ? YLColors.zinc300 : YLColors.zinc600,
                   side: BorderSide(
                     color: isDark ? YLColors.zinc700 : YLColors.zinc300,
                   ),
@@ -247,14 +257,16 @@ class _MitmEngineCard extends ConsumerWidget {
             const SizedBox(height: 8),
             Row(
               children: [
-                const Icon(Icons.info_outline,
-                    size: 13, color: YLColors.connecting),
+                const Icon(
+                  Icons.info_outline,
+                  size: 13,
+                  color: YLColors.connecting,
+                ),
                 const SizedBox(width: 4),
                 Expanded(
                   child: Text(
                     'Start the engine to enable MITM hostname routing',
-                    style:
-                        YLText.caption.copyWith(color: YLColors.connecting),
+                    style: YLText.caption.copyWith(color: YLColors.connecting),
                   ),
                 ),
               ],
@@ -282,7 +294,8 @@ class _EmptyState extends StatelessWidget {
         child: YLEmptyState(
           icon: Icons.extension_outlined,
           title: s.modulesEmpty,
-          subtitle: 'Add a .sgmodule URL to inject rules\ninto your proxy config.',
+          subtitle:
+              'Add a .sgmodule URL to inject rules\ninto your proxy config.',
           action: FilledButton.icon(
             onPressed: onAdd,
             icon: const Icon(Icons.add),

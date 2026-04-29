@@ -962,9 +962,10 @@ rules: []
       );
     });
 
-    test('idempotent: respects existing proxy: field (DIRECT or otherwise)',
-        () {
-      const config = '''
+    test(
+      'idempotent: respects existing proxy: field (DIRECT or otherwise)',
+      () {
+        const config = '''
 mixed-port: 7890
 rule-providers:
   ads: { type: http, url: 'https://x.com/ads', path: ./ads.yaml, interval: 86400, proxy: DIRECT }
@@ -972,27 +973,27 @@ rule-providers:
   pristine: { type: http, url: 'https://z.com/p', path: ./p.yaml, interval: 86400 }
 rules: []
 ''';
-      final result = ConfigTemplate.process(config);
-      // ads keeps its single proxy: DIRECT, no duplicate.
-      final adsProxyCount = RegExp(
-        r"ads:\s*\{[^}]*?proxy:\s*",
-      ).allMatches(result).length;
-      expect(adsProxyCount, 1);
-      // custom: MyGroup is NOT overwritten — user's explicit choice wins.
-      expect(result, contains('proxy: MyGroup'));
-      expect(
-        result.contains('custom:') &&
-            RegExp(r'custom:\s*\{[^}]*proxy:\s*DIRECT')
-                .hasMatch(result),
-        isFalse,
-        reason: 'custom: MyGroup must not be replaced by DIRECT',
-      );
-      // pristine had no proxy field — gets DIRECT injected.
-      expect(
-        RegExp(r'pristine:\s*\{[^}]*proxy:\s*DIRECT[^}]*\}').hasMatch(result),
-        isTrue,
-      );
-    });
+        final result = ConfigTemplate.process(config);
+        // ads keeps its single proxy: DIRECT, no duplicate.
+        final adsProxyCount = RegExp(
+          r'ads:\s*\{[^}]*?proxy:\s*',
+        ).allMatches(result).length;
+        expect(adsProxyCount, 1);
+        // custom: MyGroup is NOT overwritten — user's explicit choice wins.
+        expect(result, contains('proxy: MyGroup'));
+        expect(
+          result.contains('custom:') &&
+              RegExp(r'custom:\s*\{[^}]*proxy:\s*DIRECT').hasMatch(result),
+          isFalse,
+          reason: 'custom: MyGroup must not be replaced by DIRECT',
+        );
+        // pristine had no proxy field — gets DIRECT injected.
+        expect(
+          RegExp(r'pristine:\s*\{[^}]*proxy:\s*DIRECT[^}]*\}').hasMatch(result),
+          isTrue,
+        );
+      },
+    );
 
     test('handles block-style providers and matches sibling indent', () {
       const config = '''
@@ -1048,23 +1049,25 @@ rules: []
       expect(result, isNot(contains('proxy: DIRECT')));
     });
 
-    test('false-positive guard: path/url containing the word "proxy" is safe',
-        () {
-      // `path: ./proxies/...` previously could have tripped a naive
-      // `proxy:` substring search. The (?:^|,) anchor avoids this.
-      const config = '''
+    test(
+      'false-positive guard: path/url containing the word "proxy" is safe',
+      () {
+        // `path: ./proxies/...` previously could have tripped a naive
+        // `proxy:` substring search. The (?:^|,) anchor avoids this.
+        const config = '''
 mixed-port: 7890
 rule-providers:
   ads: { type: http, url: 'https://some-proxy.example.com:8080/ads', path: ./proxies/ads.yaml, interval: 86400 }
 rules: []
 ''';
-      final result = ConfigTemplate.process(config);
-      // Should still inject proxy: DIRECT — the URL substring doesn't count.
-      expect(
-        RegExp(r'ads:\s*\{[^}]*proxy:\s*DIRECT[^}]*\}').hasMatch(result),
-        isTrue,
-      );
-    });
+        final result = ConfigTemplate.process(config);
+        // Should still inject proxy: DIRECT — the URL substring doesn't count.
+        expect(
+          RegExp(r'ads:\s*\{[^}]*proxy:\s*DIRECT[^}]*\}').hasMatch(result),
+          isTrue,
+        );
+      },
+    );
 
     test('no longer pollutes user rules section', () {
       // Pre-fix, every user got DOMAIN-SUFFIX,jsdelivr.net,DIRECT injected
@@ -1079,7 +1082,10 @@ rules:
 ''';
       final result = ConfigTemplate.process(config);
       expect(result, isNot(contains('DOMAIN-SUFFIX,jsdelivr.net,DIRECT')));
-      expect(result, isNot(contains('DOMAIN-SUFFIX,githubusercontent.com,DIRECT')));
+      expect(
+        result,
+        isNot(contains('DOMAIN-SUFFIX,githubusercontent.com,DIRECT')),
+      );
     });
   });
 

@@ -49,8 +49,7 @@ class _NodesPageState extends ConsumerState<NodesPage> {
 
   Future<void> _syncAndReconnect() async {
     final s = S.of(context);
-    final result =
-        await ref.read(syncAndReconnectProvider.notifier).run();
+    final result = await ref.read(syncAndReconnectProvider.notifier).run();
     if (result == null || !mounted) return;
     switch (result.outcome) {
       case SyncAndReconnectOutcome.success:
@@ -72,36 +71,53 @@ class _NodesPageState extends ConsumerState<NodesPage> {
     // ── Offline state ──────────────────────────────────────────────────────
     if (status != CoreStatus.running) {
       final offlineGroups = ref.watch(offlineProxyGroupsProvider);
+      final offlineBg = Theme.of(context).brightness == Brightness.dark
+          ? YLColors.zinc950
+          : YLColors.zinc100;
       return Scaffold(
+        backgroundColor: offlineBg,
         body: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 720),
             child: CustomScrollView(
               physics: const BouncingScrollPhysics(
-                  parent: AlwaysScrollableScrollPhysics()),
+                parent: AlwaysScrollableScrollPhysics(),
+              ),
               slivers: [
+                SliverToBoxAdapter(
+                  child: SizedBox(
+                    height: MediaQuery.paddingOf(context).top + YLSpacing.sm,
+                  ),
+                ),
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(
-                        YLSpacing.xl, YLSpacing.xl, YLSpacing.xl, YLSpacing.md),
+                      YLSpacing.xl,
+                      YLSpacing.md,
+                      YLSpacing.xl,
+                      YLSpacing.md,
+                    ),
                     child: Column(
                       children: [
-                        Icon(Icons.router_outlined,
-                            size: 64, color: YLColors.zinc300),
+                        const Icon(
+                          Icons.router_outlined,
+                          size: 64,
+                          color: YLColors.zinc300,
+                        ),
                         const SizedBox(height: YLSpacing.xl),
-                        Text(s.notConnectedHintProxy,
-                            style: YLText.titleLarge),
+                        Text(s.notConnectedHintProxy, style: YLText.titleLarge),
                         const SizedBox(height: YLSpacing.sm),
                         Text(
                           s.connectToViewProxiesDesc,
-                          style:
-                              YLText.body.copyWith(color: YLColors.zinc500),
+                          style: YLText.body.copyWith(color: YLColors.zinc500),
                           textAlign: TextAlign.center,
                         ),
                         const SizedBox(height: YLSpacing.lg),
                         FilledButton(
                           onPressed: () => MainShell.switchToTab(
-                              context, MainShell.tabDashboard),
+                            context,
+                            MainShell.tabDashboard,
+                          ),
                           child: Text(s.goToHomeToProtect),
                         ),
                       ],
@@ -111,29 +127,35 @@ class _NodesPageState extends ConsumerState<NodesPage> {
                 offlineGroups.when(
                   data: (gs) {
                     if (gs.isEmpty) {
-                      return const SliverToBoxAdapter(
-                          child: SizedBox.shrink());
+                      return const SliverToBoxAdapter(child: SizedBox.shrink());
                     }
                     return SliverList(
                       delegate: SliverChildListDelegate([
                         Padding(
                           padding: const EdgeInsets.fromLTRB(
-                              YLSpacing.xl, 0, YLSpacing.xl, YLSpacing.md),
+                            YLSpacing.xl,
+                            0,
+                            YLSpacing.xl,
+                            YLSpacing.md,
+                          ),
                           child: _OfflinePreviewBanner(s.offlinePreview),
                         ),
-                        ...gs.map((g) => Padding(
-                              padding: const EdgeInsets.fromLTRB(
-                                  YLSpacing.xl,
-                                  0,
-                                  YLSpacing.xl,
-                                  YLSpacing.lg),
-                              child: _ReadOnlyGroupCard(group: g),
-                            )),
+                        ...gs.map(
+                          (g) => Padding(
+                            padding: const EdgeInsets.fromLTRB(
+                              YLSpacing.xl,
+                              0,
+                              YLSpacing.xl,
+                              YLSpacing.lg,
+                            ),
+                            child: _ReadOnlyGroupCard(group: g),
+                          ),
+                        ),
                       ]),
                     );
                   },
                   loading: () => _buildOfflineSkeleton(context),
-                  error: (_, __) =>
+                  error: (error, stack) =>
                       const SliverToBoxAdapter(child: SizedBox.shrink()),
                 ),
                 const SliverToBoxAdapter(child: SizedBox(height: 100)),
@@ -161,6 +183,7 @@ class _NodesPageState extends ConsumerState<NodesPage> {
     // The card layout — strategy group card → node card grid — never changes.
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bg = isDark ? YLColors.zinc950 : YLColors.zinc100;
     final sortMode = ref.watch(nodeSortModeProvider);
     final viewMode = ref.watch(nodeViewModeProvider);
     final searchQuery = ref.watch(nodeSearchQueryProvider);
@@ -170,7 +193,8 @@ class _NodesPageState extends ConsumerState<NodesPage> {
     // Global mode: prepend GLOBAL group so user can pick which group handles
     // all traffic; other groups still shown so selections can be made.
     final globalGroup = ref.watch(globalGroupProvider);
-    List<ProxyGroup> displayGroups = routingMode == 'global' && globalGroup != null
+    List<ProxyGroup> displayGroups =
+        routingMode == 'global' && globalGroup != null
         ? [globalGroup, ...groups]
         : groups;
 
@@ -180,12 +204,9 @@ class _NodesPageState extends ConsumerState<NodesPage> {
       for (final g in displayGroups) {
         final favNodes = g.all.where(favorites.contains).toList();
         if (favNodes.isNotEmpty) {
-          filtered.add(ProxyGroup(
-            name: g.name,
-            type: g.type,
-            all: favNodes,
-            now: g.now,
-          ));
+          filtered.add(
+            ProxyGroup(name: g.name, type: g.type, all: favNodes, now: g.now),
+          );
         }
       }
       displayGroups = filtered;
@@ -195,140 +216,184 @@ class _NodesPageState extends ConsumerState<NodesPage> {
     final int listCount = displayGroups.length + (showBanner ? 1 : 0);
 
     return Scaffold(
+      backgroundColor: bg,
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 720),
           child: CustomScrollView(
             physics: const BouncingScrollPhysics(
-                parent: AlwaysScrollableScrollPhysics()),
+              parent: AlwaysScrollableScrollPhysics(),
+            ),
             slivers: [
-              // ── App bar: all controls available in every routing mode ──
-              SliverAppBar(
-                backgroundColor: Colors.transparent,
-                surfaceTintColor: Colors.transparent,
-                pinned: true,
-                actions: [
-                  // Smart select button
-                  IconButton(
-                    icon: const Icon(Icons.auto_awesome_rounded),
-                    iconSize: 20,
-                    tooltip: S.of(context).smartSelect,
-                    onPressed: () => showSmartSelectSheet(context),
+              // ── Top controls: no tab title; bottom navigation labels tabs. ──
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    YLSpacing.xl,
+                    MediaQuery.paddingOf(context).top + YLSpacing.md,
+                    YLSpacing.xl,
+                    YLSpacing.sm,
                   ),
-                  // Chain proxy button
-                  _ChainProxyButton(),
-                  const SizedBox(width: 2),
-                  // ── Favorites filter chip ─────────────────────────────
-                  GestureDetector(
-                    onTap: () {
-                      ref.read(showFavoritesOnlyProvider.notifier).toggle();
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 5),
-                      decoration: BoxDecoration(
-                        color: showFavOnly
-                            ? Colors.amber.withValues(alpha: 0.15)
-                            : (isDark ? YLColors.zinc700 : YLColors.zinc100),
-                        borderRadius: BorderRadius.circular(YLRadius.sm),
-                      ),
-                      child: Icon(
-                        showFavOnly
-                            ? Icons.star_rounded
-                            : Icons.star_outline_rounded,
-                        size: 14,
-                        color: showFavOnly ? Colors.amber : YLColors.zinc500,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 2),
-                  // Sort chip — shows current mode, taps to cycle
-                  GestureDetector(
-                    onTap: () {
-                      // Build the cycle list: always include defaults;
-                      // include smartRecommend only when the feature flag
-                      // is on. If the user is already on smartRecommend
-                      // (e.g. flag was just turned off), we still let them
-                      // cycle away naturally.
-                      final smartOn = FeatureFlags.I
-                          .boolFlag('smart_node_recommend');
-                      final modes = <NodeSortMode>[
-                        NodeSortMode.defaultOrder,
-                        NodeSortMode.latencyAsc,
-                        NodeSortMode.latencyDesc,
-                        NodeSortMode.nameAsc,
-                        if (smartOn) NodeSortMode.smartRecommend,
-                      ];
-                      final idx = modes.indexOf(sortMode);
-                      final next = modes[(idx + 1) % modes.length];
-                      ref.read(nodeSortModeProvider.notifier).state = next;
-                      if (next == NodeSortMode.smartRecommend) {
-                        Telemetry.event(
-                          'sort_mode_change',
-                          props: {'mode': 'smart'},
-                        );
-                      }
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 5),
-                      decoration: BoxDecoration(
-                        color: isDark ? YLColors.zinc700 : YLColors.zinc100,
-                        borderRadius: BorderRadius.circular(YLRadius.sm),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.sort_rounded,
-                              size: 13, color: YLColors.zinc500),
-                          const SizedBox(width: 4),
-                          Text(
-                            _sortModeLabel(s, sortMode),
-                            style: YLText.caption.copyWith(
-                                fontSize: 11, color: YLColors.zinc500),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _NodeSearchBar(controller: _searchController),
+                      const SizedBox(height: YLSpacing.sm),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              // Smart select button
+                              IconButton(
+                                icon: const Icon(Icons.auto_awesome_rounded),
+                                iconSize: 20,
+                                tooltip: S.of(context).smartSelect,
+                                onPressed: () => showSmartSelectSheet(context),
+                              ),
+                              // Chain proxy button
+                              _ChainProxyButton(),
+                              const SizedBox(width: 2),
+                              // ── Favorites filter chip ─────────────────
+                              GestureDetector(
+                                onTap: () {
+                                  ref
+                                      .read(showFavoritesOnlyProvider.notifier)
+                                      .toggle();
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 5,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: showFavOnly
+                                        ? Colors.amber.withValues(alpha: 0.15)
+                                        : (isDark
+                                              ? YLColors.zinc700
+                                              : Colors.white),
+                                    borderRadius: BorderRadius.circular(
+                                      YLRadius.sm,
+                                    ),
+                                  ),
+                                  child: Icon(
+                                    showFavOnly
+                                        ? Icons.star_rounded
+                                        : Icons.star_outline_rounded,
+                                    size: 14,
+                                    color: showFavOnly
+                                        ? Colors.amber
+                                        : YLColors.zinc500,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              // Sort chip — shows current mode, taps to cycle
+                              GestureDetector(
+                                onTap: () {
+                                  final smartOn = FeatureFlags.I.boolFlag(
+                                    'smart_node_recommend',
+                                  );
+                                  final modes = <NodeSortMode>[
+                                    NodeSortMode.defaultOrder,
+                                    NodeSortMode.latencyAsc,
+                                    NodeSortMode.latencyDesc,
+                                    NodeSortMode.nameAsc,
+                                    if (smartOn) NodeSortMode.smartRecommend,
+                                  ];
+                                  final idx = modes.indexOf(sortMode);
+                                  final next = modes[(idx + 1) % modes.length];
+                                  ref
+                                          .read(nodeSortModeProvider.notifier)
+                                          .state =
+                                      next;
+                                  if (next == NodeSortMode.smartRecommend) {
+                                    Telemetry.event(
+                                      'sort_mode_change',
+                                      props: {'mode': 'smart'},
+                                    );
+                                  }
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 5,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: isDark
+                                        ? YLColors.zinc700
+                                        : Colors.white,
+                                    borderRadius: BorderRadius.circular(
+                                      YLRadius.sm,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(
+                                        Icons.sort_rounded,
+                                        size: 13,
+                                        color: YLColors.zinc500,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        _sortModeLabel(s, sortMode),
+                                        style: YLText.caption.copyWith(
+                                          fontSize: 11,
+                                          color: YLColors.zinc500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 2),
+                              IconButton(
+                                icon: Icon(
+                                  viewMode == NodeViewMode.card
+                                      ? Icons.view_list_rounded
+                                      : Icons.grid_view_rounded,
+                                ),
+                                iconSize: 20,
+                                tooltip: viewMode == NodeViewMode.card
+                                    ? s.nodeViewList
+                                    : s.nodeViewCard,
+                                onPressed: () {
+                                  ref
+                                      .read(nodeViewModeProvider.notifier)
+                                      .state = viewMode == NodeViewMode.card
+                                      ? NodeViewMode.list
+                                      : NodeViewMode.card;
+                                },
+                              ),
+                              Consumer(
+                                builder: (context, ref, _) {
+                                  final isSyncing = ref.watch(
+                                    syncAndReconnectProvider,
+                                  );
+                                  return IconButton(
+                                    icon: isSyncing
+                                        ? const SizedBox(
+                                            width: 18,
+                                            height: 18,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                            ),
+                                          )
+                                        : const Icon(Icons.sync_rounded),
+                                    onPressed: isSyncing
+                                        ? null
+                                        : _syncAndReconnect,
+                                  );
+                                },
+                              ),
+                            ],
                           ),
-                        ],
+                        ),
                       ),
-                    ),
-                  ),
-                  const SizedBox(width: 2),
-                  IconButton(
-                    icon: Icon(viewMode == NodeViewMode.card
-                        ? Icons.view_list_rounded
-                        : Icons.grid_view_rounded),
-                    iconSize: 20,
-                    tooltip: viewMode == NodeViewMode.card
-                        ? s.nodeViewList
-                        : s.nodeViewCard,
-                    onPressed: () {
-                      ref.read(nodeViewModeProvider.notifier).state =
-                          viewMode == NodeViewMode.card
-                              ? NodeViewMode.list
-                              : NodeViewMode.card;
-                    },
-                  ),
-                  Consumer(builder: (context, ref, _) {
-                    final isSyncing = ref.watch(syncAndReconnectProvider);
-                    return IconButton(
-                      icon: isSyncing
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
-                                  strokeWidth: 2),
-                            )
-                          : const Icon(Icons.sync_rounded),
-                      onPressed: isSyncing ? null : _syncAndReconnect,
-                    );
-                  }),
-                  const SizedBox(width: YLSpacing.sm),
-                ],
-                bottom: PreferredSize(
-                  preferredSize: const Size.fromHeight(44),
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(
-                        YLSpacing.xl, 0, YLSpacing.xl, YLSpacing.sm),
-                    child: _NodeSearchBar(controller: _searchController),
+                    ],
                   ),
                 ),
               ),
@@ -337,7 +402,11 @@ class _NodesPageState extends ConsumerState<NodesPage> {
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(
-                      YLSpacing.xl, YLSpacing.sm, YLSpacing.xl, 0),
+                    YLSpacing.xl,
+                    YLSpacing.sm,
+                    YLSpacing.xl,
+                    0,
+                  ),
                   child: _FullWidthRoutingMode(),
                 ),
               ),
@@ -348,14 +417,17 @@ class _NodesPageState extends ConsumerState<NodesPage> {
               // ── Group list ─────────────────────────────────────────────
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(
-                    YLSpacing.xl, YLSpacing.sm, YLSpacing.xl, 0),
+                  YLSpacing.xl,
+                  YLSpacing.sm,
+                  YLSpacing.xl,
+                  0,
+                ),
                 sliver: SliverList(
                   delegate: SliverChildBuilderDelegate(
                     (context, index) {
                       if (showBanner && index == 0) {
                         return Padding(
-                          padding:
-                              const EdgeInsets.only(bottom: YLSpacing.lg),
+                          padding: const EdgeInsets.only(bottom: YLSpacing.lg),
                           child: _ModeBanner(
                             icon: routingMode == 'global'
                                 ? Icons.public_rounded
@@ -370,8 +442,7 @@ class _NodesPageState extends ConsumerState<NodesPage> {
                       final group = displayGroups[groupIndex];
                       return RepaintBoundary(
                         child: Padding(
-                          padding:
-                              const EdgeInsets.only(bottom: YLSpacing.lg),
+                          padding: const EdgeInsets.only(bottom: YLSpacing.lg),
                           child: viewMode == NodeViewMode.list
                               ? GroupListSection(
                                   group: group,
@@ -432,34 +503,47 @@ class _NodeSearchBar extends ConsumerWidget {
       height: 36,
       child: TextField(
         controller: controller,
-        onChanged: (v) =>
-            ref.read(nodeSearchQueryProvider.notifier).state = v,
+        onChanged: (v) => ref.read(nodeSearchQueryProvider.notifier).state = v,
         decoration: InputDecoration(
           hintText: s.searchNodesHint,
           hintStyle: YLText.body.copyWith(
-              color: YLColors.zinc400, fontSize: 13),
-          prefixIcon: const Icon(Icons.search_rounded,
-              size: 16, color: YLColors.zinc400),
-          prefixIconConstraints:
-              const BoxConstraints(minWidth: 36, minHeight: 36),
+            color: YLColors.zinc400,
+            fontSize: 13,
+          ),
+          prefixIcon: const Icon(
+            Icons.search_rounded,
+            size: 16,
+            color: YLColors.zinc400,
+          ),
+          prefixIconConstraints: const BoxConstraints(
+            minWidth: 36,
+            minHeight: 36,
+          ),
           suffixIcon: query.isNotEmpty
               ? GestureDetector(
                   onTap: () {
                     controller.clear();
                     ref.read(nodeSearchQueryProvider.notifier).state = '';
                   },
-                  child: const Icon(Icons.close_rounded,
-                      size: 14, color: YLColors.zinc400),
+                  child: const Icon(
+                    Icons.close_rounded,
+                    size: 14,
+                    color: YLColors.zinc400,
+                  ),
                 )
               : null,
-          suffixIconConstraints:
-              const BoxConstraints(minWidth: 36, minHeight: 36),
+          suffixIconConstraints: const BoxConstraints(
+            minWidth: 36,
+            minHeight: 36,
+          ),
           filled: true,
           fillColor: isDark
               ? Colors.white.withValues(alpha: 0.06)
               : Colors.black.withValues(alpha: 0.04),
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 0,
+          ),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(YLRadius.pill),
             borderSide: BorderSide.none,
@@ -494,7 +578,9 @@ class _ModeBanner extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.symmetric(
-          horizontal: YLSpacing.lg, vertical: YLSpacing.md),
+        horizontal: YLSpacing.lg,
+        vertical: YLSpacing.md,
+      ),
       decoration: BoxDecoration(
         color: isDark
             ? Colors.white.withValues(alpha: 0.06)
@@ -506,8 +592,10 @@ class _ModeBanner extends StatelessWidget {
           Icon(icon, size: 16, color: YLColors.zinc500),
           const SizedBox(width: YLSpacing.sm),
           Expanded(
-            child: Text(text,
-                style: YLText.caption.copyWith(color: YLColors.zinc500)),
+            child: Text(
+              text,
+              style: YLText.caption.copyWith(color: YLColors.zinc500),
+            ),
           ),
         ],
       ),
@@ -549,8 +637,9 @@ class _FullWidthRoutingMode extends ConsumerWidget {
                   await SettingsService.setRoutingMode(mode);
                   if (status == CoreStatus.running) {
                     try {
-                      final ok = await CoreManager.instance.api
-                          .setRoutingMode(mode);
+                      final ok = await CoreManager.instance.api.setRoutingMode(
+                        mode,
+                      );
                       if (ok) {
                         if (mode == 'direct') {
                           try {
@@ -561,26 +650,26 @@ class _FullWidthRoutingMode extends ConsumerWidget {
                             // log so leaked proxy connections after a failed
                             // close are diagnosable.
                             debugPrint(
-                                '[RoutingMode] closeAllConnections on direct '
-                                'switch failed: $e');
+                              '[RoutingMode] closeAllConnections on direct '
+                              'switch failed: $e',
+                            );
                           }
                         }
                         ref.read(proxyGroupsProvider.notifier).refresh();
                         final actual = await CoreManager.instance.api
                             .getRoutingMode();
-                        debugPrint(
-                            '[RoutingMode] set=$mode, actual=$actual');
+                        debugPrint('[RoutingMode] set=$mode, actual=$actual');
                         if (actual != mode) {
                           AppNotifier.warning(
-                              '${s.routeModeRule}: $actual ≠ $mode');
+                            '${s.routeModeRule}: $actual ≠ $mode',
+                          );
                         } else {
                           final modeLabel = mode == 'global'
                               ? s.routeModeGlobal
                               : mode == 'direct'
-                                  ? s.routeModeDirect
-                                  : s.routeModeRule;
-                          AppNotifier.success(
-                              '${s.modeSwitched}: $modeLabel');
+                              ? s.routeModeDirect
+                              : s.routeModeRule;
+                          AppNotifier.success('${s.modeSwitched}: $modeLabel');
                         }
                       } else {
                         AppNotifier.error(s.switchModeFailed);
@@ -638,9 +727,13 @@ Widget _buildOfflineSkeleton(BuildContext context) {
   final shimmer = isDark ? YLColors.zinc800 : YLColors.zinc200;
   return SliverList(
     delegate: SliverChildBuilderDelegate(
-      (_, __) => Padding(
+      (context, index) => Padding(
         padding: const EdgeInsets.fromLTRB(
-            YLSpacing.xl, 0, YLSpacing.xl, YLSpacing.lg),
+          YLSpacing.xl,
+          0,
+          YLSpacing.xl,
+          YLSpacing.lg,
+        ),
         child: Container(
           height: 80,
           decoration: BoxDecoration(
@@ -665,7 +758,9 @@ class _OfflinePreviewBanner extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.symmetric(
-          horizontal: YLSpacing.lg, vertical: YLSpacing.sm),
+        horizontal: YLSpacing.lg,
+        vertical: YLSpacing.sm,
+      ),
       decoration: BoxDecoration(
         color: isDark
             ? Colors.amber.withValues(alpha: 0.10)
@@ -678,8 +773,7 @@ class _OfflinePreviewBanner extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Icon(Icons.info_outline_rounded,
-              size: 14, color: Colors.amber),
+          const Icon(Icons.info_outline_rounded, size: 14, color: Colors.amber),
           const SizedBox(width: YLSpacing.sm),
           Expanded(
             child: Text(
@@ -724,16 +818,14 @@ class _ChainProxyButton extends ConsumerWidget {
               S.of(context).chainProxy,
               style: YLText.caption.copyWith(
                 fontSize: 11,
-                color:
-                    chain.connected ? YLColors.connected : YLColors.zinc500,
+                color: chain.connected ? YLColors.connected : YLColors.zinc500,
                 fontWeight: chain.connected ? FontWeight.w600 : FontWeight.w400,
               ),
             ),
             if (chain.nodes.isNotEmpty) ...[
               const SizedBox(width: 4),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                 decoration: BoxDecoration(
                   color: chain.connected
                       ? YLColors.connected.withValues(alpha: 0.2)
@@ -787,14 +879,19 @@ class _ReadOnlyGroupCard extends StatelessWidget {
             padding: const EdgeInsets.all(YLSpacing.md),
             child: Row(
               children: [
-                const Icon(Icons.expand_more_rounded,
-                    size: 20, color: YLColors.zinc400),
+                const Icon(
+                  Icons.expand_more_rounded,
+                  size: 20,
+                  color: YLColors.zinc400,
+                ),
                 const SizedBox(width: YLSpacing.sm),
                 Text(group.name, style: YLText.titleMedium),
                 const SizedBox(width: YLSpacing.sm),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: isDark ? YLColors.zinc800 : YLColors.zinc100,
                     borderRadius: BorderRadius.circular(YLRadius.sm),
@@ -802,9 +899,10 @@ class _ReadOnlyGroupCard extends StatelessWidget {
                   child: Text(
                     groupTypeLabel(context, group.type),
                     style: YLText.caption.copyWith(
-                        fontSize: 10,
-                        color: YLColors.zinc500,
-                        fontWeight: FontWeight.w600),
+                      fontSize: 10,
+                      color: YLColors.zinc500,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
                 const Spacer(),
@@ -826,8 +924,9 @@ class _ReadOnlyGroupCard extends StatelessWidget {
                     children: [
                       Padding(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: YLSpacing.md,
-                            vertical: YLSpacing.sm),
+                          horizontal: YLSpacing.md,
+                          vertical: YLSpacing.sm,
+                        ),
                         child: Row(
                           children: [
                             const SizedBox(width: 24),
@@ -836,9 +935,10 @@ class _ReadOnlyGroupCard extends StatelessWidget {
                               child: Text(
                                 name,
                                 style: YLText.body.copyWith(
-                                    color: isDark
-                                        ? Colors.white70
-                                        : YLColors.zinc700),
+                                  color: isDark
+                                      ? Colors.white70
+                                      : YLColors.zinc700,
+                                ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
@@ -879,7 +979,11 @@ class _RecentNodesBar extends ConsumerWidget {
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(
-          YLSpacing.xl, YLSpacing.sm, YLSpacing.xl, 0),
+        YLSpacing.xl,
+        YLSpacing.sm,
+        YLSpacing.xl,
+        0,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -888,7 +992,7 @@ class _RecentNodesBar extends ConsumerWidget {
             style: YLText.caption.copyWith(
               fontSize: 11,
               color: YLColors.zinc400,
-              letterSpacing: 0.5,
+              letterSpacing: 0,
             ),
           ),
           const SizedBox(height: 6),
@@ -970,8 +1074,11 @@ class _RecentNodeChipState extends ConsumerState<_RecentNodeChip> {
                 child: CircularProgressIndicator(strokeWidth: 1.5),
               )
             else
-              Icon(Icons.history_rounded,
-                  size: 11, color: YLColors.zinc400),
+              const Icon(
+                Icons.history_rounded,
+                size: 11,
+                color: YLColors.zinc400,
+              ),
             const SizedBox(width: 4),
             Text(
               widget.node.name,

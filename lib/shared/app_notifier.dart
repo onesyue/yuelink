@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -34,10 +35,16 @@ class AppNotifier {
 
   static (IconData, Color) _styleFor(_SnackType type) {
     return switch (type) {
-      _SnackType.success => (Icons.check_circle_outline_rounded, Colors.green.shade600),
-      _SnackType.error   => (Icons.error_outline_rounded, Colors.red.shade600),
-      _SnackType.warning => (Icons.warning_amber_rounded, Colors.orange.shade700),
-      _SnackType.info    => (Icons.info_outline_rounded, const Color(0xFF3B82F6)),
+      _SnackType.success => (
+        Icons.check_circle_outline_rounded,
+        Colors.green.shade600,
+      ),
+      _SnackType.error => (Icons.error_outline_rounded, Colors.red.shade600),
+      _SnackType.warning => (
+        Icons.warning_amber_rounded,
+        Colors.orange.shade700,
+      ),
+      _SnackType.info => (Icons.info_outline_rounded, const Color(0xFF3B82F6)),
     };
   }
 
@@ -119,15 +126,18 @@ class AppNotifier {
     Haptics.success();
     _show(message, _SnackType.success);
   }
+
   static void error(String message) {
     Haptics.error();
     _show(message, _SnackType.error);
   }
+
   static void warning(String message) {
     Haptics.selection();
     _show(message, _SnackType.warning);
   }
-  static void info(String message)    => _show(message, _SnackType.info);
+
+  static void info(String message) => _show(message, _SnackType.info);
 }
 
 class _TopCapsule extends StatefulWidget {
@@ -196,9 +206,14 @@ class _TopCapsuleState extends State<_TopCapsule>
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final topInset = MediaQuery.of(context).padding.top;
-    final bg = (isDark ? Colors.black : Colors.white).withValues(alpha: 0.72);
-    final borderColor = (isDark ? Colors.white : Colors.black)
-        .withValues(alpha: isDark ? 0.08 : 0.06);
+    final reduceEffects = MediaQuery.of(context).disableAnimations;
+    final useLiveBackdrop = !Platform.isAndroid && !reduceEffects;
+    final bg = (isDark ? Colors.black : Colors.white).withValues(
+      alpha: useLiveBackdrop ? 0.72 : 0.92,
+    );
+    final borderColor = (isDark ? Colors.white : Colors.black).withValues(
+      alpha: isDark ? 0.08 : 0.06,
+    );
     final fg = isDark ? Colors.white : Colors.black87;
 
     return Positioned(
@@ -225,47 +240,28 @@ class _TopCapsuleState extends State<_TopCapsule>
                     constraints: const BoxConstraints(maxWidth: 420),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(28),
-                      child: BackdropFilter(
-                        filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 12),
-                          decoration: BoxDecoration(
-                            color: bg,
-                            borderRadius: BorderRadius.circular(28),
-                            border: Border.all(color: borderColor, width: 0.5),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(
-                                    alpha: isDark ? 0.4 : 0.12),
-                                blurRadius: 16,
-                                offset: const Offset(0, 4),
+                      child: useLiveBackdrop
+                          ? BackdropFilter(
+                              filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+                              child: _ToastBody(
+                                bg: bg,
+                                borderColor: borderColor,
+                                fg: fg,
+                                isDark: isDark,
+                                icon: widget.icon,
+                                accent: widget.accent,
+                                message: widget.message,
                               ),
-                            ],
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(widget.icon,
-                                  color: widget.accent, size: 18),
-                              const SizedBox(width: 8),
-                              Flexible(
-                                child: Text(
-                                  widget.message,
-                                  style: TextStyle(
-                                    color: fg,
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w500,
-                                    letterSpacing: -0.1,
-                                  ),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
+                            )
+                          : _ToastBody(
+                              bg: bg,
+                              borderColor: borderColor,
+                              fg: fg,
+                              isDark: isDark,
+                              icon: widget.icon,
+                              accent: widget.accent,
+                              message: widget.message,
+                            ),
                     ),
                   ),
                 ),
@@ -273,6 +269,65 @@ class _TopCapsuleState extends State<_TopCapsule>
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _ToastBody extends StatelessWidget {
+  const _ToastBody({
+    required this.bg,
+    required this.borderColor,
+    required this.fg,
+    required this.isDark,
+    required this.icon,
+    required this.accent,
+    required this.message,
+  });
+
+  final Color bg;
+  final Color borderColor;
+  final Color fg;
+  final bool isDark;
+  final IconData icon;
+  final Color accent;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(color: borderColor, width: 0.5),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.4 : 0.12),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: accent, size: 18),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              message,
+              style: TextStyle(
+                color: fg,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                letterSpacing: 0,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
       ),
     );
   }

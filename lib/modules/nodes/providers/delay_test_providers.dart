@@ -226,12 +226,10 @@ class DelayTestActions {
           SettingsService.setDelayResults(current);
 
           // Opt-in telemetry — one event per tested node.
-          for (final entry in current.entries) {
-            if (proxyNames.contains(entry.key)) {
-              NodeTelemetry.recordUrlTestByName(
-                name: entry.key,
-                delayMs: entry.value,
-              );
+          for (final name in proxyNames) {
+            final delay = current[name];
+            if (delay != null) {
+              NodeTelemetry.recordUrlTestByName(name: name, delayMs: delay);
             }
           }
         } else {
@@ -243,6 +241,11 @@ class DelayTestActions {
               Map<String, int>.from(ref.read(delayResultsProvider));
           for (final name in proxyNames) {
             current[name] = -1;
+            NodeTelemetry.recordUrlTestByName(
+              name: name,
+              delayMs: -1,
+              reason: outcome.failureReason ?? 'timeout',
+            );
           }
           ref.read(delayResultsProvider.notifier).state = current;
         }

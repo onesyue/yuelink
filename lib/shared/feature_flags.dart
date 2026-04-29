@@ -74,12 +74,16 @@ class FeatureFlags {
   DateTime? get lastRefresh => _lastRefresh;
 
   Future<void> refresh() async {
+    final clientId = Telemetry.clientId;
+    if (clientId.isEmpty) {
+      debugPrint('[FeatureFlags] skip refresh: telemetry client_id not ready');
+      return;
+    }
+
     final client = HttpClient();
     client.connectionTimeout = const Duration(seconds: 5);
     try {
-      final uri = Uri.parse(
-        '$_endpoint?client_id=${Uri.encodeComponent(Telemetry.clientId)}',
-      );
+      final uri = flagsUriForClientId(clientId);
       final req = await client.getUrl(uri);
       final resp = await req.close().timeout(_httpTimeout);
       if (resp.statusCode != 200) return;
@@ -99,6 +103,13 @@ class FeatureFlags {
   }
 
   Map<String, dynamic> snapshot() => Map<String, dynamic>.unmodifiable(_cache);
+
+  @visibleForTesting
+  static Uri flagsUriForClientId(String clientId) {
+    return Uri.parse(
+      _endpoint,
+    ).replace(queryParameters: {'client_id': clientId});
+  }
 }
 
 final featureFlagsProvider = Provider<FeatureFlags>((ref) => FeatureFlags.I);

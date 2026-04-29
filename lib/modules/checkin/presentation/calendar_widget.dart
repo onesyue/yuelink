@@ -35,31 +35,32 @@ class SignCalendarWidget extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
           child: Row(
-            children: <String>[
-              s.weekMon,
-              s.weekTue,
-              s.weekWed,
-              s.weekThu,
-              s.weekFri,
-              s.weekSat,
-              s.weekSun,
-            ]
-                .map(
-                  (w) => Expanded(
-                    child: Center(
-                      child: Text(
-                        w,
-                        style: YLText.caption.copyWith(
-                          color: headerColor,
-                          fontWeight: FontWeight.w500,
-                          letterSpacing: 0.4,
-                          fontSize: 11,
+            children:
+                <String>[
+                      s.weekMon,
+                      s.weekTue,
+                      s.weekWed,
+                      s.weekThu,
+                      s.weekFri,
+                      s.weekSat,
+                      s.weekSun,
+                    ]
+                    .map(
+                      (w) => Expanded(
+                        child: Center(
+                          child: Text(
+                            w,
+                            style: YLText.caption.copyWith(
+                              color: headerColor,
+                              fontWeight: FontWeight.w500,
+                              letterSpacing: 0,
+                              fontSize: 11,
+                            ),
+                          ),
                         ),
                       ),
-                    ),
-                  ),
-                )
-                .toList(),
+                    )
+                    .toList(),
           ),
         ),
         const SizedBox(height: 4),
@@ -88,9 +89,7 @@ class SignCalendarWidget extends StatelessWidget {
 
     final weeks = <List<DateTime>>[];
     for (int w = 0; w < 6; w++) {
-      weeks.add(
-        List.generate(7, (i) => start.add(Duration(days: w * 7 + i))),
-      );
+      weeks.add(List.generate(7, (i) => start.add(Duration(days: w * 7 + i))));
     }
     return weeks;
   }

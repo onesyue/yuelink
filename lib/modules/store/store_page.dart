@@ -67,9 +67,9 @@ class StorePage extends ConsumerWidget {
         IconButton(
           icon: const Icon(Icons.receipt_long_outlined, size: 22),
           tooltip: isEn ? 'Order History' : '订单记录',
-          onPressed: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const OrderHistoryPage()),
-          ),
+          onPressed: () => Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const OrderHistoryPage())),
         ),
         IconButton(
           icon: const Icon(Icons.refresh_rounded, size: 22),
@@ -79,9 +79,8 @@ class StorePage extends ConsumerWidget {
       ],
       slivers: [
         plansAsync.when(
-          loading: () => const SliverFillRemaining(
-            child: Center(child: YLLoading()),
-          ),
+          loading: () =>
+              const SliverFillRemaining(child: Center(child: YLLoading())),
           error: (err, _) => SliverFillRemaining(
             child: _ErrorView(
               message: err.toString(),
@@ -115,23 +114,21 @@ class StorePage extends ConsumerWidget {
 
             return SliverPadding(
               padding: const EdgeInsets.fromLTRB(
-                  YLSpacing.lg, YLSpacing.sm, YLSpacing.lg, 0),
+                YLSpacing.lg,
+                YLSpacing.sm,
+                YLSpacing.lg,
+                0,
+              ),
               sliver: SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (context, i) {
-                    final plan = sortedPlans[i];
-                    final isCurrentPlan = profile?.planId == plan.id;
+                delegate: SliverChildBuilderDelegate((context, i) {
+                  final plan = sortedPlans[i];
+                  final isCurrentPlan = profile?.planId == plan.id;
 
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: YLSpacing.sm),
-                      child: PlanCard(
-                        plan: plan,
-                        isCurrentPlan: isCurrentPlan,
-                      ),
-                    );
-                  },
-                  childCount: sortedPlans.length,
-                ),
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: YLSpacing.sm),
+                    child: PlanCard(plan: plan, isCurrentPlan: isCurrentPlan),
+                  );
+                }, childCount: sortedPlans.length),
               ),
             );
           },

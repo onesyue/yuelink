@@ -33,6 +33,7 @@ import '../../domain/emby/emby_info_entity.dart';
 import '../../app/main_shell.dart';
 import '../../shared/nps_service.dart';
 import '../../shared/widgets/nps_sheet.dart';
+import '../../shared/widgets/yl_scaffold.dart';
 import '../../widgets/loading_overlay.dart';
 import '../emby/emby_providers.dart';
 
@@ -71,27 +72,25 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     // perk to subscribers who don't realise their plan includes it.
     // Listener self-disarms after the first eligible event so we
     // don't fire repeatedly while embyProvider rebuilds.
-    _embyActivationSub = ref.listenManual<AsyncValue<EmbyInfo?>>(
-      embyProvider,
-      (prev, next) {
-        if (_embyActivationChecked) return;
-        final info = next.value;
-        if (info == null || !info.hasNativeAccess) return;
-        _embyActivationChecked = true;
-        // 2 s delay so the prompt doesn't race the rest of the
-        // first-paint sequence (NPS at 5 s, hero animations).
-        Future<void>.delayed(const Duration(seconds: 2), () async {
-          if (!mounted) return;
-          final seen = await SettingsService.get<bool>(
-                  'hasSeenEmbyActivation') ??
-              false;
-          if (seen || !mounted) return;
-          await _showEmbyActivationSheet();
-          await SettingsService.set('hasSeenEmbyActivation', true);
-        });
-      },
-      fireImmediately: true,
-    );
+    _embyActivationSub = ref.listenManual<AsyncValue<EmbyInfo?>>(embyProvider, (
+      prev,
+      next,
+    ) {
+      if (_embyActivationChecked) return;
+      final info = next.value;
+      if (info == null || !info.hasNativeAccess) return;
+      _embyActivationChecked = true;
+      // 2 s delay so the prompt doesn't race the rest of the
+      // first-paint sequence (NPS at 5 s, hero animations).
+      Future<void>.delayed(const Duration(seconds: 2), () async {
+        if (!mounted) return;
+        final seen =
+            await SettingsService.get<bool>('hasSeenEmbyActivation') ?? false;
+        if (seen || !mounted) return;
+        await _showEmbyActivationSheet();
+        await SettingsService.set('hasSeenEmbyActivation', true);
+      });
+    }, fireImmediately: true);
   }
 
   @override
@@ -147,9 +146,9 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
               Text(
                 isEn
                     ? 'Your subscription includes access to Emby. Watch '
-                        'licensed movies and TV shows directly inside the app.'
+                          'licensed movies and TV shows directly inside the app.'
                     : '你的订阅已包含悦视频权益，无需额外付费即可在 app '
-                        '内观看正版电影与剧集。',
+                          '内观看正版电影与剧集。',
                 style: YLText.body.copyWith(
                   color: isDark ? YLColors.zinc300 : YLColors.zinc600,
                   height: 1.5,
@@ -188,6 +187,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     // UI reads the derived display status so a manual-stop that races a
     // resume recovery cannot leave HeroCard showing "connected" for one
     // frame. Internals (lifecycle, heartbeat, tray) keep using
@@ -206,120 +206,103 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
       ref.listen(connectionsStreamProvider, (_, _) {});
     }
 
-    return Scaffold(
-      body: SafeArea(
-        bottom: false,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // ── Scrollable content ────────────────────────────────
-                Expanded(
-                  child: RefreshIndicator(
-                    onRefresh: () async {
-                      await ref.read(authProvider.notifier).refreshUserInfo();
-                      ref.invalidate(dashboardNoticesProvider);
-                      ref.invalidate(announcementsProvider);
-                      ref.read(checkinProvider.notifier).refresh();
-                    },
-                    child: ListView(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: constraints.maxWidth > 720 + 48
-                            ? (constraints.maxWidth - 720) / 2
-                            : 24.0,
-                        vertical: 24,
-                      ),
-                      children: [
-                        // ── 0. Guest mode CTA — only shown to users
-                        //     who skipped login (or finished onboarding
-                        //     without one). Hidden once they sign in.
-                        if (ref.watch(authProvider.select((a) => a.isGuest)))
-                          const Padding(
-                            padding: EdgeInsets.only(bottom: 12),
-                            child: RepaintBoundary(child: _GuestLoginBanner()),
-                          ),
+    return YLLargeTitleScaffold(
+      title: s.navHome,
+      bottomSafe: false,
+      maxContentWidth: 768,
+      showTitleBar: false,
+      onRefresh: () async {
+        await ref.read(authProvider.notifier).refreshUserInfo();
+        ref.invalidate(dashboardNoticesProvider);
+        ref.invalidate(announcementsProvider);
+        ref.read(checkinProvider.notifier).refresh();
+      },
+      slivers: [
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(24, 14, 24, 0),
+          sliver: SliverList(
+            delegate: SliverChildListDelegate([
+              // ── 0. Guest mode CTA — only shown to users
+              //     who skipped login (or finished onboarding
+              //     without one). Hidden once they sign in.
+              if (ref.watch(authProvider.select((a) => a.isGuest)))
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 12),
+                  child: RepaintBoundary(child: _GuestLoginBanner()),
+                ),
 
-                        // ── 1. VPN 连接卡 ─────────────────────────────
-                        _StaggeredIn(
-                          index: 0,
-                          child: RepaintBoundary(
-                            child: HeroCard(
-                              status: status,
-                              onToggle: () => _toggle(context, ref),
-                            ),
-                          ),
-                        ),
-
-                        const SizedBox(height: 12),
-
-                        // ── 1.5 订阅过期提示 ─────────────────────────
-                        const _StaggeredIn(
-                          index: 1,
-                          child: RepaintBoundary(
-                            child: StaleSubscriptionBanner(),
-                          ),
-                        ),
-
-                        const SizedBox(height: 12),
-
-                        // ── 2. 快捷操作 ───────────────────────────────
-                        const _StaggeredIn(
-                          index: 2,
-                          child: RepaintBoundary(child: QuickActions()),
-                        ),
-
-                        const SizedBox(height: 12),
-
-                        // ── 3. 公告（服务通知优先）──────────────────
-                        const _StaggeredIn(
-                          index: 3,
-                          child: RepaintBoundary(child: NoticesCard()),
-                        ),
-
-                        const SizedBox(height: 12),
-
-                        // ── 4. 悦视频推荐条 ───────────────────────────
-                        const _StaggeredIn(
-                          index: 4,
-                          child: RepaintBoundary(child: EmbyPreviewRow()),
-                        ),
-
-                        const SizedBox(height: 12),
-
-                        // ── 5. 签到 ─────────────────────────────────
-                        const _StaggeredIn(
-                          index: 5,
-                          child: RepaintBoundary(child: CheckinCard()),
-                        ),
-
-                        const SizedBox(height: 12),
-
-                        // ── 5.5 签到日历入口（与签到/Emby 平级） ──────
-                        const _StaggeredIn(
-                          index: 6,
-                          child: RepaintBoundary(
-                              child: CheckinCalendarEntryCard()),
-                        ),
-
-                        const SizedBox(height: 12),
-
-                        // ── 6. 数据监控（折叠）───────────────────────
-                        const _StaggeredIn(
-                          index: 7,
-                          child: RepaintBoundary(child: _TrafficSection()),
-                        ),
-
-                        const SizedBox(height: 16),
-                      ],
-                    ),
+              // ── 1. VPN 连接卡 ─────────────────────────────
+              _StaggeredIn(
+                index: 0,
+                child: RepaintBoundary(
+                  child: HeroCard(
+                    status: status,
+                    onToggle: () => _toggle(context, ref),
                   ),
                 ),
-              ],
-            );
-          },
+              ),
+
+              const SizedBox(height: 12),
+
+              // ── 1.5 订阅过期提示 ─────────────────────────
+              const _StaggeredIn(
+                index: 1,
+                child: RepaintBoundary(child: StaleSubscriptionBanner()),
+              ),
+
+              const SizedBox(height: 12),
+
+              // ── 2. 快捷操作 ───────────────────────────────
+              const _StaggeredIn(
+                index: 2,
+                child: RepaintBoundary(child: QuickActions()),
+              ),
+
+              const SizedBox(height: 12),
+
+              // ── 3. 公告（服务通知优先）──────────────────
+              const _StaggeredIn(
+                index: 3,
+                child: RepaintBoundary(child: NoticesCard()),
+              ),
+
+              const SizedBox(height: 12),
+
+              // ── 4. 悦视频推荐条 ───────────────────────────
+              const _StaggeredIn(
+                index: 4,
+                child: RepaintBoundary(child: EmbyPreviewRow()),
+              ),
+
+              const SizedBox(height: 12),
+
+              // ── 5. 签到 ─────────────────────────────────
+              const _StaggeredIn(
+                index: 5,
+                child: RepaintBoundary(child: CheckinCard()),
+              ),
+
+              const SizedBox(height: 12),
+
+              // ── 5.5 签到日历入口（与签到/Emby 平级） ──────
+              const _StaggeredIn(
+                index: 6,
+                child: RepaintBoundary(child: CheckinCalendarEntryCard()),
+              ),
+
+              const SizedBox(height: 12),
+
+              // ── 6. 数据监控（折叠）───────────────────────
+              const _StaggeredIn(
+                index: 7,
+                child: RepaintBoundary(child: _TrafficSection()),
+              ),
+
+              const SizedBox(height: 16),
+            ]),
+          ),
         ),
-      ),
+      ],
     );
   }
 
@@ -447,9 +430,8 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
         // every network service. Surface a one-shot info toast so the
         // change is visible. Skipped on TUN (the active-tunnel UX is
         // self-evident) and on mobile (VPN sheet is OS-driven).
-        final isDesktop = Platform.isMacOS ||
-            Platform.isWindows ||
-            Platform.isLinux;
+        final isDesktop =
+            Platform.isMacOS || Platform.isWindows || Platform.isLinux;
         if (isDesktop &&
             ref.read(connectionModeProvider) == 'systemProxy' &&
             ref.read(systemProxyOnConnectProvider)) {
@@ -491,9 +473,9 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
         content: Text(
           isEn
               ? 'Send a tiny probe to gstatic.com through the tunnel to '
-                  'confirm everything is routed correctly. Takes about 3 s.'
+                    'confirm everything is routed correctly. Takes about 3 s.'
               : '通过当前节点向 gstatic.com 发一个轻量探针，确认隧道工作正常。'
-                  '大约 3 秒完成。',
+                    '大约 3 秒完成。',
         ),
         actions: [
           TextButton(
@@ -561,11 +543,13 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
       if (port > 0 && !CoreManager.instance.isMockMode) {
         client.findProxy = (_) => 'PROXY 127.0.0.1:$port';
       }
-      final request = await client
-          .getUrl(Uri.parse('https://www.gstatic.com/generate_204'));
+      final request = await client.getUrl(
+        Uri.parse('https://www.gstatic.com/generate_204'),
+      );
       request.headers.set('User-Agent', 'YueLink/connectivity-test');
-      final response =
-          await request.close().timeout(const Duration(seconds: 8));
+      final response = await request.close().timeout(
+        const Duration(seconds: 8),
+      );
       await response.drain<void>();
       stopwatch.stop();
       success = response.statusCode == 204 || response.statusCode == 200;
@@ -626,12 +610,12 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
         content: Text(
           isEn
               ? 'Guest mode lets you explore the app, but connecting to '
-                  'YueLink nodes requires an account. Sign in to sync '
-                  'your subscription, or stay in guest mode and import '
-                  'a third-party subscription manually.'
+                    'YueLink nodes requires an account. Sign in to sync '
+                    'your subscription, or stay in guest mode and import '
+                    'a third-party subscription manually.'
               : '游客模式可以浏览 app，但连接悦通节点需要登录账号。'
-                  '登录后会自动同步官方订阅；也可以保持游客模式，'
-                  '手动导入第三方机场订阅。',
+                    '登录后会自动同步官方订阅；也可以保持游客模式，'
+                    '手动导入第三方机场订阅。',
         ),
         actions: [
           TextButton(
@@ -780,11 +764,7 @@ class _IosVpnRationaleSheet extends StatelessWidget {
 }
 
 class _Step extends StatelessWidget {
-  const _Step({
-    required this.index,
-    required this.text,
-    required this.isDark,
-  });
+  const _Step({required this.index, required this.text, required this.isDark});
 
   final int index;
   final String text;
@@ -1049,9 +1029,7 @@ class _GuestLoginBanner extends ConsumerWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  isEn
-                      ? 'Browsing as guest'
-                      : '当前为游客模式',
+                  isEn ? 'Browsing as guest' : '当前为游客模式',
                   style: YLText.label.copyWith(
                     fontWeight: FontWeight.w600,
                     color: isDark ? Colors.white : YLColors.zinc900,

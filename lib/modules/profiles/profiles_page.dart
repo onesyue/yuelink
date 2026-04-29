@@ -110,13 +110,14 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
               ),
             PopupMenuItem(
               value: 'export_all',
-              child: _menuItem(
-                  Icons.upload_file_outlined, s.exportAllProfiles),
+              child: _menuItem(Icons.upload_file_outlined, s.exportAllProfiles),
             ),
             PopupMenuItem(
               value: 'import_files',
               child: _menuItem(
-                  Icons.file_upload_outlined, s.importMultipleFiles),
+                Icons.file_upload_outlined,
+                s.importMultipleFiles,
+              ),
             ),
           ],
         ),
@@ -134,8 +135,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                 icon: Icons.error_outline,
                 title: s.loadFailed(e.toString()),
                 action: FilledButton.icon(
-                  onPressed: () =>
-                      ref.read(profilesProvider.notifier).load(),
+                  onPressed: () => ref.read(profilesProvider.notifier).load(),
                   icon: const Icon(Icons.refresh, size: 16),
                   label: Text(s.retry),
                 ),
@@ -163,45 +163,46 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
               });
             return SliverPadding(
               padding: const EdgeInsets.fromLTRB(
-                  YLSpacing.lg, YLSpacing.sm, YLSpacing.lg, 0),
+                YLSpacing.lg,
+                YLSpacing.sm,
+                YLSpacing.lg,
+                0,
+              ),
               sliver: SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (context, index) {
-                    final profile = sorted[index];
-                    final isActive = profile.id == activeId;
-                    final card = Padding(
-                      padding: const EdgeInsets.only(bottom: YLSpacing.sm),
-                      child: ProfileCard(
-                        profile: profile,
-                        isActive: isActive,
-                        onTap: () {
-                          if (isActive) return;
-                          _confirmSwitchProfile(context, ref, profile);
-                        },
-                        onUpdate: () =>
-                            _doUpdateProfile(context, ref, profile),
-                        onEdit: () => _showEditDialog(context, ref, profile),
-                        onViewConfig: () =>
-                            _showConfigViewer(context, profile),
-                        onExport: () =>
-                            _exportProfile(context, ref, profile),
-                        onDelete: () => _confirmDelete(context, ref, profile),
-                      ),
-                    );
-                    if (!(Platform.isIOS || Platform.isAndroid)) return card;
-                    return Dismissible(
-                      key: ValueKey('profile_${profile.id}'),
-                      direction: DismissDirection.endToStart,
-                      background: const ProfileSwipeDeleteBackground(),
-                      confirmDismiss: (_) async {
-                        return await showProfileDeleteConfirmSheet(
-                            context, ref, profile);
+                delegate: SliverChildBuilderDelegate((context, index) {
+                  final profile = sorted[index];
+                  final isActive = profile.id == activeId;
+                  final card = Padding(
+                    padding: const EdgeInsets.only(bottom: YLSpacing.sm),
+                    child: ProfileCard(
+                      profile: profile,
+                      isActive: isActive,
+                      onTap: () {
+                        if (isActive) return;
+                        _confirmSwitchProfile(context, ref, profile);
                       },
-                      child: card,
-                    );
-                  },
-                  childCount: sorted.length,
-                ),
+                      onUpdate: () => _doUpdateProfile(context, ref, profile),
+                      onEdit: () => _showEditDialog(context, ref, profile),
+                      onViewConfig: () => _showConfigViewer(context, profile),
+                      onExport: () => _exportProfile(context, ref, profile),
+                      onDelete: () => _confirmDelete(context, ref, profile),
+                    ),
+                  );
+                  if (!(Platform.isIOS || Platform.isAndroid)) return card;
+                  return Dismissible(
+                    key: ValueKey('profile_${profile.id}'),
+                    direction: DismissDirection.endToStart,
+                    background: const ProfileSwipeDeleteBackground(),
+                    confirmDismiss: (_) async {
+                      return await showProfileDeleteConfirmSheet(
+                        context,
+                        ref,
+                        profile,
+                      );
+                    },
+                    child: card,
+                  );
+                }, childCount: sorted.length),
               ),
             );
           },
@@ -234,7 +235,9 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
 
   /// Auto-read clipboard for URL, fetch subscription name, and show add dialog.
   Future<void> _autoAddFromClipboard(
-      BuildContext context, WidgetRef ref) async {
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
     final data = await Clipboard.getData(Clipboard.kTextPlain);
     final text = data?.text?.trim() ?? '';
     final hasUrl = text.isNotEmpty && text.startsWith('http');
@@ -265,7 +268,10 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   }
 
   void _confirmSwitchProfile(
-      BuildContext context, WidgetRef ref, Profile profile) {
+    BuildContext context,
+    WidgetRef ref,
+    Profile profile,
+  ) {
     final s = S.of(context);
     final isRunning = ref.read(coreStatusProvider) == CoreStatus.running;
     showDialog(
@@ -303,8 +309,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     );
   }
 
-  void _confirmDelete(
-      BuildContext context, WidgetRef ref, Profile profile) {
+  void _confirmDelete(BuildContext context, WidgetRef ref, Profile profile) {
     final s = S.of(context);
     showDialog(
       context: context,
@@ -319,18 +324,13 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
           FilledButton(
             onPressed: () {
               Navigator.pop(ctx);
-              ref
-                  .read(profilesProvider.notifier)
-                  .delete(profile.id);
+              ref.read(profilesProvider.notifier).delete(profile.id);
               final activeId = ref.read(activeProfileIdProvider);
               if (activeId == profile.id) {
-                ref
-                    .read(activeProfileIdProvider.notifier)
-                    .select(null);
+                ref.read(activeProfileIdProvider.notifier).select(null);
               }
             },
-            style:
-                FilledButton.styleFrom(backgroundColor: Colors.red),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
             child: Text(s.delete),
           ),
         ],
@@ -338,8 +338,12 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     );
   }
 
-  void _showAddDialog(BuildContext context, WidgetRef ref,
-      {String? prefilledUrl, bool autoFetchName = false}) {
+  void _showAddDialog(
+    BuildContext context,
+    WidgetRef ref, {
+    String? prefilledUrl,
+    bool autoFetchName = false,
+  }) {
     final s = S.of(context);
     final nameCtrl = TextEditingController();
     final urlCtrl = TextEditingController(text: prefilledUrl);
@@ -351,20 +355,26 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) {
           // Auto-fetch name when URL is pre-filled
-          if (autoFetchName && prefilledUrl != null && !fetchingName && fetchedName == null) {
+          if (autoFetchName &&
+              prefilledUrl != null &&
+              !fetchingName &&
+              fetchedName == null) {
             fetchingName = true;
-            ref.read(profileRepositoryProvider).fetchSubscriptionName(prefilledUrl).then((name) {
-              if (ctx.mounted) {
-                setDialogState(() {
-                  fetchedName = name;
-                  fetchingName = false;
-                  // Only set if user hasn't typed a name
-                  if (name != null && nameCtrl.text.trim().isEmpty) {
-                    nameCtrl.text = name;
+            ref
+                .read(profileRepositoryProvider)
+                .fetchSubscriptionName(prefilledUrl)
+                .then((name) {
+                  if (ctx.mounted) {
+                    setDialogState(() {
+                      fetchedName = name;
+                      fetchingName = false;
+                      // Only set if user hasn't typed a name
+                      if (name != null && nameCtrl.text.trim().isEmpty) {
+                        nameCtrl.text = name;
+                      }
+                    });
                   }
                 });
-              }
-            });
           }
 
           return AlertDialog(
@@ -408,7 +418,8 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                               final url = await Navigator.push<String>(
                                 ctx,
                                 MaterialPageRoute(
-                                    builder: (_) => const QrScanPage()),
+                                  builder: (_) => const QrScanPage(),
+                                ),
                               );
                               if (url != null && ctx.mounted) {
                                 if (url.startsWith('http://') ||
@@ -454,13 +465,18 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   }
 
   Future<void> _doAddProfile(
-      BuildContext context, WidgetRef ref, String name, String url) async {
+    BuildContext context,
+    WidgetRef ref,
+    String name,
+    String url,
+  ) async {
     final s = S.of(context);
     try {
       final profile = await LoadingOverlay.run(
         context,
         message: s.downloadingSubscription,
-        action: () => ref.read(profilesProvider.notifier).add(name: name, url: url),
+        action: () =>
+            ref.read(profilesProvider.notifier).add(name: name, url: url),
       );
       ref.read(activeProfileIdProvider.notifier).select(profile.id);
       AppNotifier.success(s.addSuccess);
@@ -468,8 +484,6 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       AppNotifier.error(s.addFailed(_friendlyError(e)));
     }
   }
-
-
 
   /// Save only profile metadata (name, interval) without re-downloading.
   Future<void> _saveProfileMetadata(WidgetRef ref, Profile profile) async {
@@ -484,7 +498,10 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   }
 
   Future<void> _doUpdateProfile(
-      BuildContext context, WidgetRef ref, Profile profile) async {
+    BuildContext context,
+    WidgetRef ref,
+    Profile profile,
+  ) async {
     final s = S.of(context);
     try {
       await LoadingOverlay.run(
@@ -498,8 +515,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     }
   }
 
-  void _showEditDialog(
-      BuildContext context, WidgetRef ref, Profile profile) {
+  void _showEditDialog(BuildContext context, WidgetRef ref, Profile profile) {
     final s = S.of(context);
     final nameCtrl = TextEditingController(text: profile.name);
     final urlCtrl = TextEditingController(text: profile.url);
@@ -544,15 +560,11 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                     value: intervalHours,
                     underline: const SizedBox.shrink(),
                     items: [
-                      DropdownMenuItem(
-                          value: 0, child: Text(s.followGlobal)),
+                      DropdownMenuItem(value: 0, child: Text(s.followGlobal)),
                       DropdownMenuItem(value: 6, child: Text(s.hours6)),
-                      DropdownMenuItem(
-                          value: 12, child: Text(s.hours12)),
-                      DropdownMenuItem(
-                          value: 24, child: Text(s.hours24)),
-                      DropdownMenuItem(
-                          value: 48, child: Text(s.hours48)),
+                      DropdownMenuItem(value: 12, child: Text(s.hours12)),
+                      DropdownMenuItem(value: 24, child: Text(s.hours24)),
+                      DropdownMenuItem(value: 48, child: Text(s.hours48)),
                       DropdownMenuItem(value: 168, child: Text(s.days7)),
                     ],
                     onChanged: (v) {
@@ -624,7 +636,9 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     // Filter to YAML files only (user may have picked non-YAML files)
     final yamlFiles = result.files.where((f) {
       final ext = f.name.toLowerCase();
-      return ext.endsWith('.yaml') || ext.endsWith('.yml') || ext.endsWith('.txt');
+      return ext.endsWith('.yaml') ||
+          ext.endsWith('.yml') ||
+          ext.endsWith('.txt');
     }).toList();
     if (yamlFiles.isEmpty) {
       if (context.mounted) AppNotifier.error(s.importLocalFileFailed);
@@ -644,7 +658,9 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
         return;
       }
       final defaultName = file.name.replaceAll(
-          RegExp(r'\.(yaml|yml)$', caseSensitive: false), '');
+        RegExp(r'\.(yaml|yml)$', caseSensitive: false),
+        '',
+      );
       if (!context.mounted) return;
 
       final nameCtrl = TextEditingController(text: defaultName);
@@ -668,7 +684,9 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
           ),
           actions: [
             TextButton(
-                onPressed: () => Navigator.pop(ctx), child: Text(s.cancel)),
+              onPressed: () => Navigator.pop(ctx),
+              child: Text(s.cancel),
+            ),
             FilledButton(
               onPressed: () {
                 final n = nameCtrl.text.trim();
@@ -698,11 +716,16 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     int ok = 0, failed = 0;
     for (final file in yamlFiles) {
       final bytes = file.bytes;
-      if (bytes == null) { failed++; continue; }
+      if (bytes == null) {
+        failed++;
+        continue;
+      }
       try {
         final content = utf8.decode(bytes);
         final name = file.name.replaceAll(
-            RegExp(r'\.(yaml|yml)$', caseSensitive: false), '');
+          RegExp(r'\.(yaml|yml)$', caseSensitive: false),
+          '',
+        );
         final profile = await repo.addLocalProfile(
           name: name.isEmpty ? s.importLocalNameHint : name,
           configContent: content,
@@ -718,17 +741,23 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
 
   /// Export a single profile's config as {name}.yaml.
   Future<void> _exportProfile(
-      BuildContext context, WidgetRef ref, Profile profile) async {
+    BuildContext context,
+    WidgetRef ref,
+    Profile profile,
+  ) async {
     final s = S.of(context);
-    final config =
-        await ref.read(profileRepositoryProvider).loadConfig(profile.id);
+    final config = await ref
+        .read(profileRepositoryProvider)
+        .loadConfig(profile.id);
     if (config == null) {
       AppNotifier.error(s.exportFailed);
       return;
     }
     // Strip characters that are invalid in filenames on Windows/macOS/Linux.
-    final safeName =
-        profile.name.replaceAll(RegExp(r'[<>:"/\\|?*\x00-\x1f]'), '_');
+    final safeName = profile.name.replaceAll(
+      RegExp(r'[<>:"/\\|?*\x00-\x1f]'),
+      '_',
+    );
     try {
       await FilePicker.saveFile(
         dialogTitle: s.exportProfile,
@@ -756,7 +785,8 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     }
 
     final repo = ref.read(profileRepositoryProvider);
-    final isDesktop = Platform.isMacOS || Platform.isWindows || Platform.isLinux;
+    final isDesktop =
+        Platform.isMacOS || Platform.isWindows || Platform.isLinux;
 
     if (isDesktop) {
       // Desktop: pick a directory, write all YAML files there
@@ -821,50 +851,53 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
 
   void _showConfigViewer(BuildContext context, Profile profile) async {
     final s = S.of(context);
-    final config = await ref.read(profileRepositoryProvider).loadConfig(profile.id);
+    final config = await ref
+        .read(profileRepositoryProvider)
+        .loadConfig(profile.id);
     if (!context.mounted) return;
 
-    Navigator.of(context).push(MaterialPageRoute(
-      builder: (ctx) => Scaffold(
-        appBar: AppBar(
-          leading: const BackButton(),
-          title: Text(profile.name),
-          actions: [
-            if (config != null)
-              IconButton(
-                icon: const Icon(Icons.copy),
-                tooltip: s.copyConfig,
-                onPressed: () {
-                  Clipboard.setData(ClipboardData(text: config));
-                  AppNotifier.success(s.copiedConfig);
-                },
-              ),
-          ],
-        ),
-        body: config == null
-            ? Center(child: Text(s.noConfig))
-            : SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                child: SelectableText(
-                  config,
-                  style: const TextStyle(
-                    fontFamily: 'monospace',
-                    fontSize: 12,
-                    height: 1.5,
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (ctx) => Scaffold(
+          appBar: AppBar(
+            leading: const BackButton(),
+            title: Text(profile.name),
+            actions: [
+              if (config != null)
+                IconButton(
+                  icon: const Icon(Icons.copy),
+                  tooltip: s.copyConfig,
+                  onPressed: () {
+                    Clipboard.setData(ClipboardData(text: config));
+                    AppNotifier.success(s.copiedConfig);
+                  },
+                ),
+            ],
+          ),
+          body: config == null
+              ? Center(child: Text(s.noConfig))
+              : SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: SelectableText(
+                    config,
+                    style: const TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 12,
+                      height: 1.5,
+                    ),
                   ),
                 ),
-              ),
+        ),
       ),
-    ));
+    );
   }
 }
 
 /// Small icon+label row for popup menu items.
 Widget _menuItem(IconData icon, String label) => Row(
-      children: [
-        Icon(icon, size: 16, color: Colors.grey),
-        const SizedBox(width: 10),
-        Text(label),
-      ],
-    );
-
+  children: [
+    Icon(icon, size: 16, color: Colors.grey),
+    const SizedBox(width: 10),
+    Text(label),
+  ],
+);

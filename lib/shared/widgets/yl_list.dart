@@ -78,10 +78,12 @@ class YLSection extends StatelessWidget {
         // 56dp matches `YLListTile.leading`'s 29dp icon + 12dp spacing
         // + 16dp left padding. iOS divides between text columns, not
         // edge-to-edge.
-        rows.add(Padding(
-          padding: const EdgeInsets.only(left: 56),
-          child: Container(height: 0.33, color: divider),
-        ));
+        rows.add(
+          Padding(
+            padding: const EdgeInsets.only(left: 56),
+            child: Container(height: 0.33, color: divider),
+          ),
+        );
       }
     }
 
@@ -93,14 +95,18 @@ class YLSection extends StatelessWidget {
           if (header != null)
             Padding(
               padding: const EdgeInsets.fromLTRB(
-                YLSpacing.md, YLSpacing.lg, YLSpacing.md, YLSpacing.sm),
+                YLSpacing.md,
+                YLSpacing.lg,
+                YLSpacing.md,
+                YLSpacing.sm,
+              ),
               child: Text(
                 header!.toUpperCase(),
                 style: YLText.caption.copyWith(
                   color: captionColor,
                   fontSize: 11,
                   fontWeight: FontWeight.w500,
-                  letterSpacing: 0.6,
+                  letterSpacing: 0,
                 ),
               ),
             ),
@@ -117,7 +123,11 @@ class YLSection extends StatelessWidget {
           if (footer != null)
             Padding(
               padding: const EdgeInsets.fromLTRB(
-                YLSpacing.md, YLSpacing.sm, YLSpacing.md, YLSpacing.lg),
+                YLSpacing.md,
+                YLSpacing.sm,
+                YLSpacing.md,
+                YLSpacing.lg,
+              ),
               child: Text(
                 footer!,
                 style: YLText.caption.copyWith(
@@ -179,7 +189,7 @@ class YLListTile extends StatelessWidget {
     final titleStyle = YLText.body.copyWith(
       fontSize: 14,
       fontWeight: FontWeight.w400,
-      letterSpacing: -0.1,
+      letterSpacing: 0,
       color: titleColor,
     );
     final subtitleStyle = YLText.caption.copyWith(
@@ -200,10 +210,7 @@ class YLListTile extends StatelessWidget {
           child: Row(
             children: [
               if (leading != null) ...[
-                Opacity(
-                  opacity: disabled ? 0.4 : 1.0,
-                  child: leading!,
-                ),
+                Opacity(opacity: disabled ? 0.4 : 1.0, child: leading!),
                 const SizedBox(width: YLSpacing.md),
               ],
               Expanded(
@@ -274,10 +281,10 @@ class YLListTrailing {
   /// Activity indicator (CupertinoActivityIndicator) — for rows
   /// performing async work (e.g. "正在同步…").
   static Widget loading() => const SizedBox(
-        width: 18,
-        height: 18,
-        child: CupertinoActivityIndicator(radius: 8),
-      );
+    width: 18,
+    height: 18,
+    child: CupertinoActivityIndicator(radius: 8),
+  );
 
   /// Status badge — colored pill with short label. Variant for
   /// "已连接 / 未连接 / 已过期" indicators.
@@ -291,8 +298,8 @@ class _Chevron extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Icon(
-      CupertinoIcons.chevron_forward,
-      size: 14,
+      Icons.chevron_right_rounded,
+      size: 18,
       color: isDark ? YLColors.zinc600 : YLColors.zinc400,
     );
   }
@@ -383,7 +390,7 @@ class _StatusBadge extends StatelessWidget {
           color: color,
           fontSize: 11,
           fontWeight: FontWeight.w600,
-          letterSpacing: 0.1,
+          letterSpacing: 0,
         ),
       ),
     );

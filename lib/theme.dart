@@ -1,7 +1,7 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 // ── Semantic colour tokens (Vercel / Tailwind inspired) ──────────────────────
 
@@ -9,7 +9,7 @@ class YLColors {
   YLColors._();
 
   // ── Neutrals (zinc-based, highly refined) ──────────────────────────────────
-  static const zinc50  = Color(0xFFFAFAFA);
+  static const zinc50 = Color(0xFFFAFAFA);
   static const zinc100 = Color(0xFFF4F4F5);
   static const zinc200 = Color(0xFFE4E4E7);
   static const zinc300 = Color(0xFFD4D4D8);
@@ -24,20 +24,22 @@ class YLColors {
   static const zinc950 = Color(0xFF09090B); // True dark for OLED/Premium feel
 
   // ── Brand (Sleek, professional Indigo/Black) ───────────────────────────────
-  static const primary = Color(0xFF000000);     // Default to sleek black in light mode
+  static const primary = Color(
+    0xFF000000,
+  ); // Default to sleek black in light mode
   static const primaryDark = Color(0xFFFFFFFF); // White in dark mode
-  static const accent = Color(0xFF3B82F6);      // Blue-500 for active states
+  static const accent = Color(0xFF3B82F6); // Blue-500 for active states
   // Dynamic accent — set by buildTheme(), read by widgets via YLColors.currentAccent
   static Color _currentAccent = accent;
   static Color get currentAccent => _currentAccent;
   static const primaryLight = Color(0xFFF5F5F5); // Light primary background
 
   // ── Status semantics (Clear, accessible) ──────────────────────────────────
-  static const connected    = Color(0xFF10B981); // Emerald-500
-  static const connecting   = Color(0xFFF59E0B); // Amber-500
+  static const connected = Color(0xFF10B981); // Emerald-500
+  static const connecting = Color(0xFFF59E0B); // Amber-500
   static const disconnected = Color(0xFF71717A); // Zinc-500
-  static const error        = Color(0xFFEF4444); // Red-500
-  static const errorLight   = Color(0xFFFEF2F2); // Red-50
+  static const error = Color(0xFFEF4444); // Red-500
+  static const errorLight = Color(0xFFFEF2F2); // Red-50
 
   /// TUN-mode connected accent. Indigo-500 (YueLink brand family) — visually
   /// distinct from the emerald [connected] used for system-proxy mode so the
@@ -52,9 +54,9 @@ class YLColors {
 
   // ── Legacy aliases ────────────────────────────────────────────────────────
   static const bgLight = zinc100;
-  static const bgDark  = zinc950;
+  static const bgDark = zinc950;
   static const surfaceLight = Color(0xFFFFFFFF);
-  static const surfaceDark  = zinc900;
+  static const surfaceDark = zinc900;
 }
 
 // ── Typography scale (Apple-like clarity) ─────────────────────────────────────
@@ -63,28 +65,55 @@ class YLText {
   YLText._();
 
   static const display = TextStyle(
-      fontSize: 32, fontWeight: FontWeight.w700, letterSpacing: -0.8,
-      fontFeatures: [FontFeature.tabularFigures()]);
+    fontSize: 28,
+    fontWeight: FontWeight.w700,
+    height: 1.16,
+    letterSpacing: 0,
+    fontFeatures: [FontFeature.tabularFigures()],
+  );
 
   static const titleLarge = TextStyle(
-      fontSize: 20, fontWeight: FontWeight.w600, letterSpacing: -0.4);
+    fontSize: 20,
+    fontWeight: FontWeight.w600,
+    height: 1.26,
+    letterSpacing: 0,
+  );
 
   static const titleMedium = TextStyle(
-      fontSize: 15, fontWeight: FontWeight.w600, letterSpacing: -0.2);
+    fontSize: 16,
+    fontWeight: FontWeight.w600,
+    height: 1.32,
+    letterSpacing: 0,
+  );
 
   static const body = TextStyle(
-      fontSize: 14, fontWeight: FontWeight.w400, letterSpacing: -0.1);
+    fontSize: 15,
+    fontWeight: FontWeight.w400,
+    height: 1.42,
+    letterSpacing: 0,
+  );
 
   static const label = TextStyle(
-      fontSize: 13, fontWeight: FontWeight.w500, letterSpacing: 0.1);
+    fontSize: 13,
+    fontWeight: FontWeight.w500,
+    height: 1.25,
+    letterSpacing: 0,
+  );
 
   static const caption = TextStyle(
-      fontSize: 12, fontWeight: FontWeight.w400, letterSpacing: 0.2);
+    fontSize: 12,
+    fontWeight: FontWeight.w400,
+    height: 1.34,
+    letterSpacing: 0,
+  );
 
   static const mono = TextStyle(
-      fontSize: 13, fontWeight: FontWeight.w500,
-      fontFamily: 'monospace',
-      fontFeatures: [FontFeature.tabularFigures()]);
+    fontSize: 13,
+    fontWeight: FontWeight.w500,
+    height: 1.34,
+    fontFamily: 'monospace',
+    fontFeatures: [FontFeature.tabularFigures()],
+  );
 
   /// iOS-style tabular figures — numbers align in fixed-width columns
   /// so digits don't shift when values update.
@@ -95,11 +124,11 @@ class YLText {
 
 class YLSpacing {
   YLSpacing._();
-  static const xs  = 4.0;
-  static const sm  = 8.0;
-  static const md  = 12.0;
-  static const lg  = 16.0;
-  static const xl  = 24.0;
+  static const xs = 4.0;
+  static const sm = 8.0;
+  static const md = 12.0;
+  static const lg = 16.0;
+  static const xl = 24.0;
   static const xxl = 32.0;
   static const massive = 48.0;
 }
@@ -124,32 +153,48 @@ class YLShadow {
   /// Small: selected pills, tabs, segmented controls. Light only.
   static List<BoxShadow> sm(BuildContext context) {
     if (Theme.of(context).brightness == Brightness.dark) return const [];
-    return [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 4, offset: const Offset(0, 1))];
+    return [
+      BoxShadow(
+        color: Colors.black.withValues(alpha: 0.05),
+        blurRadius: 4,
+        offset: const Offset(0, 1),
+      ),
+    ];
   }
 
   /// Card: standard content cards across all pages.
   static List<BoxShadow> card(BuildContext context) {
     if (Theme.of(context).brightness == Brightness.dark) return const [];
-    return [BoxShadow(
-      color: Colors.black.withValues(alpha: 0.05),
-      blurRadius: 6,
-      offset: const Offset(0, 2),
-    )];
+    return [
+      BoxShadow(
+        color: Colors.black.withValues(alpha: 0.05),
+        blurRadius: 6,
+        offset: const Offset(0, 2),
+      ),
+    ];
   }
 
   /// Hero: primary visual anchor (HeroCard only).
   static List<BoxShadow> hero(BuildContext context) {
     if (Theme.of(context).brightness == Brightness.dark) return const [];
-    return [BoxShadow(
-      color: Colors.black.withValues(alpha: 0.07),
-      blurRadius: 8,
-      offset: const Offset(0, 3),
-    )];
+    return [
+      BoxShadow(
+        color: Colors.black.withValues(alpha: 0.07),
+        blurRadius: 8,
+        offset: const Offset(0, 3),
+      ),
+    ];
   }
 
   /// Overlay: bottom sheets, floating panels.
   static List<BoxShadow> overlay(BuildContext context) {
-    return [BoxShadow(color: Colors.black.withValues(alpha: 0.12), blurRadius: 12, offset: const Offset(0, -2))];
+    return [
+      BoxShadow(
+        color: Colors.black.withValues(alpha: 0.12),
+        blurRadius: 12,
+        offset: const Offset(0, -2),
+      ),
+    ];
   }
 }
 
@@ -162,9 +207,9 @@ ThemeData buildTheme(
 }) {
   final isDark = brightness == Brightness.dark;
 
-  final bg      = isDark ? YLColors.zinc950  : YLColors.zinc100;
-  final surface = isDark ? YLColors.zinc900  : Colors.white;
-  final border  = isDark ? YLColors.zinc800  : YLColors.zinc300;
+  final bg = isDark ? YLColors.zinc950 : YLColors.zinc100;
+  final surface = isDark ? YLColors.zinc900 : Colors.white;
+  final border = isDark ? YLColors.zinc800 : YLColors.zinc300;
   final primary = isDark ? YLColors.primaryDark : YLColors.primary;
   final divider = isDark ? const Color(0x1AFFFFFF) : const Color(0x14000000);
   // Store the accent color in a static so widgets can read it without context.
@@ -178,11 +223,9 @@ ThemeData buildTheme(
   // the seed so primary/secondary/tertiary tint every M3 component to the
   // user's system wallpaper palette. Falls back to our brand-seeded
   // scheme on older Android / iOS / desktop.
-  final seedScheme = dynamicScheme ??
-      ColorScheme.fromSeed(
-        seedColor: accent,
-        brightness: brightness,
-      );
+  final seedScheme =
+      dynamicScheme ??
+      ColorScheme.fromSeed(seedColor: accent, brightness: brightness);
   // Keep our custom zinc surfaces but take primary/secondary/tertiary
   // from the seed-generated scheme so Material components are tinted.
   final colorScheme = seedScheme.copyWith(
@@ -198,18 +241,17 @@ ThemeData buildTheme(
     outlineVariant: isDark ? YLColors.zinc800 : YLColors.zinc200,
   );
 
-  // Typography: Inter for Latin, Noto Sans SC / PingFang SC fallbacks for CJK.
-  final baseTextTheme = isDark
-      ? ThemeData.dark().textTheme
-      : ThemeData.light().textTheme;
-  // Unified font across all platforms: Inter (open-source SF Pro equivalent)
-  // with CJK fallback. Matches Telegram's cross-platform consistency approach.
-  final textTheme = GoogleFonts.interTextTheme(baseTextTheme).apply(
-    fontFamilyFallback: const [
-      'PingFang SC',
-      'Noto Sans SC',
-      'Microsoft YaHei',
-    ],
+  // Typography: prefer each OS' native UI font, then add CJK/emoji fallbacks.
+  // This keeps iOS/macOS close to Apple's SF metrics, Android close to
+  // Roboto/Noto, and desktop close to the host platform instead of forcing
+  // a web font everywhere.
+  final typography = Typography.material2021(platform: defaultTargetPlatform);
+  final baseTextTheme = isDark ? typography.white : typography.black;
+  final textTheme = baseTextTheme.apply(
+    fontFamily: _platformFontFamily(),
+    fontFamilyFallback: _platformFontFallbacks(),
+    bodyColor: colorScheme.onSurface,
+    displayColor: colorScheme.onSurface,
   );
 
   return ThemeData(
@@ -218,7 +260,8 @@ ThemeData buildTheme(
     brightness: brightness,
     visualDensity: VisualDensity.standard,
     scaffoldBackgroundColor: bg,
-    splashFactory: NoSplash.splashFactory, // Remove Android ripples for premium feel
+    splashFactory:
+        NoSplash.splashFactory, // Remove Android ripples for premium feel
     splashColor: Colors.transparent,
     // Unified push/pop transitions across all platforms:
     //   iOS/macOS — Cupertino (edge swipe-back supported on iOS)
@@ -243,11 +286,12 @@ ThemeData buildTheme(
     highlightColor: isDark
         ? Colors.white.withValues(alpha: 0.06)
         : Colors.black.withValues(alpha: 0.04),
-    hoverColor: isDark ? Colors.white.withValues(alpha: 0.04) : Colors.black.withValues(alpha: 0.03),
-    // Linux: prefer Noto Sans for consistent CJK and Latin rendering.
-    // Falls back to system default if Noto Sans is not installed.
-    // Kept as a fallback when Google Fonts cannot load (e.g. offline).
-    fontFamily: Platform.isLinux ? 'Noto Sans' : null,
+    hoverColor: isDark
+        ? Colors.white.withValues(alpha: 0.04)
+        : Colors.black.withValues(alpha: 0.03),
+    typography: typography,
+    fontFamily: _platformFontFamily(),
+    fontFamilyFallback: _platformFontFallbacks(),
     textTheme: textTheme,
 
     // Surfaces
@@ -274,8 +318,13 @@ ThemeData buildTheme(
     // List tiles
     listTileTheme: ListTileThemeData(
       dense: true,
-      contentPadding: const EdgeInsets.symmetric(horizontal: YLSpacing.lg, vertical: YLSpacing.xs),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(YLRadius.lg)),
+      contentPadding: const EdgeInsets.symmetric(
+        horizontal: YLSpacing.lg,
+        vertical: YLSpacing.xs,
+      ),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(YLRadius.lg),
+      ),
     ),
 
     // Inputs (Vercel style)
@@ -306,18 +355,22 @@ ThemeData buildTheme(
         foregroundColor: isDark ? Colors.black : Colors.white,
         minimumSize: const Size(0, 40),
         padding: const EdgeInsets.symmetric(horizontal: 20),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(YLRadius.md)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(YLRadius.md),
+        ),
         textStyle: YLText.label.copyWith(fontWeight: FontWeight.w600),
         elevation: 0,
       ),
     ),
-    
+
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
         foregroundColor: primary,
         minimumSize: const Size(0, 40),
         padding: const EdgeInsets.symmetric(horizontal: 20),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(YLRadius.md)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(YLRadius.md),
+        ),
         side: BorderSide(color: border, width: 1),
         textStyle: YLText.label.copyWith(fontWeight: FontWeight.w600),
       ),
@@ -330,7 +383,9 @@ ThemeData buildTheme(
         selectedForegroundColor: primary,
         backgroundColor: isDark ? YLColors.zinc900 : YLColors.zinc100,
         side: BorderSide(color: border, width: 0.5),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(YLRadius.md)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(YLRadius.md),
+        ),
         textStyle: YLText.label.copyWith(fontWeight: FontWeight.w600),
         elevation: 0,
       ),
@@ -348,23 +403,51 @@ ThemeData buildTheme(
   );
 }
 
+String? _platformFontFamily() {
+  if (Platform.isAndroid) return 'Roboto';
+  if (Platform.isWindows) return 'Segoe UI';
+  if (Platform.isLinux) return 'Noto Sans';
+  return null;
+}
+
+List<String> _platformFontFallbacks() {
+  if (Platform.isIOS || Platform.isMacOS) {
+    return const [
+      'PingFang SC',
+      'PingFang TC',
+      'Hiragino Sans GB',
+      'Apple Color Emoji',
+    ];
+  }
+  if (Platform.isWindows) {
+    return const ['Microsoft YaHei UI', 'Microsoft YaHei', 'Segoe UI Emoji'];
+  }
+  if (Platform.isAndroid) {
+    return const ['Noto Sans CJK SC', 'Noto Sans SC', 'Noto Color Emoji'];
+  }
+  return const ['Noto Sans CJK SC', 'Noto Sans SC', 'Noto Color Emoji'];
+}
+
 // ── Reusable components ───────────────────────────────────────────────────────
 
 class YLStatusDot extends StatelessWidget {
   final Color color;
   final double size;
   final bool glow;
-  
-  const YLStatusDot({super.key, required this.color, this.size = 8, this.glow = false});
+
+  const YLStatusDot({
+    super.key,
+    required this.color,
+    this.size = 8,
+    this.glow = false,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: size, height: size,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: color,
-      ),
+      width: size,
+      height: size,
+      decoration: BoxDecoration(shape: BoxShape.circle, color: color),
     );
   }
 }
@@ -376,12 +459,17 @@ class YLSectionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(YLSpacing.lg, YLSpacing.xl, YLSpacing.lg, YLSpacing.sm),
+      padding: const EdgeInsets.fromLTRB(
+        YLSpacing.lg,
+        YLSpacing.xl,
+        YLSpacing.lg,
+        YLSpacing.sm,
+      ),
       child: Text(
         text.toUpperCase(),
         style: YLText.caption.copyWith(
           fontWeight: FontWeight.w600,
-          letterSpacing: 0.5,
+          letterSpacing: 0,
           color: YLColors.zinc500,
         ),
       ),
@@ -406,7 +494,7 @@ class YLSurface extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+
     Widget content = Container(
       margin: margin,
       padding: padding,
@@ -414,7 +502,9 @@ class YLSurface extends StatelessWidget {
         color: isDark ? YLColors.zinc900 : Colors.white,
         borderRadius: BorderRadius.circular(YLRadius.xl),
         border: Border.all(
-          color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.07),
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.black.withValues(alpha: 0.07),
           width: 0.5,
         ),
         boxShadow: YLShadow.card(context),
@@ -454,13 +544,17 @@ class YLDelayBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     if (testing) {
       return const SizedBox(
-        width: 12, height: 12,
+        width: 12,
+        height: 12,
         child: CircularProgressIndicator(strokeWidth: 2),
       );
     }
     if (delay == null) {
-      return Icon(Icons.speed_rounded, size: 14,
-          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.3));
+      return Icon(
+        Icons.speed_rounded,
+        size: 14,
+        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.3),
+      );
     }
     final c = colorFor(delay!);
     return Text(
@@ -494,7 +588,11 @@ class YLChip extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: color),
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: color,
+        ),
       ),
     );
   }
@@ -522,7 +620,9 @@ class YLPillSegmentedControl<T> extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
-        color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.05),
+        color: isDark
+            ? Colors.white.withValues(alpha: 0.1)
+            : Colors.black.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(YLRadius.pill),
       ),
       child: Row(
@@ -595,14 +695,21 @@ class YLGroupedListItem extends StatelessWidget {
           bottom: isLast ? const Radius.circular(YLRadius.lg) : Radius.zero,
         ),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: YLSpacing.lg, vertical: YLSpacing.md),
+          padding: const EdgeInsets.symmetric(
+            horizontal: YLSpacing.lg,
+            vertical: YLSpacing.md,
+          ),
           decoration: BoxDecoration(
-            border: isLast ? null : Border(
-              bottom: BorderSide(
-                color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.05),
-                width: 0.5,
-              ),
-            ),
+            border: isLast
+                ? null
+                : Border(
+                    bottom: BorderSide(
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.1)
+                          : Colors.black.withValues(alpha: 0.05),
+                      width: 0.5,
+                    ),
+                  ),
           ),
           child: Row(
             children: [
@@ -611,7 +718,9 @@ class YLGroupedListItem extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     DefaultTextStyle(
-                      style: YLText.body.copyWith(color: isDark ? Colors.white : Colors.black),
+                      style: YLText.body.copyWith(
+                        color: isDark ? Colors.white : Colors.black,
+                      ),
                       child: title,
                     ),
                     if (subtitle != null) ...[

@@ -175,6 +175,11 @@ Future<void> _bootstrap() async {
   // ── Anonymous telemetry (opt-in, default OFF) ──
   unawaited(
     Telemetry.init().then((_) async {
+      // Feature flags need the anonymous telemetry client_id. Keep this
+      // after Telemetry.init(), but still fire-and-forget so cold start
+      // is not held by the network.
+      unawaited(FeatureFlags.I.init());
+
       // Daily heartbeat — emit at most once per calendar day (UTC) so retention
       // curves count users who launched the app even when no feature event
       // happened. Persisted as a YYYY-MM-DD string; cheap string compare.
@@ -186,9 +191,6 @@ Future<void> _bootstrap() async {
       }
     }),
   );
-
-  // ── Remote feature flags — fire-and-forget, safe defaults apply on offline ──
-  unawaited(FeatureFlags.I.init());
 
   // ── v1.0.22 P0-4a: bootstrap storage hardening ──────────────────────────
   //

@@ -37,7 +37,11 @@ class IOSInstallGuidePage extends StatelessWidget {
       slivers: [
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(
-              YLSpacing.lg, 0, YLSpacing.lg, YLSpacing.xl),
+            YLSpacing.lg,
+            0,
+            YLSpacing.lg,
+            YLSpacing.xl,
+          ),
           sliver: SliverList(
             delegate: SliverChildListDelegate([
               if (errorContext != null) ...[
@@ -102,8 +106,7 @@ class IOSInstallGuidePage extends StatelessWidget {
                 icon: const Icon(Icons.check_rounded),
                 label: Text(s.iosGuideAck),
                 style: FilledButton.styleFrom(
-                  padding:
-                      const EdgeInsets.symmetric(vertical: YLSpacing.md),
+                  padding: const EdgeInsets.symmetric(vertical: YLSpacing.md),
                 ),
               ),
             ]),
@@ -130,8 +133,11 @@ class _ErrorBanner extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.error_outline_rounded,
-              color: Color(0xFFEF4444), size: 20),
+          const Icon(
+            Icons.error_outline_rounded,
+            color: Color(0xFFEF4444),
+            size: 20,
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
@@ -172,7 +178,11 @@ class _MethodCard extends StatelessWidget {
       child: Container(
         color: surface,
         padding: const EdgeInsets.fromLTRB(
-            YLSpacing.lg, YLSpacing.md, YLSpacing.lg, YLSpacing.lg),
+          YLSpacing.lg,
+          YLSpacing.md,
+          YLSpacing.lg,
+          YLSpacing.lg,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -184,14 +194,16 @@ class _MethodCard extends StatelessWidget {
                     style: YLText.titleLarge.copyWith(
                       fontSize: 17,
                       fontWeight: FontWeight.w600,
-                      letterSpacing: -0.3,
+                      letterSpacing: 0,
                     ),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Container(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 3),
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
                   decoration: BoxDecoration(
                     color: tagColor.withValues(alpha: isDark ? 0.20 : 0.14),
                     borderRadius: BorderRadius.circular(YLRadius.pill),
@@ -202,27 +214,31 @@ class _MethodCard extends StatelessWidget {
                       color: tagColor,
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
-                      letterSpacing: 0.1,
+                      letterSpacing: 0,
                     ),
                   ),
                 ),
               ],
             ),
             const SizedBox(height: YLSpacing.md),
-            ...pros.map((p) => Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: Text(
-                    p,
-                    style: YLText.body.copyWith(fontSize: 14, height: 1.45),
-                  ),
-                )),
-            ...cons.map((c) => Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: Text(
-                    c,
-                    style: YLText.body.copyWith(fontSize: 14, height: 1.45),
-                  ),
-                )),
+            ...pros.map(
+              (p) => Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(
+                  p,
+                  style: YLText.body.copyWith(fontSize: 14, height: 1.45),
+                ),
+              ),
+            ),
+            ...cons.map(
+              (c) => Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(
+                  c,
+                  style: YLText.body.copyWith(fontSize: 14, height: 1.45),
+                ),
+              ),
+            ),
             const SizedBox(height: YLSpacing.sm),
             Text(
               howto,

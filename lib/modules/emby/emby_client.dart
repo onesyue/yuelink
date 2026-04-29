@@ -24,29 +24,44 @@ class EmbyClient {
     required this.accessToken,
     required this.userId,
   }) {
+    _inner = IOClient(_buildHttpClient(proxyPort: activeProxyPort));
+  }
+
+  /// Active local proxy port for Emby traffic, or null when YueLink core is
+  /// not actually running. The mixed port keeps its last value after stop, so
+  /// checking the port alone routes requests to a dead 127.0.0.1 listener.
+  static int? get activeProxyPort {
+    final manager = CoreManager.instance;
+    if (!manager.isRunning || manager.isMockMode) return null;
+    final port = manager.mixedPort;
+    return port > 0 ? port : null;
+  }
+
+  static HttpClient _buildHttpClient({int? proxyPort}) {
     final hc = HttpClient();
     hc.badCertificateCallback = (cert, host, port) => true;
-    // Emby 流量始终走代理（需要通过代理节点访问 Emby 服务器）
-    final mixedPort = CoreManager.instance.mixedPort;
-    if (mixedPort > 0) {
-      hc.findProxy = (uri) => 'PROXY 127.0.0.1:$mixedPort';
-    }
     hc.connectionTimeout = const Duration(seconds: 8);
-    _inner = IOClient(hc);
+    hc.findProxy = proxyPort != null
+        ? (uri) => 'PROXY 127.0.0.1:$proxyPort'
+        : (uri) => 'DIRECT';
+    return hc;
   }
 
   Map<String, String> get _headers => {
-        'X-Emby-Authorization': 'MediaBrowser Client="YueLink", Device="Flutter", '
-            'DeviceId="yuelink-flutter", Version="1.0", Token="$accessToken"',
-        'Accept': 'application/json',
-      };
+    'X-Emby-Authorization':
+        'MediaBrowser Client="YueLink", Device="Flutter", '
+        'DeviceId="yuelink-flutter", Version="1.0", Token="$accessToken"',
+    'Accept': 'application/json',
+  };
 
   /// GET JSON from Emby REST API. Retries up to 2 times on failure.
-  Future<Map<String, dynamic>> get(String path,
-      [Map<String, String>? params]) async {
-    final uri = Uri.parse('$serverUrl$path').replace(queryParameters: {
-      if (params != null) ...params,
-    });
+  Future<Map<String, dynamic>> get(
+    String path, [
+    Map<String, String>? params,
+  ]) async {
+    final uri = Uri.parse(
+      '$serverUrl$path',
+    ).replace(queryParameters: {if (params != null) ...params});
     Exception? lastErr;
     for (var attempt = 0; attempt < 3; attempt++) {
       try {
@@ -59,7 +74,9 @@ class EmbyClient {
         lastErr = Exception('HTTP ${resp.statusCode}');
       } catch (e) {
         lastErr = e is Exception ? e : Exception('$e');
-        if (attempt < 2) await Future.delayed(Duration(milliseconds: 500 * (attempt + 1)));
+        if (attempt < 2) {
+          await Future.delayed(Duration(milliseconds: 500 * (attempt + 1)));
+        }
       }
     }
     throw lastErr!;
@@ -90,9 +107,11 @@ class EmbyClient {
     try {
       final uri = Uri.parse('$serverUrl$path');
       await _inner
-          .post(uri,
-              headers: {..._headers, 'Content-Type': 'application/json'},
-              body: jsonEncode(body))
+          .post(
+            uri,
+            headers: {..._headers, 'Content-Type': 'application/json'},
+            body: jsonEncode(body),
+          )
           .timeout(const Duration(seconds: 10));
     } catch (_) {}
   }
@@ -107,20 +126,19 @@ class EmbyClient {
   /// Disk + memory cache that routes image downloads through mihomo proxy.
   /// Rebuilds automatically when the proxy port changes.
   static CacheManager get imageCacheManager {
-    final mixedPort = CoreManager.instance.mixedPort;
-    if (_cacheManager != null && _cachedPort == mixedPort) return _cacheManager!;
-    _cachedPort = mixedPort;
-    final hc = HttpClient();
-    hc.badCertificateCallback = (cert, host, port) => true;
-    if (mixedPort > 0) {
-      hc.findProxy = (uri) => 'PROXY 127.0.0.1:$mixedPort';
-    }
-    _cacheManager = CacheManager(Config(
-      'emby_images',
-      stalePeriod: const Duration(days: 3),
-      maxNrOfCacheObjects: 150,
-      fileService: HttpFileService(httpClient: IOClient(hc)),
-    ));
+    final proxyPort = activeProxyPort;
+    final routeKey = proxyPort ?? 0;
+    if (_cacheManager != null && _cachedPort == routeKey) return _cacheManager!;
+    _cachedPort = routeKey;
+    final hc = _buildHttpClient(proxyPort: proxyPort);
+    _cacheManager = CacheManager(
+      Config(
+        'emby_images',
+        stalePeriod: const Duration(days: 3),
+        maxNrOfCacheObjects: 150,
+        fileService: HttpFileService(httpClient: IOClient(hc)),
+      ),
+    );
     return _cacheManager!;
   }
 }
@@ -161,7 +179,7 @@ class EmbyImage extends StatelessWidget {
   //
   //   Poster  (2:3 portrait): max 720 × 1080 × 4 = ~2.9 MB each
   //   Backdrop (16:9 landscape): max 1280 × 720 × 4 = ~3.5 MB each
-  static const _kMaxPosterWidth   = 720;
+  static const _kMaxPosterWidth = 720;
   static const _kMaxBackdropWidth = 1280;
 
   @override
@@ -177,7 +195,7 @@ class EmbyImage extends StatelessWidget {
       memH = memW * 9 ~/ 16; // 16:9 landscape
     } else {
       memW = physicalWidth.clamp(0, _kMaxPosterWidth);
-      memH = memW * 3 ~/ 2;  // 2:3 portrait poster
+      memH = memW * 3 ~/ 2; // 2:3 portrait poster
     }
 
     return CachedNetworkImage(

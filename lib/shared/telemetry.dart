@@ -332,10 +332,8 @@ class Telemetry {
     if (v is String) {
       return v.length > 100 ? v.substring(0, 100) : v;
     }
-    // One level of nesting only — enough for node_inventory.nodes but
-    // rejects arbitrary object graphs that could blow up payload size.
-    if (depth >= 1) return null;
     if (v is List) {
+      if (depth > 0) return null;
       final out = [];
       for (final item in v.take(_maxListLen)) {
         final s = _sanitizeValue(item, depth: depth + 1);
@@ -344,6 +342,7 @@ class Telemetry {
       return out;
     }
     if (v is Map) {
+      if (depth > 1) return null;
       final out = <String, dynamic>{};
       v.forEach((k, vv) {
         if (k is! String) return;

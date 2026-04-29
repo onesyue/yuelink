@@ -30,11 +30,21 @@ class _StartupReportPageState extends State<StartupReportPage> {
     // Prefer in-memory report (set by CoreManager after startup)
     final inMemory = CoreManager.instance.lastReport;
     if (inMemory != null) {
-      if (mounted) setState(() { _report = inMemory; _loading = false; });
+      if (mounted) {
+        setState(() {
+          _report = inMemory;
+          _loading = false;
+        });
+      }
       return;
     }
     final report = await StartupReport.load();
-    if (mounted) setState(() { _report = report; _loading = false; });
+    if (mounted) {
+      setState(() {
+        _report = report;
+        _loading = false;
+      });
+    }
   }
 
   @override
@@ -51,7 +61,9 @@ class _StartupReportPageState extends State<StartupReportPage> {
               icon: const Icon(Icons.copy_outlined),
               tooltip: s.copiedToClipboard,
               onPressed: () {
-                Clipboard.setData(ClipboardData(text: _report!.toDebugString()));
+                Clipboard.setData(
+                  ClipboardData(text: _report!.toDebugString()),
+                );
                 AppNotifier.success(s.copiedToClipboard);
               },
             ),
@@ -60,13 +72,13 @@ class _StartupReportPageState extends State<StartupReportPage> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _report == null
-              ? Center(
-                  child: YLEmptyState(
-                    icon: Icons.assignment_outlined,
-                    title: s.noData,
-                  ),
-                )
-              : _buildBody(context, isDark, _report!),
+          ? Center(
+              child: YLEmptyState(
+                icon: Icons.assignment_outlined,
+                title: s.noData,
+              ),
+            )
+          : _buildBody(context, isDark, _report!),
     );
   }
 
@@ -79,35 +91,36 @@ class _StartupReportPageState extends State<StartupReportPage> {
       padding: const EdgeInsets.all(16),
       children: [
         // ── Header ──────────────────────────────────────────────────
-        _InfoCard(isDark: isDark, children: [
-          _InfoRow(
-            label: 'Timestamp',
-            value: _fmtDate(report.timestamp),
-            isDark: isDark,
-          ),
-          Divider(height: 1, color: divColor),
-          _InfoRow(
-            label: 'Platform',
-            value: report.platform,
-            isDark: isDark,
-          ),
-          Divider(height: 1, color: divColor),
-          _InfoRow(
-            label: 'Result',
-            value: report.overallSuccess ? 'SUCCESS' : 'FAILED',
-            valueColor: report.overallSuccess ? YLColors.connected : Colors.red,
-            isDark: isDark,
-          ),
-          if (!report.overallSuccess && report.failureSummary != null) ...[
-            Divider(height: 1, color: divColor),
+        _InfoCard(
+          isDark: isDark,
+          children: [
             _InfoRow(
-              label: 'Error',
-              value: report.failureSummary!,
-              valueColor: Colors.red,
+              label: 'Timestamp',
+              value: _fmtDate(report.timestamp),
               isDark: isDark,
             ),
+            Divider(height: 1, color: divColor),
+            _InfoRow(label: 'Platform', value: report.platform, isDark: isDark),
+            Divider(height: 1, color: divColor),
+            _InfoRow(
+              label: 'Result',
+              value: report.overallSuccess ? 'SUCCESS' : 'FAILED',
+              valueColor: report.overallSuccess
+                  ? YLColors.connected
+                  : Colors.red,
+              isDark: isDark,
+            ),
+            if (!report.overallSuccess && report.failureSummary != null) ...[
+              Divider(height: 1, color: divColor),
+              _InfoRow(
+                label: 'Error',
+                value: report.failureSummary!,
+                valueColor: Colors.red,
+                isDark: isDark,
+              ),
+            ],
           ],
-        ]),
+        ),
         const SizedBox(height: 16),
 
         // ── Steps ───────────────────────────────────────────────────
@@ -116,7 +129,7 @@ class _StartupReportPageState extends State<StartupReportPage> {
           child: Text(
             'STARTUP STEPS',
             style: YLText.caption.copyWith(
-              letterSpacing: 1.2,
+              letterSpacing: 0,
               fontWeight: FontWeight.w600,
               color: YLColors.zinc400,
             ),
@@ -145,7 +158,7 @@ class _StartupReportPageState extends State<StartupReportPage> {
                   Text(
                     'GO CORE LOGS (${report.coreLogs.length} lines)',
                     style: YLText.caption.copyWith(
-                      letterSpacing: 1.2,
+                      letterSpacing: 0,
                       fontWeight: FontWeight.w600,
                       color: YLColors.zinc400,
                     ),
@@ -163,19 +176,22 @@ class _StartupReportPageState extends State<StartupReportPage> {
             ),
           ),
           if (_logsExpanded)
-            _InfoCard(isDark: isDark, children: [
-              Padding(
-                padding: const EdgeInsets.all(12),
-                child: SelectableText(
-                  report.coreLogs.join('\n'),
-                  style: TextStyle(
-                    fontFamily: 'monospace',
-                    fontSize: 11,
-                    color: isDark ? YLColors.zinc300 : YLColors.zinc700,
+            _InfoCard(
+              isDark: isDark,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: SelectableText(
+                    report.coreLogs.join('\n'),
+                    style: TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 11,
+                      color: isDark ? YLColors.zinc300 : YLColors.zinc700,
+                    ),
                   ),
                 ),
-              ),
-            ]),
+              ],
+            ),
         ],
         const SizedBox(height: 32),
       ],
@@ -227,11 +243,12 @@ class _InfoRow extends StatelessWidget {
   final String value;
   final Color? valueColor;
   final bool isDark;
-  const _InfoRow(
-      {required this.label,
-      required this.value,
-      this.valueColor,
-      required this.isDark});
+  const _InfoRow({
+    required this.label,
+    required this.value,
+    this.valueColor,
+    required this.isDark,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -240,16 +257,22 @@ class _InfoRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(
         children: [
-          Text(label,
-              style: YLText.body
-                  .copyWith(color: isDark ? YLColors.zinc400 : YLColors.zinc500)),
+          Text(
+            label,
+            style: YLText.body.copyWith(
+              color: isDark ? YLColors.zinc400 : YLColors.zinc500,
+            ),
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
               value,
               textAlign: TextAlign.end,
               style: YLText.body.copyWith(
-                  color: vc, fontFamily: 'monospace', fontSize: 12),
+                color: vc,
+                fontFamily: 'monospace',
+                fontSize: 12,
+              ),
               overflow: TextOverflow.ellipsis,
             ),
           ),
@@ -283,13 +306,18 @@ class _StepRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(step.name,
-                    style: YLText.body.copyWith(
-                        fontWeight: FontWeight.w500,
-                        color: isDark ? YLColors.zinc200 : YLColors.zinc700)),
+                Text(
+                  step.name,
+                  style: YLText.body.copyWith(
+                    fontWeight: FontWeight.w500,
+                    color: isDark ? YLColors.zinc200 : YLColors.zinc700,
+                  ),
+                ),
                 if (!step.success && step.error != null)
-                  Text(step.error!,
-                      style: YLText.caption.copyWith(color: Colors.red)),
+                  Text(
+                    step.error!,
+                    style: YLText.caption.copyWith(color: Colors.red),
+                  ),
               ],
             ),
           ),
