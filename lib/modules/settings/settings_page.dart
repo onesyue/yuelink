@@ -24,6 +24,8 @@ import '../../core/env_config.dart';
 import '../updater/update_checker.dart';
 import '../../shared/rich_content.dart';
 import '../../shared/widgets/setting_icon.dart';
+import '../../shared/widgets/yl_list.dart';
+import '../../shared/widgets/yl_scaffold.dart';
 import '../../theme.dart';
 import 'widgets/primitives.dart';
 import '../../domain/account/account_overview.dart';
@@ -258,349 +260,259 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
     final s = S.of(context);
     final authState = ref.watch(authProvider);
     final isGuest = authState.isGuest;
-    // loggedOut 状态同样不展示账户中心卡（避免显示"数据暂时无法获取"）
     final isLoggedOut = !authState.isLoggedIn && !isGuest;
-
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final dividerColor = isDark
-        ? Colors.white.withValues(alpha: 0.06)
-        : Colors.black.withValues(alpha: 0.06);
 
-    return Scaffold(
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // ── Top bar ──────────────────────────────────────────────
-          Padding(
-            padding: EdgeInsets.fromLTRB(
-                32, MediaQuery.of(context).padding.top + 16, 32, 20),
-            child: Text(
-              s.navMine,
-              style: TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.w600,
-                letterSpacing: -0.5,
-                color: isDark ? Colors.white : Colors.black,
-              ),
-            ),
-          ),
-          Container(
-            height: 0.5,
-            color: dividerColor,
-          ),
+    final moduleCount = ref.watch(
+      moduleProvider.select((s) => s.modules.where((m) => m.enabled).length),
+    );
 
-          // ── Content ──────────────────────────────────────────────
-          Expanded(
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 720),
-                child: ListView(
-                  padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
-                  children: [
-                    // ══ 0. Profile ═══════════════════════════════════════════
-                    if (isGuest || isLoggedOut) ...[
-                      _GuestLoginCard(isDark: isDark),
-                    ] else ...[
-                      // ── Profile row + 流量（合并为账户簇）──
+    return YLLargeTitleScaffold(
+      title: s.navMine,
+      bottomSafe: false,
+      slivers: [
+        // ── Profile cluster ──────────────────────────────────────
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+                YLSpacing.lg, 0, YLSpacing.lg, YLSpacing.md),
+            child: (isGuest || isLoggedOut)
+                ? _GuestLoginCard(isDark: isDark)
+                : Column(
+                    children: [
                       _ProfileRow(isDark: isDark),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: YLSpacing.sm),
                       _MineTrafficSection(isDark: isDark),
                     ],
+                  ),
+          ),
+        ),
 
-                    // ══ 1. Service (订阅相关) ══════════════════════════════
-                    SettingsSectionTitle(s.sectionService),
-                    SettingsCard(
-                      child: Column(
-                        children: [
-                          YLInfoRow(
-                            label: s.mineSubscriptionManage,
-                            leading: const YLSettingIcon(
-                                icon: Icons.cloud_outlined, color: Colors.blue),
-                            trailing: const Icon(Icons.chevron_right,
-                                size: 18, color: YLColors.zinc400),
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute(
-                                  builder: (_) => const ProfilePage()),
-                            ),
-                          ),
-                          if (!isGuest) ...[
-                            Divider(
-                                height: 1, thickness: 0.5, color: dividerColor),
-                            YLInfoRow(
-                              label: s.mineRenew,
-                              leading: const YLSettingIcon(
-                                  icon: Icons.shopping_bag_outlined,
-                                  color: Colors.pink),
-                              trailing: const Icon(Icons.chevron_right,
-                                  size: 18, color: YLColors.zinc400),
-                              onTap: () => Navigator.of(context).push(
-                                MaterialPageRoute(
-                                    builder: (_) => const StorePage()),
-                              ),
-                            ),
-                            Divider(
-                                height: 1, thickness: 0.5, color: dividerColor),
-                            YLInfoRow(
-                              label: s.storeOrderHistory,
-                              leading: const YLSettingIcon(
-                                  icon: Icons.receipt_long_outlined,
-                                  color: Colors.orange),
-                              trailing: const Icon(Icons.chevron_right,
-                                  size: 18, color: YLColors.zinc400),
-                              onTap: () => Navigator.of(context).push(
-                                MaterialPageRoute(
-                                    builder: (_) => const OrderHistoryPage()),
-                              ),
-                            ),
-                            Divider(
-                                height: 1, thickness: 0.5, color: dividerColor),
-                            YLInfoRow(
-                              label: s.calendarEntryTitle,
-                              leading: const YLSettingIcon(
-                                  icon: Icons.calendar_month_outlined,
-                                  color: Color(0xFF22C55E)),
-                              trailing: const Icon(Icons.chevron_right,
-                                  size: 18, color: YLColors.zinc400),
-                              onTap: () =>
-                                  CheckinCalendarPage.push(context),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-
-                    // ══ 2. 设置（偏好 / 覆写 / 修复 / 模块）═══════════════
-                    SettingsSectionTitle(s.sectionSettings),
-                    SettingsCard(
-                      child: Column(
-                        children: [
-                          YLInfoRow(
-                            label: s.preferencesLabel,
-                            leading: const YLSettingIcon(
-                                icon: Icons.settings_outlined,
-                                color: Colors.grey),
-                            trailing: const Icon(Icons.chevron_right,
-                                size: 18, color: YLColors.zinc400),
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute(
-                                  builder: (_) => const GeneralSettingsPage()),
-                            ),
-                          ),
-                          Divider(
-                              height: 1, thickness: 0.5, color: dividerColor),
-                          YLInfoRow(
-                            label: s.overwriteTitle,
-                            leading: const YLSettingIcon(
-                                icon: Icons.code, color: Colors.grey),
-                            trailing: const Icon(Icons.chevron_right,
-                                size: 18, color: YLColors.zinc400),
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute(
-                                  builder: (_) => const OverwritePage()),
-                            ),
-                          ),
-                          Divider(
-                              height: 1, thickness: 0.5, color: dividerColor),
-                          YLInfoRow(
-                            label: S.current.repairTitle,
-                            leading: const YLSettingIcon(
-                                icon: Icons.build_outlined, color: Colors.red),
-                            trailing: const Icon(Icons.chevron_right,
-                                size: 18, color: YLColors.zinc400),
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute(
-                                  builder: (_) => const ConnectionRepairPage()),
-                            ),
-                          ),
-                          Divider(
-                              height: 1, thickness: 0.5, color: dividerColor),
-                          YLInfoRow(
-                            label: s.modulesLabel,
-                            leading: const YLSettingIcon(
-                                icon: Icons.extension_outlined,
-                                color: Colors.deepPurple),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Consumer(builder: (ctx, ref, _) {
-                                  final state = ref.watch(moduleProvider);
-                                  final count = state.modules
-                                      .where((m) => m.enabled)
-                                      .length;
-                                  if (count == 0) {
-                                    return const SizedBox.shrink();
-                                  }
-                                  return Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 6, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: (isDark
-                                              ? YLColors.primaryDark
-                                              : YLColors.primary)
-                                          .withValues(alpha: 0.1),
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                    child: Text(
-                                      '$count',
-                                      style: YLText.caption.copyWith(
-                                          color: isDark
-                                              ? YLColors.primaryDark
-                                              : YLColors.primary),
-                                    ),
-                                  );
-                                }),
-                                const SizedBox(width: 4),
-                                const Icon(Icons.chevron_right,
-                                    size: 18, color: YLColors.zinc400),
-                              ],
-                            ),
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute(
-                                  builder: (_) => const ModulesPage()),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    // ══ 关于 ═════════════════════════════════════════════
-                    SettingsSectionTitle(s.sectionAbout),
-                    SettingsCard(
-                      child: Column(
-                        children: [
-                          // "Check for updates" — hidden in store builds to pass
-                          // App Store / Google Play review (self-update is prohibited).
-                          if (EnvConfig.isStandalone) ...[
-                            YLInfoRow(
-                              label: s.checkUpdate,
-                              leading: const YLSettingIcon(
-                                  icon: Icons.system_update,
-                                  color: Colors.teal),
-                              value:
-                                  ref.watch(appVersionProvider).value ??
-                                      '',
-                              trailing: _checkingUpdate
-                                  ? const SizedBox(
-                                      width: 14,
-                                      height: 14,
-                                      child: CircularProgressIndicator(
-                                          strokeWidth: 2))
-                                  : _pendingUpdate != null
-                                      ? YLChip(
-                                          s.updateAvailableV(
-                                              _pendingUpdate!.latestVersion),
-                                          color: isDark
-                                              ? Colors.white
-                                              : YLColors.primary)
-                                      : const Icon(Icons.chevron_right,
-                                          size: 18, color: YLColors.zinc400),
-                              onTap: _checkingUpdate
-                                  ? null
-                                  : _pendingUpdate != null
-                                      ? () => _showUpdateDialog(
-                                          context, _pendingUpdate!)
-                                      : () async {
-                                          setState(
-                                              () => _checkingUpdate = true);
-                                          // Manual check ignores skipped versions
-                                          final info = await UpdateChecker
-                                              .instance
-                                              .check(ignoreSkipped: true);
-                                          if (!mounted) return;
-                                          setState(() {
-                                            _pendingUpdate = info;
-                                            _checkingUpdate = false;
-                                          });
-                                          if (info == null) {
-                                            AppNotifier.info(s.alreadyLatest);
-                                          } else if (mounted) {
-                                            // ignore: use_build_context_synchronously
-                                            _showUpdateDialog(context, info);
-                                          }
-                                        },
-                            ),
-                            Divider(
-                                height: 1, thickness: 0.5, color: dividerColor),
-                          ],
-                          if (Platform.isIOS) ...[
-                            YLInfoRow(
-                              label: s.iosGuideEntry,
-                              leading: const YLSettingIcon(
-                                  icon: Icons.phone_iphone,
-                                  color: Color(0xFF8E8E93)),
-                              trailing: const Icon(Icons.chevron_right,
-                                  size: 18, color: YLColors.zinc400),
-                              onTap: () =>
-                                  IOSInstallGuidePage.push(context),
-                            ),
-                            Divider(
-                                height: 1, thickness: 0.5, color: dividerColor),
-                          ],
-                          YLInfoRow(
-                            label: s.mineTelegramGroup,
-                            leading: const YLSettingIcon(
-                                icon: Icons.send, color: Color(0xFF229ED9)),
-                            trailing: const Icon(Icons.chevron_right,
-                                size: 18, color: YLColors.zinc400),
-                            onTap: () async {
-                              final tgUri =
-                                  Uri.parse('tg://resolve?domain=yue_to');
-                              if (await canLaunchUrl(tgUri)) {
-                                await launchUrl(tgUri);
-                              } else {
-                                await launchUrl(
-                                  Uri.parse('https://t.me/yue_to'),
-                                  mode: LaunchMode.externalApplication,
-                                );
-                              }
-                            },
-                          ),
-                          Divider(
-                              height: 1, thickness: 0.5, color: dividerColor),
-                          YLInfoRow(
-                            label: s.minePrivacyPolicy,
-                            leading: const YLSettingIcon(
-                                icon: Icons.lock_outline, color: Colors.green),
-                            trailing: const Icon(Icons.chevron_right,
-                                size: 18, color: YLColors.zinc400),
-                            onTap: () {
-                              const tosUrl = 'https://yue.to/tos.html';
-                              Navigator.of(context).push(MaterialPageRoute(
-                                builder: (_) => InAppWebPage(
-                                  title: s.minePrivacyPolicy,
-                                  url: tosUrl,
-                                ),
-                              ));
-                            },
-                          ),
-                          Divider(
-                              height: 1, thickness: 0.5, color: dividerColor),
-                          YLInfoRow(
-                            label: s.openSourceLicense,
-                            leading: const YLSettingIcon(
-                                icon: Icons.info_outline, color: Colors.blue),
-                            trailing: const Icon(Icons.chevron_right,
-                                size: 18, color: YLColors.zinc400),
-                            onTap: () => showLicensePage(
-                              context: context,
-                              applicationName: AppConstants.appName,
-                              applicationVersion:
-                                  ref.watch(appVersionProvider).value ??
-                                      '',
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    // 退出登录已移到 Profile 头像卡右上角
-                    const SizedBox(height: 32),
-                  ],
+        // ── Service section ─────────────────────────────────────
+        SliverToBoxAdapter(
+          child: YLSection(
+            header: s.sectionService,
+            children: [
+              YLListTile(
+                leading: const YLSettingIcon(
+                  icon: Icons.cloud_outlined,
+                  color: Color(0xFF3B82F6),
+                ),
+                title: s.mineSubscriptionManage,
+                trailing: YLListTrailing.chevron(),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const ProfilePage()),
                 ),
               ),
-            ),
+              if (!isGuest) ...[
+                YLListTile(
+                  leading: const YLSettingIcon(
+                    icon: Icons.shopping_bag_outlined,
+                    color: Color(0xFFEC4899),
+                  ),
+                  title: s.mineRenew,
+                  trailing: YLListTrailing.chevron(),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const StorePage()),
+                  ),
+                ),
+                YLListTile(
+                  leading: const YLSettingIcon(
+                    icon: Icons.receipt_long_outlined,
+                    color: Color(0xFFF59E0B),
+                  ),
+                  title: s.storeOrderHistory,
+                  trailing: YLListTrailing.chevron(),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const OrderHistoryPage()),
+                  ),
+                ),
+                YLListTile(
+                  leading: const YLSettingIcon(
+                    icon: Icons.calendar_month_outlined,
+                    color: Color(0xFF22C55E),
+                  ),
+                  title: s.calendarEntryTitle,
+                  trailing: YLListTrailing.chevron(),
+                  onTap: () => CheckinCalendarPage.push(context),
+                ),
+              ],
+            ],
           ),
-        ],
+        ),
+
+        // ── Settings section ────────────────────────────────────
+        SliverToBoxAdapter(
+          child: YLSection(
+            header: s.sectionSettings,
+            children: [
+              YLListTile(
+                leading: const YLSettingIcon(
+                  icon: Icons.settings_outlined,
+                  color: Color(0xFF6B7280),
+                ),
+                title: s.preferencesLabel,
+                trailing: YLListTrailing.chevron(),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const GeneralSettingsPage()),
+                ),
+              ),
+              YLListTile(
+                leading: const YLSettingIcon(
+                  icon: Icons.code_rounded,
+                  color: Color(0xFF6B7280),
+                ),
+                title: s.overwriteTitle,
+                trailing: YLListTrailing.chevron(),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const OverwritePage()),
+                ),
+              ),
+              YLListTile(
+                leading: const YLSettingIcon(
+                  icon: Icons.build_outlined,
+                  color: YLColors.error,
+                ),
+                title: S.current.repairTitle,
+                trailing: YLListTrailing.chevron(),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                      builder: (_) => const ConnectionRepairPage()),
+                ),
+              ),
+              YLListTile(
+                leading: const YLSettingIcon(
+                  icon: Icons.extension_outlined,
+                  color: Color(0xFF8B5CF6),
+                ),
+                title: s.modulesLabel,
+                trailing: moduleCount > 0
+                    ? YLListTrailing.value('$moduleCount')
+                    : YLListTrailing.chevron(),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const ModulesPage()),
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // ── About section ───────────────────────────────────────
+        SliverToBoxAdapter(
+          child: YLSection(
+            header: s.sectionAbout,
+            children: [
+              if (EnvConfig.isStandalone)
+                _buildUpdateRow(s, isDark),
+              if (Platform.isIOS)
+                YLListTile(
+                  leading: const YLSettingIcon(
+                    icon: Icons.phone_iphone,
+                    color: Color(0xFF8E8E93),
+                  ),
+                  title: s.iosGuideEntry,
+                  trailing: YLListTrailing.chevron(),
+                  onTap: () => IOSInstallGuidePage.push(context),
+                ),
+              YLListTile(
+                leading: const YLSettingIcon(
+                  icon: Icons.send_rounded,
+                  color: Color(0xFF229ED9),
+                ),
+                title: s.mineTelegramGroup,
+                trailing: YLListTrailing.chevron(),
+                onTap: () async {
+                  final tgUri = Uri.parse('tg://resolve?domain=yue_to');
+                  if (await canLaunchUrl(tgUri)) {
+                    await launchUrl(tgUri);
+                  } else {
+                    await launchUrl(
+                      Uri.parse('https://t.me/yue_to'),
+                      mode: LaunchMode.externalApplication,
+                    );
+                  }
+                },
+              ),
+              YLListTile(
+                leading: const YLSettingIcon(
+                  icon: Icons.lock_outline,
+                  color: Color(0xFF22C55E),
+                ),
+                title: s.minePrivacyPolicy,
+                trailing: YLListTrailing.chevron(),
+                onTap: () {
+                  const tosUrl = 'https://yue.to/tos.html';
+                  Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) => InAppWebPage(
+                      title: s.minePrivacyPolicy,
+                      url: tosUrl,
+                    ),
+                  ));
+                },
+              ),
+              YLListTile(
+                leading: const YLSettingIcon(
+                  icon: Icons.info_outline_rounded,
+                  color: Color(0xFF3B82F6),
+                ),
+                title: s.openSourceLicense,
+                trailing: YLListTrailing.chevron(),
+                onTap: () => showLicensePage(
+                  context: context,
+                  applicationName: AppConstants.appName,
+                  applicationVersion: ref.watch(appVersionProvider).value ?? '',
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Update-check row — keeps a compact status surface (loading spinner,
+  /// "v1.0.27 已就绪" badge, or version number) on the right while the
+  /// rest of the section uses standard chevron rows.
+  Widget _buildUpdateRow(S s, bool isDark) {
+    final version = ref.watch(appVersionProvider).value ?? '';
+    final Widget trailing;
+    if (_checkingUpdate) {
+      trailing = YLListTrailing.loading();
+    } else if (_pendingUpdate != null) {
+      trailing = YLListTrailing.badge(
+        text: s.updateAvailableV(_pendingUpdate!.latestVersion),
+        color: YLColors.connected,
+      );
+    } else {
+      trailing = YLListTrailing.value(version);
+    }
+    return YLListTile(
+      leading: const YLSettingIcon(
+        icon: Icons.system_update_alt_rounded,
+        color: Color(0xFF14B8A6),
       ),
+      title: s.checkUpdate,
+      trailing: trailing,
+      onTap: _checkingUpdate
+          ? null
+          : _pendingUpdate != null
+              ? () => _showUpdateDialog(context, _pendingUpdate!)
+              : () async {
+                  setState(() => _checkingUpdate = true);
+                  final info =
+                      await UpdateChecker.instance.check(ignoreSkipped: true);
+                  if (!mounted) return;
+                  setState(() {
+                    _pendingUpdate = info;
+                    _checkingUpdate = false;
+                  });
+                  if (info == null) {
+                    AppNotifier.info(s.alreadyLatest);
+                  } else if (mounted) {
+                    // ignore: use_build_context_synchronously
+                    _showUpdateDialog(context, info);
+                  }
+                },
     );
   }
 }
