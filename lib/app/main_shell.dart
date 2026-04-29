@@ -1,5 +1,7 @@
-import 'package:flutter/cupertino.dart';
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
@@ -144,30 +146,36 @@ class _MainShellState extends ConsumerState<MainShell> {
 
     // ── Mobile bottom navigation ─────────────────────────────────
     final s = S.of(context);
-    final mobileItems = [
-      (
-        const Icon(Icons.home_outlined, size: 20),
-        const Icon(Icons.home_filled, size: 20),
-        s.navHome,
+    final mobileItems = <_GlassTabSpec>[
+      _GlassTabSpec(
+        icon: Icons.home_outlined,
+        activeIcon: Icons.home_rounded,
+        label: s.navHome,
       ),
-      (
-        const Icon(Icons.public_outlined, size: 20),
-        const Icon(Icons.public, size: 20),
-        s.navProxies,
+      _GlassTabSpec(
+        icon: Icons.public_outlined,
+        activeIcon: Icons.public,
+        label: s.navProxies,
       ),
-      (
-        const Icon(Icons.play_circle_outline, size: 20),
-        const Icon(Icons.play_circle_filled, size: 20),
-        s.navEmby,
+      _GlassTabSpec(
+        icon: Icons.play_circle_outline,
+        activeIcon: Icons.play_circle_filled,
+        label: s.navEmby,
       ),
-      (
-        const Icon(Icons.person_outline_rounded, size: 20),
-        const Icon(Icons.person_rounded, size: 20),
-        s.navMine,
+      _GlassTabSpec(
+        icon: Icons.person_outline_rounded,
+        activeIcon: Icons.person_rounded,
+        label: s.navMine,
       ),
     ];
 
+    // extendBody=true so the body content scrolls behind the bottom bar;
+    // BackdropFilter then has something real to blur (otherwise the bar
+    // would be a translucent layer over solid Scaffold background — no
+    // glass at all). Pages already use SafeArea / scroll views that
+    // tolerate the bottom inset.
     return Scaffold(
+      extendBody: true,
       body: RepaintBoundary(
         child: IndexedStack(
           index: _currentIndex,
@@ -177,34 +185,197 @@ class _MainShellState extends ConsumerState<MainShell> {
           ],
         ),
       ),
-      // Unified tab bar across all platforms — iOS-style blurred background
-      // with hairline top border, matching Telegram's cross-platform design.
-      bottomNavigationBar: CupertinoTabBar(
+      bottomNavigationBar: _GlassBottomNav(
+        items: mobileItems,
         currentIndex: _currentIndex,
-        onTap: (i) => switchTab(i),
-        backgroundColor: Theme.of(
-          context,
-        ).colorScheme.surface.withValues(alpha: 0.85),
-        border: Border(
-          top: BorderSide(
-            color: Theme.of(context).brightness == Brightness.dark
-                ? Colors.white.withValues(alpha: 0.08)
-                : Colors.black.withValues(alpha: 0.08),
-            width: 0.33,
+        onTap: (i) {
+          if (i != _currentIndex) HapticFeedback.selectionClick();
+          switchTab(i);
+        },
+        isDark: isDark,
+      ),
+    );
+  }
+}
+
+// ── Bottom glass nav (iOS 26 / Telegram-inspired) ──────────────────────
+
+class _GlassTabSpec {
+  final IconData icon;
+  final IconData activeIcon;
+  final String label;
+  const _GlassTabSpec({
+    required this.icon,
+    required this.activeIcon,
+    required this.label,
+  });
+}
+
+/// Cross-platform glass bottom bar — translucent material with a real
+/// `BackdropFilter` blur, springy icon swap, and tracking text-weight
+/// transition on the active tab. Replaces `CupertinoTabBar` so Android
+/// and Windows also get the frosted-glass look (CupertinoTabBar is
+/// iOS-only-feeling on Material).
+class _GlassBottomNav extends StatelessWidget {
+  final List<_GlassTabSpec> items;
+  final int currentIndex;
+  final ValueChanged<int> onTap;
+  final bool isDark;
+
+  const _GlassBottomNav({
+    required this.items,
+    required this.currentIndex,
+    required this.onTap,
+    required this.isDark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.viewPaddingOf(context).bottom;
+    final glassColor = isDark
+        ? Colors.black.withValues(alpha: 0.55)
+        : Colors.white.withValues(alpha: 0.65);
+    final borderColor = isDark
+        ? Colors.white.withValues(alpha: 0.06)
+        : Colors.black.withValues(alpha: 0.06);
+
+    return ClipRect(
+      child: BackdropFilter(
+        // 30/30 sigma is the Apple-native threshold where wallpaper
+        // detail is lost but colour bleed stays — TG uses ~25, Apple
+        // Music ~30. Going higher banded on low-end Android.
+        filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: glassColor,
+            border: Border(
+              top: BorderSide(color: borderColor, width: 0.33),
+            ),
+          ),
+          child: SafeArea(
+            top: false,
+            child: SizedBox(
+              height: 58,
+              child: Padding(
+                padding: EdgeInsets.only(
+                  top: 4,
+                  bottom: bottomInset > 0 ? 0 : 6,
+                ),
+                child: Row(
+                  children: [
+                    for (int i = 0; i < items.length; i++)
+                      Expanded(
+                        child: _GlassTabButton(
+                          spec: items[i],
+                          isActive: i == currentIndex,
+                          isDark: isDark,
+                          onTap: () => onTap(i),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
           ),
         ),
-        activeColor: Theme.of(context).colorScheme.primary,
-        inactiveColor: Theme.of(context).brightness == Brightness.dark
-            ? YLColors.zinc400
-            : YLColors.zinc500,
-        items: [
-          for (int i = 0; i < mobileItems.length; i++)
-            BottomNavigationBarItem(
-              icon: mobileItems[i].$1,
-              activeIcon: mobileItems[i].$2,
-              label: mobileItems[i].$3,
-            ),
-        ],
+      ),
+    );
+  }
+}
+
+/// One slot of [_GlassBottomNav]. Active state animates: outline→filled
+/// icon swap with overshoot scale, label colour + weight crossfade, and
+/// a subtle press-scale on tap-down. No text-only fallback variant —
+/// labels are always shown so the bar reads consistently across locales.
+class _GlassTabButton extends StatefulWidget {
+  final _GlassTabSpec spec;
+  final bool isActive;
+  final bool isDark;
+  final VoidCallback onTap;
+
+  const _GlassTabButton({
+    required this.spec,
+    required this.isActive,
+    required this.isDark,
+    required this.onTap,
+  });
+
+  @override
+  State<_GlassTabButton> createState() => _GlassTabButtonState();
+}
+
+class _GlassTabButtonState extends State<_GlassTabButton> {
+  bool _pressed = false;
+
+  Color get _activeColor =>
+      widget.isDark ? Colors.white : YLColors.primary;
+  Color get _inactiveColor =>
+      widget.isDark ? YLColors.zinc500 : YLColors.zinc500;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = widget.isActive ? _activeColor : _inactiveColor;
+    final iconData =
+        widget.isActive ? widget.spec.activeIcon : widget.spec.icon;
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapDown: (_) => setState(() => _pressed = true),
+      onTapCancel: () => setState(() => _pressed = false),
+      onTapUp: (_) => setState(() => _pressed = false),
+      onTap: widget.onTap,
+      child: AnimatedScale(
+        scale: _pressed ? 0.92 : 1.0,
+        duration: const Duration(milliseconds: 140),
+        curve: Curves.easeOut,
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                height: 24,
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 260),
+                  switchInCurve: Curves.easeOutBack,
+                  switchOutCurve: Curves.easeInCubic,
+                  transitionBuilder: (child, anim) {
+                    return ScaleTransition(
+                      scale: Tween<double>(begin: 0.55, end: 1.0).animate(
+                        CurvedAnimation(
+                          parent: anim,
+                          curve: Curves.easeOutBack,
+                        ),
+                      ),
+                      child: FadeTransition(opacity: anim, child: child),
+                    );
+                  },
+                  child: Icon(
+                    iconData,
+                    key: ValueKey(
+                      '${widget.spec.label}-${widget.isActive}',
+                    ),
+                    size: 22,
+                    color: color,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 2),
+              AnimatedDefaultTextStyle(
+                duration: const Duration(milliseconds: 220),
+                curve: Curves.easeOut,
+                style: TextStyle(
+                  fontSize: 10.5,
+                  height: 1.1,
+                  color: color,
+                  fontWeight:
+                      widget.isActive ? FontWeight.w600 : FontWeight.w500,
+                  letterSpacing: 0.1,
+                ),
+                child: Text(widget.spec.label),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
