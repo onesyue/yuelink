@@ -16,6 +16,8 @@ import '../../modules/store/store_page.dart';
 import '../../modules/store/order_history_page.dart';
 import 'connection_repair_page.dart';
 import '../../modules/yue_auth/providers/yue_auth_providers.dart';
+import '../../modules/onboarding/ios_install_guide_page.dart';
+import '../../modules/checkin/presentation/calendar_page.dart';
 import '../../shared/formatters/subscription_parser.dart' show formatBytes;
 import '../../shared/app_notifier.dart';
 import '../../core/env_config.dart';
@@ -350,6 +352,18 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                                     builder: (_) => const OrderHistoryPage()),
                               ),
                             ),
+                            Divider(
+                                height: 1, thickness: 0.5, color: dividerColor),
+                            YLInfoRow(
+                              label: '签到日历',
+                              leading: const YLSettingIcon(
+                                  icon: Icons.calendar_month_outlined,
+                                  color: Color(0xFF22C55E)),
+                              trailing: const Icon(Icons.chevron_right,
+                                  size: 18, color: YLColors.zinc400),
+                              onTap: () =>
+                                  CheckinCalendarPage.push(context),
+                            ),
                           ],
                         ],
                       ),
@@ -504,6 +518,20 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                                             _showUpdateDialog(context, info);
                                           }
                                         },
+                            ),
+                            Divider(
+                                height: 1, thickness: 0.5, color: dividerColor),
+                          ],
+                          if (Platform.isIOS) ...[
+                            YLInfoRow(
+                              label: 'iOS 安装方式',
+                              leading: const YLSettingIcon(
+                                  icon: Icons.phone_iphone,
+                                  color: Color(0xFF8E8E93)),
+                              trailing: const Icon(Icons.chevron_right,
+                                  size: 18, color: YLColors.zinc400),
+                              onTap: () =>
+                                  IOSInstallGuidePage.push(context),
                             ),
                             Divider(
                                 height: 1, thickness: 0.5, color: dividerColor),

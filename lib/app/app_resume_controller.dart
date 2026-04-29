@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
 import '../i18n/app_strings.dart';
 import '../modules/dashboard/providers/dashboard_providers.dart'
@@ -20,6 +21,21 @@ import '../core/managers/system_proxy_manager.dart';
 import '../core/platform/vpn_service.dart';
 import '../core/providers/core_provider.dart';
 import '../core/storage/settings_service.dart';
+
+/// One-shot event published by [AppResumeController] when iOS reports a
+/// tunnel that connected then dropped within 10 s — the signature of an
+/// untrusted IPA (TrollStore / unsigned re-sign). Connection page listens
+/// and surfaces an explicit error dialog with iOS install guide.
+class IosEntitlementSuspectEvent {
+  final int elapsedMs;
+  final DateTime at;
+  const IosEntitlementSuspectEvent({required this.elapsedMs, required this.at});
+}
+
+/// Latest entitlement-suspect event. `null` until first occurrence.
+final iosEntitlementSuspectProvider =
+    StateProvider<IosEntitlementSuspectEvent?>((_) => null);
+
 
 /// Coordinates "user came back to the app" semantics:
 ///
@@ -68,7 +84,7 @@ class AppResumeController {
     );
   }
 
-  void _onVpnRevoked() {
+  void _onVpnRevoked(VpnRevocationReason reason) {
     // Skip if recovery is in progress — the recovery logic will handle
     // state correctly. Without this guard, onVpnRevoked races with
     // [run] on engine recreate and resets state prematurely.
@@ -76,11 +92,26 @@ class AppResumeController {
       debugPrint('[Resume] VPN revoked during recovery — ignoring');
       return;
     }
-    debugPrint('[Resume] VPN revoked — resetting state');
+    debugPrint(
+        '[Resume] VPN revoked (kind=${reason.kind}, elapsed=${reason.elapsedMs}ms) — resetting state');
     resetCoreToStopped(ref);
     // delay-state wipe happens via the coreStatusProvider listener in
     // main.dart (status → stopped clears delay results).
-    AppNotifier.warning(S.current.disconnectedUnexpected);
+
+    if (reason.kind == VpnRevocationKind.entitlementSuspect) {
+      // Surface a strong signal: tunnel reached .connected then dropped
+      // within 10 s — almost always means the IPA isn't trusted enough by
+      // the system to actually route packets (TrollStore-installed,
+      // unsigned re-pack, etc.). Mark a flag the connection page checks
+      // next frame to show the iOS install guide dialog.
+      ref.read(iosEntitlementSuspectProvider.notifier).state =
+          IosEntitlementSuspectEvent(
+        elapsedMs: reason.elapsedMs ?? 0,
+        at: DateTime.now(),
+      );
+    } else {
+      AppNotifier.warning(S.current.disconnectedUnexpected);
+    }
   }
 
   Future<void> _onTransportChanged(String prev, String now) async {

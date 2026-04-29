@@ -12,6 +12,12 @@ import NetworkExtension
     private var backgroundVpnObserver: NSObjectProtocol?
     /// Channel reference kept alive so we can send unsolicited messages (vpnRevoked).
     private var vpnChannel: FlutterMethodChannel?
+    /// Timestamp when session.status reached `.connected`. Used by the
+    /// background observer to detect "connected then immediately dropped" —
+    /// the signature symptom of an iOS PacketTunnel that the system started
+    /// but isn't actually trusted (TrollStore / unsigned IPA / missing
+    /// provisioning profile chain).
+    private var lastConnectedAt: Date?
 
     override func application(
         _ application: UIApplication,
@@ -148,6 +154,7 @@ import NetworkExtension
                                 NotificationCenter.default.removeObserver(obs)
                                 self?.vpnStatusObserver = nil
                             }
+                            self?.lastConnectedAt = Date()
                             self?.startBackgroundVpnObserver(session: session)
                             result(true)
                         case .disconnected, .invalid:
@@ -224,12 +231,38 @@ import NetworkExtension
         ) { [weak self] _ in
             let status = session.status
             guard status == .disconnected || status == .invalid else { return }
-            NSLog("[VPN] Unexpected disconnect (status=%d) — notifying Flutter", status.rawValue)
+
+            // Distinguish "tunnel held connected for a while then dropped"
+            // (legitimate revoke / network change) from "tunnel reached
+            // .connected then immediately collapsed" — the latter is the
+            // signature of an iOS PacketTunnel extension that the system
+            // started but isn't fully trusted. Most common cause: TrollStore
+            // installed IPA without a valid provisioning profile chain, or a
+            // re-signed IPA whose entitlements aren't honored.
+            //
+            // < 10s window is generous: even a slow-but-working tunnel
+            // typically holds far longer; legitimate "system killed it"
+            // events on healthy installs almost never happen within seconds.
+            var args: [String: Any] = [:]
+            if let connectedAt = self?.lastConnectedAt {
+                let elapsedMs = Int(Date().timeIntervalSince(connectedAt) * 1000)
+                args["elapsed_ms"] = elapsedMs
+                if elapsedMs < 10_000 {
+                    args["reason"] = "entitlement_suspect"
+                }
+            }
+
+            NSLog("[VPN] Unexpected disconnect (status=%d, args=%@) — notifying Flutter",
+                  status.rawValue, args.description)
             if let obs = self?.backgroundVpnObserver {
                 NotificationCenter.default.removeObserver(obs)
                 self?.backgroundVpnObserver = nil
             }
-            self?.vpnChannel?.invokeMethod("vpnRevoked", arguments: nil)
+            self?.lastConnectedAt = nil
+            self?.vpnChannel?.invokeMethod(
+                "vpnRevoked",
+                arguments: args.isEmpty ? nil : args
+            )
         }
     }
 

@@ -264,6 +264,11 @@ class VpnService {
   /// Register callbacks for VPN lifecycle events (Android-focused).
   ///
   /// [onRevoked] fires when the system or another app revokes VPN permission.
+  /// On iOS the native side may pass `reason` in the args map — currently
+  /// `entitlement_suspect` when the tunnel reached `.connected` and then
+  /// dropped within 10 s, the signature of a TrollStore-installed IPA whose
+  /// PacketTunnel extension isn't fully trusted by the system.
+  ///
   /// [onTransportChanged] fires when the underlying physical network flips
   /// (e.g. Wi-Fi dropped → cellular picked up on elevator entry); consumer
   /// should flush fake-ip cache + close stale connections + optionally
@@ -273,15 +278,25 @@ class VpnService {
   /// `transportChanged` — Apple's NetworkExtension handles re-routing
   /// transparently and connections usually survive the switch.
   static void listenForRevocation(
-    VoidCallback onRevoked, {
+    void Function(VpnRevocationReason reason) onRevoked, {
     void Function(String prev, String now)? onTransportChanged,
   }) {
     if (!Platform.isAndroid && !Platform.isIOS) return;
     _channel.setMethodCallHandler((call) async {
       switch (call.method) {
         case 'vpnRevoked':
-          debugPrint('[VpnService] VPN revoked by system');
-          onRevoked();
+          final args = (call.arguments as Map?)?.cast<String, dynamic>();
+          final reasonStr = args?['reason'] as String?;
+          final elapsedMs = args?['elapsed_ms'] as int?;
+          final reason = VpnRevocationReason(
+            kind: reasonStr == 'entitlement_suspect'
+                ? VpnRevocationKind.entitlementSuspect
+                : VpnRevocationKind.unknown,
+            elapsedMs: elapsedMs,
+          );
+          debugPrint(
+              '[VpnService] VPN revoked by system (kind=${reason.kind}, elapsed=${reason.elapsedMs}ms)');
+          onRevoked(reason);
           break;
         case 'transportChanged':
           final args = (call.arguments as Map?)?.cast<String, dynamic>();
@@ -329,4 +344,23 @@ class VpnService {
       return false;
     }
   }
+}
+
+/// Reason a VPN tunnel was revoked, surfaced from native side via vpnRevoked.
+enum VpnRevocationKind {
+  /// Generic / unknown revoke (legitimate system kill, permission revoke,
+  /// or transport loss after extended uptime).
+  unknown,
+
+  /// iOS only: tunnel reached `.connected` then dropped within 10 s.
+  /// Signature of TrollStore / unsigned IPA whose PacketTunnel extension
+  /// the system starts but doesn't fully trust. Recommend AltStore /
+  /// SideStore re-sign.
+  entitlementSuspect,
+}
+
+class VpnRevocationReason {
+  final VpnRevocationKind kind;
+  final int? elapsedMs;
+  const VpnRevocationReason({required this.kind, this.elapsedMs});
 }

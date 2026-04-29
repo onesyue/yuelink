@@ -25,6 +25,7 @@ import 'modules/nodes/providers/nodes_providers.dart'
 import 'modules/settings/providers/settings_providers.dart';
 import 'modules/onboarding/onboarding_page.dart';
 import 'modules/onboarding/persona_prompt_page.dart';
+import 'modules/onboarding/ios_install_guide_page.dart';
 import 'modules/carrier/carrier_provider.dart';
 import 'modules/yue_auth/presentation/auth_loading_fallback.dart';
 import 'modules/yue_auth/presentation/yue_auth_page.dart';
@@ -505,6 +506,7 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
   ProviderSubscription? _carrierSub;
   ProviderSubscription? _exitIpSub;
   ProviderSubscription? _tileNodeInfoSub;
+  ProviderSubscription? _entitlementSuspectSub;
   ProviderSubscription? _delayResetSub;
   ProviderSubscription? _routingModeTraySub;
   ProviderSubscription? _connectionModeTraySub;
@@ -728,6 +730,27 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
         _tile.pushState();
       });
     }
+
+    // iOS only: PacketTunnel reached .connected then dropped within 10 s →
+    // signature of an untrusted IPA (TrollStore / unsigned re-sign). Push a
+    // full-screen install-method guide so users stop hitting "connect" and
+    // wondering why nothing happens. Listener is plumbed regardless of
+    // platform (provider is null on non-iOS) and gated by Platform.isIOS at
+    // the dispatch site so we don't accidentally surface the iOS guide on
+    // Android even if someone misuses the provider in the future.
+    _entitlementSuspectSub =
+        ref.listenManual(iosEntitlementSuspectProvider, (prev, next) {
+      if (next == null || next == prev) return;
+      if (!Platform.isIOS) return;
+      final ctx = navigatorKey.currentContext;
+      if (ctx == null || !ctx.mounted) return;
+      IOSInstallGuidePage.push(
+        ctx,
+        errorContext:
+            'VPN 进程在 ${(next.elapsedMs / 1000).toStringAsFixed(1)} 秒内被系统中止 — '
+            '极有可能是 iOS 巨魔 / 未签名 IPA 安装造成。请改用 AltStore / SideStore 自签后重新安装。',
+      );
+    });
   }
 
   /// Load the config YAML from the currently selected profile.
@@ -770,6 +793,7 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
     _carrierSub?.close();
     _exitIpSub?.close();
     _tileNodeInfoSub?.close();
+    _entitlementSuspectSub?.close();
     _delayResetSub?.close();
     _routingModeTraySub?.close();
     _connectionModeTraySub?.close();

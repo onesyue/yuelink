@@ -124,8 +124,12 @@ YueLink 当前内置一套可用的 Surge 模块兼容层，支持：
 
 支持以下侧载方式：
 
-- **TrollStore**：推荐，安装后不过期
-- **AltStore / SideStore**：自签安装，需按各自规则重签
+- **AltStore / SideStore**：**推荐**，VPN 完全可用。自签每 7 天到期，需用 AltServer / SideServer 重签
+- **TrollStore（巨魔）**：安装永久不过期，但 **VPN 几乎不工作** —— 系统会启动 PacketTunnel 进程后立刻丢弃，表现为「提示连接成功但实际无网络」。仅推荐在不需要代理的场景使用（例如只看 Emby）
+
+> ⚠️ **iOS 巨魔用户重要提示**
+> 巨魔利用系统漏洞绕过签名校验，但 NetworkExtension 仍依赖 Apple 签发的 Provisioning Profile —— 巨魔安装的 IPA 拿不到这条信任链。若你需要代理上网，请改用 **AltStore** 或 **SideStore** 自签后重新安装。
+> App 检测到这个症状时（连接 10s 内被系统中止）会自动弹出安装方式说明页。也可以在「设置 → 关于 → iOS 安装方式」主动查看。
 
 ### macOS
 
