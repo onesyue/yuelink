@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../i18n/app_strings.dart';
+import '../../shared/widgets/yl_scaffold.dart';
 import '../../theme.dart';
 
 /// iOS 安装方式说明页 — 在两种场景下出现：
@@ -29,85 +30,86 @@ class IOSInstallGuidePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bg = isDark ? YLColors.zinc950 : YLColors.zinc100;
-    final surface = isDark ? YLColors.zinc900 : Colors.white;
+    final s = S.of(context);
 
-    return Scaffold(
-      backgroundColor: bg,
-      appBar: AppBar(
-        title: Text(S.of(context).iosGuideTitle),
-        backgroundColor: bg,
-        elevation: 0,
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (errorContext != null) _ErrorBanner(message: errorContext!),
-              if (errorContext != null) const SizedBox(height: 16),
-              Text(S.of(context).iosGuideIntro, style: YLText.body),
-              const SizedBox(height: 20),
+    return YLLargeTitleScaffold(
+      title: s.iosGuideTitle,
+      slivers: [
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(
+              YLSpacing.lg, 0, YLSpacing.lg, YLSpacing.xl),
+          sliver: SliverList(
+            delegate: SliverChildListDelegate([
+              if (errorContext != null) ...[
+                _ErrorBanner(message: errorContext!),
+                const SizedBox(height: YLSpacing.lg),
+              ],
+              Text(
+                s.iosGuideIntro,
+                style: YLText.body.copyWith(
+                  fontSize: 15,
+                  height: 1.5,
+                  color: isDark ? YLColors.zinc300 : YLColors.zinc700,
+                ),
+              ),
+              const SizedBox(height: YLSpacing.xl),
               _MethodCard(
-                surface: surface,
                 isDark: isDark,
-                title: S.of(context).iosGuideMethodAltstoreTitle,
-                tag: S.of(context).iosGuideMethodAltstoreTag,
+                title: s.iosGuideMethodAltstoreTitle,
+                tag: s.iosGuideMethodAltstoreTag,
                 tagColor: const Color(0xFF22C55E),
                 pros: [
-                  S.of(context).iosGuideMethodAltstoreProVpn,
-                  S.of(context).iosGuideMethodAltstoreProFree,
-                  S.of(context).iosGuideMethodAltstoreProDevice,
+                  s.iosGuideMethodAltstoreProVpn,
+                  s.iosGuideMethodAltstoreProFree,
+                  s.iosGuideMethodAltstoreProDevice,
                 ],
                 cons: [
-                  S.of(context).iosGuideMethodAltstoreCon7d,
-                  S.of(context).iosGuideMethodAltstoreConLimit,
+                  s.iosGuideMethodAltstoreCon7d,
+                  s.iosGuideMethodAltstoreConLimit,
                 ],
-                howto: S.of(context).iosGuideMethodAltstoreHowto,
+                howto: s.iosGuideMethodAltstoreHowto,
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: YLSpacing.md),
               _MethodCard(
-                surface: surface,
                 isDark: isDark,
-                title: S.of(context).iosGuideMethodTrollTitle,
-                tag: S.of(context).iosGuideMethodTrollTag,
+                title: s.iosGuideMethodTrollTitle,
+                tag: s.iosGuideMethodTrollTag,
                 tagColor: const Color(0xFFEF4444),
-                pros: [S.of(context).iosGuideMethodTrollProForever],
+                pros: [s.iosGuideMethodTrollProForever],
                 cons: [
-                  S.of(context).iosGuideMethodTrollConVpn,
-                  S.of(context).iosGuideMethodTrollConFail,
-                  S.of(context).iosGuideMethodTrollConDevice,
+                  s.iosGuideMethodTrollConVpn,
+                  s.iosGuideMethodTrollConFail,
+                  s.iosGuideMethodTrollConDevice,
                 ],
-                howto: S.of(context).iosGuideMethodTrollHowto,
+                howto: s.iosGuideMethodTrollHowto,
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: YLSpacing.md),
               _MethodCard(
-                surface: surface,
                 isDark: isDark,
-                title: S.of(context).iosGuideMethodIpaTitle,
-                tag: S.of(context).iosGuideMethodIpaTag,
+                title: s.iosGuideMethodIpaTitle,
+                tag: s.iosGuideMethodIpaTag,
                 tagColor: const Color(0xFFF59E0B),
-                pros: [S.of(context).iosGuideMethodIpaProSigned],
+                pros: [s.iosGuideMethodIpaProSigned],
                 cons: [
-                  S.of(context).iosGuideMethodIpaConRevoke,
-                  S.of(context).iosGuideMethodIpaConTamper,
+                  s.iosGuideMethodIpaConRevoke,
+                  s.iosGuideMethodIpaConTamper,
                 ],
-                howto: S.of(context).iosGuideMethodIpaHowto,
+                howto: s.iosGuideMethodIpaHowto,
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: YLSpacing.xl),
               FilledButton.icon(
                 onPressed: () => Navigator.of(context).maybePop(),
                 icon: const Icon(Icons.check_rounded),
-                label: Text(S.of(context).iosGuideAck),
+                label: Text(s.iosGuideAck),
                 style: FilledButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  padding:
+                      const EdgeInsets.symmetric(vertical: YLSpacing.md),
                 ),
               ),
-            ],
+            ]),
           ),
         ),
-      ),
+      ],
     );
   }
 }
@@ -144,7 +146,6 @@ class _ErrorBanner extends StatelessWidget {
 }
 
 class _MethodCard extends StatelessWidget {
-  final Color surface;
   final bool isDark;
   final String title;
   final String tag;
@@ -154,7 +155,6 @@ class _MethodCard extends StatelessWidget {
   final String howto;
 
   const _MethodCard({
-    required this.surface,
     required this.isDark,
     required this.title,
     required this.tag,
@@ -166,54 +166,74 @@ class _MethodCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final border = isDark
-        ? Colors.white.withValues(alpha: 0.08)
-        : Colors.black.withValues(alpha: 0.06);
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-      decoration: BoxDecoration(
+    final surface = isDark ? YLColors.zinc900 : Colors.white;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(YLRadius.lg),
+      child: Container(
         color: surface,
-        borderRadius: BorderRadius.circular(YLRadius.lg),
-        border: Border.all(color: border, width: 0.5),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(title, style: YLText.titleLarge.copyWith(fontSize: 17)),
-              const SizedBox(width: 8),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: tagColor.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  tag,
-                  style: YLText.caption.copyWith(
-                    color: tagColor,
-                    fontWeight: FontWeight.w600,
+        padding: const EdgeInsets.fromLTRB(
+            YLSpacing.lg, YLSpacing.md, YLSpacing.lg, YLSpacing.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    title,
+                    style: YLText.titleLarge.copyWith(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: -0.3,
+                    ),
                   ),
                 ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: tagColor.withValues(alpha: isDark ? 0.20 : 0.14),
+                    borderRadius: BorderRadius.circular(YLRadius.pill),
+                  ),
+                  child: Text(
+                    tag,
+                    style: YLText.caption.copyWith(
+                      color: tagColor,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.1,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: YLSpacing.md),
+            ...pros.map((p) => Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Text(
+                    p,
+                    style: YLText.body.copyWith(fontSize: 14, height: 1.45),
+                  ),
+                )),
+            ...cons.map((c) => Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Text(
+                    c,
+                    style: YLText.body.copyWith(fontSize: 14, height: 1.45),
+                  ),
+                )),
+            const SizedBox(height: YLSpacing.sm),
+            Text(
+              howto,
+              style: YLText.caption.copyWith(
+                fontSize: 12,
+                color: isDark ? YLColors.zinc400 : YLColors.zinc500,
+                height: 1.5,
               ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          ...pros.map((p) => Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Text(p, style: YLText.body),
-              )),
-          ...cons.map((c) => Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Text(c, style: YLText.body),
-              )),
-          const SizedBox(height: 8),
-          Text(howto,
-              style:
-                  YLText.caption.copyWith(color: YLColors.zinc500, height: 1.5)),
-        ],
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../../../i18n/app_strings.dart';
 import '../../../theme.dart';
 import '../../../shared/app_notifier.dart';
+import '../../../shared/widgets/yl_scaffold.dart';
 
 /// 原生意见反馈页 — 替代外跳 Telegram。
 class FeedbackPage extends StatefulWidget {
@@ -70,108 +71,134 @@ class _FeedbackPageState extends State<FeedbackPage> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Scaffold(
-      appBar: AppBar(
-        leading: const BackButton(),
-        title: Text(S.current.feedbackTitle),
-        backgroundColor: isDark ? YLColors.zinc900 : Colors.white,
-        foregroundColor: isDark ? Colors.white : YLColors.zinc900,
-        elevation: 0,
-      ),
-      backgroundColor: isDark ? YLColors.zinc950 : YLColors.zinc50,
-      body: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
-          Text(
-            '描述你遇到的问题或建议',
-            style: YLText.label.copyWith(
-              color: isDark ? YLColors.zinc300 : YLColors.zinc700,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Container(
-            decoration: BoxDecoration(
-              color: isDark ? YLColors.zinc800 : Colors.white,
-              borderRadius: BorderRadius.circular(YLRadius.lg),
-              border: Border.all(
-                color: isDark
-                    ? Colors.white.withValues(alpha: 0.08)
-                    : Colors.black.withValues(alpha: 0.08),
-              ),
-            ),
-            child: TextField(
-              controller: _ctrl,
-              maxLines: 6,
-              maxLength: 500,
-              style: YLText.body.copyWith(
-                color: isDark ? Colors.white : YLColors.zinc900,
-              ),
-              decoration: InputDecoration(
-                hintText: S.current.feedbackHint,
-                hintStyle: YLText.body.copyWith(color: YLColors.zinc400),
-                border: InputBorder.none,
-                contentPadding: const EdgeInsets.all(14),
-                counterStyle: YLText.caption.copyWith(color: YLColors.zinc500),
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            '联系方式（选填）',
-            style: YLText.label.copyWith(
-              color: isDark ? YLColors.zinc300 : YLColors.zinc700,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Container(
-            decoration: BoxDecoration(
-              color: isDark ? YLColors.zinc800 : Colors.white,
-              borderRadius: BorderRadius.circular(YLRadius.lg),
-              border: Border.all(
-                color: isDark
-                    ? Colors.white.withValues(alpha: 0.08)
-                    : Colors.black.withValues(alpha: 0.08),
-              ),
-            ),
-            child: TextField(
-              controller: _contactCtrl,
-              style: YLText.body.copyWith(
-                color: isDark ? Colors.white : YLColors.zinc900,
-              ),
-              decoration: InputDecoration(
-                hintText: S.current.feedbackContactHint,
-                hintStyle: YLText.body.copyWith(color: YLColors.zinc400),
-                border: InputBorder.none,
-                contentPadding: const EdgeInsets.all(14),
-              ),
-            ),
-          ),
-          const SizedBox(height: 24),
-          SizedBox(
-            width: double.infinity,
-            height: 48,
-            child: ElevatedButton(
-              onPressed: _submitting ? null : _submit,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: isDark ? Colors.white : YLColors.zinc900,
-                foregroundColor: isDark ? YLColors.zinc900 : Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(YLRadius.lg),
+    final s = S.current;
+    final isEn = Localizations.localeOf(context).languageCode == 'en';
+
+    return YLLargeTitleScaffold(
+      title: s.feedbackTitle,
+      slivers: [
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(
+              YLSpacing.lg, 0, YLSpacing.lg, YLSpacing.xl),
+          sliver: SliverList(
+            delegate: SliverChildListDelegate([
+              _SectionLabel(
+                  isEn ? 'Describe your issue or suggestion' : '描述你遇到的问题或建议',
+                  isDark: isDark),
+              const SizedBox(height: YLSpacing.sm),
+              _FieldShell(
+                isDark: isDark,
+                child: TextField(
+                  controller: _ctrl,
+                  maxLines: 6,
+                  maxLength: 500,
+                  style: YLText.body.copyWith(
+                    fontSize: 15,
+                    color: isDark ? Colors.white : YLColors.zinc900,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: s.feedbackHint,
+                    hintStyle: YLText.body
+                        .copyWith(color: YLColors.zinc400, fontSize: 15),
+                    border: InputBorder.none,
+                    contentPadding: const EdgeInsets.all(YLSpacing.md),
+                    counterStyle:
+                        YLText.caption.copyWith(color: YLColors.zinc500),
+                  ),
                 ),
-                elevation: 0,
               ),
-              child: _submitting
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Text(S.current.feedbackSubmit, style: const TextStyle(fontWeight: FontWeight.w600)),
-            ),
+              const SizedBox(height: YLSpacing.lg),
+              _SectionLabel(
+                  isEn ? 'Contact info (optional)' : '联系方式（选填）',
+                  isDark: isDark),
+              const SizedBox(height: YLSpacing.sm),
+              _FieldShell(
+                isDark: isDark,
+                child: TextField(
+                  controller: _contactCtrl,
+                  style: YLText.body.copyWith(
+                    fontSize: 15,
+                    color: isDark ? Colors.white : YLColors.zinc900,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: s.feedbackContactHint,
+                    hintStyle: YLText.body
+                        .copyWith(color: YLColors.zinc400, fontSize: 15),
+                    border: InputBorder.none,
+                    contentPadding: const EdgeInsets.all(YLSpacing.md),
+                  ),
+                ),
+              ),
+              const SizedBox(height: YLSpacing.xl),
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: FilledButton(
+                  onPressed: _submitting ? null : _submit,
+                  style: FilledButton.styleFrom(
+                    backgroundColor:
+                        isDark ? Colors.white : YLColors.zinc900,
+                    foregroundColor:
+                        isDark ? YLColors.zinc900 : Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(YLRadius.lg),
+                    ),
+                    textStyle: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  child: _submitting
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Text(s.feedbackSubmit),
+                ),
+              ),
+            ]),
           ),
-        ],
+        ),
+      ],
+    );
+  }
+}
+
+class _SectionLabel extends StatelessWidget {
+  final String text;
+  final bool isDark;
+  const _SectionLabel(this.text, {required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: YLSpacing.xs),
+      child: Text(
+        text,
+        style: YLText.caption.copyWith(
+          fontSize: 13,
+          fontWeight: FontWeight.w500,
+          color: isDark ? YLColors.zinc400 : YLColors.zinc500,
+          letterSpacing: -0.05,
+        ),
+      ),
+    );
+  }
+}
+
+class _FieldShell extends StatelessWidget {
+  final Widget child;
+  final bool isDark;
+  const _FieldShell({required this.child, required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(YLRadius.lg),
+      child: Container(
+        color: isDark ? YLColors.zinc900 : Colors.white,
+        child: child,
       ),
     );
   }

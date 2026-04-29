@@ -5,6 +5,7 @@ import '../../../domain/announcements/announcement_entity.dart';
 import '../../../i18n/app_strings.dart';
 import '../../../shared/rich_content.dart';
 import '../../../shared/widgets/empty_state.dart';
+import '../../../shared/widgets/yl_scaffold.dart';
 import '../../../theme.dart';
 import '../providers/announcements_providers.dart';
 
@@ -24,89 +25,95 @@ class _AnnouncementsPageState extends ConsumerState<AnnouncementsPage> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final async = ref.watch(announcementsProvider);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(s.dashAnnouncementsLabel),
-        centerTitle: false,
-        actions: [
-          // Manual refresh button
-          IconButton(
-            icon: const Icon(Icons.refresh_rounded, size: 20),
-            onPressed: () {
-              _markedRead = false;
-              ref.invalidate(announcementsProvider);
-            },
-            tooltip: s.retry,
+    return YLLargeTitleScaffold(
+      title: s.dashAnnouncementsLabel,
+      onRefresh: () async {
+        _markedRead = false;
+        ref.invalidate(announcementsProvider);
+      },
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.refresh_rounded, size: 22),
+          onPressed: () {
+            _markedRead = false;
+            ref.invalidate(announcementsProvider);
+          },
+          tooltip: s.retry,
+        ),
+      ],
+      slivers: [
+        async.when(
+          loading: () => const SliverFillRemaining(
+            hasScrollBody: false,
+            child: Center(child: CircularProgressIndicator()),
           ),
-        ],
-      ),
-      body: async.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: YLEmptyState(
-              icon: Icons.error_outline,
-              title: e.toString(),
-              action: FilledButton.icon(
-                onPressed: () {
-                  _markedRead = false;
-                  ref.invalidate(announcementsProvider);
-                },
-                icon: const Icon(Icons.refresh, size: 16),
-                label: Text(s.retry),
+          error: (e, _) => SliverFillRemaining(
+            hasScrollBody: false,
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(YLSpacing.xl),
+                child: YLEmptyState(
+                  icon: Icons.error_outline,
+                  title: e.toString(),
+                  action: FilledButton.icon(
+                    onPressed: () {
+                      _markedRead = false;
+                      ref.invalidate(announcementsProvider);
+                    },
+                    icon: const Icon(Icons.refresh, size: 16),
+                    label: Text(s.retry),
+                  ),
+                ),
               ),
             ),
           ),
-        ),
-        data: (list) {
-          if (list.isEmpty) {
-            return Center(
-              child: YLEmptyState(
-                icon: Icons.campaign_outlined,
-                title: s.dashNoAnnouncements,
-                action: TextButton(
-                  onPressed: () {
-                    _markedRead = false;
-                    ref.invalidate(announcementsProvider);
-                  },
-                  child: Text(s.refresh),
+          data: (list) {
+            if (list.isEmpty) {
+              return SliverFillRemaining(
+                hasScrollBody: false,
+                child: Center(
+                  child: YLEmptyState(
+                    icon: Icons.campaign_outlined,
+                    title: s.dashNoAnnouncements,
+                    action: TextButton(
+                      onPressed: () {
+                        _markedRead = false;
+                        ref.invalidate(announcementsProvider);
+                      },
+                      child: Text(s.refresh),
+                    ),
+                  ),
+                ),
+              );
+            }
+
+            if (!_markedRead) {
+              _markedRead = true;
+              final ids = list
+                  .where((a) => a.id != null)
+                  .map((a) => a.id!)
+                  .toList();
+              if (ids.isNotEmpty) {
+                ref.read(readAnnouncementIdsProvider.notifier).markAllRead(ids);
+              }
+            }
+
+            return SliverPadding(
+              padding: const EdgeInsets.fromLTRB(
+                  YLSpacing.lg, 0, YLSpacing.lg, 0),
+              sliver: SliverList.separated(
+                itemCount: list.length,
+                separatorBuilder: (_, _) =>
+                    const SizedBox(height: YLSpacing.md),
+                itemBuilder: (context, i) => _AnnouncementTile(
+                  item: list[i],
+                  isDark: isDark,
                 ),
               ),
             );
-          }
-
-          // Mark all as read once when data arrives — guarded to prevent rebuild cascade
-          if (!_markedRead) {
-            _markedRead = true;
-            final ids = list
-                .where((a) => a.id != null)
-                .map((a) => a.id!)
-                .toList();
-            if (ids.isNotEmpty) {
-              // Fire-and-forget, no setState needed
-              ref.read(readAnnouncementIdsProvider.notifier).markAllRead(ids);
-            }
-          }
-
-          return RefreshIndicator(
-            onRefresh: () async {
-              _markedRead = false;
-              ref.invalidate(announcementsProvider);
-            },
-            child: ListView.separated(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-              itemCount: list.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 14),
-              itemBuilder: (context, i) => _AnnouncementTile(
-                item: list[i],
-                isDark: isDark,
-              ),
-            ),
-          );
-        },
-      ),
+          },
+        ),
+      ],
     );
   }
 }

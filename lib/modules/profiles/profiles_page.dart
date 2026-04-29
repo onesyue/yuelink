@@ -19,6 +19,7 @@ import '../../core/kernel/core_manager.dart';
 import '../../theme.dart';
 import '../../shared/widgets/empty_state.dart';
 import '../../shared/widgets/yl_loading.dart';
+import '../../shared/widgets/yl_scaffold.dart';
 import '../../widgets/loading_overlay.dart';
 import 'widgets/profile_card.dart';
 
@@ -71,172 +72,141 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final profilesAsync = ref.watch(profilesProvider);
     final activeId = ref.watch(activeProfileIdProvider);
 
-    return Scaffold(
-      body: Column(
-        children: [
-          // ── Top bar ──────────────────────────────────────────────
-          Padding(
-            padding: EdgeInsets.fromLTRB(32, MediaQuery.of(context).padding.top + 16, 32, 20),
-            child: Row(
-              children: [
-                if (Navigator.canPop(context))
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: BackButton(onPressed: () => Navigator.pop(context)),
-                  ),
-                Expanded(
-                  child: Text(
-                    s.navProfile,
-                    style: TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: -0.5,
-                      color: isDark ? Colors.white : Colors.black,
-                    ),
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.refresh_rounded, size: 18),
-                  tooltip: s.updateAllNow,
-                  onPressed: () => _updateAllProfiles(context, ref),
-                  style: IconButton.styleFrom(
-                    foregroundColor: YLColors.zinc500,
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.add, size: 20),
-                  tooltip: s.addSubscription,
-                  onPressed: () => _autoAddFromClipboard(context, ref),
-                  style: IconButton.styleFrom(
-                    foregroundColor: isDark ? Colors.white : YLColors.primary,
-                  ),
-                ),
-                PopupMenuButton<String>(
-                  icon: const Icon(Icons.more_vert, size: 20, color: YLColors.zinc500),
-                  tooltip: s.isEn ? 'More' : '更多',
-                  onSelected: (action) {
-                    switch (action) {
-                      case 'export_all':
-                        _exportAllProfiles(context, ref);
-                      case 'import_files':
-                        _importLocalFile(context, ref);
-                      case 'scan_qr':
-                        _scanQrAndAdd(context, ref);
-                    }
-                  },
-                  itemBuilder: (_) => [
-                    if (Platform.isAndroid || Platform.isIOS)
-                      PopupMenuItem(
-                        value: 'scan_qr',
-                        child: _menuItem(Icons.qr_code_scanner, s.scanQrImport),
-                      ),
-                    PopupMenuItem(
-                      value: 'export_all',
-                      child: _menuItem(Icons.upload_file_outlined, s.exportAllProfiles),
-                    ),
-                    PopupMenuItem(
-                      value: 'import_files',
-                      child: _menuItem(Icons.file_upload_outlined, s.importMultipleFiles),
-                    ),
-                  ],
-                ),
-              ],
+    return YLLargeTitleScaffold(
+      title: s.navProfile,
+      onRefresh: () => ref.read(profilesProvider.notifier).load(),
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.refresh_rounded, size: 22),
+          tooltip: s.updateAllNow,
+          onPressed: () => _updateAllProfiles(context, ref),
+        ),
+        IconButton(
+          icon: const Icon(Icons.add_rounded, size: 24),
+          tooltip: s.addSubscription,
+          onPressed: () => _autoAddFromClipboard(context, ref),
+        ),
+        PopupMenuButton<String>(
+          icon: const Icon(Icons.more_vert_rounded, size: 22),
+          tooltip: s.isEn ? 'More' : '更多',
+          onSelected: (action) {
+            switch (action) {
+              case 'export_all':
+                _exportAllProfiles(context, ref);
+              case 'import_files':
+                _importLocalFile(context, ref);
+              case 'scan_qr':
+                _scanQrAndAdd(context, ref);
+            }
+          },
+          itemBuilder: (_) => [
+            if (Platform.isAndroid || Platform.isIOS)
+              PopupMenuItem(
+                value: 'scan_qr',
+                child: _menuItem(Icons.qr_code_scanner, s.scanQrImport),
+              ),
+            PopupMenuItem(
+              value: 'export_all',
+              child: _menuItem(
+                  Icons.upload_file_outlined, s.exportAllProfiles),
             ),
+            PopupMenuItem(
+              value: 'import_files',
+              child: _menuItem(
+                  Icons.file_upload_outlined, s.importMultipleFiles),
+            ),
+          ],
+        ),
+      ],
+      slivers: [
+        profilesAsync.when(
+          loading: () => const SliverFillRemaining(
+            hasScrollBody: false,
+            child: Center(child: YLLoading()),
           ),
-          Container(
-            height: 0.5,
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.06)
-                : Colors.black.withValues(alpha: 0.06),
-          ),
-
-          // ── Content ──────────────────────────────────────────────
-          Expanded(
+          error: (e, _) => SliverFillRemaining(
+            hasScrollBody: false,
             child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 720),
-                child: profilesAsync.when(
-              loading: () => const Center(child: YLLoading()),
-              error: (e, _) => Center(
-                child: YLEmptyState(
-                  icon: Icons.error_outline,
-                  title: s.loadFailed(e.toString()),
-                  action: FilledButton.icon(
-                    onPressed: () =>
-                        ref.read(profilesProvider.notifier).load(),
-                    icon: const Icon(Icons.refresh, size: 16),
-                    label: Text(s.retry),
-                  ),
+              child: YLEmptyState(
+                icon: Icons.error_outline,
+                title: s.loadFailed(e.toString()),
+                action: FilledButton.icon(
+                  onPressed: () =>
+                      ref.read(profilesProvider.notifier).load(),
+                  icon: const Icon(Icons.refresh, size: 16),
+                  label: Text(s.retry),
                 ),
               ),
-              data: (profiles) {
-                if (profiles.isEmpty) {
-                  return Center(
-                    child: YLEmptyState(
-                      icon: Icons.description_outlined,
-                      title: s.noProfiles,
-                      subtitle: s.addSubscriptionHint,
-                    ),
-                  );
-                }
-                final sorted = List<Profile>.from(profiles)
-                  ..sort((a, b) {
-                    if (a.id == activeId && b.id != activeId) return -1;
-                    if (b.id == activeId && a.id != activeId) return 1;
-                    return 0;
-                  });
-                return RefreshIndicator(
-                  onRefresh: () => ref.read(profilesProvider.notifier).load(),
-                  child: ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
-                    itemCount: sorted.length,
-                    itemBuilder: (context, index) {
-                      final profile = sorted[index];
-                      final isActive = profile.id == activeId;
-                      final card = ProfileCard(
+            ),
+          ),
+          data: (profiles) {
+            if (profiles.isEmpty) {
+              return SliverFillRemaining(
+                hasScrollBody: false,
+                child: Center(
+                  child: YLEmptyState(
+                    icon: Icons.description_outlined,
+                    title: s.noProfiles,
+                    subtitle: s.addSubscriptionHint,
+                  ),
+                ),
+              );
+            }
+            final sorted = List<Profile>.from(profiles)
+              ..sort((a, b) {
+                if (a.id == activeId && b.id != activeId) return -1;
+                if (b.id == activeId && a.id != activeId) return 1;
+                return 0;
+              });
+            return SliverPadding(
+              padding: const EdgeInsets.fromLTRB(
+                  YLSpacing.lg, YLSpacing.sm, YLSpacing.lg, 0),
+              sliver: SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) {
+                    final profile = sorted[index];
+                    final isActive = profile.id == activeId;
+                    final card = Padding(
+                      padding: const EdgeInsets.only(bottom: YLSpacing.sm),
+                      child: ProfileCard(
                         profile: profile,
                         isActive: isActive,
                         onTap: () {
                           if (isActive) return;
                           _confirmSwitchProfile(context, ref, profile);
                         },
-                        onUpdate: () => _doUpdateProfile(context, ref, profile),
+                        onUpdate: () =>
+                            _doUpdateProfile(context, ref, profile),
                         onEdit: () => _showEditDialog(context, ref, profile),
                         onViewConfig: () =>
                             _showConfigViewer(context, profile),
-                        onExport: () => _exportProfile(context, ref, profile),
-                        onDelete: () =>
-                            _confirmDelete(context, ref, profile),
-                      );
-                      // On mobile, left-swipe reveals a delete action — the
-                      // iOS Mail / Gmail convention. Desktop keeps the
-                      // existing context-menu Delete row, since swipe
-                      // gestures don't apply to mouse-driven UIs.
-                      if (!(Platform.isIOS || Platform.isAndroid)) return card;
-                      return Dismissible(
-                        key: ValueKey('profile_${profile.id}'),
-                        direction: DismissDirection.endToStart,
-                        background: const ProfileSwipeDeleteBackground(),
-                        confirmDismiss: (_) async {
-                          return await showProfileDeleteConfirmSheet(
-                              context, ref, profile);
-                        },
-                        child: card,
-                      );
-                    },
-                  ),
-                );
-              },
-            ),
+                        onExport: () =>
+                            _exportProfile(context, ref, profile),
+                        onDelete: () => _confirmDelete(context, ref, profile),
+                      ),
+                    );
+                    if (!(Platform.isIOS || Platform.isAndroid)) return card;
+                    return Dismissible(
+                      key: ValueKey('profile_${profile.id}'),
+                      direction: DismissDirection.endToStart,
+                      background: const ProfileSwipeDeleteBackground(),
+                      confirmDismiss: (_) async {
+                        return await showProfileDeleteConfirmSheet(
+                            context, ref, profile);
+                      },
+                      child: card,
+                    );
+                  },
+                  childCount: sorted.length,
+                ),
               ),
-            ),
-          ),
-        ],
-      ),
+            );
+          },
+        ),
+      ],
     );
   }
 

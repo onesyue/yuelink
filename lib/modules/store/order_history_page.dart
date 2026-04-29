@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../i18n/app_strings.dart';
+import '../../shared/widgets/yl_scaffold.dart';
 import '../../theme.dart';
 import '../../domain/store/store_error.dart';
 import '../../domain/store/store_order.dart';
@@ -45,64 +46,66 @@ class _OrderHistoryPageState extends ConsumerState<OrderHistoryPage>
     final isEn = s.isEn;
     final ordersAsync = ref.watch(orderHistoryProvider);
 
-    return Scaffold(
-      backgroundColor: isDark ? YLColors.bgDark : YLColors.bgLight,
-      appBar: AppBar(
-        backgroundColor: isDark ? YLColors.bgDark : YLColors.bgLight,
-        elevation: 0,
-        leading: Navigator.canPop(context) ? const BackButton() : null,
-        automaticallyImplyLeading: false,
-        title: Text(
-          isEn ? 'Order History' : '订单记录',
-          style: YLText.titleMedium.copyWith(fontWeight: FontWeight.w700),
+    return YLLargeTitleScaffold(
+      title: isEn ? 'Order History' : '订单记录',
+      onRefresh: () => ref.read(orderHistoryProvider.notifier).refresh(),
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.refresh_rounded, size: 22),
+          tooltip: isEn ? 'Refresh' : '刷新',
+          onPressed: () => ref.read(orderHistoryProvider.notifier).refresh(),
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh_rounded, size: 20),
-            color: YLColors.zinc500,
-            onPressed: () => ref.read(orderHistoryProvider.notifier).refresh(),
+      ],
+      slivers: [
+        ordersAsync.when(
+          loading: () => const SliverFillRemaining(
+            hasScrollBody: false,
+            child: Center(child: CircularProgressIndicator()),
           ),
-        ],
-      ),
-      body: ordersAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, _) => _ErrorView(
-          message: err is StoreError ? err.message : err.toString(),
-          onRetry: () => ref.read(orderHistoryProvider.notifier).refresh(),
-          isEn: isEn,
-        ),
-        data: (orders) {
-          if (orders.isEmpty) {
-            return _EmptyView(isEn: isEn);
-          }
-          final notifier = ref.read(orderHistoryProvider.notifier);
-          return RefreshIndicator(
-            onRefresh: notifier.refresh,
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(
-                horizontal: YLSpacing.md,
-                vertical: YLSpacing.sm,
-              ),
-              itemCount: orders.length + 1, // +1 for load-more footer
-              itemBuilder: (context, i) {
-                if (i == orders.length) {
-                  return _LoadMoreFooter(notifier: notifier, isEn: isEn);
-                }
-                final order = orders[i];
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: YLSpacing.sm),
-                  child: _OrderItem(
-                    order: order,
-                    isDark: isDark,
-                    isEn: isEn,
-                    onTap: () => _showDetail(context, order, isDark, isEn),
-                  ),
-                );
-              },
+          error: (err, _) => SliverFillRemaining(
+            hasScrollBody: false,
+            child: _ErrorView(
+              message: err is StoreError ? err.message : err.toString(),
+              onRetry: () => ref.read(orderHistoryProvider.notifier).refresh(),
+              isEn: isEn,
             ),
-          );
-        },
-      ),
+          ),
+          data: (orders) {
+            if (orders.isEmpty) {
+              return SliverFillRemaining(
+                hasScrollBody: false,
+                child: _EmptyView(isEn: isEn),
+              );
+            }
+            final notifier = ref.read(orderHistoryProvider.notifier);
+            return SliverPadding(
+              padding: const EdgeInsets.fromLTRB(
+                  YLSpacing.lg, YLSpacing.sm, YLSpacing.lg, 0),
+              sliver: SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (context, i) {
+                    if (i == orders.length) {
+                      return _LoadMoreFooter(notifier: notifier, isEn: isEn);
+                    }
+                    final order = orders[i];
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: YLSpacing.sm),
+                      child: _OrderItem(
+                        order: order,
+                        isDark: isDark,
+                        isEn: isEn,
+                        onTap: () =>
+                            _showDetail(context, order, isDark, isEn),
+                      ),
+                    );
+                  },
+                  childCount: orders.length + 1,
+                ),
+              ),
+            );
+          },
+        ),
+      ],
     );
   }
 
