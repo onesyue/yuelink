@@ -70,7 +70,7 @@ class CoreLifecycleManager {
         ref.read(coreStatusProvider.notifier).state = CoreStatus.stopped;
         const detail =
             'TUN 模式需要安装"服务模式"辅助程序。\n'
-            '请前往设置 → 连接修复 → 安装服务模式，然后再连接。';
+            '请前往设置 → 连接修复 → 桌面 TUN → 安装服务，然后再连接。';
         ref.read(coreStartupErrorProvider.notifier).state = detail;
         AppNotifier.error(detail);
         EventLog.write('[Core] connect_fail reason=service_not_installed');

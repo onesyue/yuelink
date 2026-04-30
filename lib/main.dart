@@ -579,8 +579,11 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
       deepLinkUrlProvider: deepLinkUrlProvider,
     );
     WidgetsBinding.instance.addObserver(this);
-    if (Platform.isAndroid || Platform.isIOS) {
+    if (Platform.isAndroid || Platform.isIOS || Platform.isMacOS) {
       _resume.setupVpnRevocationListener();
+    }
+    if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
+      _resume.startNetworkChangePolling();
     }
     if (Platform.isAndroid) {
       _tile.init();
@@ -822,6 +825,7 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
     TileService.onToggleRequested = null;
     TileService.onOpenPreferences = null;
     WidgetsBinding.instance.removeObserver(this);
+    _resume.dispose();
     unawaited(_deeplink.dispose());
     _tray.dispose();
     unawaited(_hotkey.dispose());

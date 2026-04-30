@@ -217,6 +217,10 @@ class ServiceManager {
       if (socketPath != null) {
         await SettingsService.setServiceSocketPath(socketPath);
       }
+      // Persist IPC credentials/paths before the elevation prompt. If the
+      // app is killed or relaunched while UAC/osascript is active, the OS
+      // service and Dart-side client state must not drift apart.
+      await SettingsService.flush();
 
       final configFile = File('${tempDir.path}/service-config.json');
       await configFile.writeAsString(
@@ -508,11 +512,14 @@ Start-Service -Name $serviceName
     return _ServiceBinaries(helperPath: helperPath, mihomoPath: mihomoPath);
   }
 
-  static Future<void> _waitUntilReachable() async {
-    // 20 × 500ms = 10s. Helper binaries typically ping within ~1s; the long
-    // cap covers slow Windows Service startup (driver init, AV scan) and
-    // macOS launchd kickstart lag on first install.
-    for (var i = 0; i < 20; i++) {
+  static Future<void> _waitUntilReachable({
+    Duration deadline = const Duration(seconds: 30),
+  }) async {
+    // Helper binaries typically ping within ~1s. First install can be much
+    // slower on Windows/macOS because service registration, AV scanning and
+    // TUN driver warmup happen in parallel with the listener binding.
+    final end = DateTime.now().add(deadline);
+    while (DateTime.now().isBefore(end)) {
       if (await ServiceClient.ping()) return;
       await Future.delayed(const Duration(milliseconds: 500));
     }
@@ -524,7 +531,8 @@ Start-Service -Name $serviceName
     throw ProcessException(
       'service',
       const [],
-      'Service installed but IPC never came up (10s). $diag',
+      'Service installed but IPC never came up '
+          '(${deadline.inSeconds}s). $diag',
     );
   }
 

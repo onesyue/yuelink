@@ -1,6 +1,7 @@
 import Flutter
 import UIKit
 import NetworkExtension
+import Network
 
 @main
 @objc class AppDelegate: FlutterAppDelegate {
@@ -12,6 +13,9 @@ import NetworkExtension
     private var backgroundVpnObserver: NSObjectProtocol?
     /// Channel reference kept alive so we can send unsolicited messages (vpnRevoked).
     private var vpnChannel: FlutterMethodChannel?
+    private var pathMonitor: NWPathMonitor?
+    private let pathMonitorQueue = DispatchQueue(label: "YueLinkPathMonitor")
+    private var lastTransport: String?
     /// Timestamp when session.status reached `.connected`. Used by the
     /// background observer to detect "connected then immediately dropped" —
     /// the signature symptom of an iOS PacketTunnel that the system started
@@ -33,6 +37,7 @@ import NetworkExtension
             binaryMessenger: controller.binaryMessenger
         )
         vpnChannel = channel
+        startPathMonitor()
 
         channel.setMethodCallHandler { [weak self] call, result in
             switch call.method {
@@ -54,6 +59,34 @@ import NetworkExtension
         }
 
         return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+    }
+
+    private func startPathMonitor() {
+        if pathMonitor != nil { return }
+        let monitor = NWPathMonitor()
+        pathMonitor = monitor
+        monitor.pathUpdateHandler = { [weak self] path in
+            guard let self = self else { return }
+            let now = self.transportLabel(for: path)
+            let prev = self.lastTransport
+            self.lastTransport = now
+            guard let prev = prev, prev != now else { return }
+            DispatchQueue.main.async { [weak self] in
+                self?.vpnChannel?.invokeMethod(
+                    "transportChanged",
+                    arguments: ["prev": prev, "now": now]
+                )
+            }
+        }
+        monitor.start(queue: pathMonitorQueue)
+    }
+
+    private func transportLabel(for path: Network.NWPath) -> String {
+        guard path.status == .satisfied else { return "none" }
+        if path.usesInterfaceType(.wifi) { return "wifi" }
+        if path.usesInterfaceType(.wiredEthernet) { return "ethernet" }
+        if path.usesInterfaceType(.cellular) { return "cellular" }
+        return "other"
     }
 
     // MARK: - VPN control

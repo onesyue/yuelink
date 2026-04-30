@@ -43,7 +43,7 @@ find-process-mode: off
 ''';
       final result = ConfigTemplate.process(config, connectionMode: 'tun');
 
-      if (Platform.isMacOS || Platform.isWindows) {
+      if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
         expect(result, contains('tun:'));
         expect(result, contains('enable: true'));
         expect(result, contains('stack: mixed'));
@@ -76,10 +76,31 @@ tun:
         connectionMode: 'systemProxy',
       );
 
-      if (Platform.isMacOS || Platform.isWindows) {
+      if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
         expect(result, contains('enable: false'));
       } else {
         expect(result, contains('enable: true'));
+      }
+    });
+
+    test('desktop tun process bypass injects PROCESS-NAME rules', () {
+      const config = '''
+mixed-port: 7890
+rules:
+  - MATCH,Proxy
+''';
+      final result = ConfigTemplate.process(
+        config,
+        connectionMode: 'tun',
+        tunBypassProcesses: const ['ssh', 'Parallels Desktop'],
+      );
+
+      if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
+        expect(result, contains('"PROCESS-NAME,ssh,DIRECT"'));
+        expect(result, contains('"PROCESS-NAME,Parallels Desktop,DIRECT"'));
+        expect(result, isNot(contains('exclude-package:')));
+      } else {
+        expect(result, isNot(contains('PROCESS-NAME,ssh,DIRECT')));
       }
     });
 
@@ -1093,10 +1114,11 @@ rules:
     test(
       'desktop tun uses AppConstants.defaultTunMtu (matches hot-switch PATCH)',
       () {
-        // Production code path `if (Platform.isMacOS || Platform.isWindows)`
-        // only injects the TUN section on those two desktops. Linux + mobile
-        // fall through untouched, so the assertion below doesn't apply there.
-        if (!(Platform.isMacOS || Platform.isWindows)) return;
+        // Production code path injects desktop TUN on macOS/Windows/Linux.
+        // Mobile TUN is fd-based and tested separately.
+        if (!(Platform.isMacOS || Platform.isWindows || Platform.isLinux)) {
+          return;
+        }
         const config = 'mixed-port: 7890\nproxies: []\n';
         final result = ConfigTemplate.process(config, connectionMode: 'tun');
         expect(result, contains('mtu: ${AppConstants.defaultTunMtu}'));

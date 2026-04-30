@@ -252,7 +252,7 @@ rules:
         '${tempDir.path}/${AppConstants.configFileName}',
       ).readAsString();
 
-      if (Platform.isMacOS || Platform.isWindows) {
+      if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
         expect(written, contains('stack: mixed'));
         expect(written, contains('enable: true'));
         expect(written, isNot(contains('file-descriptor: 42')));
@@ -418,29 +418,36 @@ rules:
       expect(await SettingsService.getManualStopped(), isTrue);
     });
 
-    test('round-trips false (clear after stop) through flush + reload',
-        () async {
-      await SettingsService.setManualStopped(true);
-      await SettingsService.flush();
-      // Then a subsequent start() clears it
-      await SettingsService.setManualStopped(false);
-      await SettingsService.flush();
-      expect(await SettingsService.getManualStopped(), isFalse);
-    });
+    test(
+      'round-trips false (clear after stop) through flush + reload',
+      () async {
+        await SettingsService.setManualStopped(true);
+        await SettingsService.flush();
+        // Then a subsequent start() clears it
+        await SettingsService.setManualStopped(false);
+        await SettingsService.flush();
+        expect(await SettingsService.getManualStopped(), isFalse);
+      },
+    );
 
-    test('default immediate=true survives cache invalidation (real disk write)',
-        () async {
-      // Prove the value actually hit the disk, not just the in-memory cache.
-      // Write with immediate=true, drop the in-memory cache, read back:
-      // if immediate=true is working, the value comes from the JSON file.
-      await SettingsService.setManualStopped(true);
-      SettingsService.invalidateCache();
-      expect(await SettingsService.getManualStopped(), isTrue,
-          reason: 'immediate=true must persist to disk, not only memory');
-      // Clean up for other tests in this group.
-      await SettingsService.setManualStopped(false);
-      SettingsService.invalidateCache();
-    });
+    test(
+      'default immediate=true survives cache invalidation (real disk write)',
+      () async {
+        // Prove the value actually hit the disk, not just the in-memory cache.
+        // Write with immediate=true, drop the in-memory cache, read back:
+        // if immediate=true is working, the value comes from the JSON file.
+        await SettingsService.setManualStopped(true);
+        SettingsService.invalidateCache();
+        expect(
+          await SettingsService.getManualStopped(),
+          isTrue,
+          reason: 'immediate=true must persist to disk, not only memory',
+        );
+        // Clean up for other tests in this group.
+        await SettingsService.setManualStopped(false);
+        SettingsService.invalidateCache();
+      },
+    );
 
     test('immediate=false updates in-memory cache synchronously', () async {
       await SettingsService.setManualStopped(true);
@@ -472,16 +479,17 @@ rules:
       required bool savedManualStopped,
       required bool savedAutoConnect,
     }) {
-      final container = ProviderContainer(overrides: [
-        userStoppedProvider.overrideWith((ref) => savedManualStopped),
-        autoConnectProvider.overrideWith((ref) => savedAutoConnect),
-      ]);
+      final container = ProviderContainer(
+        overrides: [
+          userStoppedProvider.overrideWith((ref) => savedManualStopped),
+          autoConnectProvider.overrideWith((ref) => savedAutoConnect),
+        ],
+      );
       addTearDown(container.dispose);
       return container;
     }
 
-    test(
-        'autoConnect=true + persisted manualStopped=true → gate blocks '
+    test('autoConnect=true + persisted manualStopped=true → gate blocks '
         'auto-connect on cold start', () async {
       // Simulate: user had explicitly disconnected, then killed the app.
       await SettingsService.setManualStopped(true);
@@ -498,16 +506,22 @@ rules:
       // autoConnect == true, userStopped == false. If userStopped is
       // true (from override), auto-connect must be blocked.
       expect(container.read(autoConnectProvider), isTrue);
-      expect(container.read(userStoppedProvider), isTrue,
-          reason: 'override must hydrate the provider with persisted value');
-      final gatedAllowed = container.read(autoConnectProvider) &&
+      expect(
+        container.read(userStoppedProvider),
+        isTrue,
+        reason: 'override must hydrate the provider with persisted value',
+      );
+      final gatedAllowed =
+          container.read(autoConnectProvider) &&
           !container.read(userStoppedProvider);
-      expect(gatedAllowed, isFalse,
-          reason: 'auto-connect must be gated when user explicitly stopped');
+      expect(
+        gatedAllowed,
+        isFalse,
+        reason: 'auto-connect must be gated when user explicitly stopped',
+      );
     });
 
-    test(
-        'manual start clears persisted flag → next cold-start allows '
+    test('manual start clears persisted flag → next cold-start allows '
         'auto-connect', () async {
       // Step 1: user stopped manually
       await SettingsService.setManualStopped(true);
@@ -523,17 +537,24 @@ rules:
         savedAutoConnect: true,
       );
 
-      expect(container.read(userStoppedProvider), isFalse,
-          reason: 'cleared flag must not zombie-block future auto-connect');
-      final gatedAllowed = container.read(autoConnectProvider) &&
+      expect(
+        container.read(userStoppedProvider),
+        isFalse,
+        reason: 'cleared flag must not zombie-block future auto-connect',
+      );
+      final gatedAllowed =
+          container.read(autoConnectProvider) &&
           !container.read(userStoppedProvider);
-      expect(gatedAllowed, isTrue,
-          reason: 'auto-connect must proceed after a clean start cleared '
-              'the flag');
+      expect(
+        gatedAllowed,
+        isTrue,
+        reason:
+            'auto-connect must proceed after a clean start cleared '
+            'the flag',
+      );
     });
 
-    test(
-        'autoConnect=false + persisted manualStopped=false → gate still '
+    test('autoConnect=false + persisted manualStopped=false → gate still '
         'blocks (autoConnect off)', () async {
       // Not the primary hotfix scenario, but guards against a regression
       // where the new override accidentally forces autoConnect on.
@@ -542,7 +563,8 @@ rules:
         savedManualStopped: saved,
         savedAutoConnect: false,
       );
-      final gatedAllowed = container.read(autoConnectProvider) &&
+      final gatedAllowed =
+          container.read(autoConnectProvider) &&
           !container.read(userStoppedProvider);
       expect(gatedAllowed, isFalse);
     });

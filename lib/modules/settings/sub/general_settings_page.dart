@@ -364,9 +364,9 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
                           },
                         ),
                       ),
+                      Divider(height: 1, thickness: 0.5, color: dividerColor),
+                      const ServiceModeRow(),
                       if (connectionMode == 'tun') ...[
-                        Divider(height: 1, thickness: 0.5, color: dividerColor),
-                        const ServiceModeRow(),
                         Divider(height: 1, thickness: 0.5, color: dividerColor),
                         YLInfoRow(
                           label: s.tunStackLabel,

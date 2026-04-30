@@ -40,46 +40,54 @@ extension _DesktopServiceMode on CoreManager {
     String? homeDir;
 
     try {
-      await diag.runStartupStep(steps, 'ensureGeo', StartupError.geoFilesFailed,
-          () async {
-        final installed = await GeoDataService.ensureFiles();
-        return 'installed=$installed';
-      });
+      await diag.runStartupStep(
+        steps,
+        'ensureGeo',
+        StartupError.geoFilesFailed,
+        () async {
+          final installed = await GeoDataService.ensureFiles();
+          return 'installed=$installed';
+        },
+      );
 
-      await diag.runStartupStep(steps, 'buildConfig',
-          StartupError.configBuildFailed, () async {
-        final appDir = await getApplicationSupportDirectory();
-        homeDir = appDir.path;
+      await diag.runStartupStep(
+        steps,
+        'buildConfig',
+        StartupError.configBuildFailed,
+        () async {
+          final appDir = await getApplicationSupportDirectory();
+          homeDir = appDir.path;
 
-        // A5a relay wiring on desktop service-mode path.
-        final relay = await _resolveRelay();
-        final withOverwrite = await _prepareConfig(
-          configYaml,
-          relayProfile: relay.profile,
-        );
-        processed = await ConfigTemplate.processInIsolate(
-          withOverwrite,
-          apiPort: _apiPort,
-          secret: _apiSecret,
-          connectionMode: connectionMode,
-          desktopTunStack: desktopTunStack,
-          tunBypassAddresses: tunBypassAddresses,
-          tunBypassProcesses: tunBypassProcesses,
-          quicRejectPolicy: quicRejectPolicy,
-          relayHostWhitelist: relay.bypassHosts,
-        );
-        _apiPort = ConfigTemplate.getApiPort(processed);
-        _mixedPort = ConfigTemplate.getMixedPort(processed);
-        final parsedSecret = ConfigTemplate.getSecret(processed);
-        if (parsedSecret != null && parsedSecret.isNotEmpty) {
-          _apiSecret = parsedSecret;
-        }
-        _api = null;
-        _stream = null;
-        _clashCore = null;
-        return 'output=${processed.length}b, apiPort=$_apiPort, '
-            'mixedPort=$_mixedPort, homeDir=$homeDir';
-      });
+          // A5a relay wiring on desktop service-mode path.
+          final relay = await _resolveRelay();
+          final withOverwrite = await _prepareConfig(
+            configYaml,
+            relayProfile: relay.profile,
+          );
+          processed = await ConfigTemplate.processInIsolate(
+            withOverwrite,
+            apiPort: _apiPort,
+            secret: _apiSecret,
+            connectionMode: connectionMode,
+            desktopTunStack: desktopTunStack,
+            tunBypassAddresses: tunBypassAddresses,
+            tunBypassProcesses: tunBypassProcesses,
+            quicRejectPolicy: quicRejectPolicy,
+            relayHostWhitelist: relay.bypassHosts,
+          );
+          _apiPort = ConfigTemplate.getApiPort(processed);
+          _mixedPort = ConfigTemplate.getMixedPort(processed);
+          final parsedSecret = ConfigTemplate.getSecret(processed);
+          if (parsedSecret != null && parsedSecret.isNotEmpty) {
+            _apiSecret = parsedSecret;
+          }
+          _api = null;
+          _stream = null;
+          _clashCore = null;
+          return 'output=${processed.length}b, apiPort=$_apiPort, '
+              'mixedPort=$_mixedPort, homeDir=$homeDir';
+        },
+      );
 
       // Two-factor readiness: SCM registered (isInstalled) + HTTP listener
       // actually answering. Without the second factor, install() can return
@@ -87,20 +95,24 @@ extension _DesktopServiceMode on CoreManager {
       // subsequent POST /v1/start to race and fail — the classic "user has
       // to refresh once before it connects" symptom. Matches FlClash's
       // `sc query RUNNING && ping` and CVR's `wait_for_service_ipc`.
-      await diag.runStartupStep(steps, 'waitService',
-          StartupError.coreStartFailed, () async {
-        for (var i = 0; i < 50; i++) {
-          if (await ServiceClient.ping()) {
-            return 'ready after ${i + 1} ping(s)';
+      await diag.runStartupStep(
+        steps,
+        'waitService',
+        StartupError.coreStartFailed,
+        () async {
+          for (var i = 0; i < 150; i++) {
+            if (await ServiceClient.ping()) {
+              return 'ready after ${i + 1} ping(s)';
+            }
+            await Future.delayed(const Duration(milliseconds: 200));
           }
-          await Future.delayed(const Duration(milliseconds: 200));
-        }
-        throw Exception(
-          'service helper not answering ping after 10s — likely a cold '
-          'install + Windows Defender / TUN driver init. Retry usually '
-          'works once the helper has bound its listener.',
-        );
-      });
+          throw Exception(
+            'service helper not answering ping after 30s — likely a cold '
+            'install + Windows Defender / TUN driver init. Retry usually '
+            'works once the helper has bound its listener.',
+          );
+        },
+      );
 
       await diag.runStartupStep(
         steps,
@@ -142,72 +154,86 @@ extension _DesktopServiceMode on CoreManager {
         },
       );
 
-      await diag.runStartupStep(steps, 'waitApi', StartupError.apiTimeout,
-          () async {
-        // Windows cold-start budget: wintun.dll first-load + Defender scan
-        // + mihomo process start + external-controller bind can push past
-        // 10 s on older machines. Previous 5 s cap caused "install OK,
-        // first connect fails, second connect works" — users had to click
-        // twice because the app was racing the TUN driver. 150 × 100 ms
-        // = 15 s matches the service install _waitUntilReachable ceiling
-        // so the whole install→run flow has a consistent window.
-        for (var i = 1; i <= 150; i++) {
-          if (await api.isAvailable()) {
-            return 'ready after $i attempts';
-          }
-          try {
-            final status = await ServiceClient.status();
-            if (!status.mihomoRunning) {
-              throw Exception(
-                'service child stopped before API ready: '
-                '${status.lastError ?? status.lastExit ?? 'unknown'}',
-              );
+      await diag.runStartupStep(
+        steps,
+        'waitApi',
+        StartupError.apiTimeout,
+        () async {
+          // Windows cold-start budget: wintun.dll first-load + Defender scan
+          // + mihomo process start + external-controller bind can push past
+          // 10 s on older machines. Previous 5 s cap caused "install OK,
+          // first connect fails, second connect works" — users had to click
+          // twice because the app was racing the TUN driver. 300 × 100 ms
+          // = 30 s also gives the service watchdog time to recover from one
+          // early child crash before the UI declares startup failed.
+          var lastState = 'no service status yet';
+          for (var i = 1; i <= 300; i++) {
+            if (await api.isAvailable()) {
+              return 'ready after $i attempts, $lastState';
             }
-          } catch (e) {
-            throw Exception(
-              'service helper unavailable while waiting API: $e',
-            );
+            try {
+              final status = await ServiceClient.status();
+              if (!status.mihomoRunning) {
+                lastState =
+                    'child stopped: '
+                    '${status.lastError ?? status.lastExit ?? 'unknown'}';
+              } else {
+                lastState = 'child running pid=${status.pid ?? 0}';
+              }
+            } catch (e) {
+              lastState = 'service status unavailable: $e';
+            }
+            await Future.delayed(const Duration(milliseconds: 100));
           }
-          await Future.delayed(const Duration(milliseconds: 100));
-        }
-        throw Exception('API not available after 150 attempts (15s)');
-      });
+          throw Exception(
+            'API not available after 300 attempts (30s); $lastState',
+          );
+        },
+      );
 
       // ── waitProxies (v1.0.22 P0-2, desktop service mode) ─────────
       // Service-helper-hosted mihomo binds /version before /proxies
       // is fully populated, same as the FFI path. See _waitProxiesReady.
-      await diag.runStartupStep(steps, 'waitProxies',
-          StartupError.apiTimeout, () async {
-        return await _waitProxiesReady();
-      });
+      await diag.runStartupStep(
+        steps,
+        'waitProxies',
+        StartupError.apiTimeout,
+        () async {
+          return await _waitProxiesReady();
+        },
+      );
 
-      await diag.runStartupStep(steps, 'verify',
-          StartupError.coreDiedAfterStart, () async {
-        final status = await ServiceClient.status();
-        final apiOk = await api.isAvailable();
+      await diag.runStartupStep(
+        steps,
+        'verify',
+        StartupError.coreDiedAfterStart,
+        () async {
+          final status = await ServiceClient.status();
+          final apiOk = await api.isAvailable();
 
-        if (!status.mihomoRunning) {
-          throw Exception('service child is not running');
-        }
-        if (!apiOk) {
-          throw Exception('API unavailable after startup');
-        }
+          if (!status.mihomoRunning) {
+            throw Exception('service child is not running');
+          }
+          if (!apiOk) {
+            throw Exception('API unavailable after startup');
+          }
 
-        final appDir = await getApplicationSupportDirectory();
-        await File(
-          '${appDir.path}/${CoreManager._kLastWorkingConfig}',
-        ).writeAsString(processed);
+          final appDir = await getApplicationSupportDirectory();
+          await File(
+            '${appDir.path}/${CoreManager._kLastWorkingConfig}',
+          ).writeAsString(processed);
 
-        var info = 'serviceRunning=${status.mihomoRunning}, apiOk=$apiOk';
-        try {
-          final dns = await api.queryDns('google.com');
-          final answers = dns['Answer'] as List?;
-          info += ', dns=${answers?.length ?? 0}answers';
-        } catch (e) {
-          info += ', dnsErr=$e';
-        }
-        return info;
-      });
+          var info = 'serviceRunning=${status.mihomoRunning}, apiOk=$apiOk';
+          try {
+            final dns = await api.queryDns('google.com');
+            final answers = dns['Answer'] as List?;
+            info += ', dns=${answers?.length ?? 0}answers';
+          } catch (e) {
+            info += ', dnsErr=$e';
+          }
+          return info;
+        },
+      );
 
       await _persistPorts();
       await _finishReport(steps, true, null);

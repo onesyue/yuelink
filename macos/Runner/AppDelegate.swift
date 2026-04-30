@@ -1,8 +1,14 @@
 import Cocoa
 import FlutterMacOS
+import Network
 
 @main
 class AppDelegate: FlutterAppDelegate {
+    private var vpnChannel: FlutterMethodChannel?
+    private var pathMonitor: NWPathMonitor?
+    private let pathMonitorQueue = DispatchQueue(label: "YueLinkPathMonitor")
+    private var lastTransport: String?
+
     override func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         // Return false so the app stays alive in the tray when the window is hidden.
         // window_manager's setPreventClose(true) intercepts close events, but if the
@@ -27,6 +33,8 @@ class AppDelegate: FlutterAppDelegate {
     override func applicationDidFinishLaunching(_ notification: Notification) {
         guard let controller = mainFlutterWindow?.contentViewController as? FlutterViewController else { return }
         let channel = FlutterMethodChannel(name: "com.yueto.yuelink/vpn", binaryMessenger: controller.engine.binaryMessenger)
+        vpnChannel = channel
+        startPathMonitor()
 
         channel.setMethodCallHandler { call, result in
             switch call.method {
@@ -53,6 +61,34 @@ class AppDelegate: FlutterAppDelegate {
                 result(FlutterMethodNotImplemented)
             }
         }
+    }
+
+    private func startPathMonitor() {
+        if pathMonitor != nil { return }
+        let monitor = NWPathMonitor()
+        pathMonitor = monitor
+        monitor.pathUpdateHandler = { [weak self] path in
+            guard let self = self else { return }
+            let now = self.transportLabel(for: path)
+            let prev = self.lastTransport
+            self.lastTransport = now
+            guard let prev = prev, prev != now else { return }
+            DispatchQueue.main.async { [weak self] in
+                self?.vpnChannel?.invokeMethod(
+                    "transportChanged",
+                    arguments: ["prev": prev, "now": now]
+                )
+            }
+        }
+        monitor.start(queue: pathMonitorQueue)
+    }
+
+    private func transportLabel(for path: NWPath) -> String {
+        guard path.status == .satisfied else { return "none" }
+        if path.usesInterfaceType(.wifi) { return "wifi" }
+        if path.usesInterfaceType(.wiredEthernet) { return "ethernet" }
+        if path.usesInterfaceType(.cellular) { return "cellular" }
+        return "other"
     }
 
     private func setSystemProxy(host: String, httpPort: Int, socksPort: Int) {

@@ -19,6 +19,7 @@ import '../core/kernel/core_manager.dart';
 import '../core/kernel/recovery_manager.dart';
 import '../core/managers/system_proxy_manager.dart';
 import '../core/platform/vpn_service.dart';
+import '../core/profile/profile_service.dart';
 import '../core/providers/core_provider.dart';
 import '../core/storage/settings_service.dart';
 
@@ -35,7 +36,6 @@ class IosEntitlementSuspectEvent {
 /// Latest entitlement-suspect event. `null` until first occurrence.
 final iosEntitlementSuspectProvider =
     StateProvider<IosEntitlementSuspectEvent?>((_) => null);
-
 
 /// Coordinates "user came back to the app" semantics:
 ///
@@ -73,15 +73,36 @@ class AppResumeController {
   /// would otherwise double-invalidate streams and race on recovery).
   bool get inFlight => _inFlight;
   bool _inFlight = false;
+  int _transportRecoveryGeneration = 0;
+  bool _transportRestartInFlight = false;
+  Timer? _networkPollTimer;
+  String? _lastNetworkSignature;
 
   /// Wire up the platform VPN-service callbacks. Call once from
-  /// `initState` on Android / iOS. Idempotent — internally
+  /// `initState` on Android / iOS / macOS. Idempotent — internally
   /// `VpnService.listenForRevocation` replaces any previous handler.
   void setupVpnRevocationListener() {
     VpnService.listenForRevocation(
       _onVpnRevoked,
       onTransportChanged: _onTransportChanged,
     );
+  }
+
+  /// Desktop fallback path. macOS also has NWPathMonitor, but polling catches
+  /// same-medium changes that the transport label cannot express, such as
+  /// Wi-Fi A → Wi-Fi B or Ethernet DHCP address changes.
+  void startNetworkChangePolling() {
+    if (_networkPollTimer != null) return;
+    unawaited(_pollNetworkSignature(seedOnly: true));
+    _networkPollTimer = Timer.periodic(
+      const Duration(seconds: 5),
+      (_) => unawaited(_pollNetworkSignature()),
+    );
+  }
+
+  void dispose() {
+    _networkPollTimer?.cancel();
+    _networkPollTimer = null;
   }
 
   void _onVpnRevoked(VpnRevocationReason reason) {
@@ -93,7 +114,8 @@ class AppResumeController {
       return;
     }
     debugPrint(
-        '[Resume] VPN revoked (kind=${reason.kind}, elapsed=${reason.elapsedMs}ms) — resetting state');
+      '[Resume] VPN revoked (kind=${reason.kind}, elapsed=${reason.elapsedMs}ms) — resetting state',
+    );
     resetCoreToStopped(ref);
     // delay-state wipe happens via the coreStatusProvider listener in
     // main.dart (status → stopped clears delay results).
@@ -104,8 +126,9 @@ class AppResumeController {
       // the system to actually route packets (TrollStore-installed,
       // unsigned re-pack, etc.). Mark a flag the connection page checks
       // next frame to show the iOS install guide dialog.
-      ref.read(iosEntitlementSuspectProvider.notifier).state =
-          IosEntitlementSuspectEvent(
+      ref
+          .read(iosEntitlementSuspectProvider.notifier)
+          .state = IosEntitlementSuspectEvent(
         elapsedMs: reason.elapsedMs ?? 0,
         at: DateTime.now(),
       );
@@ -114,7 +137,11 @@ class AppResumeController {
     }
   }
 
-  Future<void> _onTransportChanged(String prev, String now) async {
+  Future<void> _onTransportChanged(
+    String prev,
+    String now, {
+    bool force = false,
+  }) async {
     // Mirror the underlying transport into Riverpod so the heartbeat
     // can re-derive its cadence (Wi-Fi 15 s / cellular 30 s
     // foreground; 60 / 120 s background). Cheap state write — no
@@ -124,28 +151,345 @@ class AppResumeController {
     }
 
     // Wi-Fi → cellular / cellular → Wi-Fi: stale TCP pool + polluted
-    // fake-ip mappings kill perceived responsiveness for ~30 s after
-    // the switch. Flush both. Skip the initial "none → wifi" transition
-    // at cold start — there's nothing to flush yet.
-    if (prev == 'none') return;
+    // fake-ip mappings kill perceived responsiveness after the switch.
+    // Flush them repeatedly because Android emits the callback before
+    // DNS/route state has fully settled on some ROMs. The cold-start
+    // "none → wifi" transition is harmless because recovery exits while
+    // the core is still starting, but a real no-network → network return
+    // while connected gets the same cleanup.
+    if (!_isTransportHandoff(prev, now, force: force)) return;
     if (CoreManager.instance.isMockMode) return;
+
+    final generation = ++_transportRecoveryGeneration;
+    await _recoverTransportHandoff(prev, now, generation);
+  }
+
+  Future<void> _pollNetworkSignature({bool seedOnly = false}) async {
+    if (_networkPollTimer == null && !seedOnly) return;
+    if (CoreManager.instance.isMockMode) return;
+    if (ref.read(appInBackgroundProvider)) return;
+
+    final signature = await _networkSignature().timeout(
+      const Duration(seconds: 2),
+      onTimeout: () => null,
+    );
+    if (signature == null) return;
+
+    if (seedOnly ||
+        ref.read(coreStatusProvider) != CoreStatus.running ||
+        ref.read(userStoppedProvider)) {
+      _lastNetworkSignature = signature;
+      return;
+    }
+
+    final previous = _lastNetworkSignature;
+    if (previous == null) {
+      _lastNetworkSignature = signature;
+      return;
+    }
+    if (previous == signature) return;
+
+    _lastNetworkSignature = signature;
+    final prevTransport = _transportFromNetworkSignature(previous);
+    final nowTransport = _transportFromNetworkSignature(signature);
+    debugPrint(
+      '[Resume] network signature changed $prevTransport→$nowTransport',
+    );
+    await _onTransportChanged(prevTransport, nowTransport, force: true);
+  }
+
+  Future<String?> _networkSignature() async {
+    try {
+      final interfaces = await NetworkInterface.list(
+        includeLoopback: false,
+        includeLinkLocal: false,
+        type: InternetAddressType.any,
+      );
+      final parts = <String>[];
+      for (final iface in interfaces) {
+        if (!_isPhysicalInterfaceName(iface.name)) continue;
+        final addresses =
+            iface.addresses
+                .where((a) => !a.isLoopback && !a.isLinkLocal)
+                .map((a) => a.address)
+                .where((a) => a.isNotEmpty)
+                .toList()
+              ..sort();
+        if (addresses.isEmpty) continue;
+        parts.add('${iface.name.toLowerCase()}=${addresses.join(",")}');
+      }
+      parts.sort();
+      return parts.isEmpty ? 'none' : parts.join('|');
+    } catch (e) {
+      debugPrint('[Resume] network signature probe failed: $e');
+      return null;
+    }
+  }
+
+  bool _isPhysicalInterfaceName(String name) {
+    final lower = name.toLowerCase();
+    if (lower.isEmpty) return false;
+    if (lower == 'lo' || lower.startsWith('lo:')) return false;
+    const virtualPrefixes = [
+      'tun',
+      'tap',
+      'utun',
+      'wg',
+      'awdl',
+      'llw',
+      'docker',
+      'veth',
+      'br-',
+      'vmnet',
+      'vboxnet',
+      'zt',
+    ];
+    for (final prefix in virtualPrefixes) {
+      if (lower.startsWith(prefix)) return false;
+    }
+    const virtualContains = [
+      'loopback',
+      'virtual',
+      'vethernet',
+      'hyper-v',
+      'docker',
+      'wsl',
+      'tailscale',
+      'zerotier',
+      'clash',
+      'mihomo',
+      'yuelink',
+    ];
+    for (final token in virtualContains) {
+      if (lower.contains(token)) return false;
+    }
+    return true;
+  }
+
+  String _transportFromNetworkSignature(String signature) {
+    if (signature == 'none' || signature.isEmpty) return 'none';
+    final lower = signature.toLowerCase();
+    if (lower.contains('wi-fi') ||
+        lower.contains('wifi') ||
+        lower.contains('wlan') ||
+        lower.contains('wlp')) {
+      return 'wifi';
+    }
+    if (lower.contains('cell') ||
+        lower.contains('mobile') ||
+        lower.contains('wwan') ||
+        lower.contains('wwp') ||
+        lower.contains('rmnet')) {
+      return 'cellular';
+    }
+    if (lower.contains('ethernet') ||
+        lower.contains('eth') ||
+        lower.contains('enp') ||
+        lower.contains('eno')) {
+      return 'ethernet';
+    }
+    return 'other';
+  }
+
+  bool _isTransportHandoff(String prev, String now, {bool force = false}) {
+    if (!_isPhysicalTransport(now)) return false;
+    if (force) return true;
+    if (prev == now) return _isPhysicalTransport(prev);
+    return prev == 'none' || _isPhysicalTransport(prev);
+  }
+
+  bool _isPhysicalTransport(String transport) {
+    return transport == 'wifi' ||
+        transport == 'cellular' ||
+        transport == 'ethernet' ||
+        transport == 'other';
+  }
+
+  Future<void> _recoverTransportHandoff(
+    String prev,
+    String now,
+    int generation,
+  ) async {
+    const delays = <Duration>[
+      Duration.zero,
+      Duration(milliseconds: 900),
+      Duration(milliseconds: 2500),
+    ];
+
+    debugPrint('[Resume] transport $prev→$now — recovery scheduled');
+    EventLog.write('[Transport] handoff from=$prev to=$now');
+    _invalidatePlatformNetworkCaches();
+
+    var lastReason = 'not_attempted';
+    var successAttempt = 0;
+    for (var attempt = 0; attempt < delays.length; attempt++) {
+      final delay = delays[attempt];
+      if (delay > Duration.zero) await Future<void>.delayed(delay);
+      if (generation != _transportRecoveryGeneration) return;
+      if (ref.read(coreStatusProvider) != CoreStatus.running) return;
+      if (ref.read(userStoppedProvider)) return;
+
+      final result = await _flushTransportState(attempt + 1, prev, now);
+      if (generation != _transportRecoveryGeneration) return;
+      if (result.ok) {
+        successAttempt = attempt + 1;
+      } else {
+        lastReason = result.reason;
+      }
+    }
+
+    if (successAttempt > 0) {
+      EventLog.write(
+        '[Transport] recovery ok from=$prev to=$now '
+        'last_attempt=$successAttempt',
+      );
+      unawaited(_repairPlatformNetworkSettingsAfterHandoff(prev, now));
+      return;
+    }
+
+    if (generation != _transportRecoveryGeneration) return;
+    await _restartAfterTransportHandoff(prev, now, lastReason, generation);
+  }
+
+  void _invalidatePlatformNetworkCaches() {
+    if (!(Platform.isMacOS || Platform.isWindows || Platform.isLinux)) return;
+    SystemProxyManager.invalidateNetworkServicesCache();
+    SystemProxyManager.invalidateVerifyCache();
+  }
+
+  Future<void> _repairPlatformNetworkSettingsAfterHandoff(
+    String prev,
+    String now,
+  ) async {
+    if (!(Platform.isMacOS || Platform.isWindows || Platform.isLinux)) return;
+    try {
+      final mode = ref.read(connectionModeProvider);
+      if (Platform.isMacOS && mode == 'tun') {
+        EventLog.write('[Transport] reapply_macos_tun_dns from=$prev to=$now');
+        await SystemProxyManager.setTunDns();
+        return;
+      }
+      if (mode == 'systemProxy') {
+        await _proxyTamperCheck();
+      }
+    } catch (e) {
+      debugPrint('[Resume] platform network repair failed: $e');
+      EventLog.write(
+        '[Transport] platform_repair err=${e.toString().split("\n").first}',
+      );
+    }
+  }
+
+  Future<({bool ok, String reason})> _flushTransportState(
+    int attempt,
+    String prev,
+    String now,
+  ) async {
     try {
       final api = CoreManager.instance.api;
-      if (!await api.isAvailable()) return;
+      final health = await api.healthSnapshot();
+      if (!health.ok) {
+        debugPrint(
+          '[Resume] transport $prev→$now attempt=$attempt api=${health.reason}',
+        );
+        return (ok: false, reason: health.reason);
+      }
+
       debugPrint(
-        '[Resume] transport $prev→$now — flushing fake-ip + '
-        'closing connections',
+        '[Resume] transport $prev→$now attempt=$attempt — closing '
+        'connections + flushing fake-ip',
       );
-      // Fire both in parallel; either one failing isn't fatal.
-      await Future.wait<void>([
-        api.flushFakeIpCache().then((_) {}).catchError((_) {}),
-        api.closeAllConnections().then((_) {}).catchError((_) {}),
-      ]);
-      // Invalidate cached delay results — proxies that were fast on
-      // Wi-Fi may be slow on cellular and vice versa.
+
+      var closeOk = false;
+      var fakeIpOk = false;
+      Object? lastError;
+      try {
+        closeOk = await api.closeAllConnections().timeout(
+          const Duration(seconds: 3),
+        );
+      } catch (e) {
+        lastError = e;
+      }
+      try {
+        fakeIpOk = await api.flushFakeIpCache().timeout(
+          const Duration(seconds: 3),
+        );
+      } catch (e) {
+        lastError = e;
+      }
+
+      if (!closeOk && !fakeIpOk) {
+        final reason = lastError == null
+            ? 'cleanup_false'
+            : lastError.toString().split('\n').first;
+        debugPrint('[Resume] transport $prev→$now cleanup failed: $reason');
+        return (ok: false, reason: reason);
+      }
+
+      // Invalidate cached state tied to the old network. Keep the traffic
+      // chart intact; its WebSocket reconnect logic handles stale sockets.
       ref.read(delayResultsProvider.notifier).state = {};
+      ref.invalidate(memoryStreamProvider);
+      ref.invalidate(connectionsStreamProvider);
+      ref.invalidate(exitIpInfoProvider);
+      ref.read(proxyGroupsProvider.notifier).refresh();
+      return (ok: true, reason: 'ok');
     } catch (e) {
-      debugPrint('[Resume] transport-change flush threw: $e');
+      final reason = e.toString().split('\n').first;
+      debugPrint('[Resume] transport-change cleanup threw: $reason');
+      return (ok: false, reason: reason);
+    }
+  }
+
+  Future<void> _restartAfterTransportHandoff(
+    String prev,
+    String now,
+    String reason,
+    int generation,
+  ) async {
+    if (_transportRestartInFlight) return;
+    if (ref.read(coreStatusProvider) != CoreStatus.running) return;
+    if (ref.read(userStoppedProvider)) return;
+
+    _transportRestartInFlight = true;
+    try {
+      final activeId = await SettingsService.getActiveProfileId();
+      if (activeId == null) {
+        EventLog.write(
+          '[Transport] restart skipped from=$prev to=$now reason=no_profile',
+        );
+        return;
+      }
+      final config = await ProfileService.loadConfig(activeId);
+      if (config == null) {
+        EventLog.write(
+          '[Transport] restart skipped from=$prev to=$now reason=no_config',
+        );
+        return;
+      }
+      if (generation != _transportRecoveryGeneration) return;
+      if (ref.read(coreStatusProvider) != CoreStatus.running) return;
+      if (ref.read(userStoppedProvider)) return;
+
+      debugPrint(
+        '[Resume] transport $prev→$now cleanup failed ($reason) — '
+        'silent restart',
+      );
+      EventLog.write(
+        '[Transport] restart start from=$prev to=$now reason=$reason',
+      );
+      AppNotifier.info('网络切换后正在自动恢复连接...');
+      final ok = await ref.read(coreActionsProvider).restart(config);
+      EventLog.write('[Transport] restart done from=$prev to=$now ok=$ok');
+      if (ok) {
+        AppNotifier.success('已自动恢复连接');
+      }
+    } catch (e) {
+      final msg = e.toString().split('\n').first;
+      debugPrint('[Resume] transport restart threw: $msg');
+      EventLog.write('[Transport] restart err=$msg');
+    } finally {
+      _transportRestartInFlight = false;
     }
   }
 
@@ -329,6 +673,11 @@ class AppResumeController {
         ref.invalidate(exitIpInfoProvider);
         // Refresh proxy groups in case core reloaded config
         ref.read(proxyGroupsProvider.notifier).refresh();
+        // Windows/Linux fallback: if the app was suspended while the
+        // physical network changed, the polling timer resumes after this
+        // lifecycle tick. Run one immediate probe so stale connections
+        // are cleaned without waiting for the next 5 s poll.
+        unawaited(_pollNetworkSignature());
         // v1.0.21 hotfix P0-2: system-proxy tamper detection on resume.
         // If the user flipped over to v2rayN / Clash Verge / any other
         // proxy tool while YueLink was backgrounded, the 60 s verify

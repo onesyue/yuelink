@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/io.dart';
@@ -19,11 +20,7 @@ export '../../domain/logs/log_entry.dart';
 /// - /connections — live connection snapshots
 /// - /memory — memory usage (inuse bytes)
 class MihomoStream {
-  MihomoStream({
-    this.host = '127.0.0.1',
-    this.port = 9090,
-    this.secret,
-  });
+  MihomoStream({this.host = '127.0.0.1', this.port = 9090, this.secret});
 
   final String host;
   final int port;
@@ -57,10 +54,12 @@ class MihomoStream {
   // ------------------------------------------------------------------
 
   Stream<LogEntry> logStream({String level = 'info'}) {
-    return _connectWithRetry('/logs?level=$level').map((data) => LogEntry(
-          type: data['type'] as String? ?? 'info',
-          payload: data['payload'] as String? ?? '',
-        ));
+    return _connectWithRetry('/logs?level=$level').map(
+      (data) => LogEntry(
+        type: data['type'] as String? ?? 'info',
+        payload: data['payload'] as String? ?? '',
+      ),
+    );
   }
 
   // ------------------------------------------------------------------
@@ -69,9 +68,10 @@ class MihomoStream {
 
   Stream<int> memoryStream() {
     // Also 1Hz periodic — apply the same half-open watchdog as /traffic.
-    return _connectWithRetry('/memory',
-            idleTimeout: const Duration(seconds: 15))
-        .map((data) => (data['inuse'] as num?)?.toInt() ?? 0);
+    return _connectWithRetry(
+      '/memory',
+      idleTimeout: const Duration(seconds: 15),
+    ).map((data) => (data['inuse'] as num?)?.toInt() ?? 0);
   }
 
   // ------------------------------------------------------------------
@@ -106,7 +106,25 @@ class MihomoStream {
     late StreamController<Map<String, dynamic>> controller;
     bool cancelled = false;
     IOWebSocketChannel? activeChannel;
+    HttpClient? activeClient;
     Timer? idleTimer;
+
+    HttpClient buildLocalClient() {
+      final client = HttpClient();
+      client.findProxy = (_) => 'DIRECT';
+      client.connectionTimeout = const Duration(seconds: 5);
+      client.idleTimeout = const Duration(seconds: 15);
+      return client;
+    }
+
+    void closeActive({bool force = false}) {
+      idleTimer?.cancel();
+      idleTimer = null;
+      activeChannel?.sink.close();
+      activeChannel = null;
+      activeClient?.close(force: force);
+      activeClient = null;
+    }
 
     Future<void> connect() async {
       var retryDelay = const Duration(seconds: 2);
@@ -115,6 +133,8 @@ class MihomoStream {
       while (!cancelled) {
         try {
           final uri = Uri.parse('$_wsBase$path');
+          final client = buildLocalClient();
+          activeClient = client;
           // Pass token via HTTP header instead of URL query parameter
           // to prevent it from appearing in proxy/server access logs.
           final channel = IOWebSocketChannel.connect(
@@ -122,6 +142,9 @@ class MihomoStream {
             headers: secret != null
                 ? {'Authorization': 'Bearer $secret'}
                 : null,
+            pingInterval: const Duration(seconds: 15),
+            connectTimeout: const Duration(seconds: 5),
+            customClient: client,
           );
           activeChannel = channel;
           var gotFirstMessage = false;
@@ -158,8 +181,9 @@ class MihomoStream {
               return;
             }
             try {
-              controller
-                  .add(json.decode(event as String) as Map<String, dynamic>);
+              controller.add(
+                json.decode(event as String) as Map<String, dynamic>,
+              );
             } catch (e) {
               // Malformed JSON — skip frame
               final msg = e.toString();
@@ -169,12 +193,10 @@ class MihomoStream {
               );
             }
           }
-          idleTimer?.cancel();
-          activeChannel = null;
+          closeActive();
           // Stream ended cleanly (server closed); fall through to reconnect
         } catch (e) {
-          idleTimer?.cancel();
-          activeChannel = null;
+          closeActive(force: true);
           // Connection failed or dropped
           final msg = e.toString();
           final shortMsg = msg.substring(0, msg.length.clamp(0, 200));
@@ -192,8 +214,10 @@ class MihomoStream {
           await Future.delayed(retryDelay);
           // Exponential backoff: 2s → 4s → 8s → 16s → 30s (cap)
           retryDelay = Duration(
-            milliseconds: (retryDelay.inMilliseconds * 2)
-                .clamp(0, maxDelay.inMilliseconds),
+            milliseconds: (retryDelay.inMilliseconds * 2).clamp(
+              0,
+              maxDelay.inMilliseconds,
+            ),
           );
         }
       }
@@ -203,9 +227,7 @@ class MihomoStream {
       onListen: () => connect(),
       onCancel: () {
         cancelled = true;
-        idleTimer?.cancel();
-        activeChannel?.sink.close();
-        activeChannel = null;
+        closeActive(force: true);
         controller.close();
       },
     );

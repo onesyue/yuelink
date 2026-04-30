@@ -5,6 +5,7 @@ import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:http/io_client.dart';
 
 import 'circuit_breaker.dart';
 
@@ -19,7 +20,7 @@ class MihomoApi {
     this.port = 9090,
     this.secret,
     http.Client? client,
-  }) : _client = client ?? http.Client();
+  }) : _client = client ?? _defaultLocalClient();
 
   final String host;
   final int port;
@@ -35,6 +36,17 @@ class MihomoApi {
   /// reuse) when `host`/`port`/`secret` change.
   final http.Client _client;
 
+  static http.Client _defaultLocalClient() {
+    final inner = HttpClient();
+    // The external-controller is always local. Force DIRECT so desktop
+    // system-proxy mode cannot route controller calls back through mihomo's
+    // mixed-port and create a self-dependency during recovery.
+    inner.findProxy = (_) => 'DIRECT';
+    inner.connectionTimeout = const Duration(seconds: 3);
+    inner.idleTimeout = const Duration(seconds: 10);
+    return IOClient(inner);
+  }
+
   /// Release the underlying HTTP client. Call from
   /// `CoreManager.stop()` / on session teardown so `IOClient` returns
   /// its connection-pool sockets to the OS instead of waiting for GC.
@@ -48,9 +60,9 @@ class MihomoApi {
   String get _baseUrl => 'http://$host:$port';
 
   Map<String, String> get _headers => {
-        'Content-Type': 'application/json',
-        if (secret != null) 'Authorization': 'Bearer $secret',
-      };
+    'Content-Type': 'application/json',
+    if (secret != null) 'Authorization': 'Bearer $secret',
+  };
 
   // ------------------------------------------------------------------
   // Version / Health
@@ -82,7 +94,8 @@ class MihomoApi {
         return (ok: true, reason: 'ok');
       }
       debugPrint(
-          '[MihomoApi] /version returned HTTP ${resp.statusCode} @ $_baseUrl');
+        '[MihomoApi] /version returned HTTP ${resp.statusCode} @ $_baseUrl',
+      );
       return (ok: false, reason: 'http_${resp.statusCode}');
     } on SocketException {
       return (ok: false, reason: 'socket');
@@ -118,9 +131,11 @@ class MihomoApi {
   }
 
   /// Test proxy delay.
-  Future<int> testDelay(String proxyName,
-      {String url = 'https://www.gstatic.com/generate_204',
-      int timeout = 5000}) async {
+  Future<int> testDelay(
+    String proxyName, {
+    String url = 'https://www.gstatic.com/generate_204',
+    int timeout = 5000,
+  }) async {
     try {
       final resp = await _get(
         '/proxies/${Uri.encodeComponent(proxyName)}/delay'
@@ -133,9 +148,11 @@ class MihomoApi {
   }
 
   /// Test all proxies in a group.
-  Future<Map<String, dynamic>> testGroupDelay(String groupName,
-      {String url = 'https://www.gstatic.com/generate_204',
-      int timeout = 5000}) async {
+  Future<Map<String, dynamic>> testGroupDelay(
+    String groupName, {
+    String url = 'https://www.gstatic.com/generate_204',
+    int timeout = 5000,
+  }) async {
     final resp = await _client
         .get(
           Uri.parse(
@@ -207,7 +224,9 @@ class MihomoApi {
     final list = await listRuleProviders();
     if (list.isEmpty) return (ok: 0, failed: 0);
     final results = await Future.wait(
-      list.keys.map((name) => updateRuleProvider(name).catchError((_) => false)),
+      list.keys.map(
+        (name) => updateRuleProvider(name).catchError((_) => false),
+      ),
     );
     var ok = 0;
     var failed = 0;
@@ -240,8 +259,7 @@ class MihomoApi {
   Future<bool> setRoutingMode(String mode) => patchConfig({'mode': mode});
 
   /// Set log level: "info" | "debug" | "warning" | "error" | "silent".
-  Future<bool> setLogLevel(String level) =>
-      patchConfig({'log-level': level});
+  Future<bool> setLogLevel(String level) => patchConfig({'log-level': level});
 
   /// Get current routing mode from running config.
   Future<String> getRoutingMode() async {
@@ -255,10 +273,7 @@ class MihomoApi {
 
   /// Reload config from file path. Throws [MihomoApiException] on failure.
   Future<bool> reloadConfig(String path, {bool force = false}) async {
-    final resp = await _put(
-      '/configs?force=$force',
-      body: {'path': path},
-    );
+    final resp = await _put('/configs?force=$force', body: {'path': path});
     if (resp.statusCode == 204 || resp.statusCode == 200) return true;
     throw MihomoApiException(resp.statusCode, resp.body);
   }
@@ -310,8 +325,10 @@ class MihomoApi {
   // ------------------------------------------------------------------
 
   /// Query DNS.
-  Future<Map<String, dynamic>> queryDns(String name,
-      {String type = 'A'}) async {
+  Future<Map<String, dynamic>> queryDns(
+    String name, {
+    String type = 'A',
+  }) async {
     return _get('/dns/query?name=${Uri.encodeComponent(name)}&type=$type');
   }
 
@@ -421,8 +438,7 @@ class MihomoApi {
     return json.decode(body) as Map<String, dynamic>;
   });
 
-  Future<http.Response> _put(String path,
-      {Map<String, dynamic>? body}) async {
+  Future<http.Response> _put(String path, {Map<String, dynamic>? body}) async {
     return _client
         .put(
           Uri.parse('$_baseUrl$path'),
@@ -432,8 +448,10 @@ class MihomoApi {
         .timeout(_kTimeout);
   }
 
-  Future<http.Response> _patch(String path,
-      {Map<String, dynamic>? body}) async {
+  Future<http.Response> _patch(
+    String path, {
+    Map<String, dynamic>? body,
+  }) async {
     return _client
         .patch(
           Uri.parse('$_baseUrl$path'),
@@ -449,8 +467,7 @@ class MihomoApi {
         .timeout(_kTimeout);
   }
 
-  Future<http.Response> _post(String path,
-      {Map<String, dynamic>? body}) async {
+  Future<http.Response> _post(String path, {Map<String, dynamic>? body}) async {
     return _client
         .post(
           Uri.parse('$_baseUrl$path'),

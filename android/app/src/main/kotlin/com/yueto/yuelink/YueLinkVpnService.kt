@@ -80,6 +80,7 @@ class YueLinkVpnService : VpnService() {
     // When this flips (e.g. Wi-Fi dropped → cellular picked up), Dart is
     // notified so it can flush fake-ip + close stale connections.
     private var lastTransport: String = "none"
+    private var lastPrimaryNetwork: Network? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -281,14 +282,7 @@ class YueLinkVpnService : VpnService() {
             override fun onLinkPropertiesChanged(network: Network, lp: LinkProperties) {
                 // Forward updated DNS to mihomo so it can reach nameservers on the
                 // new interface after WiFi ↔ cellular switches.
-                val dnsServers = lp.dnsServers
-                    .mapNotNull { it.hostAddress }
-                    .filter { it.isNotEmpty() }
-                if (dnsServers.isNotEmpty()) {
-                    val dnsList = dnsServers.joinToString(",")
-                    android.util.Log.d("YueLinkVpn", "DNS changed on $network: $dnsList")
-                    try { nativeNotifyDnsChanged(dnsList) } catch (_: UnsatisfiedLinkError) {}
-                }
+                notifyDnsFromLinkProperties(network, lp)
             }
 
             override fun onLost(network: Network) {
@@ -317,16 +311,23 @@ class YueLinkVpnService : VpnService() {
      */
     private fun applyUnderlyingNetworks() {
         try {
-            val nets = synchronized(availableNetworks) { availableNetworks.toTypedArray() }
+            val cm = getSystemService(ConnectivityManager::class.java) ?: return
+            val rawNets = synchronized(availableNetworks) { availableNetworks.toTypedArray() }
+            val nets = orderUnderlyingNetworks(cm, rawNets)
+            val primary = primaryNetwork(cm, nets)
             setUnderlyingNetworks(if (nets.isEmpty()) null else nets)
-            android.util.Log.d("YueLinkVpn", "underlyingNetworks: ${nets.size}")
+            android.util.Log.d("YueLinkVpn",
+                "underlyingNetworks: ${nets.size}, active=${cm.activeNetwork}")
 
-            val newTransport = computePrimaryTransport(nets)
-            if (newTransport != lastTransport) {
+            val newTransport = computePrimaryTransport(cm, nets, primary)
+            val primaryChanged = primary != lastPrimaryNetwork
+            if (newTransport != lastTransport || primaryChanged) {
                 val prev = lastTransport
                 lastTransport = newTransport
+                lastPrimaryNetwork = primary
                 android.util.Log.d("YueLinkVpn",
-                    "transport changed: $prev → $newTransport")
+                    "transport changed: $prev → $newTransport primary=$primary")
+                notifyDnsForPrimaryNetwork(cm, nets, primary)
                 try {
                     onTransportChanged?.invoke(prev, newTransport)
                 } catch (e: Exception) {
@@ -337,21 +338,55 @@ class YueLinkVpnService : VpnService() {
         } catch (_: Exception) {}
     }
 
+    private fun orderUnderlyingNetworks(
+        cm: ConnectivityManager,
+        nets: Array<Network>
+    ): Array<Network> {
+        if (nets.size <= 1) return nets
+        val active = cm.activeNetwork ?: return nets
+        if (!nets.any { it == active }) return nets
+        val ordered = mutableListOf<Network>()
+        ordered.add(active)
+        for (n in nets) {
+            if (n != active) ordered.add(n)
+        }
+        return ordered.toTypedArray()
+    }
+
+    private fun primaryNetwork(
+        cm: ConnectivityManager,
+        nets: Array<Network>
+    ): Network? {
+        if (nets.isEmpty()) return null
+        val active = cm.activeNetwork
+        if (active != null && nets.any { it == active }) return active
+        return nets.first()
+    }
+
     /** Reduce a set of underlying networks to one primary transport label. */
-    private fun computePrimaryTransport(nets: Array<Network>): String {
+    private fun computePrimaryTransport(
+        cm: ConnectivityManager,
+        nets: Array<Network>,
+        primary: Network?
+    ): String {
         if (nets.isEmpty()) return "none"
-        val cm = getSystemService(ConnectivityManager::class.java) ?: return "none"
-        // Priority: wifi > ethernet > cellular > other. Wi-Fi is cheapest and
-        // preferred; ethernet is implicit on Android TV / Chromebook boxes.
+        // Prefer Android's current default physical network. It changes only
+        // after network scoring/validation has settled, which avoids switching
+        // YueLink onto Wi-Fi while the system still routes through cellular.
+        if (primary != null) {
+            transportLabel(cm, primary)?.let { return it }
+        }
+
+        // Fallback when activeNetwork is unavailable or not in the physical
+        // set yet: wifi > ethernet > cellular > other.
         var hasWifi = false
         var hasEthernet = false
         var hasCellular = false
         for (n in nets) {
-            val caps = cm.getNetworkCapabilities(n) ?: continue
-            when {
-                caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> hasWifi = true
-                caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> hasEthernet = true
-                caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> hasCellular = true
+            when (transportLabel(cm, n)) {
+                "wifi" -> hasWifi = true
+                "ethernet" -> hasEthernet = true
+                "cellular" -> hasCellular = true
             }
         }
         return when {
@@ -362,10 +397,42 @@ class YueLinkVpnService : VpnService() {
         }
     }
 
+    private fun transportLabel(cm: ConnectivityManager, network: Network): String? {
+        val caps = cm.getNetworkCapabilities(network) ?: return null
+        return when {
+            caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "wifi"
+            caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> "ethernet"
+            caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "cellular"
+            else -> "other"
+        }
+    }
+
+    private fun notifyDnsForPrimaryNetwork(
+        cm: ConnectivityManager,
+        nets: Array<Network>,
+        primary: Network?
+    ) {
+        if (nets.isEmpty()) return
+        val network = primary ?: nets.first()
+        val lp = cm.getLinkProperties(network) ?: return
+        notifyDnsFromLinkProperties(network, lp)
+    }
+
+    private fun notifyDnsFromLinkProperties(network: Network, lp: LinkProperties) {
+        val dnsServers = lp.dnsServers
+            .mapNotNull { it.hostAddress }
+            .filter { it.isNotEmpty() }
+        if (dnsServers.isEmpty()) return
+        val dnsList = dnsServers.joinToString(",")
+        android.util.Log.d("YueLinkVpn", "DNS changed on $network: $dnsList")
+        try { nativeNotifyDnsChanged(dnsList) } catch (_: UnsatisfiedLinkError) {}
+    }
+
     private fun stopNetworkMonitor() {
         val cb = networkCallback ?: return
         networkCallback = null
         synchronized(availableNetworks) { availableNetworks.clear() }
+        lastPrimaryNetwork = null
         try {
             val cm = getSystemService(ConnectivityManager::class.java)
             cm?.unregisterNetworkCallback(cb)

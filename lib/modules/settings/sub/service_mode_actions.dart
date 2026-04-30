@@ -33,29 +33,38 @@ class ServiceModeActions {
   /// refreshes status, then brings the core up. Throws on install failure.
   /// Returns the post-apply warning (null = OK).
   Future<String?> install() async {
-    await ServiceManager.install();
-    await _markTunInstallIntent();
-    refresh();
-    return applyImmediately();
+    try {
+      await ServiceManager.install();
+      await _markTunInstallIntent();
+      return applyImmediately();
+    } finally {
+      refresh();
+    }
   }
 
   /// Stops the core if running, uninstalls the helper, refreshes status.
   /// Throws on uninstall failure.
   Future<void> uninstall(CoreStatus status) async {
-    if (status == CoreStatus.running) {
-      await _ref.read(coreActionsProvider).stop();
+    try {
+      if (status == CoreStatus.running) {
+        await _ref.read(coreActionsProvider).stop();
+      }
+      await ServiceManager.uninstall();
+    } finally {
+      refresh();
     }
-    await ServiceManager.uninstall();
-    refresh();
   }
 
   /// Reinstalls over the top + core bounce. Same warning semantics as
   /// `install`. Throws on update failure.
   Future<String?> update() async {
-    await ServiceManager.update();
-    await _markTunInstallIntent();
-    refresh();
-    return applyImmediately();
+    try {
+      await ServiceManager.update();
+      await _markTunInstallIntent();
+      return applyImmediately();
+    } finally {
+      refresh();
+    }
   }
 
   /// Installing/updating the desktop helper from the TUN row is an explicit

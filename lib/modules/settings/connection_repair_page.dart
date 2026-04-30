@@ -19,6 +19,7 @@ import '../../shared/widgets/yl_scaffold.dart';
 import '../../theme.dart';
 import '../profiles/providers/profiles_providers.dart';
 import '../yue_auth/providers/yue_auth_providers.dart';
+import 'sub/widgets/service_mode_row.dart';
 import 'startup_report_page.dart';
 
 /// Connection repair tools: rebuild VPN, clear config, re-sync subscription,
@@ -180,17 +181,24 @@ class _ConnectionRepairPageState extends ConsumerState<ConnectionRepairPage> {
     final s = S.of(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isEn = Localizations.localeOf(context).languageCode == 'en';
+    final isDesktop =
+        Platform.isMacOS || Platform.isWindows || Platform.isLinux;
 
     return YLLargeTitleScaffold(
       title: s.repairTitle,
       slivers: [
         // ── Status ─────────────────────────────────────────────────
         const SliverToBoxAdapter(
-          child: YLSection(
-            header: 'STATUS',
-            children: [_StatusTile()],
-          ),
+          child: YLSection(header: 'STATUS', children: [_StatusTile()]),
         ),
+
+        if (isDesktop)
+          SliverToBoxAdapter(
+            child: YLSection(
+              header: isEn ? 'Desktop TUN' : '桌面 TUN',
+              children: const [ServiceModeRow()],
+            ),
+          ),
 
         // ── One-click full repair (主 CTA) ─────────────────────────
         SliverPadding(
@@ -231,9 +239,7 @@ class _ConnectionRepairPageState extends ConsumerState<ConnectionRepairPage> {
                     : const Icon(Icons.auto_fix_high_rounded, size: 18),
                 label: Text(_busy ? s.repairRunning : s.repairOneClick),
                 style: FilledButton.styleFrom(
-                  backgroundColor: isDark
-                      ? YLColors.zinc700
-                      : YLColors.zinc800,
+                  backgroundColor: isDark ? YLColors.zinc700 : YLColors.zinc800,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(
@@ -643,10 +649,7 @@ class _NetworkDiagnosticsState extends State<_NetworkDiagnostics> {
           onTap: _testing ? null : _runDiagnostics,
         ),
         for (var i = 0; i < _kDiagEndpoints.length; i++)
-          _DiagRow(
-            endpoint: _kDiagEndpoints[i],
-            result: _results[i],
-          ),
+          _DiagRow(endpoint: _kDiagEndpoints[i], result: _results[i]),
       ],
     );
   }

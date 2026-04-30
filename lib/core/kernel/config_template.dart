@@ -228,7 +228,7 @@ class ConfigTemplate {
     }
     debugPrint('[Config] 11 mode done');
 
-    if (Platform.isMacOS || Platform.isWindows) {
+    if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
       if (connectionMode == 'tun') {
         config = _ensureDesktopTun(
           config,
@@ -510,7 +510,7 @@ class ConfigTemplate {
         config.substring(tunEnd);
   }
 
-  /// Inject desktop-safe TUN configuration for macOS/Windows.
+  /// Inject desktop-safe TUN configuration for macOS/Windows/Linux.
   ///
   /// Unlike Android, desktop platforms let mihomo create and manage the TUN
   /// device itself. Replace any subscription-provided TUN section so we don't
@@ -556,6 +556,7 @@ class ConfigTemplate {
 
     // Force fake-ip DNS mode for TUN (CVR does the same in use_tun())
     config = _ensureFakeIpForTun(config);
+    config = _ensureProcessBypassRules(config, bypassProcesses);
 
     // mtu: AppConstants.defaultTunMtu — matches physical Ethernet/Wi-Fi MTU.
     // Single source of truth shared with _injectTunFd (Android/iOS) and
@@ -579,15 +580,50 @@ class ConfigTemplate {
       }
     }
 
-    // TUN bypass: exclude processes from TUN
-    if (bypassProcesses.isNotEmpty) {
-      buf.write('  exclude-package:\n');
-      for (final proc in bypassProcesses) {
-        buf.write('    - $proc\n');
+    return buf.toString();
+  }
+
+  /// Desktop process bypass is represented as rule-level DIRECT routing.
+  ///
+  /// mihomo's `tun.include-package` / `tun.exclude-package` keys are Android
+  /// package filters, not desktop process names. Writing process names there
+  /// is ignored by modern cores and can make diagnostics misleading.
+  static String _ensureProcessBypassRules(
+    String config,
+    List<String> processNames,
+  ) {
+    final cleaned = processNames
+        .map((p) => p.trim())
+        .where((p) => p.isNotEmpty && !p.contains('\n') && !p.contains(','))
+        .toSet()
+        .toList(growable: false);
+    if (cleaned.isEmpty) return config;
+
+    final rulesMatch = RegExp(
+      r'^rules:\s*\n',
+      multiLine: true,
+    ).firstMatch(config);
+    if (rulesMatch == null) return config;
+
+    final rulesBody = config.substring(rulesMatch.end);
+    final firstRule = RegExp(
+      r'^([ \t]*)-\s',
+      multiLine: true,
+    ).firstMatch(rulesBody);
+    final ruleIndent = firstRule?.group(1) ?? '  ';
+
+    var injection = '';
+    for (final proc in cleaned) {
+      final rule = 'PROCESS-NAME,$proc,DIRECT';
+      if (!rulesBody.contains(rule)) {
+        injection += '$ruleIndent- "$rule"\n';
       }
     }
+    if (injection.isEmpty) return config;
 
-    return buf.toString();
+    return config.substring(0, rulesMatch.end) +
+        injection +
+        config.substring(rulesMatch.end);
   }
 
   /// Force fake-ip DNS mode within the existing dns section.

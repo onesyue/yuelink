@@ -60,15 +60,19 @@ class VpnService {
 
     Future<int> attempt() async {
       try {
-        final fd = await _channel.invokeMethod<int>('startVpn', {
-          'mixedPort': mixedPort,
-          'splitMode': splitMode,
-          'splitApps': splitApps,
-        }).timeout(_kPermissionDialogBudget);
+        final fd = await _channel
+            .invokeMethod<int>('startVpn', {
+              'mixedPort': mixedPort,
+              'splitMode': splitMode,
+              'splitApps': splitApps,
+            })
+            .timeout(_kPermissionDialogBudget);
         return fd ?? -1;
       } on TimeoutException {
-        debugPrint('[VpnService] startAndroidVpn timed out after '
-            '${_kPermissionDialogBudget.inSeconds}s');
+        debugPrint(
+          '[VpnService] startAndroidVpn timed out after '
+          '${_kPermissionDialogBudget.inSeconds}s',
+        );
         return -1;
       } on PlatformException catch (_) {
         return -1;
@@ -78,8 +82,10 @@ class VpnService {
     var fd = await attempt();
     if (fd > 0) return fd;
 
-    debugPrint('[VpnService] startAndroidVpn attempt-1 returned $fd — '
-        'retrying once after 1.5 s (OEM settle race)');
+    debugPrint(
+      '[VpnService] startAndroidVpn attempt-1 returned $fd — '
+      'retrying once after 1.5 s (OEM settle race)',
+    );
     await Future.delayed(const Duration(milliseconds: 1500));
     fd = await attempt();
     if (fd <= 0) {
@@ -96,19 +102,22 @@ class VpnService {
   }) async {
     if (!Platform.isAndroid) return [];
     try {
-      final raw = await _appsChannel.invokeListMethod<Map>(
-        'getInstalledApps',
-        {'showSystem': showSystem},
-      ).timeout(_kStartTunnelBudget);
+      final raw = await _appsChannel
+          .invokeListMethod<Map>('getInstalledApps', {'showSystem': showSystem})
+          .timeout(_kStartTunnelBudget);
       return (raw ?? [])
-          .map((m) => {
-                'packageName': m['packageName'] as String? ?? '',
-                'appName': m['appName'] as String? ?? '',
-              })
+          .map(
+            (m) => {
+              'packageName': m['packageName'] as String? ?? '',
+              'appName': m['appName'] as String? ?? '',
+            },
+          )
           .toList();
     } on TimeoutException {
-      debugPrint('[VpnService] getInstalledApps timed out after '
-          '${_kStartTunnelBudget.inSeconds}s');
+      debugPrint(
+        '[VpnService] getInstalledApps timed out after '
+        '${_kStartTunnelBudget.inSeconds}s',
+      );
       return [];
     } on PlatformException catch (e) {
       debugPrint('[VpnService] getInstalledApps PlatformException: $e');
@@ -202,11 +211,13 @@ class VpnService {
     required int socksPort,
   }) async {
     try {
-      final result = await _channel.invokeMethod<bool>('setSystemProxy', {
-        'host': host,
-        'httpPort': httpPort,
-        'socksPort': socksPort,
-      }).timeout(_kQuickOpBudget);
+      final result = await _channel
+          .invokeMethod<bool>('setSystemProxy', {
+            'host': host,
+            'httpPort': httpPort,
+            'socksPort': socksPort,
+          })
+          .timeout(_kQuickOpBudget);
       return result ?? false;
     } on TimeoutException {
       return false;
@@ -261,7 +272,7 @@ class VpnService {
     }
   }
 
-  /// Register callbacks for VPN lifecycle events (Android-focused).
+  /// Register callbacks for VPN lifecycle and network-path events.
   ///
   /// [onRevoked] fires when the system or another app revokes VPN permission.
   /// On iOS the native side may pass `reason` in the args map — currently
@@ -270,18 +281,17 @@ class VpnService {
   /// PacketTunnel extension isn't fully trusted by the system.
   ///
   /// [onTransportChanged] fires when the underlying physical network flips
-  /// (e.g. Wi-Fi dropped → cellular picked up on elevator entry); consumer
-  /// should flush fake-ip cache + close stale connections + optionally
-  /// re-test node latency for the new network.
+  /// (e.g. Wi-Fi dropped → cellular picked up on elevator entry, or desktop
+  /// Wi-Fi → Ethernet); consumer should flush fake-ip cache + close stale
+  /// connections + optionally re-test node latency for the new network.
   ///
-  /// Call this once during app initialization. iOS does not emit
-  /// `transportChanged` — Apple's NetworkExtension handles re-routing
-  /// transparently and connections usually survive the switch.
+  /// Call this once during app initialization. Android emits from
+  /// VpnService.NetworkCallback; iOS/macOS emit from NWPathMonitor.
   static void listenForRevocation(
     void Function(VpnRevocationReason reason) onRevoked, {
     void Function(String prev, String now)? onTransportChanged,
   }) {
-    if (!Platform.isAndroid && !Platform.isIOS) return;
+    if (!Platform.isAndroid && !Platform.isIOS && !Platform.isMacOS) return;
     _channel.setMethodCallHandler((call) async {
       switch (call.method) {
         case 'vpnRevoked':
@@ -295,7 +305,8 @@ class VpnService {
             elapsedMs: elapsedMs,
           );
           debugPrint(
-              '[VpnService] VPN revoked by system (kind=${reason.kind}, elapsed=${reason.elapsedMs}ms)');
+            '[VpnService] VPN revoked by system (kind=${reason.kind}, elapsed=${reason.elapsedMs}ms)',
+          );
           onRevoked(reason);
           break;
         case 'transportChanged':
