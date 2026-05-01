@@ -98,8 +98,11 @@ class _ServiceModeRowState extends ConsumerState<ServiceModeRow> {
               height: 18,
               child: CircularProgressIndicator(strokeWidth: 2),
             )
-          : Row(
-              mainAxisSize: MainAxisSize.min,
+          : Wrap(
+              alignment: WrapAlignment.end,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 4,
+              runSpacing: 4,
               children: [
                 TextButton(
                   onPressed: () => ServiceModeActions(ref).refresh(),
@@ -111,7 +114,6 @@ class _ServiceModeRowState extends ConsumerState<ServiceModeRow> {
                     style: const TextStyle(fontSize: 12),
                   ),
                 ),
-                const SizedBox(width: 4),
                 if (serviceInfo.value?.installed == true) ...[
                   if (serviceInfo.value?.needsReinstall == true)
                     FilledButton(

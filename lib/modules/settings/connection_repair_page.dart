@@ -599,6 +599,7 @@ Future<String> _collectDesktopTunSnapshotText(WidgetRef ref) async {
   final mode = ref.read(connectionModeProvider);
   final tunStack = ref.read(desktopTunStackProvider);
   buffer.writeln('structured_snapshot:');
+  buffer.writeln('  platform: ${Platform.operatingSystem}');
   buffer.writeln('  mode: $mode');
   buffer.writeln('  tun_stack: $tunStack');
   buffer.writeln('  core_running: ${manager.isRunning}');
@@ -629,6 +630,10 @@ Future<String> _collectDesktopTunSnapshotText(WidgetRef ref) async {
       ..writeln('  transport_ok: ${snapshot.transportOk}')
       ..writeln('  google_ok: ${snapshot.googleOk}')
       ..writeln('  github_ok: ${snapshot.githubOk}')
+      ..writeln(
+        '  cleanup_ok: '
+        '${snapshot.state != DesktopTunState.cleanupFailed}',
+      )
       ..writeln('  repair_suggested: ${snapshot.needsRepair}')
       ..writeln('  running_verified: ${snapshot.runningVerified}');
   } catch (e) {

@@ -246,6 +246,7 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
                       description: _quicPolicyDescription(strings, quicPolicy),
                       trailing: DropdownButton<String>(
                         value: quicPolicy,
+                        isExpanded: true,
                         underline: const SizedBox.shrink(),
                         style: YLText.body.copyWith(
                           color: isDark ? YLColors.zinc200 : YLColors.zinc700,
@@ -307,6 +308,7 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
                         label: s.connectionMode,
                         trailing: DropdownButton<String>(
                           value: connectionMode,
+                          isExpanded: true,
                           underline: const SizedBox.shrink(),
                           style: YLText.body.copyWith(
                             color: isDark ? YLColors.zinc200 : YLColors.zinc700,
@@ -364,6 +366,7 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
                           label: s.tunStackLabel,
                           trailing: DropdownButton<String>(
                             value: desktopTunStack,
+                            isExpanded: true,
                             underline: const SizedBox.shrink(),
                             style: YLText.body.copyWith(
                               color: isDark
@@ -477,6 +480,7 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
                       label: isEn ? 'Subscription update' : '订阅更新频率',
                       trailing: DropdownButton<int>(
                         value: subSyncInterval,
+                        isExpanded: true,
                         underline: const SizedBox.shrink(),
                         style: YLText.body.copyWith(
                           color: isDark ? YLColors.zinc200 : YLColors.zinc700,

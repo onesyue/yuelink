@@ -160,12 +160,13 @@ class YLInfoRow extends StatelessWidget {
             ],
           );
 
-          // Narrow rows with adaptive segmented controls should stack instead
+          // Narrow rows with complex trailing controls should stack instead
           // of squeezing Chinese labels into wrapped text or causing Windows
           // text-overpaint. Simple trailing widgets (switches, chevrons) stay
           // inline so ordinary settings rows keep their familiar shape.
           final shouldStackTrailing =
-              trailing is YLAdaptiveSegmentedControl &&
+              (trailing is YLAdaptiveSegmentedControl ||
+                  trailing is DropdownButton) &&
               constraints.maxWidth < 360;
           if (trailing != null && value == null && shouldStackTrailing) {
             return Column(
@@ -377,35 +378,56 @@ class YLSettingsRow extends StatelessWidget {
         horizontal: YLSpacing.lg,
         vertical: YLSpacing.md,
       ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final textBlock = Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                title,
+                style: YLText.rowTitle.copyWith(
+                  fontWeight: FontWeight.w400,
+                  color: titleColor,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              if (description != null) ...[
+                const SizedBox(height: 2),
                 Text(
-                  title,
-                  style: YLText.rowTitle.copyWith(
-                    fontWeight: FontWeight.w400,
-                    color: titleColor,
-                  ),
-                  maxLines: 2,
+                  description!,
+                  style: YLText.rowSubtitle.copyWith(color: descColor),
+                  maxLines: 3,
                   overflow: TextOverflow.ellipsis,
                 ),
-                if (description != null) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    description!,
-                    style: YLText.rowSubtitle.copyWith(color: descColor),
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
               ],
-            ),
-          ),
-          trailing,
-        ],
+            ],
+          );
+
+          if (constraints.maxWidth < 360) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                textBlock,
+                const SizedBox(height: YLSpacing.sm),
+                Align(alignment: Alignment.centerRight, child: trailing),
+              ],
+            );
+          }
+
+          return Row(
+            children: [
+              Expanded(child: textBlock),
+              const SizedBox(width: YLSpacing.md),
+              Flexible(
+                fit: FlexFit.loose,
+                child: Align(alignment: Alignment.centerRight, child: trailing),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
