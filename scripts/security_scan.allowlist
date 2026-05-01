@@ -1,0 +1,46 @@
+# scripts/security_scan.allowlist — patterns deliberately allowed in the working tree.
+# One extended-regex per line. Lines starting with # are comments.
+#
+# A FAIL/NOTE finding whose source line matches any regex here is downgraded to
+# ALLOWED (counted but not blocking). Use this for:
+#   - Test fixtures with clearly fake values
+#   - Documentation that quotes a sensitive-looking pattern as an example
+#   - Intentional public hosts (e.g. our own API base URL is not a "secret")
+#
+# Keep entries narrow — wide regexes mute real findings. Add a date and reason
+# to every line so the next reviewer can re-evaluate.
+
+# ── 2026-05-01 — public API host. The IP is documented across CLAUDE.md,
+# README, the Flutter default fallback, and the XBoard plugin docs. It is
+# not a secret. The DB password leak that matched THIS host was rotated
+# (per docs/security/credential_rotation_sop.md).
+^.*66\.55\.76\.208(:[0-9]+)?
+
+# ── 2026-05-01 — telemetry test fixtures use clearly fake DSNs.
+host=stub
+postgres://test
+postgres://user:pass@localhost
+postgresql://user:pass@localhost
+
+# ── 2026-05-01 — docs intentionally show the SOP-required env layout
+# (with placeholder <pg-host> / <pg-password>), not real values.
+TELEMETRY_DATABASE_DSN=host=<pg-host>
+
+# ── 2026-05-01 — store_real_env_regression_test is a manual gate that
+# exercises live store APIs. It uses public IPs / dev tokens that ops
+# rotates separately from prod.
+test/manual/store_real_env_regression_test.dart
+
+# ── 2026-05-01 — telemetry probe + node probe scripts intentionally
+# match on these literal field names to assert they do NOT appear in
+# output. The names themselves are not secrets.
+"server", "port", "uuid", "password",
+
+# ── 2026-05-01 — Dart test fixtures use literal "secret-a" / "fake-pass"
+# style strings to assert redaction code drops them. Allow these by name.
+'password': 'secret-
+
+# ── 2026-05-01 — common Flutter/Android resource strings that mention
+# "password" without containing one (e.g. UI label).
+"password.{0,30}field"
+android:label.{0,30}password
