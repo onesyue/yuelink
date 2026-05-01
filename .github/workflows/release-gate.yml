@@ -63,6 +63,14 @@ jobs:
   probe_telemetry:
     name: Probe telemetry endpoints
     runs-on: ubuntu-latest
+    # Lift secrets into env at the job level so subsequent step `if:`
+    # expressions can read them — GH Actions forbids `secrets.*`
+    # directly inside if expressions and would 0-second-fail the run
+    # at parse time.
+    env:
+      TELEMETRY_DASHBOARD_USER: ${{ secrets.TELEMETRY_DASHBOARD_USER }}
+      TELEMETRY_DASHBOARD_PASSWORD: ${{ secrets.TELEMETRY_DASHBOARD_PASSWORD }}
+      TELEMETRY_ACTIVE_PROBE_TOKEN: ${{ secrets.TELEMETRY_ACTIVE_PROBE_TOKEN }}
     steps:
       - uses: actions/checkout@v6
 
@@ -70,11 +78,7 @@ jobs:
         run: bash scripts/probe_telemetry.sh
 
       - name: Full probe (authed + ingest + privacy)
-        if: ${{ env.TELEMETRY_BASE != '' && secrets.TELEMETRY_DASHBOARD_PASSWORD != '' }}
-        env:
-          TELEMETRY_DASHBOARD_USER: ${{ secrets.TELEMETRY_DASHBOARD_USER }}
-          TELEMETRY_DASHBOARD_PASSWORD: ${{ secrets.TELEMETRY_DASHBOARD_PASSWORD }}
-          TELEMETRY_ACTIVE_PROBE_TOKEN: ${{ secrets.TELEMETRY_ACTIVE_PROBE_TOKEN }}
+        if: env.TELEMETRY_DASHBOARD_PASSWORD != ''
         run: |
           python3 scripts/probe_telemetry.py --full --json --base "$TELEMETRY_BASE" \
             > /tmp/full.json
@@ -93,7 +97,7 @@ jobs:
           "
 
       - name: Full probe (skipped — secrets unset)
-        if: ${{ secrets.TELEMETRY_DASHBOARD_PASSWORD == '' }}
+        if: env.TELEMETRY_DASHBOARD_PASSWORD == ''
         run: |
           echo "::warning::TELEMETRY_DASHBOARD_PASSWORD not set; skipping full probe."
           echo "Configure dashboard creds in repo secrets to enable the gate."
