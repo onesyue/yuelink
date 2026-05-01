@@ -26,6 +26,7 @@ void main() {
     expect(titleSizes, equals({17}));
     expect(titleSizes, isNot(contains(32)));
     expect(find.text('订单记录'), findsOneWidget);
+    expect(find.byType(FlexibleSpaceBar), findsNothing);
   });
 
   testWidgets('large title mode is explicit opt-in', (tester) async {
@@ -49,6 +50,7 @@ void main() {
     expect(titleSizes, contains(17));
     expect(titleSizes, contains(30));
     expect(titleSizes, isNot(contains(32)));
+    expect(find.byType(FlexibleSpaceBar), findsOneWidget);
   });
 
   testWidgets('compact title survives viewport, scale and theme matrix', (

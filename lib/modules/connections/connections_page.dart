@@ -18,8 +18,7 @@ class ConnectionsPage extends ConsumerStatefulWidget {
   const ConnectionsPage({super.key});
 
   @override
-  ConsumerState<ConnectionsPage> createState() =>
-      _ConnectionsPageState();
+  ConsumerState<ConnectionsPage> createState() => _ConnectionsPageState();
 }
 
 enum _SortColumn { target, process, rule, download, upload, duration }
@@ -43,19 +42,27 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
   List<ActiveConnection> _sorted(List<ActiveConnection> list) {
     // Return cached result if inputs haven't changed (identity check is sufficient
     // because filteredConnectionsProvider returns a new list on every change)
-    if (identical(list, _sortedInput) && _sortCol == _sortedCol && _sortAsc == _sortedAsc) {
+    if (identical(list, _sortedInput) &&
+        _sortCol == _sortedCol &&
+        _sortAsc == _sortedAsc) {
       return _sortedCache!;
     }
     final copy = List<ActiveConnection>.from(list);
     copy.sort((a, b) {
       int cmp;
       switch (_sortCol) {
-        case _SortColumn.target:   cmp = a.target.compareTo(b.target);
-        case _SortColumn.process:  cmp = a.processName.compareTo(b.processName);
-        case _SortColumn.rule:     cmp = a.rule.compareTo(b.rule);
-        case _SortColumn.download: cmp = a.download.compareTo(b.download);
-        case _SortColumn.upload:   cmp = a.upload.compareTo(b.upload);
-        case _SortColumn.duration: cmp = a.start.compareTo(b.start);
+        case _SortColumn.target:
+          cmp = a.target.compareTo(b.target);
+        case _SortColumn.process:
+          cmp = a.processName.compareTo(b.processName);
+        case _SortColumn.rule:
+          cmp = a.rule.compareTo(b.rule);
+        case _SortColumn.download:
+          cmp = a.download.compareTo(b.download);
+        case _SortColumn.upload:
+          cmp = a.upload.compareTo(b.upload);
+        case _SortColumn.duration:
+          cmp = a.start.compareTo(b.start);
       }
       return _sortAsc ? cmp : -cmp;
     });
@@ -114,8 +121,11 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
                 ),
                 child: Padding(
                   padding: const EdgeInsets.all(24),
-                  child: Icon(Icons.cable_rounded, size: 48,
-                      color: isDark ? YLColors.zinc700 : YLColors.zinc300),
+                  child: Icon(
+                    Icons.cable_rounded,
+                    size: 48,
+                    color: isDark ? YLColors.zinc700 : YLColors.zinc300,
+                  ),
                 ),
               ),
               const SizedBox(height: 24),
@@ -147,33 +157,29 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
 
     return Scaffold(
       appBar: _isSubPage
-            ? AppBar(leading: const BackButton(), title: Text(s.navConnections))
-            : null,
+          ? AppBar(leading: const BackButton(), title: Text(s.navConnections))
+          : null,
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Top bar ──────────────────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.fromLTRB(24, 32, 24, 16),
-            child: Text(
-              s.navConnections,
-              style: YLText.display.copyWith(
-                color: isDark ? YLColors.zinc50 : YLColors.zinc900,
-              ),
-            ),
-          ),
+          // The AppBar already carries this secondary page's title.
+          // Keep a small top gutter before the summary bar instead of
+          // rendering a second large in-body title.
+          const SizedBox(height: 12),
 
           // Summary bar — isolated Consumer so the bar rebuilds on totals
           // change without rebuilding the rest of the page.
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Consumer(builder: (context, ref, _) {
-              final totals = ref.watch(connectionsTotalsProvider);
-              return SummaryBar(
-                downloadTotal: totals.down,
-                uploadTotal: totals.up,
-              );
-            }),
+            child: Consumer(
+              builder: (context, ref, _) {
+                final totals = ref.watch(connectionsTotalsProvider);
+                return SummaryBar(
+                  downloadTotal: totals.down,
+                  uploadTotal: totals.up,
+                );
+              },
+            ),
           ),
           const SizedBox(height: 12),
 
@@ -181,13 +187,15 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
           if (!isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Consumer(builder: (context, ref, _) {
-                final stats = ref.watch(proxyStatsProvider);
-                if (stats.isEmpty) return const SizedBox.shrink();
-                // Provider already caps at the top 5 — no client-side
-                // trim or copy needed here.
-                return ProxyStatsBar(stats: stats);
-              }),
+              child: Consumer(
+                builder: (context, ref, _) {
+                  final stats = ref.watch(proxyStatsProvider);
+                  if (stats.isEmpty) return const SizedBox.shrink();
+                  // Provider already caps at the top 5 — no client-side
+                  // trim or copy needed here.
+                  return ProxyStatsBar(stats: stats);
+                },
+              ),
             ),
           const SizedBox(height: 12),
 
@@ -202,9 +210,7 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
                     hintText: s.searchConnHint,
                     onClear: () {
                       _searchDebounce?.cancel();
-                      ref
-                          .read(connectionSearchProvider.notifier)
-                          .state = '';
+                      ref.read(connectionSearchProvider.notifier).state = '';
                     },
                   ),
                 ),
@@ -213,12 +219,16 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
                   decoration: BoxDecoration(
                     color: isEmpty
                         ? Colors.transparent
-                        : YLColors.errorLight.withValues(alpha: isDark ? 0.1 : 0.5),
+                        : YLColors.errorLight.withValues(
+                            alpha: isDark ? 0.1 : 0.5,
+                          ),
                     borderRadius: BorderRadius.circular(YLRadius.lg),
                   ),
                   child: IconButton(
-                    icon: Icon(Icons.delete_sweep_rounded,
-                        color: isEmpty ? YLColors.zinc500 : YLColors.error),
+                    icon: Icon(
+                      Icons.delete_sweep_rounded,
+                      color: isEmpty ? YLColors.zinc500 : YLColors.error,
+                    ),
                     tooltip: s.closeAll,
                     onPressed: isEmpty
                         ? null
@@ -234,63 +244,74 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
           // total count already uses a .select internally.
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-            child: Consumer(builder: (context, ref, _) {
-              final filteredCount = ref.watch(
-                filteredConnectionsProvider.select((l) => l.length),
-              );
-              final totalCount = ref.watch(connectionCountProvider);
-              return Text(
-                filteredCount != totalCount
-                    ? s.connectionsCountFiltered(filteredCount)
-                    : s.connectionsCount(filteredCount),
-                style: YLText.caption.copyWith(
-                    color: YLColors.zinc500, fontWeight: FontWeight.w600),
-              );
-            }),
+            child: Consumer(
+              builder: (context, ref, _) {
+                final filteredCount = ref.watch(
+                  filteredConnectionsProvider.select((l) => l.length),
+                );
+                final totalCount = ref.watch(connectionCountProvider);
+                return Text(
+                  filteredCount != totalCount
+                      ? s.connectionsCountFiltered(filteredCount)
+                      : s.connectionsCount(filteredCount),
+                  style: YLText.caption.copyWith(
+                    color: YLColors.zinc500,
+                    fontWeight: FontWeight.w600,
+                  ),
+                );
+              },
+            ),
           ),
 
           // Connections list — own Consumer so the 500 ms rebuild is
           // scoped to this subtree. The parent Scaffold / AppBar /
           // summary / search row sit outside this rebuild path.
           Expanded(
-            child: Consumer(builder: (context, ref, _) {
-              final filtered = ref.watch(filteredConnectionsProvider);
-              if (filtered.isEmpty) {
-                return Center(
-                  child: YLEmptyState(
-                    icon: isEmpty
-                        ? Icons.cable_rounded
-                        : Icons.search_off_rounded,
-                    title: isEmpty
-                        ? s.noActiveConnections
-                        : s.noMatchingConnections,
+            child: Consumer(
+              builder: (context, ref, _) {
+                final filtered = ref.watch(filteredConnectionsProvider);
+                if (filtered.isEmpty) {
+                  return Center(
+                    child: YLEmptyState(
+                      icon: isEmpty
+                          ? Icons.cable_rounded
+                          : Icons.search_off_rounded,
+                      title: isEmpty
+                          ? s.noActiveConnections
+                          : s.noMatchingConnections,
+                    ),
+                  );
+                }
+                if (Platform.isMacOS ||
+                    Platform.isWindows ||
+                    Platform.isLinux) {
+                  return _ConnectionsDataTable(
+                    connections: _sorted(filtered),
+                    sortColumn: _sortCol,
+                    ascending: _sortAsc,
+                    onSort: (col, asc) => setState(() {
+                      _sortCol = col;
+                      _sortAsc = asc;
+                    }),
+                    onClose: (id) => actions.close(id),
+                  );
+                }
+                return ListView.builder(
+                  padding: const EdgeInsets.only(
+                    left: 16,
+                    right: 16,
+                    bottom: 32,
+                  ),
+                  physics: const BouncingScrollPhysics(),
+                  itemCount: filtered.length,
+                  addAutomaticKeepAlives: false,
+                  itemBuilder: (context, i) => ConnectionTile(
+                    connection: filtered[i],
+                    onClose: () => actions.close(filtered[i].id),
                   ),
                 );
-              }
-              if (Platform.isMacOS ||
-                  Platform.isWindows ||
-                  Platform.isLinux) {
-                return _ConnectionsDataTable(
-                  connections: _sorted(filtered),
-                  sortColumn: _sortCol,
-                  ascending: _sortAsc,
-                  onSort: (col, asc) =>
-                      setState(() { _sortCol = col; _sortAsc = asc; }),
-                  onClose: (id) => actions.close(id),
-                );
-              }
-              return ListView.builder(
-                padding:
-                    const EdgeInsets.only(left: 16, right: 16, bottom: 32),
-                physics: const BouncingScrollPhysics(),
-                itemCount: filtered.length,
-                addAutomaticKeepAlives: false,
-                itemBuilder: (context, i) => ConnectionTile(
-                  connection: filtered[i],
-                  onClose: () => actions.close(filtered[i].id),
-                ),
-              );
-            }),
+              },
+            ),
           ),
         ],
       ),
@@ -305,13 +326,21 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: isDark ? YLColors.zinc900 : Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(YLRadius.xl)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(YLRadius.xl),
+        ),
         title: Text(s.closeAllDialogTitle, style: YLText.titleLarge),
         content: Text(s.closeAllDialogMessage, style: YLText.body),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: Text(s.cancel, style: TextStyle(color: isDark ? YLColors.zinc400 : YLColors.zinc600))),
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(
+              s.cancel,
+              style: TextStyle(
+                color: isDark ? YLColors.zinc400 : YLColors.zinc600,
+              ),
+            ),
+          ),
           FilledButton(
             onPressed: () {
               Navigator.pop(ctx);
@@ -319,7 +348,9 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
             },
             style: FilledButton.styleFrom(
               backgroundColor: YLColors.error,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(YLRadius.pill)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(YLRadius.pill),
+              ),
             ),
             child: Text(s.closeAll),
           ),
@@ -328,7 +359,6 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
     );
   }
 }
-
 
 // ── Desktop: Sortable DataTable ───────────────────────────────────────────────
 
@@ -340,7 +370,12 @@ class _Col {
   final _SortColumn? sortBy;
   final double width;
   final TextAlign align;
-  const _Col(this.label, this.sortBy, this.width, [this.align = TextAlign.left]);
+  const _Col(
+    this.label,
+    this.sortBy,
+    this.width, [
+    this.align = TextAlign.left,
+  ]);
 }
 
 /// Desktop connections table — replaces the previous Material `DataTable`
@@ -439,7 +474,9 @@ class _HeaderRow extends StatelessWidget {
       height: 48,
       child: Row(
         children: cols.map((c) {
-          final headerStyle = YLText.label.copyWith(fontWeight: FontWeight.w700);
+          final headerStyle = YLText.label.copyWith(
+            fontWeight: FontWeight.w700,
+          );
           final isSorted = c.sortBy != null && c.sortBy == sortColumn;
           final cell = Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -461,10 +498,7 @@ class _HeaderRow extends StatelessWidget {
           final boxed = SizedBox(width: c.width, child: cell);
           if (c.sortBy == null) return boxed;
           return InkWell(
-            onTap: () => onSort(
-              c.sortBy!,
-              isSorted ? !ascending : true,
-            ),
+            onTap: () => onSort(c.sortBy!, isSorted ? !ascending : true),
             child: boxed,
           );
         }).toList(),
@@ -489,8 +523,12 @@ class _ConnectionRow extends StatelessWidget {
     return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
 
-  Widget _textCell(String text, double width, TextAlign align,
-      {TextStyle? style}) {
+  Widget _textCell(
+    String text,
+    double width,
+    TextAlign align, {
+    TextStyle? style,
+  }) {
     return SizedBox(
       width: width,
       child: Padding(
@@ -514,9 +552,24 @@ class _ConnectionRow extends StatelessWidget {
         _textCell(conn.target, cols[0].width, TextAlign.left, style: mono),
         _textCell(conn.processName, cols[1].width, TextAlign.left),
         _textCell(conn.rule, cols[2].width, TextAlign.left),
-        _textCell(_fmt(conn.download), cols[3].width, TextAlign.right, style: mono),
-        _textCell(_fmt(conn.upload), cols[4].width, TextAlign.right, style: mono),
-        _textCell(conn.durationText, cols[5].width, TextAlign.right, style: mono),
+        _textCell(
+          _fmt(conn.download),
+          cols[3].width,
+          TextAlign.right,
+          style: mono,
+        ),
+        _textCell(
+          _fmt(conn.upload),
+          cols[4].width,
+          TextAlign.right,
+          style: mono,
+        ),
+        _textCell(
+          conn.durationText,
+          cols[5].width,
+          TextAlign.right,
+          style: mono,
+        ),
         SizedBox(
           width: cols[6].width,
           child: IconButton(
@@ -561,9 +614,7 @@ class ConnectionsSearchField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: BoxDecoration(
-        boxShadow: YLShadow.card(context),
-      ),
+      decoration: BoxDecoration(boxShadow: YLShadow.card(context)),
       child: ListenableBuilder(
         listenable: controller,
         builder: (context, _) {
@@ -574,12 +625,18 @@ class ConnectionsSearchField extends StatelessWidget {
             decoration: InputDecoration(
               hintText: hintText,
               hintStyle: YLText.body.copyWith(color: YLColors.zinc500),
-              prefixIcon: const Icon(Icons.search_rounded,
-                  size: 20, color: YLColors.zinc400),
+              prefixIcon: const Icon(
+                Icons.search_rounded,
+                size: 20,
+                color: YLColors.zinc400,
+              ),
               suffixIcon: hasText
                   ? IconButton(
-                      icon: const Icon(Icons.cancel_rounded,
-                          size: 18, color: YLColors.zinc400),
+                      icon: const Icon(
+                        Icons.cancel_rounded,
+                        size: 18,
+                        color: YLColors.zinc400,
+                      ),
                       onPressed: () {
                         controller.clear();
                         onClear();

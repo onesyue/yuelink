@@ -320,6 +320,20 @@ ThemeData buildTheme(
     brightness: brightness,
     visualDensity: VisualDensity.standard,
     scaffoldBackgroundColor: bg,
+    appBarTheme: AppBarTheme(
+      backgroundColor: bg,
+      foregroundColor: colorScheme.onSurface,
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
+      scrolledUnderElevation: 0,
+      centerTitle: false,
+      titleTextStyle: YLText.collapsedTitle.copyWith(
+        color: colorScheme.onSurface,
+        fontWeight: FontWeight.w600,
+      ),
+      iconTheme: IconThemeData(color: colorScheme.onSurface, size: 20),
+      actionsIconTheme: IconThemeData(color: colorScheme.onSurface, size: 20),
+    ),
     splashFactory:
         NoSplash.splashFactory, // Remove Android ripples for premium feel
     splashColor: Colors.transparent,
