@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
 import '../../../core/kernel/core_manager.dart';
+import '../../../core/providers/core_preferences_providers.dart';
 import '../../../core/storage/settings_service.dart';
 import '../../../infrastructure/repositories/proxy_repository.dart';
 import '../../../shared/node_telemetry.dart';
@@ -86,6 +87,14 @@ class DelayTestActions {
 
       // Opt-in telemetry — anonymous fingerprint + latency only.
       NodeTelemetry.recordUrlTestByName(name: proxyName, delayMs: delay);
+      // v1 closed-schema event — single-node tests don't know their group,
+      // so we omit it.
+      NodeTelemetry.recordProbeResultByName(
+        name: proxyName,
+        testUrl: testUrl,
+        delayMs: delay,
+        connectionMode: ref.read(connectionModeProvider),
+      );
 
       return delay;
     } finally {
@@ -226,10 +235,18 @@ class DelayTestActions {
           SettingsService.setDelayResults(current);
 
           // Opt-in telemetry — one event per tested node.
+          final connMode = ref.read(connectionModeProvider);
           for (final name in proxyNames) {
             final delay = current[name];
             if (delay != null) {
               NodeTelemetry.recordUrlTestByName(name: name, delayMs: delay);
+              NodeTelemetry.recordProbeResultByName(
+                name: name,
+                testUrl: testUrl,
+                delayMs: delay,
+                group: groupName,
+                connectionMode: connMode,
+              );
             }
           }
         } else {
@@ -239,12 +256,20 @@ class DelayTestActions {
               '(reason=${outcome.failureReason})');
           final current =
               Map<String, int>.from(ref.read(delayResultsProvider));
+          final connMode = ref.read(connectionModeProvider);
           for (final name in proxyNames) {
             current[name] = -1;
             NodeTelemetry.recordUrlTestByName(
               name: name,
               delayMs: -1,
               reason: outcome.failureReason ?? 'timeout',
+            );
+            NodeTelemetry.recordProbeResultByName(
+              name: name,
+              testUrl: testUrl,
+              delayMs: -1,
+              group: groupName,
+              connectionMode: connMode,
             );
           }
           ref.read(delayResultsProvider.notifier).state = current;

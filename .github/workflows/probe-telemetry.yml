@@ -1,0 +1,30 @@
+name: Probe telemetry
+
+# Scheduled health check for the telemetry router on 23.80.91.14.
+#
+# Caught a regression on 2026-05-01 where /api/client/telemetry/* silently
+# returned 404 for days. SRE was blind for the entire v1.1.x stability
+# investigation. This workflow runs the probe every 30 min so any future
+# unmount fails loudly via GitHub's "scheduled workflow failed" email.
+#
+# Deliberately separate from ci.yml: PRs must NOT be blocked by prod outages.
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: probe-telemetry
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    name: Probe production telemetry router
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Run probe
+        run: bash scripts/probe_telemetry.sh

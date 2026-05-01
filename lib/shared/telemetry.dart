@@ -67,6 +67,13 @@ class TelemetryEvents {
   static const delayTestAutoRecovered = 'delay_test_auto_recovered';
   static const coreRestarted = 'core_restarted';
 
+  // Per-node probe (v1). Closed schema enforced by
+  // [NodeTelemetry.recordProbeResult] — only fp, type, group, target, ok,
+  // latency_ms, error_class, status_code, core_version, connection_mode
+  // (app_version + platform come from the envelope). NEVER server / port /
+  // uuid / password / sni / publicKey / shortId.
+  static const nodeProbeResultV1 = 'node_probe_result_v1';
+
   // Errors
   static const crash = 'crash';
   static const networkError = 'network_error';

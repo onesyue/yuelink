@@ -256,6 +256,129 @@ class NodeTelemetry {
     );
   }
 
+  /// Map a probe URL to a target category. Closed set: transport / claude /
+  /// chatgpt / google / youtube / netflix / github / other. Mirrors the
+  /// matrix in scripts/sre/probe_nodes.py so RUM and active probe agree.
+  static String classifyTarget(String url) {
+    final host = Uri.tryParse(url)?.host.toLowerCase() ?? '';
+    if (host.isEmpty) return 'other';
+    if (host.endsWith('claude.ai') || host.endsWith('anthropic.com')) {
+      return 'claude';
+    }
+    if (host.endsWith('chatgpt.com') || host.endsWith('chat.openai.com')) {
+      return 'chatgpt';
+    }
+    if (host.endsWith('netflix.com')) return 'netflix';
+    if (host.endsWith('github.com') || host.endsWith('githubusercontent.com')) {
+      return 'github';
+    }
+    if (host.endsWith('youtube.com') || host.endsWith('youtu.be')) {
+      return 'youtube';
+    }
+    if (host.endsWith('google.com') || host.endsWith('gstatic.com')) {
+      // The default delay-test URL is gstatic.com/generate_204 — kept as a
+      // distinct `transport` bucket (vs the user-facing `google` site) so
+      // dashboards can separate "node carries packets" from "Google search
+      // is reachable" instead of conflating them.
+      if (host == 'www.gstatic.com' || host == 'gstatic.com') {
+        return 'transport';
+      }
+      return 'google';
+    }
+    return 'other';
+  }
+
+  /// Emit a [TelemetryEvents.nodeProbeResultV1] event with the closed
+  /// field schema. Reject silently if telemetry is opted-out OR if the
+  /// node isn't in inventory (no fp resolution possible).
+  ///
+  /// Field whitelist (in addition to the envelope's automatic
+  /// `client_id / session_id / platform / version / ts`):
+  ///   - `fp`             non-reversible 16-hex node hash
+  ///   - `type`           lowercase protocol (vless / hysteria2 / …)
+  ///   - `group`          proxy-group name (optional — null when called
+  ///                       from a single-node test)
+  ///   - `target`         classifyTarget result, closed set
+  ///   - `ok`             bool, derived from latency
+  ///   - `latency_ms`     int, clamped to [0, 60000]
+  ///   - `error_class`    `'timeout'` / `'socket'` / `'handshake'` / null
+  ///   - `status_code`    HTTP status when available (raw probe), else null
+  ///   - `core_version`   mihomo version string (best-effort, may be empty)
+  ///   - `connection_mode` 'tun' / 'systemProxy' / etc. — caller resolves
+  ///
+  /// Hard rule: this method MUST NOT include any of:
+  /// `server / port / uuid / password / sni / servername / public-key /
+  ///  short-id / path / host`. The covering test
+  /// `node_probe_result_v1_does_not_leak_secrets` enforces this.
+  static void recordProbeResult({
+    required String fp,
+    required String type,
+    String? group,
+    required String target,
+    required bool ok,
+    required int latencyMs,
+    String? errorClass,
+    int? statusCode,
+    String? coreVersion,
+    String? connectionMode,
+  }) {
+    if (!Telemetry.isEnabled) return;
+    Telemetry.event(
+      TelemetryEvents.nodeProbeResultV1,
+      // Failed probes are diagnostically valuable — survive buffer prune.
+      priority: !ok,
+      props: {
+        'fp': fp,
+        'type': type.toLowerCase(),
+        if (group != null && group.isNotEmpty) 'group': group,
+        'target': target,
+        'ok': ok,
+        'latency_ms': latencyMs.clamp(0, 60000),
+        if (errorClass != null && errorClass.isNotEmpty)
+          'error_class': errorClass,
+        'status_code': ?statusCode,
+        if (coreVersion != null && coreVersion.isNotEmpty)
+          'core_version': coreVersion,
+        if (connectionMode != null && connectionMode.isNotEmpty)
+          'connection_mode': connectionMode,
+      },
+    );
+  }
+
+  /// Convenience overload: resolves fp + type from the in-process
+  /// inventory, classifies the target URL. Silent no-op when the node
+  /// isn't in inventory.
+  ///
+  /// Maps the mihomo `/delay` semantics:
+  ///   - `delayMs > 0` → ok, latency = delayMs
+  ///   - `delayMs <= 0` → !ok, latency = timeoutMs, error_class = 'timeout'
+  static void recordProbeResultByName({
+    required String name,
+    required String testUrl,
+    required int delayMs,
+    String? group,
+    String? coreVersion,
+    String? connectionMode,
+    int timeoutMs = 5000,
+  }) {
+    final meta = _nameToMeta[name];
+    final fp = meta?['fp'] as String? ?? _nameToFp[name];
+    final type = meta?['type'] as String? ?? _nameToType[name];
+    if (fp == null || type == null) return;
+    final ok = delayMs > 0 && delayMs < 60000;
+    recordProbeResult(
+      fp: fp,
+      type: type,
+      group: group,
+      target: classifyTarget(testUrl),
+      ok: ok,
+      latencyMs: ok ? delayMs : timeoutMs,
+      errorClass: ok ? null : 'timeout',
+      coreVersion: coreVersion,
+      connectionMode: connectionMode,
+    );
+  }
+
   static String _nodeType(Map<dynamic, dynamic> proxy) {
     final raw = _string(proxy, 'type').toLowerCase();
     return raw == 'hy2' ? 'hysteria2' : raw;

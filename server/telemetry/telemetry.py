@@ -71,7 +71,12 @@ MAX_EVENT_NAME_LEN = 64
 MAX_PROP_VALUE_LEN = 200
 MAX_INVENTORY_NODES = 200
 
-router = APIRouter(prefix="/api/client/telemetry", tags=["telemetry"])
+router_ingest = APIRouter(prefix="/api/client/telemetry", tags=["telemetry"])
+router_dashboard = APIRouter(prefix="/api/client/telemetry", tags=["telemetry"])
+
+# Backward-compatible default export for deployments that only want the
+# read/admin surface. Existing checkin-api main.py owns ingest + flags.
+router = router_dashboard
 security = HTTPBasic()
 
 
@@ -329,7 +334,7 @@ def _extract_node_rows(event_name: str, body: dict, day) -> list[tuple]:
     return rows
 
 
-@router.post("")
+@router_ingest.post("")
 async def ingest(request: Request) -> JSONResponse:
     try:
         body = await request.json()
@@ -438,7 +443,7 @@ async def ingest(request: Request) -> JSONResponse:
 # ── Feature flags ───────────────────────────────────────────────────────
 
 
-@router.get("/flags")
+@router_ingest.get("/flags")
 def get_flags(client_id: str = "", platform: str = "", version: str = ""):
     """Return the effective flags for [client_id]."""
     with db() as c, _dict_cursor(c) as cur:
@@ -461,7 +466,7 @@ def _bucket(client_id: str, key: str) -> int:
     return h[0] % 100
 
 
-@router.get("/admin/flags")
+@router_dashboard.get("/admin/flags")
 def admin_list_flags(_user: str = Depends(require_dashboard_auth)):
     with db() as c, _dict_cursor(c) as cur:
         cur.execute(
@@ -471,7 +476,7 @@ def admin_list_flags(_user: str = Depends(require_dashboard_auth)):
         return {"flags": cur.fetchall()}
 
 
-@router.post("/admin/flags")
+@router_dashboard.post("/admin/flags")
 async def admin_set_flag(
     request: Request,
     _user: str = Depends(require_dashboard_auth),
@@ -501,7 +506,7 @@ async def admin_set_flag(
 # ── NPS ─────────────────────────────────────────────────────────────────
 
 
-@router.post("/nps")
+@router_dashboard.post("/nps")
 async def nps_submit(request: Request) -> JSONResponse:
     body = await request.json()
     score = body.get("score")
@@ -537,7 +542,7 @@ def _day_window(days: int):
     return start, end
 
 
-@router.get("/stats/summary")
+@router_dashboard.get("/stats/summary")
 def stats_summary(days: int = 7, _user: str = Depends(require_dashboard_auth)):
     start, end = _day_window(days)
     with db() as c, _dict_cursor(c) as cur:
@@ -567,7 +572,7 @@ def stats_summary(days: int = 7, _user: str = Depends(require_dashboard_auth)):
     }
 
 
-@router.get("/stats/dau")
+@router_dashboard.get("/stats/dau")
 def stats_dau(days: int = 30, _user: str = Depends(require_dashboard_auth)):
     start, end = _day_window(days)
     with db() as c, _dict_cursor(c) as cur:
@@ -582,7 +587,7 @@ def stats_dau(days: int = 30, _user: str = Depends(require_dashboard_auth)):
         return {"series": cur.fetchall()}
 
 
-@router.get("/stats/crash_free")
+@router_dashboard.get("/stats/crash_free")
 def stats_crash_free(days: int = 7, _user: str = Depends(require_dashboard_auth)):
     """1 - (sessions with ≥1 crash) / (total sessions). 2026 mobile baseline."""
     start, end = _day_window(days)
@@ -631,7 +636,7 @@ def stats_crash_free(days: int = 7, _user: str = Depends(require_dashboard_auth)
     }
 
 
-@router.get("/stats/startup_funnel")
+@router_dashboard.get("/stats/startup_funnel")
 def stats_startup_funnel(days: int = 7, _user: str = Depends(require_dashboard_auth)):
     start, end = _day_window(days)
     with db() as c, _dict_cursor(c) as cur:
@@ -661,7 +666,7 @@ def stats_startup_funnel(days: int = 7, _user: str = Depends(require_dashboard_a
     }
 
 
-@router.get("/stats/errors")
+@router_dashboard.get("/stats/errors")
 def stats_errors(days: int = 7, _user: str = Depends(require_dashboard_auth)):
     start, end = _day_window(days)
     with db() as c, _dict_cursor(c) as cur:
@@ -677,7 +682,7 @@ def stats_errors(days: int = 7, _user: str = Depends(require_dashboard_auth)):
         return {"top_errors": cur.fetchall()}
 
 
-@router.get("/stats/versions")
+@router_dashboard.get("/stats/versions")
 def stats_versions(days: int = 7, _user: str = Depends(require_dashboard_auth)):
     start, end = _day_window(days)
     with db() as c, _dict_cursor(c) as cur:
@@ -691,75 +696,267 @@ def stats_versions(days: int = 7, _user: str = Depends(require_dashboard_auth)):
         return {"distribution": cur.fetchall()}
 
 
-@router.get("/stats/nodes")
+# ── Per-node aggregation (v1 + legacy) ─────────────────────────────────
+#
+# v1 schema lives in `events.props` (JSONB) — emitted by
+# `NodeTelemetry.recordProbeResult` in the client. Closed field set:
+#   fp, type, group, target, ok, latency_ms, error_class, status_code,
+#   core_version, connection_mode  (+ envelope: client_id, version, …)
+#
+# Legacy `node_urltest` events land in `node_events` via main.py's
+# handwritten ingest. Those don't carry target / status / error class —
+# we adapt them into the v1-shaped output by treating each urltest as a
+# `transport` sample so the dashboard contract stays single.
+
+NODE_PROBE_RESULT_V1 = "node_probe_result_v1"
+PROBE_TARGETS = (
+    "transport", "claude", "chatgpt", "google",
+    "youtube", "netflix", "github", "other",
+)
+DEFAULT_INSUFFICIENT_THRESHOLD = 3
+
+
+def _percentile(sorted_lats: list, q: float):
+    """Nearest-rank percentile. Mirrors probe_nodes.py / scripts/sre to
+    keep Python and dashboard math identical."""
+    if not sorted_lats:
+        return None
+    idx = max(0, min(len(sorted_lats) - 1, int(round(q * (len(sorted_lats) - 1)))))
+    return sorted_lats[idx]
+
+
+def _aggregate_v1_node_probe_rows(rows) -> dict:
+    """Pure-Python aggregator for `events.event = node_probe_result_v1`.
+
+    Input row shape (extracted by SQL `SELECT props->>'fp' AS fp, …`):
+      fp, type, target, ok (bool), latency_ms (int|None),
+      status_code (int|None), error_class (str|None),
+      connection_mode (str|None), core_version (str|None), client_id
+
+    Output: `{fp: {type, users(set), samples, per_target: {target: ...}}}`.
+
+    Extracted as a free function so the unit test exercises it
+    without needing a live Postgres."""
+    by_fp: dict = {}
+    for r in rows:
+        fp = r.get("fp")
+        if not fp:
+            continue
+        node = by_fp.setdefault(fp, {
+            "type": r.get("type"),
+            "users": set(),
+            "samples": 0,
+            "per_target": {},
+        })
+        node["samples"] += 1
+        cid = r.get("client_id")
+        if cid:
+            node["users"].add(cid)
+        target = (r.get("target") or "other")
+        if target not in PROBE_TARGETS:
+            target = "other"
+        t = node["per_target"].setdefault(target, {
+            "attempts": 0, "ok": 0,
+            "latencies": [],
+            "status_buckets": {},
+            "error_buckets": {},
+        })
+        t["attempts"] += 1
+        if r.get("ok"):
+            t["ok"] += 1
+        lat = r.get("latency_ms")
+        if isinstance(lat, (int, float)) and lat > 0:
+            t["latencies"].append(int(lat))
+        st = r.get("status_code")
+        if isinstance(st, (int, float)):
+            key = str(int(st))
+            t["status_buckets"][key] = t["status_buckets"].get(key, 0) + 1
+        ec = r.get("error_class")
+        if ec:
+            t["error_buckets"][ec] = t["error_buckets"].get(ec, 0) + 1
+    return by_fp
+
+
+def _aggregate_legacy_urltest_rows(rows) -> dict:
+    """Adapt `node_events.event = 'urltest'` rows into the v1-shaped
+    structure so the response schema stays identical regardless of
+    data source. Treats each urltest hit as a `transport` sample.
+    delay_ms <= 0 means timeout; reason populates error_buckets."""
+    by_fp: dict = {}
+    for r in rows:
+        fp = r.get("fp")
+        if not fp:
+            continue
+        node = by_fp.setdefault(fp, {
+            "type": r.get("type"),
+            "users": set(),
+            "samples": 0,
+            "per_target": {},
+        })
+        node["samples"] += 1
+        cid = r.get("client_id")
+        if cid:
+            node["users"].add(cid)
+        t = node["per_target"].setdefault("transport", {
+            "attempts": 0, "ok": 0,
+            "latencies": [],
+            "status_buckets": {},
+            "error_buckets": {},
+        })
+        t["attempts"] += 1
+        ok_int = r.get("ok")
+        is_ok = (ok_int == 1) or (ok_int is True)
+        if is_ok:
+            t["ok"] += 1
+        delay = r.get("delay_ms")
+        if isinstance(delay, (int, float)) and delay > 0:
+            t["latencies"].append(int(delay))
+        if not is_ok:
+            reason = r.get("reason") or "timeout"
+            t["error_buckets"][reason] = t["error_buckets"].get(reason, 0) + 1
+    return by_fp
+
+
+def _shape_node(fp: str, agg: dict, region, min_samples: int) -> dict:
+    """Render one fp's aggregation into the public response schema."""
+    per_target_out = {}
+    for target, t in agg["per_target"].items():
+        lats = sorted(t["latencies"])
+        attempts = t["attempts"]
+        ok = t["ok"]
+        timeouts = sum(
+            v for k, v in t["error_buckets"].items() if k == "timeout"
+        )
+        top_err = (
+            max(t["error_buckets"], key=t["error_buckets"].get)
+            if t["error_buckets"] else None
+        )
+        per_target_out[target] = {
+            "attempts": attempts,
+            "ok": ok,
+            "success_rate": (ok / attempts) if attempts else None,
+            "timeout_rate": (timeouts / attempts) if attempts else None,
+            "p50_ms": _percentile(lats, 0.5),
+            "p95_ms": _percentile(lats, 0.95),
+            "p99_ms": _percentile(lats, 0.99),
+            "top_error_class": top_err,
+            # Empty maps drop to None to keep payload lean — JSONB
+            # `{}` and `null` round-trip differently, dashboard reads
+            # null as "no breakdown".
+            "status_buckets": t["status_buckets"] or None,
+            "error_buckets": t["error_buckets"] or None,
+        }
+    return {
+        "fp": fp,
+        "type": agg["type"],
+        "region": region,
+        "users": len(agg["users"]),
+        "samples": agg["samples"],
+        "per_target": per_target_out,
+        "insufficient_data": agg["samples"] < min_samples,
+    }
+
+
+def _node_rollup(nodes: list) -> dict:
+    """Group-level by-target rollup so dashboard can show 'this group's
+    Claude success rate' separate from 'transport success rate' instead
+    of conflating the two."""
+    by_target: dict = {}
+    for n in nodes:
+        for target, t in n.get("per_target", {}).items():
+            r = by_target.setdefault(target, {"attempts": 0, "ok": 0})
+            r["attempts"] += t.get("attempts", 0)
+            r["ok"] += t.get("ok", 0)
+    for r in by_target.values():
+        r["success_rate"] = (r["ok"] / r["attempts"]) if r["attempts"] else None
+    return {"total_nodes": len(nodes), "by_target_overall": by_target}
+
+
+@router_dashboard.get("/stats/nodes")
 def stats_nodes(
-    days: int = 7, limit: int = 50,
+    days: int = 1,
+    limit: int = 200,
+    min_samples: int = DEFAULT_INSUFFICIENT_THRESHOLD,
     _user: str = Depends(require_dashboard_auth),
 ):
-    """Per-node health score from real-user telemetry. Region sourced from
-    node_identity (only inventory rows carry it)."""
+    """Per-node health derived from `node_probe_result_v1` (preferred)
+    falling back to legacy `node_urltest` aggregation when no v1 events
+    exist in the window — single response shape regardless of source.
+
+    The v1 path reads directly from `events.props` (JSONB), which
+    deliberately avoids touching main.py's handwritten ingest. Adding
+    v1 to `_extract_node_rows` would require a careful production
+    deploy of main.py; reading JSONB from `events` is a pure dashboard
+    change that can ship independently.
+
+    Region is decorated from `node_identity` (populated by
+    `node_inventory` events). For nodes whose identity hasn't been
+    indexed yet, region is null."""
     start, end = _day_window(days)
     with db() as c, _dict_cursor(c) as cur:
         cur.execute(
-            f"""SELECT ne.fp AS fp,
-                       COALESCE(ni.protocol, ne.type) AS type,
-                       ni.region AS region,
-                       COUNT(*)::int AS tests,
-                       COALESCE(SUM(ne.ok), 0)::int AS ok_count,
-                       COUNT(DISTINCT ne.client_id)::int AS users,
-                       AVG(ne.delay_ms) AS avg_delay,
-                       percentile_cont(0.95) WITHIN GROUP (ORDER BY ne.delay_ms) AS p95_delay
-                FROM {SCHEMA}.node_events ne
-                LEFT JOIN {SCHEMA}.node_identity ni ON ni.current_fp = ne.fp
-                WHERE ne.event='urltest' AND ne.day BETWEEN %s AND %s
-                  AND ne.fp IS NOT NULL
-                GROUP BY ne.fp, COALESCE(ni.protocol, ne.type), ni.region""",
-            (start, end),
+            f"""SELECT
+                  props->>'fp'                       AS fp,
+                  props->>'type'                     AS type,
+                  props->>'target'                   AS target,
+                  (props->>'ok')::boolean            AS ok,
+                  NULLIF(props->>'latency_ms', '')::int   AS latency_ms,
+                  NULLIF(props->>'status_code', '')::int  AS status_code,
+                  props->>'error_class'              AS error_class,
+                  client_id
+                FROM {SCHEMA}.events
+                WHERE event = %s
+                  AND day BETWEEN %s AND %s
+                  AND props->>'fp' IS NOT NULL""",
+            (NODE_PROBE_RESULT_V1, start, end),
         )
-        urltest = cur.fetchall()
+        v1_rows = cur.fetchall()
         cur.execute(
-            f"""SELECT fp, COUNT(*)::int AS attempts, COALESCE(SUM(ok),0)::int AS ok_count
-                FROM {SCHEMA}.node_events
-                WHERE event='connect' AND day BETWEEN %s AND %s AND fp IS NOT NULL
-                GROUP BY fp""",
-            (start, end),
+            f"""SELECT current_fp, region FROM {SCHEMA}.node_identity
+                WHERE region IS NOT NULL""",
         )
-        connect = cur.fetchall()
-    cmap = {r["fp"]: (r["attempts"], r["ok_count"]) for r in connect}
+        region_by_fp = {r["current_fp"]: r["region"] for r in cur.fetchall()}
 
-    out = []
-    for r in urltest:
-        tests = r["tests"] or 0
-        oks = r["ok_count"] or 0
-        users = r["users"] or 0
-        success = (oks / tests) if tests else 0
-        avg_delay = r["avg_delay"] or 0
-        p95_delay = r["p95_delay"] or 0
-        latency = max(0, 1 - (p95_delay / 2000))
-        c_attempts, c_oks = cmap.get(r["fp"], (0, 0))
-        connect_rate = (c_oks / c_attempts) if c_attempts else 1.0
-        score = 0.45 * success + 0.35 * latency + 0.20 * connect_rate
-        insufficient = users < 5 or tests < 10
-        out.append({
-            "fp": r["fp"],
-            "type": r["type"],
-            "region": r["region"],
-            "users": users,
-            "tests": tests,
-            "success_rate": round(success, 3),
-            "avg_delay_ms": round(float(avg_delay), 0),
-            "p95_delay_ms": round(float(p95_delay), 0),
-            "connect_attempts": c_attempts,
-            "connect_ok_rate": round(connect_rate, 3),
-            "score": int(round(score * 100)),
-            "insufficient_data": insufficient,
-        })
+        legacy_rows = []
+        legacy_count = 0
+        if not v1_rows:
+            cur.execute(
+                f"""SELECT fp, type, ok, delay_ms, reason, client_id
+                    FROM {SCHEMA}.node_events
+                    WHERE event = 'urltest'
+                      AND day BETWEEN %s AND %s
+                      AND fp IS NOT NULL""",
+                (start, end),
+            )
+            legacy_rows = cur.fetchall()
+            legacy_count = len(legacy_rows)
 
-    out.sort(key=lambda x: (x["insufficient_data"], -x["score"]))
-    return {"window_days": days, "nodes": out[:limit]}
+    if v1_rows:
+        agg = _aggregate_v1_node_probe_rows(v1_rows)
+        data_source = "node_probe_result_v1"
+    else:
+        agg = _aggregate_legacy_urltest_rows(legacy_rows)
+        data_source = "node_urltest_legacy"
+
+    nodes = [
+        _shape_node(fp, node_agg, region_by_fp.get(fp), min_samples)
+        for fp, node_agg in agg.items()
+    ]
+    nodes.sort(key=lambda n: (n["insufficient_data"], -n["samples"]))
+
+    return {
+        "window_days": days,
+        "data_source": data_source,
+        "v1_samples": len(v1_rows),
+        "legacy_samples": legacy_count,
+        "node_count": len(nodes),
+        "min_samples_threshold": min_samples,
+        "nodes": nodes[:limit],
+        "rollup": _node_rollup(nodes),
+    }
 
 
-@router.get("/stats/nps")
+@router_dashboard.get("/stats/nps")
 def stats_nps(days: int = 30, _user: str = Depends(require_dashboard_auth)):
     start, end = _day_window(days)
     with db() as c, _dict_cursor(c) as cur:
@@ -797,7 +994,7 @@ def stats_nps(days: int = 30, _user: str = Depends(require_dashboard_auth)):
 # ── HTML dashboard ──────────────────────────────────────────────────────
 
 
-@router.get("/dashboard", response_class=HTMLResponse)
+@router_dashboard.get("/dashboard", response_class=HTMLResponse)
 def dashboard(_user: str = Depends(require_dashboard_auth)) -> HTMLResponse:
     here = os.path.dirname(os.path.abspath(__file__))
     path = os.path.join(here, "dashboard.html")
