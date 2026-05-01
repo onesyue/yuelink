@@ -565,7 +565,16 @@ class ConfigTemplate {
     final buf = StringBuffer()
       ..write('$config\ntun:\n')
       ..write('  enable: true\n')
-      ..write('  stack: $normalizedStack\n')
+      ..write('  stack: $normalizedStack\n');
+    if (Platform.isWindows || Platform.isLinux) {
+      // Pin YueLink-managed TUN devices to a stable name. Without this,
+      // mihomo/Wintun may expose the adapter as the upstream default
+      // "Meta Tunnel"; diagnostics then cannot distinguish YueLink's TUN
+      // from an unrelated adapter and may report a false route/interface
+      // failure even when packets are flowing.
+      buf.write('  device: YueLink\n');
+    }
+    buf
       ..write('  auto-route: true\n')
       ..write('  auto-detect-interface: true\n')
       ..write('  strict-route: ${Platform.isWindows ? 'true' : 'false'}\n')

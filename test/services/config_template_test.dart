@@ -49,6 +49,11 @@ find-process-mode: off
         expect(result, contains('stack: mixed'));
         expect(result, contains('auto-route: true'));
         expect(result, contains('auto-detect-interface: true'));
+        if (Platform.isWindows || Platform.isLinux) {
+          expect(result, contains('device: YueLink'));
+        } else {
+          expect(result, isNot(contains('device: YueLink')));
+        }
         expect(result, contains('strict-route:'));
         expect(result, contains('dns-hijack:'));
         expect(result, contains('- tcp://any:53'));

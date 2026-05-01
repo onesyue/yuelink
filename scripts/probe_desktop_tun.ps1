@@ -37,8 +37,8 @@ function Test-Wintun {
 function Test-TunInterface {
   try {
     (Get-NetAdapter | Where-Object {
-      $_.Name -match "YueLink|mihomo|Wintun|Clash" -or
-      $_.InterfaceDescription -match "Wintun|YueLink|mihomo|Clash"
+      $_.Name -match "^Meta$|YueLink|mihomo|Wintun|Clash" -or
+      $_.InterfaceDescription -match "Meta Tunnel|Wintun|YueLink|mihomo|Clash"
     } | Select-Object -First 1) -ne $null
   } catch { $false }
 }
@@ -46,7 +46,7 @@ function Test-TunInterface {
 function Test-Route {
   try {
     $route = route print | Out-String
-    $route -match "YueLink|mihomo|Wintun|Clash"
+    $route -match "\bMeta\b|Meta Tunnel|YueLink|mihomo|Wintun|Clash"
   } catch { $false }
 }
 

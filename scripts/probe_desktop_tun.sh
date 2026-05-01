@@ -51,7 +51,7 @@ driver_present() {
 interface_present() {
   case "$PLATFORM" in
     darwin) ifconfig 2>/dev/null | grep -E '^utun[0-9]+:' >/dev/null ;;
-    linux) ip addr 2>/dev/null | grep -E '^[0-9]+: (tun|yuelink|mihomo)' >/dev/null ;;
+    linux) ip addr 2>/dev/null | grep -Ei '^[0-9]+: (tun|yuelink|mihomo)' >/dev/null ;;
     *) false ;;
   esac
 }
@@ -59,7 +59,7 @@ interface_present() {
 route_ok() {
   case "$PLATFORM" in
     darwin) netstat -rn 2>/dev/null | grep -q 'utun' ;;
-    linux) ip route 2>/dev/null | grep -E 'dev (tun|yuelink|mihomo)' >/dev/null ;;
+    linux) ip route 2>/dev/null | grep -Ei 'dev (tun|yuelink|mihomo)' >/dev/null ;;
     *) false ;;
   esac
 }

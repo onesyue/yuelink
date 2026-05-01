@@ -29,6 +29,29 @@ class DesktopTunDiagnostics {
   final DesktopTunProcessRunner _processRunner;
   final DesktopTunInterfaceLister _interfaceLister;
 
+  @visibleForTesting
+  static bool looksLikeWindowsTunInterfaceName(String value) {
+    final normalized = value.toLowerCase().trim();
+    if (normalized.isEmpty) return false;
+    if (normalized == 'meta') return true;
+    return normalized.contains('meta tunnel') ||
+        normalized.contains('wintun') ||
+        normalized.contains('yuelink') ||
+        normalized.contains('mihomo') ||
+        normalized.contains('clash');
+  }
+
+  @visibleForTesting
+  static bool windowsRouteOutputHasTun(String value) {
+    final normalized = value.toLowerCase();
+    if (normalized.contains('meta tunnel')) return true;
+    if (RegExp(r'\bmeta\b').hasMatch(normalized)) return true;
+    return normalized.contains('wintun') ||
+        normalized.contains('yuelink') ||
+        normalized.contains('mihomo') ||
+        normalized.contains('clash');
+  }
+
   Future<DesktopTunSnapshot> inspect({
     required MihomoApi api,
     required int mixedPort,
@@ -176,10 +199,7 @@ class DesktopTunDiagnostics {
               name.contains('yuelink');
         }
         if (Platform.isWindows) {
-          return name.contains('wintun') ||
-              name.contains('mihomo') ||
-              name.contains('clash') ||
-              name.contains('yuelink');
+          return looksLikeWindowsTunInterfaceName(name);
         }
         return false;
       });
@@ -213,10 +233,7 @@ class DesktopTunDiagnostics {
           'print',
         ], const Duration(seconds: 6));
         final out = '${r.stdout}\n${r.stderr}'.toLowerCase();
-        return r.exitCode == 0 &&
-            (out.contains('wintun') ||
-                out.contains('yuelink') ||
-                out.contains('mihomo'));
+        return r.exitCode == 0 && windowsRouteOutputHasTun(out);
       }
       return false;
     } catch (_) {
