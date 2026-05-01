@@ -137,7 +137,7 @@ class _RuleCountBadge extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         color: isDark ? YLColors.zinc700 : YLColors.zinc100,
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(YLRadius.sm),
       ),
       child: Text(
         '$count rules',

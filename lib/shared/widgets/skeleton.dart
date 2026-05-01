@@ -66,7 +66,7 @@ class _SkeletonRow extends StatelessWidget {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(YLRadius.lg),
       ),
       child: Row(
         children: [
@@ -75,7 +75,7 @@ class _SkeletonRow extends StatelessWidget {
             height: 40,
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(YLRadius.xl),
             ),
           ),
           const SizedBox(width: 12),

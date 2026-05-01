@@ -87,7 +87,7 @@ class _ResignDialogState extends ConsumerState<ResignDialog> {
               color: isDark
                   ? Colors.white.withValues(alpha: 0.05)
                   : Colors.black.withValues(alpha: 0.04),
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(YLRadius.md),
             ),
             child: Row(
               children: [

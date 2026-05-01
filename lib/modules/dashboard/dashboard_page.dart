@@ -784,7 +784,7 @@ class _Step extends StatelessWidget {
           alignment: Alignment.center,
           decoration: BoxDecoration(
             color: accentBg,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(YLRadius.lg),
           ),
           child: Text(
             '$index',

@@ -248,7 +248,7 @@ class ProfileSwipeDeleteBackground extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
         color: const Color(0xFFE53935),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(YLRadius.lg),
       ),
       alignment: Alignment.centerRight,
       child: const Row(

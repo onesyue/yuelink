@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 
 import '../../../i18n/app_strings.dart';
+import '../../../theme.dart';
 import '../emby_client.dart';
 
 /// Netflix-style unified settings panel for the Emby player.
@@ -240,7 +241,7 @@ class _EmbyPlayerSettingsPanelState extends State<EmbyPlayerSettingsPanel>
                         color: _currentSize == e.value
                             ? Colors.red
                             : Colors.white12,
-                        borderRadius: BorderRadius.circular(6),
+                        borderRadius: BorderRadius.circular(YLRadius.sm),
                       ),
                       child: Text(
                         e.key,

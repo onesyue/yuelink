@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../i18n/app_strings.dart';
 import '../../shared/friendly_error.dart';
+import '../../theme.dart';
 import 'emby_client.dart';
 import 'emby_detail_page.dart';
 import 'emby_theme.dart';
@@ -512,7 +513,7 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
                           fontWeight: FontWeight.w600,
                         ),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(6),
+                          borderRadius: BorderRadius.circular(YLRadius.sm),
                         ),
                       ),
                     ),
@@ -610,7 +611,7 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
         width: posterWidth,
         height: height,
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(YLRadius.md),
           child: Stack(
             fit: StackFit.expand,
             children: [
@@ -766,7 +767,7 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
           fillColor: EmbyTheme.pillUnselected(context),
           contentPadding: const EdgeInsets.symmetric(vertical: 6),
           border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(YLRadius.xl),
             borderSide: BorderSide.none,
           ),
           isDense: true,
@@ -907,7 +908,7 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
                 width: 120,
                 decoration: BoxDecoration(
                   color: shimmer,
-                  borderRadius: BorderRadius.circular(6),
+                  borderRadius: BorderRadius.circular(YLRadius.sm),
                 ),
               ),
             ),
@@ -930,7 +931,7 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
         width: 120,
         decoration: BoxDecoration(
           color: shimmer,
-          borderRadius: BorderRadius.circular(6),
+          borderRadius: BorderRadius.circular(YLRadius.sm),
         ),
       ),
     );

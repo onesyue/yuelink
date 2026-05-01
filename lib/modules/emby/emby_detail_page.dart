@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../i18n/app_strings.dart';
+import '../../theme.dart';
 import 'emby_client.dart';
 import 'emby_player_page.dart';
 import 'emby_theme.dart';
@@ -448,7 +449,7 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> {
                   foregroundColor: Colors.black,
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8)),
+                      borderRadius: BorderRadius.circular(YLRadius.md)),
                   textStyle: const TextStyle(
                       fontSize: 15, fontWeight: FontWeight.w600),
                 ),
@@ -590,7 +591,7 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             ClipRRect(
-              borderRadius: BorderRadius.circular(6),
+              borderRadius: BorderRadius.circular(YLRadius.sm),
               child: SizedBox(
                 width: 110,
                 height: 150,
@@ -722,7 +723,7 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             ClipRRect(
-              borderRadius: BorderRadius.circular(6),
+              borderRadius: BorderRadius.circular(YLRadius.sm),
               child: SizedBox(
                 width: 140,
                 height: 79,

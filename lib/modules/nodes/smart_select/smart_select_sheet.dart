@@ -529,7 +529,7 @@ class _NodeCard extends StatelessWidget {
                 height: 24,
                 decoration: BoxDecoration(
                   color: rankColor.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(6),
+                  borderRadius: BorderRadius.circular(YLRadius.sm),
                 ),
                 alignment: Alignment.center,
                 child: Text(

@@ -150,14 +150,14 @@ class _ScoreRow extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 0.5),
               child: InkWell(
                 onTap: () => onPick(i),
-                borderRadius: BorderRadius.circular(6),
+                borderRadius: BorderRadius.circular(YLRadius.sm),
                 child: Container(
                   width: w,
                   height: 40,
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
                     color: color,
-                    borderRadius: BorderRadius.circular(6),
+                    borderRadius: BorderRadius.circular(YLRadius.sm),
                   ),
                   child: Text(
                     '$i',

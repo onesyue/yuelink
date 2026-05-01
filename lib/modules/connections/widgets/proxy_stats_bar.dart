@@ -20,7 +20,7 @@ class ProxyStatsBar extends StatelessWidget {
             color: isDark
                 ? Colors.white.withValues(alpha: 0.06)
                 : Colors.black.withValues(alpha: 0.04),
-            borderRadius: BorderRadius.circular(6),
+            borderRadius: BorderRadius.circular(YLRadius.sm),
           ),
           child: Text(
             '${ps.proxyName}  ${ps.connectionCount}  ${_fmtBytes(ps.totalDownload)}',

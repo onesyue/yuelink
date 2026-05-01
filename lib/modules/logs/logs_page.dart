@@ -539,7 +539,7 @@ class _RulesTabState extends ConsumerState<_RulesTab> {
                         vertical: 6,
                       ),
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(YLRadius.md),
                         borderSide: BorderSide.none,
                       ),
                       filled: true,

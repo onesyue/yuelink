@@ -413,7 +413,7 @@ class Pill extends StatelessWidget {
     final container = Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(YLRadius.xl),
         color: primary
             ? (isDark
                   ? tint.withValues(alpha: 0.12)
@@ -439,11 +439,11 @@ class Pill extends StatelessWidget {
     // are visually distinguishable from the profile-name decorative Pill.
     final tappable = Material(
       color: Colors.transparent,
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(YLRadius.xl),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(YLRadius.xl),
         child: container,
       ),
     );

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../i18n/app_strings.dart';
+import '../../theme.dart';
 import 'emby_client.dart';
 import 'emby_theme.dart';
 import 'models/emby_models.dart';
@@ -150,7 +151,7 @@ class _LibraryGridPageState extends State<LibraryGridPage> {
                 fillColor: EmbyTheme.pillUnselected(context),
                 contentPadding: const EdgeInsets.symmetric(vertical: 6),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: BorderRadius.circular(YLRadius.xl),
                   borderSide: BorderSide.none,
                 ),
                 isDense: true,
@@ -184,7 +185,7 @@ class _LibraryGridPageState extends State<LibraryGridPage> {
                           return GestureDetector(
                             onTap: () => widget.onItemTap(item),
                             child: ClipRRect(
-                              borderRadius: BorderRadius.circular(6),
+                              borderRadius: BorderRadius.circular(YLRadius.sm),
                               child: Stack(
                                 fit: StackFit.expand,
                                 children: [
@@ -362,7 +363,7 @@ class _BoxSetGridPageState extends State<BoxSetGridPage> {
                     return GestureDetector(
                       onTap: () => widget.onItemTap(item),
                       child: ClipRRect(
-                        borderRadius: BorderRadius.circular(6),
+                        borderRadius: BorderRadius.circular(YLRadius.sm),
                         child: Stack(
                           fit: StackFit.expand,
                           children: [

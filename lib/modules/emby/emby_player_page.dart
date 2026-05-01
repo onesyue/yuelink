@@ -7,6 +7,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
 import '../../i18n/app_strings.dart';
+import '../../theme.dart';
 import 'emby_client.dart';
 import 'widgets/player_settings_panel.dart';
 
@@ -224,7 +225,7 @@ class _EmbyPlayerPageState extends State<EmbyPlayerPage>
         builder: (_) => AlertDialog(
           backgroundColor: const Color(0xFF1C1C1E),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(YLRadius.lg),
           ),
           title: Text(
             S.current.embyResumeTitle,
@@ -700,7 +701,7 @@ class _EmbyPlayerPageState extends State<EmbyPlayerPage>
                       ),
                       decoration: BoxDecoration(
                         color: Colors.black54,
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(YLRadius.md),
                       ),
                       child: Text(
                         _fitToast!,
@@ -726,7 +727,7 @@ class _EmbyPlayerPageState extends State<EmbyPlayerPage>
                       ),
                       decoration: BoxDecoration(
                         color: Colors.black54,
-                        borderRadius: BorderRadius.circular(6),
+                        borderRadius: BorderRadius.circular(YLRadius.sm),
                       ),
                       child: Text(
                         S.current.embySpeedUp,
