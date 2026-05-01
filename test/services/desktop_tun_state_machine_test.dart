@@ -58,12 +58,41 @@ void main() {
       expect(s.userMessage, contains('控制接口不可用'));
     });
 
-    test('Windows no admin shows missing_permission', () {
+    test('no privileged path shows missing_permission', () {
+      // hasAdmin in this layer means "do we have a privileged path to
+      // apply TUN routes/DNS" — the SCM service on Windows / launchd
+      // helper on macOS / systemd unit on Linux. It is NOT a check
+      // that the UI process itself runs as admin.
       final s = _snap(hasAdmin: false);
       expect(s.state, DesktopTunState.missingPermission);
       expect(s.errorClass, 'missing_permission');
       expect(s.userMessage, contains('管理员权限'));
     });
+
+    test(
+      'fully working TUN on Windows is running, even without UAC elevation',
+      () {
+        // Regression for the Windows service-mode false positive: when the
+        // helper service is installed, hasAdmin is true regardless of
+        // whether the UI process is elevated, so a TUN that has every
+        // verifiable layer green must classify as running.
+        final s = _snap(
+          hasAdmin: true,
+          driverPresent: true,
+          interfacePresent: true,
+          routeOk: true,
+          dnsOk: true,
+          controllerOk: true,
+          systemProxyEnabled: false,
+          transportOk: true,
+          googleOk: true,
+          githubOk: true,
+        );
+        expect(s.state, DesktopTunState.running);
+        expect(s.errorClass, 'ok');
+        expect(s.runningVerified, isTrue);
+      },
+    );
 
     test('Windows missing Wintun shows missing_driver', () {
       final s = _snap(driverPresent: false);

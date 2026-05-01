@@ -1,7 +1,66 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yuelink/core/tun/desktop_tun_diagnostics.dart';
 
 void main() {
+  group('DesktopTunDiagnostics privilege probe', () {
+    test(
+      'reports privileged when helper service is installed (no UAC needed)',
+      () async {
+        // Regression: a Windows user with the elevated SCM service installed
+        // had TUN running cleanly (interface up, routes/DNS/Google/GitHub
+        // verified) but the diagnostic still flipped state to
+        // missing_permission because `_hasPrivilege` ran `net session`
+        // against the un-elevated UI process. The helper IS the privileged
+        // path on Windows just as on macOS/Linux — installation is the
+        // boundary.
+        var processCalled = false;
+        final diag = DesktopTunDiagnostics(
+          privilegedHelperProbe: () async => true,
+          processRunner: (exe, args, timeout) async {
+            processCalled = true;
+            return ProcessResult(0, 1, '', 'must not be probed');
+          },
+        );
+        expect(await diag.hasPrivilegeForTesting(), isTrue);
+        expect(
+          processCalled,
+          isFalse,
+          reason: 'helper-installed path must short-circuit before net session',
+        );
+      },
+    );
+
+    test(
+      'falls back to net session on Windows when helper not installed',
+      () async {
+        if (!Platform.isWindows) return;
+        var nseCalls = 0;
+        final diag = DesktopTunDiagnostics(
+          privilegedHelperProbe: () async => false,
+          processRunner: (exe, args, timeout) async {
+            nseCalls++;
+            expect(exe, 'net');
+            expect(args, ['session']);
+            return ProcessResult(0, 0, '', '');
+          },
+        );
+        expect(await diag.hasPrivilegeForTesting(), isTrue);
+        expect(nseCalls, 1);
+      },
+    );
+
+    test('non-desktop platforms always report false', () async {
+      // Skip on the desktop platforms where the OS check actually runs.
+      if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) return;
+      final diag = DesktopTunDiagnostics(
+        privilegedHelperProbe: () async => true,
+      );
+      expect(await diag.hasPrivilegeForTesting(), isFalse);
+    });
+  });
+
   group('DesktopTunDiagnostics Windows TUN matching', () {
     test('recognizes YueLink and upstream Meta Tunnel adapters', () {
       expect(

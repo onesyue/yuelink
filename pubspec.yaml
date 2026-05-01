@@ -1,7 +1,7 @@
 name: yuelink
 description: "YueLink - Cross-platform proxy client by Yue.to"
 publish_to: 'none'
-version: 1.1.5+133
+version: 1.1.6+134
 
 environment:
   # Lower bound is set by the hardest active (transitive) dependency:

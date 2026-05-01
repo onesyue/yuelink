@@ -17,17 +17,23 @@ typedef DesktopTunProcessRunner =
 
 typedef DesktopTunInterfaceLister = Future<List<NetworkInterface>> Function();
 
+typedef DesktopTunPrivilegedHelperProbe = Future<bool> Function();
+
 class DesktopTunDiagnostics {
   DesktopTunDiagnostics({
     DesktopTunProcessRunner? processRunner,
     DesktopTunInterfaceLister? interfaceLister,
+    DesktopTunPrivilegedHelperProbe? privilegedHelperProbe,
   }) : _processRunner = processRunner ?? _runProcess,
-       _interfaceLister = interfaceLister ?? NetworkInterface.list;
+       _interfaceLister = interfaceLister ?? NetworkInterface.list,
+       _privilegedHelperProbe =
+           privilegedHelperProbe ?? ServiceManager.isInstalled;
 
   static final instance = DesktopTunDiagnostics();
 
   final DesktopTunProcessRunner _processRunner;
   final DesktopTunInterfaceLister _interfaceLister;
+  final DesktopTunPrivilegedHelperProbe _privilegedHelperProbe;
 
   @visibleForTesting
   static bool looksLikeWindowsTunInterfaceName(String value) {
@@ -142,19 +148,34 @@ class DesktopTunDiagnostics {
     );
   }
 
+  @visibleForTesting
+  Future<bool> hasPrivilegeForTesting() => _hasPrivilege();
+
   Future<bool> _hasPrivilege() async {
     if (!(Platform.isMacOS || Platform.isWindows || Platform.isLinux)) {
       return false;
     }
     try {
+      // The privileged helper is the privilege boundary on every desktop
+      // platform — launchd plist on macOS, systemd unit on Linux, SCM
+      // service on Windows. Probing the calling process for elevation
+      // (`net session` on Windows / EUID==0 on Unix) would gate TUN on
+      // running the UI as admin, which YueLink never does and never
+      // needs to: TUN-mode startup is dispatched through the helper
+      // (see `_shouldUseDesktopServiceMode`).
+      if (await _privilegedHelperProbe()) return true;
       if (Platform.isWindows) {
+        // Legacy fallback for users who launch the UI elevated without
+        // a service installed. Without this, an admin-launched UI that
+        // intentionally bypasses the helper would be misclassified as
+        // missing_permission while the routes/DNS it just installed
+        // are functioning.
         final r = await _processRunner('net', const [
           'session',
         ], const Duration(seconds: 3));
         return r.exitCode == 0;
       }
-      // The privileged helper is the privilege boundary on macOS/Linux.
-      return await ServiceManager.isInstalled();
+      return false;
     } catch (_) {
       return false;
     }
