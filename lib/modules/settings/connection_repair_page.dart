@@ -8,6 +8,7 @@ import '../../core/kernel/core_manager.dart';
 import '../../core/platform/vpn_service.dart';
 import '../../core/profile/profile_service.dart';
 import '../../core/providers/core_provider.dart';
+import '../../core/storage/settings_service.dart';
 import '../../core/tun/desktop_tun_diagnostics.dart';
 import '../../core/tun/desktop_tun_state.dart';
 import '../../core/tun/desktop_tun_telemetry.dart';
@@ -131,14 +132,8 @@ class _ConnectionRepairPageState extends ConsumerState<ConnectionRepairPage> {
     if (_busy) return;
     setState(() => _busy = true);
     try {
-      final activeId = ref.read(activeProfileIdProvider);
-      if (activeId == null) {
-        AppNotifier.error(S.current.repairNeedLogin);
-        return;
-      }
-      final config = await ProfileService.loadConfig(activeId);
+      final config = await _loadActiveConfigForRepair();
       if (config == null) {
-        AppNotifier.error(S.current.repairActionFailed);
         return;
       }
       final ok = await ref.read(coreActionsProvider).restart(config);
@@ -158,6 +153,51 @@ class _ConnectionRepairPageState extends ConsumerState<ConnectionRepairPage> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  Future<String?> _loadActiveConfigForRepair() async {
+    final activeId =
+        ref.read(activeProfileIdProvider) ??
+        await SettingsService.getActiveProfileId();
+    if (activeId == null) {
+      AppNotifier.error(
+        S.current.isEn ? 'No active subscription selected' : '未选择活动订阅',
+      );
+      return null;
+    }
+    final config = await ProfileService.loadConfig(activeId);
+    if (config == null || config.trim().isEmpty) {
+      AppNotifier.error(
+        S.current.isEn
+            ? 'Active subscription config is empty. Re-sync first.'
+            : '活动订阅配置为空，请先重新同步订阅',
+      );
+      return null;
+    }
+    return config;
+  }
+
+  Future<bool> _oneClickRepairAndReconnect() async {
+    if (Platform.isIOS) {
+      await VpnService.resetVpnProfile();
+      await VpnService.clearAppGroupConfig();
+    }
+    if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
+      // Clear stale system proxy before reconnecting. In TUN mode this avoids
+      // controller self-loop; in system-proxy mode start() will reapply the
+      // proxy if the user has "set proxy on connect" enabled.
+      await ref.read(coreActionsProvider).clearSystemProxy();
+      if (Platform.isMacOS) await CoreActions.restoreTunDns();
+    }
+
+    final token = ref.read(authProvider).token;
+    if (token != null) {
+      await ref.read(authProvider.notifier).syncSubscription();
+    }
+
+    final config = await _loadActiveConfigForRepair();
+    if (config == null) return false;
+    return ref.read(coreActionsProvider).start(config);
   }
 
   Future<void> _run(String label, Future<bool> Function() action) async {
@@ -223,19 +263,10 @@ class _ConnectionRepairPageState extends ConsumerState<ConnectionRepairPage> {
               child: FilledButton.icon(
                 onPressed: _busy
                     ? null
-                    : () => _run('一键修复', () async {
-                        if (Platform.isIOS) {
-                          await VpnService.resetVpnProfile();
-                          await VpnService.clearAppGroupConfig();
-                        }
-                        final token = ref.read(authProvider).token;
-                        if (token != null) {
-                          await ref
-                              .read(authProvider.notifier)
-                              .syncSubscription();
-                        }
-                        return true;
-                      }),
+                    : () => _run(
+                        s.repairOneClick,
+                        _oneClickRepairAndReconnect,
+                      ),
                 icon: _busy
                     ? const SizedBox(
                         width: 16,
