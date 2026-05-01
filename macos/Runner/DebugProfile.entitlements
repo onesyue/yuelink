@@ -11,6 +11,11 @@
 	<true/>
 	<key>com.apple.security.network.client</key>
 	<true/>
+	<!-- Required by file_picker's macOS saveFile() implementation for user
+	     selected diagnostic/profile exports. The app sandbox stays disabled
+	     above, but file_picker still checks this entitlement via SecTask. -->
+	<key>com.apple.security.files.user-selected.read-write</key>
+	<true/>
 	<!-- Required for FFI core execution (loading libclash.dylib) -->
 	<key>com.apple.security.cs.allow-jit</key>
 	<true/>
