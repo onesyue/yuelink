@@ -30,10 +30,7 @@ import psycopg2.extras
 SQLITE_PATH = os.environ.get(
     "TELEMETRY_SQLITE_PATH", "/var/lib/yuelink-telemetry/events.db"
 )
-DSN = os.environ.get(
-    "TELEMETRY_DATABASE_DSN",
-    "host=66.55.76.208 port=5432 user=root password=jim@8858 dbname=yueops",
-)
+DSN = os.environ.get("TELEMETRY_DATABASE_DSN", "")
 SCHEMA = os.environ.get("TELEMETRY_SCHEMA", "telemetry")
 
 
@@ -46,6 +43,10 @@ def _day_from_sqlite(val) -> date:
 
 
 def main() -> int:
+    if not DSN:
+        print("[migrate] TELEMETRY_DATABASE_DSN is required", file=sys.stderr)
+        return 2
+
     if not os.path.exists(SQLITE_PATH):
         print(f"[migrate] no sqlite file at {SQLITE_PATH}; nothing to migrate")
         return 0

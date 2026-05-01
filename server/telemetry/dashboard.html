@@ -181,6 +181,8 @@
   <div class="tabs">
     <div class="tab active" onclick="switchTab('overview')">Overview</div>
     <div class="tab"        onclick="switchTab('nodes')">Nodes</div>
+    <div class="tab"        onclick="switchTab('review')">Review queue</div>
+    <div class="tab"        onclick="switchTab('probe')">Active probe</div>
     <div class="tab"        onclick="switchTab('nps')">NPS</div>
     <div class="tab"        onclick="switchTab('flags')">Feature Flags</div>
   </div>
@@ -253,13 +255,101 @@
         <thead><tr>
           <th>FP</th><th>Type</th><th>Region</th>
           <th class="num">Users</th>
-          <th class="num">Tests</th>
-          <th class="num">Success</th>
+          <th class="num">Samples</th>
+          <th class="num">Transport</th>
           <th class="num">p95 ms</th>
-          <th class="num">Connect OK</th>
-          <th class="num">Score</th>
+          <th>Error</th>
+          <th>AI</th>
+          <th class="num">State</th>
         </tr></thead>
         <tbody id="nodeList"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- REVIEW QUEUE (P7) -->
+  <div id="tab-review" class="tab-content">
+    <div class="card">
+      <h2>Review queue · waiting for human action</h2>
+      <p style="color:var(--muted); font-size:12px; margin: 0 0 12px">
+        Nodes the state machine flagged as <code>quarantine_candidate</code>.
+        Automation never sets <code>quarantined</code> — only the
+        approve/reject buttons below can. Need an SRE token configured
+        on the server (TELEMETRY_SRE_TOKEN) and pasted into the field
+        below; the token never leaves your browser.
+      </p>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
+        <label style="font-size:12px;color:var(--muted)">SRE token</label>
+        <input id="sreToken" type="password" placeholder="paste TELEMETRY_SRE_TOKEN"
+          style="flex:1;background:var(--bg);color:var(--text);
+                 border:1px solid var(--border);border-radius:4px;padding:6px 8px;
+                 font-size:12px;font-family:'SF Mono',monospace">
+        <button onclick="refreshReview()"
+          style="background:var(--accent);color:white;border:none;border-radius:4px;
+                 padding:6px 14px;cursor:pointer;font-size:12px">Reload</button>
+        <button onclick="recomputeStates()"
+          style="background:var(--panel);color:var(--text);border:1px solid var(--border);
+                 border-radius:4px;padding:6px 14px;cursor:pointer;font-size:12px">
+          Recompute</button>
+      </div>
+      <table>
+        <thead><tr>
+          <th>FP</th><th>State</th><th>Reason</th>
+          <th class="num">RUM</th><th class="num">Probe</th><th class="num">AI</th>
+          <th class="num">Last txn</th>
+          <th>Action</th>
+        </tr></thead>
+        <tbody id="reviewList"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ACTIVE PROBE (P5) -->
+  <div id="tab-probe" class="tab-content">
+    <div class="grid">
+      <div class="card">
+        <h2>Active probe · target matrix (24h)</h2>
+        <p style="color:var(--muted); font-size:12px; margin: 0 0 12px">
+          Independent measurement from SRE runner, not user RUM. If RUM is
+          bad but probe is fine, the issue is on the user path.
+        </p>
+        <table>
+          <thead><tr>
+            <th>Target</th>
+            <th class="num">Attempts</th>
+            <th class="num">Success</th>
+            <th class="num">p50</th>
+            <th class="num">p95</th>
+            <th>Top errors</th>
+          </tr></thead>
+          <tbody id="probeMatrix"></tbody>
+        </table>
+      </div>
+      <div class="card">
+        <h2>Active probe · recent runs</h2>
+        <table>
+          <thead><tr>
+            <th>Run</th><th>Region</th>
+            <th class="num">Started</th>
+            <th class="num">Nodes</th>
+            <th class="num">Targets</th>
+            <th>Status</th>
+          </tr></thead>
+          <tbody id="probeRuns"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <h2>Active probe · per-node (24h)</h2>
+      <table>
+        <thead><tr>
+          <th>FP</th>
+          <th class="num">Attempts</th>
+          <th class="num">Success</th>
+          <th class="num">p50 ms</th>
+          <th class="num">p95 ms</th>
+        </tr></thead>
+        <tbody id="probeNodes"></tbody>
       </table>
     </div>
   </div>
@@ -335,13 +425,40 @@ async function jpost(path, body) {
 function switchTab(t) {
   currentTab = t;
   document.querySelectorAll('.tab').forEach((el, i) => {
-    const names = ['overview','nodes','nps','flags'];
+    const names = ['overview','nodes','review','probe','nps','flags'];
     el.classList.toggle('active', names[i] === t);
   });
   document.querySelectorAll('.tab-content').forEach(el => {
     el.classList.toggle('active', el.id === `tab-${t}`);
   });
   refresh();
+}
+
+// SRE token persisted in sessionStorage (NOT localStorage) so closing
+// the tab clears it. The dashboard never POSTs the token to anywhere
+// other than /api/sre/* — the browser is the trust boundary.
+function getSreToken() {
+  const cached = sessionStorage.getItem('yueSreToken') || '';
+  const input = document.getElementById('sreToken');
+  if (input) {
+    if (cached && !input.value) input.value = cached;
+    if (input.value) sessionStorage.setItem('yueSreToken', input.value);
+    return input.value;
+  }
+  return cached;
+}
+async function sreFetch(path, opts) {
+  const token = getSreToken();
+  if (!token) throw new Error('SRE token required (paste it in Review queue)');
+  const o = opts || {};
+  o.headers = Object.assign({}, o.headers || {}, {
+    'Authorization': 'Bearer ' + token,
+    'Content-Type': 'application/json',
+  });
+  o.credentials = 'include';
+  const r = await fetch(path, o);
+  if (!r.ok) throw new Error(`${path}: HTTP ${r.status}`);
+  return r.json();
 }
 
 function setWindow(d) {
@@ -426,20 +543,41 @@ async function refreshOverview() {
 async function refreshNodes() {
   const nodes = await jget(`${API}/stats/nodes?days=${currentDays}&limit=200`);
   document.getElementById('nodeList').innerHTML = nodes.nodes.map(n => {
-    const cls = scoreClass(n.score, n.insufficient_data);
-    const scoreText = n.insufficient_data ? 'n/a' : n.score;
+    const transport = (n.per_target && n.per_target.transport) || {};
+    const claude = (n.per_target && n.per_target.claude) || {};
+    const chatgpt = (n.per_target && n.per_target.chatgpt) || {};
+    const transportRate = typeof transport.success_rate === 'number'
+      ? `${(transport.success_rate * 100).toFixed(1)}%`
+      : '—';
+    const p95 = transport.p95_ms ?? '—';
+    const topError = transport.top_error_class || claude.top_error_class ||
+      chatgpt.top_error_class || '—';
+    const aiBits = [];
+    if (claude.attempts) aiBits.push(`Claude ${(claude.success_rate * 100).toFixed(0)}%`);
+    if (chatgpt.attempts) aiBits.push(`ChatGPT ${(chatgpt.success_rate * 100).toFixed(0)}%`);
+    const state = n.state || (n.insufficient_data ? 'insufficient' : 'unknown');
+    const cls = stateClass(state, n.insufficient_data);
     return `<tr>
       <td><code>${n.fp.substring(0, 8)}…</code></td>
       <td><code>${n.type || '?'}</code></td>
       <td>${n.region || '?'}</td>
       <td class="num">${n.users}</td>
-      <td class="num">${n.tests}</td>
-      <td class="num">${(n.success_rate * 100).toFixed(1)}%</td>
-      <td class="num">${n.p95_delay_ms}</td>
-      <td class="num">${n.connect_attempts ? (n.connect_ok_rate * 100).toFixed(0) + '%' : '—'}</td>
-      <td class="num"><span class="node-score ${cls}">${scoreText}</span></td>
+      <td class="num">${n.samples ?? '—'}</td>
+      <td class="num">${transportRate}</td>
+      <td class="num">${p95}</td>
+      <td><code>${topError}</code></td>
+      <td>${aiBits.join(' · ') || '—'}</td>
+      <td class="num"><span class="node-score ${cls}" title="${n.state_reason || ''}">${state}</span></td>
     </tr>`;
-  }).join('') || '<tr><td colspan="9" style="color:var(--muted)">no node data yet — client needs to send node_urltest / node_connect / node_inventory events</td></tr>';
+  }).join('') || '<tr><td colspan="9" style="color:var(--muted)">no node data yet — client needs to send node_probe_result_v1 or legacy node_urltest events</td></tr>';
+}
+
+function stateClass(state, insufficient) {
+  if (insufficient) return 'score-na';
+  if (state === 'healthy') return 'score-high';
+  if (state === 'ai_blocked' || state === 'suspect') return 'score-mid';
+  if (state === 'quarantine_candidate' || state === 'quarantined') return 'score-low';
+  return 'score-na';
 }
 
 async function refreshNps() {
@@ -501,6 +639,127 @@ function escapeHtml(s) {
     ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
+function fmtPct(v) {
+  if (v === null || v === undefined) return '—';
+  return (v * 100).toFixed(1) + '%';
+}
+function fmtTime(ms) {
+  if (!ms) return '—';
+  return new Date(ms).toLocaleString();
+}
+
+async function refreshReview() {
+  let queue;
+  try {
+    queue = await sreFetch(`/api/sre/nodes/state?requires_human=true&limit=200`);
+  } catch (e) {
+    document.getElementById('reviewList').innerHTML =
+      `<tr><td colspan="8" class="err">${e.message}</td></tr>`;
+    return;
+  }
+  document.getElementById('reviewList').innerHTML = (queue.nodes || []).map(n => {
+    const fp = (n.node_fp || '').substring(0, 10) + '…';
+    return `<tr>
+      <td><code>${fp}</code></td>
+      <td><span class="node-score score-low">${n.current_state}</span></td>
+      <td style="max-width:280px;color:var(--muted);font-size:11px">${escapeHtml(n.reason || '')}</td>
+      <td class="num">${fmtPct(n.rum_success_rate)}</td>
+      <td class="num">${fmtPct(n.active_probe_success_rate)}</td>
+      <td class="num">${fmtPct(n.ai_success_rate)}</td>
+      <td class="num">${fmtTime(n.last_transition_at)}</td>
+      <td>
+        <button onclick="reviewNode('${n.node_fp}','approve','quarantined')"
+          style="background:var(--err);color:white;border:none;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:11px">
+          Quarantine</button>
+        <button onclick="reviewNode('${n.node_fp}','reject')"
+          style="background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:4px 8px;cursor:pointer;font-size:11px;margin-left:4px">
+          Reject</button>
+        <button onclick="reviewNode('${n.node_fp}','hold')"
+          style="background:var(--panel);color:var(--muted);border:1px solid var(--border);border-radius:4px;padding:4px 8px;cursor:pointer;font-size:11px;margin-left:4px">
+          Hold</button>
+      </td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="8" style="color:var(--muted)">no nodes awaiting review</td></tr>';
+}
+
+async function reviewNode(fp, decision, requestedState) {
+  const reviewer = (prompt('Reviewer name:') || '').trim();
+  if (!reviewer) return;
+  const comment = prompt('Comment (optional):') || '';
+  try {
+    const r = await sreFetch(`/api/sre/nodes/state/${encodeURIComponent(fp)}/review`, {
+      method: 'POST',
+      body: JSON.stringify({
+        reviewer, decision, comment,
+        requested_state: requestedState || '',
+      }),
+    });
+    alert(`${fp.substring(0,10)}…  ${r.from_state} → ${r.to_state}`);
+    refreshReview();
+  } catch (e) {
+    alert('review failed: ' + e.message);
+  }
+}
+
+async function recomputeStates() {
+  try {
+    const r = await sreFetch(`/api/sre/nodes/state/recompute`, {
+      method: 'POST',
+      body: JSON.stringify({days: currentDays, triggered_by: 'manual'}),
+    });
+    alert(`recompute: ${r.upserts} upserts, ${r.transitions} transitions`);
+    refreshReview();
+  } catch (e) {
+    alert('recompute failed: ' + e.message);
+  }
+}
+
+async function refreshProbe() {
+  let matrix, runs, nodes;
+  try {
+    matrix = await sreFetch(`/api/sre/active-probe/v1/matrix?hours=24`);
+    runs   = await sreFetch(`/api/sre/active-probe/v1/runs?limit=20`);
+    nodes  = await sreFetch(`/api/sre/active-probe/v1/nodes?hours=24&limit=200`);
+  } catch (e) {
+    document.getElementById('probeMatrix').innerHTML =
+      `<tr><td colspan="6" class="err">${e.message}</td></tr>`;
+    return;
+  }
+  document.getElementById('probeMatrix').innerHTML = (matrix.targets || []).map(t => {
+    const top = (t.top_errors || []).slice(0, 3)
+      .map(e => `<code>${escapeHtml(e.error_class||'')}</code>×${e.n}`).join(' · ');
+    const cls = t.success_rate === null ? 'score-na'
+      : t.success_rate > 0.9 ? 'score-high'
+      : t.success_rate > 0.5 ? 'score-mid'
+      : 'score-low';
+    return `<tr>
+      <td><code>${t.target}</code></td>
+      <td class="num">${t.attempts}</td>
+      <td class="num"><span class="node-score ${cls}">${fmtPct(t.success_rate)}</span></td>
+      <td class="num">${t.p50_ms ?? '—'}</td>
+      <td class="num">${t.p95_ms ?? '—'}</td>
+      <td style="color:var(--muted);font-size:11px">${top || '—'}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="6" style="color:var(--muted)">no probe data yet — start scripts/sre/active_probe_runner.py</td></tr>';
+
+  document.getElementById('probeRuns').innerHTML = (runs.runs || []).map(r => `<tr>
+    <td><code>${r.run_id.substring(0, 12)}…</code></td>
+    <td>${r.region}</td>
+    <td class="num">${fmtTime(r.started_at)}</td>
+    <td class="num">${r.node_count ?? '—'}</td>
+    <td class="num">${r.target_count ?? '—'}</td>
+    <td><span class="node-score ${r.status==='ok'?'score-high':'score-mid'}">${r.status}</span></td>
+  </tr>`).join('') || '<tr><td colspan="6" style="color:var(--muted)">no runs yet</td></tr>';
+
+  document.getElementById('probeNodes').innerHTML = (nodes.nodes || []).map(n => `<tr>
+    <td><code>${(n.node_fp||'').substring(0, 10)}…</code></td>
+    <td class="num">${n.attempts}</td>
+    <td class="num">${fmtPct(n.success_rate)}</td>
+    <td class="num">${n.p50_ms ?? '—'}</td>
+    <td class="num">${n.p95_ms ?? '—'}</td>
+  </tr>`).join('') || '<tr><td colspan="5" style="color:var(--muted)">no per-node data</td></tr>';
+}
+
 async function refresh() {
   document.getElementById('err').textContent = '';
   document.getElementById('refreshTime').textContent =
@@ -508,6 +767,8 @@ async function refresh() {
   try {
     if (currentTab === 'overview') await refreshOverview();
     else if (currentTab === 'nodes') await refreshNodes();
+    else if (currentTab === 'review') await refreshReview();
+    else if (currentTab === 'probe') await refreshProbe();
     else if (currentTab === 'nps') await refreshNps();
     else if (currentTab === 'flags') await refreshFlags();
   } catch (e) {

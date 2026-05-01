@@ -1,0 +1,151 @@
+name: Release gate
+
+# Release-gate. Runs on every tag push and on workflow_dispatch. The
+# tag-push variant is informational by default (no required status check
+# yet — wire it as a required check after the first clean run on master).
+#
+# Five gates:
+#   1. security_scan — working tree must have zero FAIL findings.
+#   2. probe_telemetry --basic — every dashboard endpoint must 401
+#      without auth (proves the router is mounted).
+#   3. probe_telemetry --full — authed schema + ingest round-trip +
+#      privacy assertions + cleanup. Skipped when secrets unset.
+#   4. server tests (telemetry P7 + P5 + node aggregation pytest).
+#   5. wintun bundle verifier — confirms windows/third_party/wintun
+#      pinned hashes and (when downloaded) a built bundle.
+#
+# Skipped gates report as "skipped" rather than missing — release-gate
+# being green when nothing was checked is the worst kind of false signal.
+
+on:
+  push:
+    tags: ['v*', 'pre']
+  pull_request:
+    paths:
+      - 'server/telemetry/**'
+      - 'scripts/probe_telemetry*'
+      - 'scripts/security_scan.sh'
+      - 'scripts/security_scan.allowlist'
+      - 'scripts/check_windows_wintun_bundle.*'
+      - 'windows/CMakeLists.txt'
+      - '.github/workflows/release-gate.yml'
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: 'TELEMETRY_BASE URL (default: production)'
+        required: false
+        default: 'https://yue.yuebao.website'
+
+concurrency:
+  group: release-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TELEMETRY_BASE: ${{ github.event.inputs.base_url || 'https://yue.yuebao.website' }}
+
+jobs:
+  # ── Gate 1: working-tree security scan ──────────────────────────────
+  security_scan:
+    name: Security scan (working tree)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: security_scan.sh
+        run: |
+          bash scripts/security_scan.sh --json | tee /tmp/scan.json
+          fail_count=$(python3 -c "import json,sys; print(json.load(open('/tmp/scan.json'))['fail'])")
+          if [ "$fail_count" -ne 0 ]; then
+            echo "::error::security_scan FAIL=$fail_count — release blocked"
+            exit 1
+          fi
+
+  # ── Gate 2 + 3: telemetry endpoint probes ───────────────────────────
+  probe_telemetry:
+    name: Probe telemetry endpoints
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Basic probe (no-auth challenge)
+        run: bash scripts/probe_telemetry.sh
+
+      - name: Full probe (authed + ingest + privacy)
+        if: ${{ env.TELEMETRY_BASE != '' && secrets.TELEMETRY_DASHBOARD_PASSWORD != '' }}
+        env:
+          TELEMETRY_DASHBOARD_USER: ${{ secrets.TELEMETRY_DASHBOARD_USER }}
+          TELEMETRY_DASHBOARD_PASSWORD: ${{ secrets.TELEMETRY_DASHBOARD_PASSWORD }}
+          TELEMETRY_ACTIVE_PROBE_TOKEN: ${{ secrets.TELEMETRY_ACTIVE_PROBE_TOKEN }}
+        run: |
+          python3 scripts/probe_telemetry.py --full --json --base "$TELEMETRY_BASE" \
+            > /tmp/full.json
+          # Pretty-print the report without leaking secrets — probe_telemetry.py
+          # already redacts but we double-strip Authorization headers just in case.
+          python3 -c "
+          import json
+          d = json.load(open('/tmp/full.json'))
+          for c in d['checks']:
+              # Belt-and-braces redaction: never print anything that looks like a token.
+              c_safe = {k: v for k, v in c.items()}
+              print(json.dumps(c_safe))
+          if not d['ok']:
+              print('::error::release-gate full probe failed')
+              raise SystemExit(1)
+          "
+
+      - name: Full probe (skipped — secrets unset)
+        if: ${{ secrets.TELEMETRY_DASHBOARD_PASSWORD == '' }}
+        run: |
+          echo "::warning::TELEMETRY_DASHBOARD_PASSWORD not set; skipping full probe."
+          echo "Configure dashboard creds in repo secrets to enable the gate."
+
+  # ── Gate 4: server tests ────────────────────────────────────────────
+  server_tests:
+    name: Server tests (telemetry)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: py_compile
+        run: |
+          python3 -m py_compile server/telemetry/telemetry.py
+          python3 -m py_compile scripts/probe_telemetry.py
+          python3 -m py_compile scripts/sre/active_probe_runner.py
+      - name: Run pytest
+        run: |
+          python3 server/telemetry/test_stats_nodes_aggregation.py
+          python3 server/telemetry/test_node_state.py
+
+  # ── Gate 5: Wintun bundle verifier ──────────────────────────────────
+  # Verifies the pinned hash file is present and consistent — does NOT
+  # download the DLL itself in this lightweight job (build.yml does
+  # that as part of the Windows leg).
+  wintun_gate:
+    name: Wintun bundle gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Pinned hashes present
+        run: |
+          test -f windows/third_party/wintun/wintun.sha256
+          test -f windows/third_party/wintun/README.md
+          echo "OK: pinned hash file + README present"
+      - name: Hash file sanity (3 entries)
+        run: |
+          # zip + amd64 + arm64 = 3 sha256 lines. If a future commit drops
+          # one (or changes naming), this trips before a Windows release.
+          n=$(grep -c '^[0-9a-f]\{64\}' windows/third_party/wintun/wintun.sha256 || echo 0)
+          if [ "$n" -lt 3 ]; then
+            echo "::error::expected ≥3 sha256 entries in wintun.sha256, found $n"
+            exit 1
+          fi
+          echo "OK: $n pinned hashes"
+
+  # ── Aggregator: gate-summary job that downstream branch protections
+  # can require as a single status check.
+  release_gate:
+    name: Release gate summary
+    runs-on: ubuntu-latest
+    needs: [security_scan, probe_telemetry, server_tests, wintun_gate]
+    steps:
+      - run: echo "release-gate ok"

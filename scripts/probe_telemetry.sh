@@ -21,10 +21,14 @@ BASE="${TELEMETRY_BASE:-https://yue.yuebao.website}"
 PREFIX="/api/client/telemetry"
 
 # Endpoints to probe. Each protected by BasicAuth → expect HTTP 401.
+# When ops adds a new BasicAuth-protected route, append it here so the
+# 30-min scheduled probe catches a missing mount the same day.
 ENDPOINTS=(
   "$PREFIX/dashboard"
   "$PREFIX/stats/summary?days=1"
   "$PREFIX/stats/versions?days=1"
+  "$PREFIX/stats/nodes?days=1"
+  "$PREFIX/stats/node_health?days=1"
 )
 
 ERRORS=0

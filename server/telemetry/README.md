@@ -41,7 +41,7 @@ ssh root@23.80.91.14 'cat > /etc/systemd/system/checkin-api.service.d/telemetry-
 [Service]
 Environment=TELEMETRY_DASHBOARD_USER=yuelink
 Environment=TELEMETRY_DASHBOARD_PASSWORD=<openssl rand -hex 16>
-Environment="TELEMETRY_DATABASE_DSN=host=66.55.76.208 port=5432 user=root password=jim@8858 dbname=yueops"
+Environment="TELEMETRY_DATABASE_DSN=host=<pg-host> port=5432 user=<pg-user> password=<pg-password> dbname=<pg-db>"
 Environment=TELEMETRY_SCHEMA=telemetry
 EOF'
 
@@ -75,7 +75,7 @@ ssh root@23.80.91.14 'mv /var/lib/yuelink-telemetry/events.db /var/lib/yuelink-t
 
 | Var | Default |
 |---|---|
-| `TELEMETRY_DATABASE_DSN` | `host=66.55.76.208 port=5432 user=root password=jim@8858 dbname=yueops` |
+| `TELEMETRY_DATABASE_DSN` | *(required; libpq DSN, injected by systemd/secret manager)* |
 | `TELEMETRY_SCHEMA` | `telemetry` |
 | `TELEMETRY_RETENTION_DAYS` | `90` (sampled prune, 1/1000 requests) |
 | `TELEMETRY_DASHBOARD_USER` | *(required for stats/admin)* |

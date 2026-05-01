@@ -131,8 +131,27 @@ class V1AggregationTest(unittest.TestCase):
             a["per_target"]["claude"]["status_buckets"], {"200": 1, "403": 1},
         )
         self.assertEqual(
-            a["per_target"]["claude"]["error_buckets"], {"timeout": 1},
+            a["per_target"]["claude"]["error_buckets"],
+            {"ai_blocked": 1, "timeout": 1},
         )
+
+    def test_ai_403_derives_ai_blocked_when_error_missing(self):
+        rows = [_v1_row("A", "chatgpt", False, status=403)]
+        agg = T._aggregate_v1_node_probe_rows(rows)
+        self.assertEqual(
+            agg["A"]["per_target"]["chatgpt"]["error_buckets"],
+            {"ai_blocked": 1},
+        )
+
+    def test_reality_auth_failure_normalizes_to_candidate_signal(self):
+        rows = [
+            _v1_row("A", "transport", False, err="REALITY authentication failed"),
+            _v1_row("A", "transport", False, err="REALITY authentication failed"),
+        ]
+        agg = T._aggregate_v1_node_probe_rows(rows)
+        node = T._shape_node("A", agg["A"], region=None, min_samples=1)
+        self.assertEqual(node["state"], "quarantine_candidate")
+        self.assertTrue(node["requires_human"])
 
     def test_unknown_target_collapses_into_other(self):
         rows = [_v1_row("A", "weird-bucket", True, 100)]
@@ -211,6 +230,9 @@ class ShapeTest(unittest.TestCase):
         node = T._shape_node("A", agg, region="HK", min_samples=3)
         self.assertEqual(node["fp"], "A")
         self.assertEqual(node["region"], "HK")
+        self.assertIn(node["state"], T.NODE_HEALTH_STATES)
+        self.assertEqual(node["state"], "ai_blocked")
+        self.assertFalse(node["requires_human"])
         self.assertEqual(node["users"], 2)
         self.assertEqual(node["samples"], 6)
         self.assertFalse(node["insufficient_data"])
@@ -245,6 +267,7 @@ class ShapeTest(unittest.TestCase):
         }
         node = T._shape_node("B", agg, region=None, min_samples=3)
         self.assertTrue(node["insufficient_data"])
+        self.assertEqual(node["state"], "suspect")
 
     def test_rollup_sums_per_target(self):
         node_a = {"per_target": {
