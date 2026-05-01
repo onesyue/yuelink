@@ -1,6 +1,7 @@
 import 'dart:developer' show Timeline;
+import 'dart:math' as math;
+import 'dart:ui' show ImageFilter;
 
-import 'package:flutter/cupertino.dart' show CupertinoTabBar;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
@@ -170,23 +171,23 @@ class _MainShellState extends ConsumerState<MainShell> {
 
     // ── Mobile bottom navigation ─────────────────────────────────
     final s = S.of(context);
-    final mobileItems = <_GlassTabSpec>[
-      _GlassTabSpec(
+    final mobileItems = <YLGlassTabSpec>[
+      YLGlassTabSpec(
         icon: Icons.home_outlined,
         activeIcon: Icons.home_rounded,
         label: s.navHome,
       ),
-      _GlassTabSpec(
+      YLGlassTabSpec(
         icon: Icons.public_outlined,
         activeIcon: Icons.public,
         label: s.navProxies,
       ),
-      _GlassTabSpec(
+      YLGlassTabSpec(
         icon: Icons.play_circle_outline,
         activeIcon: Icons.play_circle_filled,
         label: s.navEmby,
       ),
-      _GlassTabSpec(
+      YLGlassTabSpec(
         icon: Icons.person_outline_rounded,
         activeIcon: Icons.person_rounded,
         label: s.navMine,
@@ -195,7 +196,7 @@ class _MainShellState extends ConsumerState<MainShell> {
 
     // Let the tab bar participate in layout instead of floating over
     // content. This keeps the last card / row reachable on phones while
-    // still giving the bar a light material finish.
+    // still giving the bar a light glass finish.
     return Scaffold(
       extendBody: false,
       body: RepaintBoundary(
@@ -207,41 +208,18 @@ class _MainShellState extends ConsumerState<MainShell> {
           ],
         ),
       ),
-      // ANR root cause (2026-04-30, SM-G9860 Android 13 / Adreno 660):
-      // _GlassBottomNav rebuilds 4 nested animation widgets per tab tap
-      // (BackdropFilter + AnimatedSwitcher + AnimatedDefaultTextStyle +
-      // AnimatedScale on 4 tabs each). On Adreno 660 this single rebuild
-      // pegged the UI thread at 100% CPU for 10+ s and tripped the
-      // 5-s input-dispatcher ANR. v1.0.25 used CupertinoTabBar without
-      // issue; reverting to it on mobile is the cheapest fix while we
-      // figure out a glass design that doesn't burn the frame budget.
-      bottomNavigationBar: CupertinoTabBar(
+      // Keep this glass bar deliberately cheap. The previous experiment
+      // animated every tab with nested switchers/scales and caused an
+      // Android GPU/CPU spike. This version uses one blur layer and one
+      // moving indicator; tab contents are plain static widgets.
+      bottomNavigationBar: YLGlassBottomNav(
+        key: const ValueKey('main_glass_bottom_nav'),
         currentIndex: _currentIndex,
-        onTap: (i) {
+        items: mobileItems,
+        onSelect: (i) {
           if (i != _currentIndex) HapticFeedback.selectionClick();
           switchTab(i);
         },
-        backgroundColor: Theme.of(
-          context,
-        ).colorScheme.surface.withValues(alpha: 0.92),
-        border: Border(
-          top: BorderSide(
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.08)
-                : Colors.black.withValues(alpha: 0.08),
-            width: 0.33,
-          ),
-        ),
-        activeColor: isDark ? Colors.white : YLColors.primary,
-        inactiveColor: YLColors.zinc500,
-        items: [
-          for (final spec in mobileItems)
-            BottomNavigationBarItem(
-              icon: Icon(spec.icon, size: 22),
-              activeIcon: Icon(spec.activeIcon, size: 22),
-              label: spec.label,
-            ),
-        ],
       ),
     );
   }
@@ -249,17 +227,215 @@ class _MainShellState extends ConsumerState<MainShell> {
 
 // ── Bottom glass nav (iOS 26 / Telegram-inspired) ──────────────────────
 
-class _GlassTabSpec {
+class YLGlassTabSpec {
   final IconData icon;
   final IconData activeIcon;
   final String label;
-  const _GlassTabSpec({
+  const YLGlassTabSpec({
     required this.icon,
     required this.activeIcon,
     required this.label,
   });
 }
 
+class YLGlassBottomNav extends StatelessWidget {
+  final int currentIndex;
+  final List<YLGlassTabSpec> items;
+  final ValueChanged<int> onSelect;
+
+  const YLGlassBottomNav({
+    super.key,
+    required this.currentIndex,
+    required this.items,
+    required this.onSelect,
+  }) : assert(items.length > 0);
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final bottomInset = MediaQuery.paddingOf(context).bottom;
+    final bottomPadding = math.max(8.0, bottomInset);
+
+    final glassColor = isDark
+        ? YLColors.zinc950.withValues(alpha: 0.74)
+        : Colors.white.withValues(alpha: 0.76);
+    final topLine = isDark
+        ? Colors.white.withValues(alpha: 0.10)
+        : Colors.white.withValues(alpha: 0.68);
+    final bottomLine = isDark
+        ? Colors.black.withValues(alpha: 0.32)
+        : Colors.black.withValues(alpha: 0.06);
+
+    return RepaintBoundary(
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.34 : 0.12),
+              blurRadius: 24,
+              spreadRadius: -10,
+              offset: const Offset(0, -8),
+            ),
+          ],
+        ),
+        child: ClipRect(
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+            child: Container(
+              padding: EdgeInsets.fromLTRB(10, 8, 10, bottomPadding),
+              decoration: BoxDecoration(
+                color: glassColor,
+                border: Border(
+                  top: BorderSide(color: topLine, width: 0.7),
+                  bottom: BorderSide(color: bottomLine, width: 0.33),
+                ),
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.white.withValues(alpha: isDark ? 0.08 : 0.34),
+                    glassColor,
+                  ],
+                ),
+              ),
+              child: SizedBox(
+                height: 56,
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final count = items.length;
+                    final safeIndex = currentIndex.clamp(0, count - 1);
+                    final itemWidth = constraints.maxWidth / count;
+                    final indicatorWidth = math.min(86.0, itemWidth - 8);
+                    final indicatorLeft =
+                        safeIndex * itemWidth +
+                        (itemWidth - indicatorWidth) / 2;
+
+                    return Stack(
+                      alignment: Alignment.centerLeft,
+                      children: [
+                        AnimatedPositioned(
+                          key: const ValueKey('main_glass_nav_indicator'),
+                          duration: reduceMotion
+                              ? Duration.zero
+                              : const Duration(milliseconds: 220),
+                          curve: Curves.easeOutCubic,
+                          left: indicatorLeft,
+                          top: 5,
+                          width: indicatorWidth,
+                          height: 46,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(24),
+                              color: isDark
+                                  ? Colors.white.withValues(alpha: 0.10)
+                                  : Colors.white.withValues(alpha: 0.58),
+                              border: Border.all(
+                                color: isDark
+                                    ? Colors.white.withValues(alpha: 0.18)
+                                    : Colors.white.withValues(alpha: 0.82),
+                                width: 0.8,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: YLColors.primary.withValues(
+                                    alpha: isDark ? 0.18 : 0.12,
+                                  ),
+                                  blurRadius: 18,
+                                  spreadRadius: -8,
+                                  offset: const Offset(0, 8),
+                                ),
+                                BoxShadow(
+                                  color: Colors.black.withValues(
+                                    alpha: isDark ? 0.34 : 0.08,
+                                  ),
+                                  blurRadius: 14,
+                                  spreadRadius: -8,
+                                  offset: const Offset(0, 10),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        Row(
+                          children: [
+                            for (int i = 0; i < count; i++)
+                              Expanded(
+                                child: _YLGlassBottomNavItem(
+                                  key: ValueKey('main_glass_nav_item_$i'),
+                                  spec: items[i],
+                                  selected: safeIndex == i,
+                                  onTap: () => onSelect(i),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _YLGlassBottomNavItem extends StatelessWidget {
+  final YLGlassTabSpec spec;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _YLGlassBottomNavItem({
+    super.key,
+    required this.spec,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final activeColor = isDark ? Colors.white : YLColors.primary;
+    final inactiveColor = isDark ? YLColors.zinc400 : YLColors.zinc500;
+
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: spec.label,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                selected ? spec.activeIcon : spec.icon,
+                size: 21,
+                color: selected ? activeColor : inactiveColor,
+              ),
+              const SizedBox(height: 3),
+              Text(
+                spec.label,
+                maxLines: 1,
+                overflow: TextOverflow.fade,
+                softWrap: false,
+                style: YLText.badge.copyWith(
+                  color: selected ? activeColor : inactiveColor,
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                  letterSpacing: 0,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 // ── Sidebar ────────────────────────────────────────────────────────────────────
 
