@@ -26,7 +26,7 @@ class ServiceModeActions {
   final WidgetRef _ref;
 
   void refresh() {
-    _ref.read(desktopServiceRefreshProvider.notifier).state++;
+    _ref.read(desktopServiceRefreshProvider.notifier).bump();
   }
 
   /// Installs the privileged helper, marks TUN as the active user intent,

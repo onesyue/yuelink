@@ -97,68 +97,80 @@ class PlanCard extends ConsumerWidget {
                 const SizedBox(height: YLSpacing.md),
 
                 // ── Price row ─────────────────────────────────────────
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Flexible(
-                      child: Text(
-                        price,
-                        style: YLText.price.copyWith(
-                          color: isDark ? Colors.white : YLColors.zinc900,
+                SizedBox(
+                  width: double.infinity,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Expanded(
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                price,
+                                style: YLText.price.copyWith(
+                                  color: isDark
+                                      ? Colors.white
+                                      : YLColors.zinc900,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            if (periodLabel.isNotEmpty) ...[
+                              const SizedBox(width: 4),
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 3),
+                                child: Text(
+                                  '/ $periodLabel',
+                                  style: YLText.caption.copyWith(
+                                    color: YLColors.zinc500,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                       ),
-                    ),
-                    if (periodLabel.isNotEmpty) ...[
-                      const SizedBox(width: 4),
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 3),
+                      const SizedBox(width: YLSpacing.sm),
+                      // Quick buy button
+                      FilledButton(
+                        onPressed: () =>
+                            _showDetail(context, ref, selectedPeriod),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: isDark
+                              ? Colors.white
+                              : YLColors.primary,
+                          foregroundColor: isDark
+                              ? YLColors.primary
+                              : Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
+                          minimumSize: const Size(0, 40),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(YLRadius.sm),
+                          ),
+                        ),
                         child: Text(
-                          '/ $periodLabel',
+                          isCurrentPlan
+                              ? (isEn ? 'Renew' : '续订')
+                              : (isEn ? 'Subscribe' : '立即订阅'),
                           style: YLText.caption.copyWith(
-                            color: YLColors.zinc500,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],
-                    const Spacer(),
-                    // Quick buy button
-                    FilledButton(
-                      onPressed: () =>
-                          _showDetail(context, ref, selectedPeriod),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: isDark
-                            ? Colors.white
-                            : YLColors.primary,
-                        foregroundColor: isDark
-                            ? YLColors.primary
-                            : Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        minimumSize: const Size(0, 40),
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(YLRadius.sm),
-                        ),
-                      ),
-                      child: Text(
-                        isCurrentPlan
-                            ? (isEn ? 'Renew' : '续订')
-                            : (isEn ? 'Subscribe' : '立即订阅'),
-                        style: YLText.caption.copyWith(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 12,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ],
             ),

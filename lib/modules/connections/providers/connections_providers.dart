@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/legacy.dart';
 
 import '../../../core/kernel/core_manager.dart';
 import '../../../domain/models/connection.dart';
@@ -13,12 +12,31 @@ import '../../../core/providers/core_provider.dart';
 // Connections snapshot (polled every second via WebSocket stream)
 // ------------------------------------------------------------------
 
+/// Latest connections snapshot (totals + per-connection list). Pushed by
+/// the WebSocket stream wired up in [connectionsStreamProvider]; consumed
+/// by widgets via `select(...)` so they only rebuild on the slice they
+/// care about.
+///
+/// Riverpod 3.0: migrated from `StateProvider<ConnectionsSnapshot>`. All
+/// writers live inside this file (the stream provider + closeAll), so
+/// only the local callsites need the new [ConnectionsSnapshotNotifier.set]
+/// method.
+class ConnectionsSnapshotNotifier extends Notifier<ConnectionsSnapshot> {
+  @override
+  ConnectionsSnapshot build() => const ConnectionsSnapshot(
+        connections: [],
+        downloadTotal: 0,
+        uploadTotal: 0,
+      );
+
+  /// Replace the current snapshot. Used by the polling/stream code paths.
+  void set(ConnectionsSnapshot snapshot) => state = snapshot;
+}
+
 final connectionsSnapshotProvider =
-    StateProvider<ConnectionsSnapshot>((ref) => const ConnectionsSnapshot(
-          connections: [],
-          downloadTotal: 0,
-          uploadTotal: 0,
-        ));
+    NotifierProvider<ConnectionsSnapshotNotifier, ConnectionsSnapshot>(
+  ConnectionsSnapshotNotifier.new,
+);
 
 final connectionsStreamProvider = Provider<void>((ref) {
   final status = ref.watch(coreStatusProvider);
@@ -39,10 +57,14 @@ final connectionsStreamProvider = Provider<void>((ref) {
     // forbids modifying other providers synchronously during initialization.
     Future.microtask(() {
       if (disposed) return;
-      ref.read(connectionsSnapshotProvider.notifier).state =
-          const ConnectionsSnapshot(
-              connections: [], downloadTotal: 0, uploadTotal: 0);
-      ref.read(connectionSearchProvider.notifier).state = '';
+      ref.read(connectionsSnapshotProvider.notifier).set(
+            const ConnectionsSnapshot(
+              connections: [],
+              downloadTotal: 0,
+              uploadTotal: 0,
+            ),
+          );
+      ref.read(connectionSearchProvider.notifier).setQuery('');
     });
     return;
   }
@@ -56,7 +78,7 @@ final connectionsStreamProvider = Provider<void>((ref) {
         final data = await manager.core.getConnections();
         if (disposed) return;
         final snapshot = ConnectionsSnapshot.fromJson(data);
-        ref.read(connectionsSnapshotProvider.notifier).state = snapshot;
+        ref.read(connectionsSnapshotProvider.notifier).set(snapshot);
       } catch (e) {
         debugPrint('[Connections] mock poll failed: $e');
       }
@@ -72,7 +94,7 @@ final connectionsStreamProvider = Provider<void>((ref) {
   final repo = ref.watch(connectionRepositoryProvider);
   final sub = repo.connectionsStream().listen((snap) {
     if (disposed) return;
-    ref.read(connectionsSnapshotProvider.notifier).state = snap;
+    ref.read(connectionsSnapshotProvider.notifier).set(snap);
   });
   ref.onDispose(() => sub.cancel());
 });
@@ -106,7 +128,25 @@ final connectionsTotalsProvider = Provider<({int down, int up})>((ref) {
 // Connection filter / search
 // ------------------------------------------------------------------
 
-final connectionSearchProvider = StateProvider<String>((ref) => '');
+/// Free-text search query for the connections page. Bound to a
+/// [TextEditingController]; debounced upstream so we don't rebuild the
+/// filter list on every keystroke.
+///
+/// Riverpod 3.0: migrated from `StateProvider<String>`. Public
+/// [ConnectionSearchNotifier.setQuery] preserves the existing
+/// `ref.read(provider.notifier).state = '...'` callsite shape.
+class ConnectionSearchNotifier extends Notifier<String> {
+  @override
+  String build() => '';
+
+  /// Update the current search query. Treats null as empty.
+  void setQuery(String query) => state = query;
+}
+
+final connectionSearchProvider =
+    NotifierProvider<ConnectionSearchNotifier, String>(
+  ConnectionSearchNotifier.new,
+);
 
 final filteredConnectionsProvider =
     Provider<List<ActiveConnection>>((ref) {
@@ -200,9 +240,13 @@ class ConnectionActions {
     final ok =
         await ref.read(connectionRepositoryProvider).closeAllConnections();
     if (ok) {
-      ref.read(connectionsSnapshotProvider.notifier).state =
-          const ConnectionsSnapshot(
-              connections: [], downloadTotal: 0, uploadTotal: 0);
+      ref.read(connectionsSnapshotProvider.notifier).set(
+            const ConnectionsSnapshot(
+              connections: [],
+              downloadTotal: 0,
+              uploadTotal: 0,
+            ),
+          );
     }
     return ok;
   }

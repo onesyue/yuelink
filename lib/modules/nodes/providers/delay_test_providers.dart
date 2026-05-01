@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/legacy.dart';
 
 import '../../../core/kernel/core_manager.dart';
 import '../../../core/providers/core_preferences_providers.dart';
@@ -22,24 +21,82 @@ import 'delay_test_recovery.dart';
 /// nodes_providers.dart so existing widget imports stay stable — see
 /// the trailing `export` in nodes_providers.dart.
 
+const _defaultTestUrl = 'https://www.gstatic.com/generate_204';
+
 /// Custom URL used for latency testing. Defaults to the standard gstatic URL.
-final testUrlProvider =
-    StateProvider<String>((ref) => 'https://www.gstatic.com/generate_204');
+class TestUrlNotifier extends Notifier<String> {
+  TestUrlNotifier([this._initial = _defaultTestUrl]);
+
+  final String _initial;
+
+  @override
+  String build() => _initial;
+
+  void setUrl(String url) => state = url;
+}
+
+final testUrlProvider = NotifierProvider<TestUrlNotifier, String>(
+  TestUrlNotifier.new,
+);
 
 /// Per-node latest delay (ms). -1 means "tested and timed out". Persisted
 /// to SettingsService after each successful test so a re-launch shows
 /// the user where they left off.
-final delayResultsProvider = StateProvider<Map<String, int>>((ref) => {});
+class DelayResultsNotifier extends Notifier<Map<String, int>> {
+  DelayResultsNotifier([Map<String, int>? initial])
+    : _initial = initial == null ? const {} : Map<String, int>.from(initial);
+
+  final Map<String, int> _initial;
+
+  @override
+  Map<String, int> build() => Map<String, int>.from(_initial);
+
+  void set(Map<String, int> results) {
+    state = Map<String, int>.from(results);
+  }
+
+  void clear() => state = {};
+}
+
+final delayResultsProvider =
+    NotifierProvider<DelayResultsNotifier, Map<String, int>>(
+      DelayResultsNotifier.new,
+    );
 
 /// Set of node names with an in-flight latency test. UI uses this to
 /// show the spinner / disable repeat-tap.
-final delayTestingProvider = StateProvider<Set<String>>((ref) => {});
+class DelayTestingNotifier extends Notifier<Set<String>> {
+  @override
+  Set<String> build() => {};
+
+  void mark(String name) => state = {...state, name};
+
+  void markAll(Iterable<String> names) => state = {...state, ...names};
+
+  void unmark(String name) {
+    final next = Set<String>.from(state)..remove(name);
+    state = next;
+  }
+
+  void unmarkAll(Iterable<String> names) {
+    final next = Set<String>.from(state)..removeAll(names);
+    state = next;
+  }
+
+  void clear() => state = {};
+}
+
+final delayTestingProvider =
+    NotifierProvider<DelayTestingNotifier, Set<String>>(
+      DelayTestingNotifier.new,
+    );
 
 /// Imperative entry point for triggering tests. Reads/writes the two
 /// state providers above and routes through [ProxyRepository] for the
 /// real-mode HTTP call (or [CoreMock] in mock mode).
-final delayTestProvider =
-    Provider<DelayTestActions>((ref) => DelayTestActions(ref));
+final delayTestProvider = Provider<DelayTestActions>(
+  (ref) => DelayTestActions(ref),
+);
 
 class DelayTestActions {
   final Ref ref;
@@ -55,9 +112,7 @@ class DelayTestActions {
   /// unreachable on the error path and the user had to refresh the page
   /// to clear the stale state.
   Future<int> testDelay(String proxyName) async {
-    final testing = Set<String>.from(ref.read(delayTestingProvider));
-    testing.add(proxyName);
-    ref.read(delayTestingProvider.notifier).state = testing;
+    ref.read(delayTestingProvider.notifier).mark(proxyName);
 
     try {
       final manager = CoreManager.instance;
@@ -75,14 +130,13 @@ class DelayTestActions {
           url: testUrl,
           onResult: (name, d) {
             results[name] = d;
-            ref.read(delayResultsProvider.notifier).state =
-                Map<String, int>.from(results);
+            ref.read(delayResultsProvider.notifier).set(results);
           },
         );
       }
 
       results[proxyName] = delay;
-      ref.read(delayResultsProvider.notifier).state = results;
+      ref.read(delayResultsProvider.notifier).set(results);
       SettingsService.setDelayResults(results);
 
       // Opt-in telemetry — anonymous fingerprint + latency only.
@@ -98,9 +152,7 @@ class DelayTestActions {
 
       return delay;
     } finally {
-      final doneSet = Set<String>.from(ref.read(delayTestingProvider));
-      doneSet.remove(proxyName);
-      ref.read(delayTestingProvider.notifier).state = doneSet;
+      ref.read(delayTestingProvider.notifier).unmark(proxyName);
     }
   }
 
@@ -124,9 +176,7 @@ class DelayTestActions {
     final manager = CoreManager.instance;
 
     if (!manager.isMockMode) {
-      final testing = Set<String>.from(ref.read(delayTestingProvider));
-      testing.addAll(proxyNames);
-      ref.read(delayTestingProvider.notifier).state = testing;
+      ref.read(delayTestingProvider.notifier).markAll(proxyNames);
 
       final testUrl = ref.read(testUrlProvider);
       try {
@@ -167,12 +217,12 @@ class DelayTestActions {
           // outer recovery still has its own wall-clock budget below.
           healthCheckProviders: () async {
             try {
-              final providers = await manager.api
-                  .getProxyProviders()
-                  .timeout(const Duration(seconds: 5));
+              final providers = await manager.api.getProxyProviders().timeout(
+                const Duration(seconds: 5),
+              );
               final names =
                   (providers['providers'] as Map?)?.keys.cast<String>() ??
-                      const <String>[];
+                  const <String>[];
               if (names.isEmpty) return;
               await Future.wait(
                 names.map((name) async {
@@ -221,8 +271,7 @@ class DelayTestActions {
         final results = outcome.results;
         if (results != null) {
           // Results shape: {proxyName: {delay: int}} or {proxyName: int}
-          final current =
-              Map<String, int>.from(ref.read(delayResultsProvider));
+          final current = Map<String, int>.from(ref.read(delayResultsProvider));
           for (final entry in results.entries) {
             final value = entry.value;
             if (value is int) {
@@ -231,7 +280,7 @@ class DelayTestActions {
               current[entry.key] = (value['delay'] as num?)?.toInt() ?? -1;
             }
           }
-          ref.read(delayResultsProvider.notifier).state = current;
+          ref.read(delayResultsProvider.notifier).set(current);
           SettingsService.setDelayResults(current);
 
           // Opt-in telemetry — one event per tested node.
@@ -251,11 +300,12 @@ class DelayTestActions {
           }
         } else {
           // Every recovery round also failed — mark all red as last resort.
-          debugPrint('[DelayTest] group "$groupName" '
-              '(${proxyNames.length} nodes) failed after recovery '
-              '(reason=${outcome.failureReason})');
-          final current =
-              Map<String, int>.from(ref.read(delayResultsProvider));
+          debugPrint(
+            '[DelayTest] group "$groupName" '
+            '(${proxyNames.length} nodes) failed after recovery '
+            '(reason=${outcome.failureReason})',
+          );
+          final current = Map<String, int>.from(ref.read(delayResultsProvider));
           final connMode = ref.read(connectionModeProvider);
           for (final name in proxyNames) {
             current[name] = -1;
@@ -272,15 +322,13 @@ class DelayTestActions {
               connectionMode: connMode,
             );
           }
-          ref.read(delayResultsProvider.notifier).state = current;
+          ref.read(delayResultsProvider.notifier).set(current);
         }
       } finally {
         // Unmark all — always runs, even if the unexpected happens
         // (StateError during state write, etc.). Without this users see
         // perpetual "testing…" dots.
-        final doneSet = Set<String>.from(ref.read(delayTestingProvider));
-        doneSet.removeAll(proxyNames);
-        ref.read(delayTestingProvider.notifier).state = doneSet;
+        ref.read(delayTestingProvider.notifier).unmarkAll(proxyNames);
       }
     } else {
       // Mock: test sequentially

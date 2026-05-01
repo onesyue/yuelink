@@ -3,8 +3,9 @@ import 'dart:io';
 
 import 'package:app_links/app_links.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/legacy.dart';
 import 'package:window_manager/window_manager.dart';
+
+import 'deeplink_provider.dart';
 
 /// Listens for `clash://install-config?url=...` and
 /// `mihomo://install-config?url=...` deep links and routes them into
@@ -23,10 +24,7 @@ import 'package:window_manager/window_manager.dart';
 ///   1. `init(deepLinkUrlProvider: ...)` once after first frame.
 ///   2. `dispose()` from the widget's dispose.
 class DeeplinkController {
-  DeeplinkController({
-    required this.ref,
-    required this.deepLinkUrlProvider,
-  });
+  DeeplinkController({required this.ref, required this.deepLinkUrlProvider});
 
   final WidgetRef ref;
 
@@ -34,7 +32,7 @@ class DeeplinkController {
   /// open its add-subscription dialog with the URL pre-filled. Passed
   /// in rather than imported so the controller stays decoupled from
   /// main.dart's top-level provider declaration.
-  final StateProvider<String?> deepLinkUrlProvider;
+  final NotifierProvider<DeepLinkUrlNotifier, String?> deepLinkUrlProvider;
 
   final _appLinks = AppLinks();
   StreamSubscription<Uri>? _sub;
@@ -68,7 +66,7 @@ class DeeplinkController {
     final rawUrl = uri.queryParameters['url'];
     if (rawUrl == null || rawUrl.isEmpty) return;
     // Notify the profile page to pre-fill the add dialog
-    ref.read(deepLinkUrlProvider.notifier).state = rawUrl;
+    ref.read(deepLinkUrlProvider.notifier).setUrl(rawUrl);
     // If window is hidden (desktop), bring it to front
     if (Platform.isMacOS || Platform.isWindows) {
       windowManager.show();

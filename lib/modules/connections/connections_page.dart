@@ -85,7 +85,9 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
       _searchDebounce?.cancel();
       _searchDebounce = Timer(const Duration(milliseconds: 200), () {
         if (mounted) {
-          ref.read(connectionSearchProvider.notifier).state = _searchCtrl.text;
+          ref
+              .read(connectionSearchProvider.notifier)
+              .setQuery(_searchCtrl.text);
         }
       });
     });
@@ -215,7 +217,7 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
                       hintText: s.searchConnHint,
                       onClear: () {
                         _searchDebounce?.cancel();
-                        ref.read(connectionSearchProvider.notifier).state = '';
+                        ref.read(connectionSearchProvider.notifier).setQuery('');
                       },
                     ),
                   ),

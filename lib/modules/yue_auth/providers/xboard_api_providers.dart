@@ -1,5 +1,4 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/legacy.dart';
 
 import '../../../infrastructure/datasources/xboard/index.dart';
 
@@ -37,7 +36,24 @@ const kBootstrapRetries = 1;
 /// Tracks the current API host — updated on login and restored from
 /// storage. AuthNotifier writes to it on host migration; widgets read
 /// indirectly via [xboardApiProvider].
-final apiHostProvider = StateProvider<String>((ref) => kDefaultApiHost);
+///
+/// Riverpod 3.0: migrated from `StateProvider<String>` to a [Notifier]
+/// because the protected `state` setter prevents external writes. The
+/// public [ApiHostNotifier.setHost] method preserves the
+/// `ref.read(apiHostProvider.notifier).setHost(...)` call shape that
+/// auth flows already use.
+class ApiHostNotifier extends Notifier<String> {
+  @override
+  String build() => kDefaultApiHost;
+
+  /// Replace the current API host. Emits a state change even when the
+  /// new value equals the old — keeps AuthNotifier's "force re-resolve"
+  /// callsites idempotent.
+  void setHost(String host) => state = host;
+}
+
+final apiHostProvider =
+    NotifierProvider<ApiHostNotifier, String>(ApiHostNotifier.new);
 
 List<String> fallbackHostsFor(String primaryHost) => [
       for (final host in [kDefaultApiHost, ...kFallbackHosts])

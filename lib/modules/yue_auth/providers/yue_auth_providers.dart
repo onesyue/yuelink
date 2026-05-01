@@ -183,7 +183,7 @@ class AuthNotifier extends Notifier<AuthState> {
             .timeout(timeout, onTimeout: () => null);
         if (_disposed) return;
         if (savedHost != null && savedHost.isNotEmpty) {
-          ref.read(apiHostProvider.notifier).state = savedHost;
+          ref.read(apiHostProvider.notifier).setHost(savedHost);
         }
         final cachedProfile = await _authService
             .getCachedProfile()
@@ -229,7 +229,7 @@ class AuthNotifier extends Notifier<AuthState> {
       // 2. Save token and host, update provider so all consumers get correct host
       await _authService.saveToken(token);
       await _authService.saveApiHost(host);
-      ref.read(apiHostProvider.notifier).state = host;
+      ref.read(apiHostProvider.notifier).setHost(host);
       EventLog.write('[Auth] login_ok');
 
       // 3. Get subscribe data (profile + URL) in one request.
@@ -398,7 +398,7 @@ class AuthNotifier extends Notifier<AuthState> {
       await _authService.saveSubscribeUrl(sub.subscribeUrl);
       if (resolvedHost != host) {
         await _authService.saveApiHost(resolvedHost);
-        ref.read(apiHostProvider.notifier).state = resolvedHost;
+        ref.read(apiHostProvider.notifier).setHost(resolvedHost);
       }
       if (!_disposed) {
         state = state.copyWith(userProfile: sub.profile);
@@ -428,7 +428,7 @@ class AuthNotifier extends Notifier<AuthState> {
       await _authService.cacheProfile(sub.profile);
       if (resolvedHost != host) {
         await _authService.saveApiHost(resolvedHost);
-        ref.read(apiHostProvider.notifier).state = resolvedHost;
+        ref.read(apiHostProvider.notifier).setHost(resolvedHost);
       }
       await _authService.saveSubscribeUrl(sub.subscribeUrl);
       if (!_disposed) state = state.copyWith(userProfile: sub.profile);

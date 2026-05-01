@@ -432,7 +432,7 @@ class AppResumeController {
 
       // Invalidate cached state tied to the old network. Keep the traffic
       // chart intact; its WebSocket reconnect logic handles stale sockets.
-      ref.read(delayResultsProvider.notifier).state = {};
+      ref.read(delayResultsProvider.notifier).clear();
       ref.invalidate(memoryStreamProvider);
       ref.invalidate(connectionsStreamProvider);
       ref.invalidate(exitIpInfoProvider);

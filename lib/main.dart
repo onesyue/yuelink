@@ -17,6 +17,8 @@ import 'i18n/app_strings.dart';
 import 'i18n/strings_g.dart';
 import 'modules/nodes/providers/nodes_providers.dart'
     show
+        DelayResultsNotifier,
+        TestUrlNotifier,
         delayResultsProvider,
         delayTestingProvider,
         expandedGroupNamesProvider,
@@ -55,6 +57,7 @@ import 'app/app_quit_controller.dart';
 import 'app/app_resume_controller.dart';
 import 'app/app_tray_controller.dart';
 import 'app/deeplink_controller.dart';
+import 'app/deeplink_provider.dart';
 import 'app/hotkey_controller.dart';
 import 'app/main_shell.dart';
 import 'theme.dart';
@@ -109,9 +112,6 @@ Future<bool> _ensureSingleInstance() async {
     return false;
   }
 }
-
-/// Jump-to-profile-page notifier (deep link triggers this).
-final deepLinkUrlProvider = StateProvider<String?>((ref) => null);
 
 /// Pre-loaded onboarding flag (avoids async blank flash in _AuthGate).
 final hasSeenOnboardingProvider = StateProvider<bool>((ref) => false);
@@ -451,10 +451,12 @@ Future<void> _bootstrap() async {
         autoConnectProvider.overrideWith((ref) => savedAutoConnect),
         userStoppedProvider.overrideWith((ref) => savedManualStopped),
         systemProxyOnConnectProvider.overrideWith((ref) => savedSystemProxy),
-        testUrlProvider.overrideWith((ref) => savedTestUrl),
+        testUrlProvider.overrideWith(() => TestUrlNotifier(savedTestUrl)),
         closeBehaviorProvider.overrideWith((ref) => savedCloseBehavior),
         toggleHotkeyProvider.overrideWith((ref) => savedToggleHotkey),
-        delayResultsProvider.overrideWith((ref) => savedDelayResults),
+        delayResultsProvider.overrideWith(
+          () => DelayResultsNotifier(savedDelayResults),
+        ),
         expandedGroupNamesProvider.overrideWith((ref) => <String>{}),
         initialTabIndexProvider.overrideWithValue(savedTabIndex),
         hasSeenOnboardingProvider.overrideWith((ref) => savedOnboarding),
@@ -739,8 +741,8 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
       if (prev != null &&
           prev != CoreStatus.stopped &&
           next == CoreStatus.stopped) {
-        ref.read(delayResultsProvider.notifier).state = {};
-        ref.read(delayTestingProvider.notifier).state = {};
+        ref.read(delayResultsProvider.notifier).clear();
+        ref.read(delayTestingProvider.notifier).clear();
       }
     });
 

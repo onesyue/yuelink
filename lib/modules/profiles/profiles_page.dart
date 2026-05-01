@@ -9,7 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'qr_scan_page.dart';
 
 import '../../i18n/app_strings.dart';
-import '../../main.dart' show deepLinkUrlProvider;
+import '../../app/deeplink_provider.dart';
 import '../../domain/models/profile.dart';
 import '../../core/providers/core_provider.dart';
 import 'providers/profiles_providers.dart';
@@ -49,7 +49,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       if (!mounted) return;
       _deepLinkSub = ref.listenManual(deepLinkUrlProvider, (_, url) {
         if (url != null && url.isNotEmpty && mounted) {
-          ref.read(deepLinkUrlProvider.notifier).state = null; // consume
+          ref.read(deepLinkUrlProvider.notifier).clear();
           _showAddDialog(context, ref, prefilledUrl: url);
         }
       });
@@ -57,7 +57,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       // was set before this page mounted (e.g. cold-start deep link).
       final pendingUrl = ref.read(deepLinkUrlProvider);
       if (pendingUrl != null && pendingUrl.isNotEmpty) {
-        ref.read(deepLinkUrlProvider.notifier).state = null;
+        ref.read(deepLinkUrlProvider.notifier).clear();
         _showAddDialog(context, ref, prefilledUrl: pendingUrl);
       }
     });
