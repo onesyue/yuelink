@@ -13,6 +13,7 @@ import '../../core/tun/desktop_tun_state.dart';
 import '../../core/tun/desktop_tun_telemetry.dart';
 import '../../i18n/app_strings.dart';
 import '../../shared/app_notifier.dart';
+import '../../shared/diagnostic_text.dart';
 import '../../shared/log_export_sources.dart';
 import '../../shared/log_export_service.dart';
 import '../../shared/telemetry.dart';
@@ -76,7 +77,7 @@ class _ConnectionRepairPageState extends ConsumerState<ConnectionRepairPage> {
         if (f.existsSync()) {
           found++;
           try {
-            buffer.writeln(await f.readAsString());
+            buffer.writeln(await readLogTextLossy(f));
           } catch (e) {
             buffer.writeln('<read failed: $e>');
           }
@@ -545,11 +546,12 @@ Future<String> _collectDesktopTunDiagnosticsText() async {
   for (final (exe, args) in commands) {
     buffer.writeln('\$ $exe ${args.join(' ')}');
     try {
-      final r = await Process.run(
+      final r = await runDiagnosticCommand(
         exe,
         args,
       ).timeout(const Duration(seconds: 5));
-      buffer.writeln(_redactDiagnosticText('${r.stdout}\n${r.stderr}'));
+      final text = '${lossyUtf8(r.stdout)}\n${lossyUtf8(r.stderr)}';
+      buffer.writeln(_redactDiagnosticText(text));
     } catch (e) {
       buffer.writeln('<failed: $e>');
     }
