@@ -126,3 +126,38 @@ if(EXISTS "${LIBCLASH_DIR}/yuelink-mihomo.exe")
     DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
     COMPONENT Runtime)
 endif()
+
+# Wintun is required by desktop TUN on Windows. Source-of-truth lives in
+# windows/third_party/wintun/<arch>/wintun.dll, fetched + sha256-pinned by
+# scripts/check_windows_wintun_bundle.ps1 (run by CI before flutter build).
+# Falls back to the legacy libs/amd64 path so existing dev machines keep working.
+#
+# Build-time is intentionally non-fatal — running flutter build on a host that
+# never set up Wintun is fine; the runtime diagnostic in
+# lib/core/tun/desktop_tun_diagnostics.dart surfaces error_class=missing_driver
+# and the UI says "Wintun 驱动缺失". The release-gate (post-build
+# check_windows_wintun_bundle.ps1 -Verify) is what blocks shipping a Windows
+# installer without the DLL.
+set(WINTUN_THIRD_PARTY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/wintun")
+if(CMAKE_GENERATOR_PLATFORM STREQUAL "ARM64" OR CMAKE_VS_PLATFORM_NAME STREQUAL "ARM64")
+  set(WINTUN_ARCH "arm64")
+else()
+  set(WINTUN_ARCH "amd64")
+endif()
+set(WINTUN_DLL_THIRD_PARTY "${WINTUN_THIRD_PARTY_DIR}/${WINTUN_ARCH}/wintun.dll")
+set(WINTUN_DLL_LEGACY      "${LIBCLASH_DIR}/wintun.dll")
+if(EXISTS "${WINTUN_DLL_THIRD_PARTY}")
+  install(FILES "${WINTUN_DLL_THIRD_PARTY}"
+    DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+    COMPONENT Runtime)
+elseif(EXISTS "${WINTUN_DLL_LEGACY}")
+  install(FILES "${WINTUN_DLL_LEGACY}"
+    DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+    COMPONENT Runtime)
+else()
+  message(WARNING
+    "wintun.dll not found at ${WINTUN_DLL_THIRD_PARTY} or ${WINTUN_DLL_LEGACY}. "
+    "Run `pwsh scripts/check_windows_wintun_bundle.ps1 -Download` before packaging "
+    "a release; without it desktop TUN will fail with error_class=missing_driver."
+  )
+endif()

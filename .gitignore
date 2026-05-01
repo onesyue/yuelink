@@ -65,6 +65,11 @@ macos/Frameworks/
 windows/libs/
 windows/vc_redist.x64.exe
 linux/libs/
+# Wintun DLLs are GPL-2 upstream binaries fetched + pinned at build time
+# (see windows/third_party/wintun/README.md). Source-of-truth lives in
+# wintun.sha256; the actual DLLs are CI-downloaded and verified.
+windows/third_party/wintun/amd64/wintun.dll
+windows/third_party/wintun/arm64/wintun.dll
 
 # Platform generated
 android/.gradle/

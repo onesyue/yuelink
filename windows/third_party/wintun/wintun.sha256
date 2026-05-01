@@ -1,0 +1,20 @@
+# Pinned Wintun upstream hashes — see windows/third_party/wintun/README.md
+# Format: sha256sum-compatible. Update when bumping WINTUN_VERSION.
+#
+# Source: https://www.wintun.net/  (signify-signed by WireGuard)
+# Last verified: 2026-05-01 — fetched via curl, sha256 computed locally.
+#
+# WINTUN_VERSION=0.14.1
+#
+# To regenerate after bumping the version:
+#   curl -fSL https://www.wintun.net/builds/wintun-<ver>.zip -o /tmp/wintun.zip
+#   shasum -a 256 /tmp/wintun.zip
+#   unzip -q -d /tmp/wintun /tmp/wintun.zip
+#   shasum -a 256 /tmp/wintun/wintun/bin/{amd64,arm64}/wintun.dll
+# Then replace the lines below and commit.
+
+# zip archive
+07c256185d6ee3652e09fa55c0b673e2624b565e02c4b9091c79ca7d2f24ef51  wintun-0.14.1.zip
+# unpacked DLLs (post-extraction)
+e5da8447dc2c320edc0fc52fa01885c103de8c118481f683643cacc3220dafce  amd64/wintun.dll
+f7ba89005544be9d85231a9e0d5f23b2d15b3311667e2dad0debd344918a3f80  arm64/wintun.dll

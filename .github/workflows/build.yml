@@ -434,6 +434,17 @@ jobs:
       # ─────────────────────────────────────────────────────────────────────
       # WINDOWS — Inno Setup installer + portable zip
       # ─────────────────────────────────────────────────────────────────────
+      - name: Bundle Wintun (Windows)
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          # Pulls upstream Wintun zip, sha256-verifies against the pinned
+          # values in windows/third_party/wintun/wintun.sha256, and stages
+          # the amd64 + arm64 DLLs so windows/CMakeLists.txt can install
+          # them. Without this the desktop_tun_diagnostics surfaces
+          # missing_driver and the UI shows "Wintun 驱动缺失".
+          ./scripts/check_windows_wintun_bundle.ps1 -Download
+
       - name: Build Windows
         if: matrix.platform == 'windows'
         shell: bash
@@ -442,6 +453,15 @@ jobs:
           flutter build windows --release \
             --build-name=${{ env.APP_VERSION }} \
             --build-number=${{ env.BUILD_NUM }}
+
+      - name: Verify Wintun bundle (Windows)
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          # Post-build: confirm wintun.dll landed next to yuelink.exe with
+          # a hash matching one of the pinned arch entries. Release-gate.
+          ./scripts/check_windows_wintun_bundle.ps1 -Verify `
+            -BundleDir build/windows/x64/runner/Release
 
       - name: Bundle libclash + service binaries (Windows)
         if: matrix.platform == 'windows'
