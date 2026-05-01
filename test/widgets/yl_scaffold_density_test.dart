@@ -4,7 +4,9 @@ import 'package:yuelink/shared/widgets/yl_scaffold.dart';
 import 'package:yuelink/theme.dart';
 
 void main() {
-  testWidgets('secondary pages default to compact title sizes', (tester) async {
+  testWidgets('secondary pages default to a single compact title', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       MaterialApp(
         theme: buildTheme(Brightness.light),
@@ -21,9 +23,9 @@ void main() {
         .whereType<double>()
         .toSet();
 
-    expect(titleSizes, contains(17));
-    expect(titleSizes, contains(24));
+    expect(titleSizes, equals({17}));
     expect(titleSizes, isNot(contains(32)));
+    expect(find.text('订单记录'), findsOneWidget);
   });
 
   testWidgets('large title mode is explicit opt-in', (tester) async {

@@ -4,12 +4,12 @@ import '../../theme.dart';
 
 enum YLTitleMode { compact, large }
 
-/// iOS 26-style large title scaffold.
+/// YueLink route scaffold with compact-by-default titles.
 ///
-/// Wraps Material's `SliverAppBar.large` (which already implements the
-/// large-title-collapses-on-scroll behaviour) with YueLink's neutral
-/// surface tokens, removes the default elevation shadow, and lets
-/// callers pass any list of slivers as the body.
+/// Secondary tool pages use a single compact `SliverAppBar` title so
+/// Windows/macOS do not render both a toolbar title and a large body
+/// title. Entry pages can opt into [YLTitleMode.large] to get Material's
+/// large-title-collapses-on-scroll behaviour.
 ///
 /// ```dart
 /// YLLargeTitleScaffold(
@@ -91,53 +91,74 @@ class YLLargeTitleScaffold extends StatelessWidget {
     final bg = isDark ? YLColors.zinc950 : YLColors.zinc100;
     final fg = isDark ? Colors.white : YLColors.zinc900;
     final isLargeTitle = titleMode == YLTitleMode.large;
-    final expandedTitleSize = isLargeTitle ? 30.0 : 24.0;
-    final expandedHeight = isLargeTitle ? 152.0 : 112.0;
+    const expandedTitleSize = 30.0;
+    const expandedHeight = 152.0;
 
     final body = CustomScrollView(
       slivers: [
         if (showTitleBar)
-          SliverAppBar.large(
-            expandedHeight: expandedHeight,
-            backgroundColor: bg,
-            surfaceTintColor: Colors.transparent,
-            elevation: 0,
-            scrolledUnderElevation: 0,
-            pinned: true,
-            stretch: true,
-            centerTitle: false,
-            automaticallyImplyLeading: leading == null,
-            leading: leading,
-            actions: actions,
-            title: Text(
-              title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: YLText.collapsedTitle.copyWith(
-                fontWeight: FontWeight.w600,
-                color: fg,
-              ),
-            ),
-            flexibleSpace: FlexibleSpaceBar(
-              titlePadding: const EdgeInsetsDirectional.only(
-                start: YLSpacing.lg,
-                bottom: YLSpacing.sm,
-              ),
+          if (isLargeTitle)
+            SliverAppBar.large(
+              expandedHeight: expandedHeight,
+              backgroundColor: bg,
+              surfaceTintColor: Colors.transparent,
+              elevation: 0,
+              scrolledUnderElevation: 0,
+              pinned: true,
+              stretch: true,
+              centerTitle: false,
+              automaticallyImplyLeading: leading == null,
+              leading: leading,
+              actions: actions,
               title: Text(
                 title,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: (isLargeTitle ? YLText.display : YLText.pageTitle)
-                    .copyWith(
-                      fontSize: expandedTitleSize,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0,
-                      color: fg,
-                    ),
+                style: YLText.collapsedTitle.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: fg,
+                ),
               ),
-              collapseMode: CollapseMode.pin,
+              flexibleSpace: FlexibleSpaceBar(
+                titlePadding: const EdgeInsetsDirectional.only(
+                  start: YLSpacing.lg,
+                  bottom: YLSpacing.sm,
+                ),
+                title: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: YLText.display.copyWith(
+                    fontSize: expandedTitleSize,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0,
+                    color: fg,
+                  ),
+                ),
+                collapseMode: CollapseMode.pin,
+              ),
+            )
+          else
+            SliverAppBar(
+              backgroundColor: bg,
+              surfaceTintColor: Colors.transparent,
+              elevation: 0,
+              scrolledUnderElevation: 0,
+              pinned: true,
+              centerTitle: false,
+              automaticallyImplyLeading: leading == null,
+              leading: leading,
+              actions: actions,
+              title: Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: YLText.collapsedTitle.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: fg,
+                ),
+              ),
             ),
-          ),
         if (showTitleBar && subtitle != null)
           SliverToBoxAdapter(
             child: Padding(
