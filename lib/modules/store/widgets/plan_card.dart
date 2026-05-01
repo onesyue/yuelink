@@ -9,11 +9,7 @@ import 'plan_detail_sheet.dart';
 
 /// Compact plan card for the store home list.
 class PlanCard extends ConsumerWidget {
-  const PlanCard({
-    super.key,
-    required this.plan,
-    this.isCurrentPlan = false,
-  });
+  const PlanCard({super.key, required this.plan, this.isCurrentPlan = false});
 
   final StorePlan plan;
   final bool isCurrentPlan;
@@ -32,109 +28,142 @@ class PlanCard extends ConsumerWidget {
         : '-';
     final periodLabel = selectedPeriod?.label(isEn) ?? '';
 
-    return GestureDetector(
-      onTap: () => _showDetail(context, ref, selectedPeriod),
-      child: Container(
-        decoration: BoxDecoration(
-          color: isDark ? YLColors.zinc900 : Colors.white,
-          borderRadius: BorderRadius.circular(YLRadius.xl),
-          border: Border.all(
-            color: isCurrentPlan
-                ? YLColors.connected.withValues(alpha: 0.5)
-                : (isDark
-                    ? Colors.white.withValues(alpha: 0.08)
-                    : Colors.black.withValues(alpha: 0.06)),
-            width: isCurrentPlan ? 1.0 : 0.5,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _showDetail(context, ref, selectedPeriod),
+        borderRadius: BorderRadius.circular(YLRadius.lg),
+        child: Container(
+          decoration: BoxDecoration(
+            color: isDark ? YLColors.zinc900 : Colors.white,
+            borderRadius: BorderRadius.circular(YLRadius.lg),
+            border: Border.all(
+              color: isCurrentPlan
+                  ? YLColors.connected.withValues(alpha: 0.5)
+                  : (isDark
+                        ? Colors.white.withValues(alpha: 0.08)
+                        : Colors.black.withValues(alpha: 0.06)),
+              width: isCurrentPlan ? 1.0 : 0.5,
+            ),
+            boxShadow: YLShadow.card(context),
           ),
-          boxShadow: YLShadow.card(context),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(YLSpacing.md),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // ── Top row: name + badge ─────────────────────────────
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      plan.name,
-                      style: YLText.titleMedium,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  if (isCurrentPlan)
-                    _Badge(label: isEn ? 'Current' : '当前', color: YLColors.connected),
-                ],
-              ),
-
-              const SizedBox(height: YLSpacing.sm),
-
-              // ── Info chips ────────────────────────────────────────
-              Wrap(
-                spacing: 6,
-                runSpacing: 4,
-                children: [
-                  _InfoChip(icon: Icons.data_usage_rounded, label: plan.trafficLabel),
-                  _InfoChip(icon: Icons.speed_rounded, label: plan.speedLabel),
-                  if (plan.deviceLimit != null)
-                    _InfoChip(icon: Icons.devices_rounded, label: plan.deviceLabel),
-                ],
-              ),
-
-              const SizedBox(height: YLSpacing.md),
-
-              // ── Price row ─────────────────────────────────────────
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    price,
-                    style: YLText.titleLarge.copyWith(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w700,
-                      color: isDark ? Colors.white : YLColors.zinc900,
-                    ),
-                  ),
-                  if (periodLabel.isNotEmpty) ...[
-                    const SizedBox(width: 4),
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 3),
+          child: Padding(
+            padding: const EdgeInsets.all(YLSpacing.md),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // ── Top row: name + badge ─────────────────────────────
+                Row(
+                  children: [
+                    Expanded(
                       child: Text(
-                        '/ $periodLabel',
-                        style: YLText.caption.copyWith(color: YLColors.zinc500),
+                        plan.name,
+                        style: YLText.rowTitle.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (isCurrentPlan)
+                      _Badge(
+                        label: isEn ? 'Current' : '当前',
+                        color: YLColors.connected,
+                      ),
+                  ],
+                ),
+
+                const SizedBox(height: YLSpacing.sm),
+
+                // ── Info chips ────────────────────────────────────────
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: [
+                    _InfoChip(
+                      icon: Icons.data_usage_rounded,
+                      label: plan.trafficLabel,
+                    ),
+                    _InfoChip(
+                      icon: Icons.speed_rounded,
+                      label: plan.speedLabel,
+                    ),
+                    if (plan.deviceLimit != null)
+                      _InfoChip(
+                        icon: Icons.devices_rounded,
+                        label: plan.deviceLabel,
+                      ),
+                  ],
+                ),
+
+                const SizedBox(height: YLSpacing.md),
+
+                // ── Price row ─────────────────────────────────────────
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        price,
+                        style: YLText.price.copyWith(
+                          color: isDark ? Colors.white : YLColors.zinc900,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (periodLabel.isNotEmpty) ...[
+                      const SizedBox(width: 4),
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 3),
+                        child: Text(
+                          '/ $periodLabel',
+                          style: YLText.caption.copyWith(
+                            color: YLColors.zinc500,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                    const Spacer(),
+                    // Quick buy button
+                    FilledButton(
+                      onPressed: () =>
+                          _showDetail(context, ref, selectedPeriod),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: isDark
+                            ? Colors.white
+                            : YLColors.primary,
+                        foregroundColor: isDark
+                            ? YLColors.primary
+                            : Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        minimumSize: const Size(0, 40),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(YLRadius.sm),
+                        ),
+                      ),
+                      child: Text(
+                        isCurrentPlan
+                            ? (isEn ? 'Renew' : '续订')
+                            : (isEn ? 'Subscribe' : '立即订阅'),
+                        style: YLText.caption.copyWith(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 12,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],
-                  const Spacer(),
-                  // Quick buy button
-                  FilledButton(
-                    onPressed: () => _showDetail(context, ref, selectedPeriod),
-                    style: FilledButton.styleFrom(
-                      backgroundColor:
-                          isDark ? Colors.white : YLColors.primary,
-                      foregroundColor:
-                          isDark ? YLColors.primary : Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 6),
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(YLRadius.sm),
-                      ),
-                    ),
-                    child: Text(
-                      isCurrentPlan
-                          ? (isEn ? 'Renew' : '续订')
-                          : (isEn ? 'Subscribe' : '立即订阅'),
-                      style: YLText.caption
-                          .copyWith(fontWeight: FontWeight.w600, fontSize: 12),
-                    ),
-                  ),
-                ],
-              ),
-            ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -174,7 +203,10 @@ class _Badge extends StatelessWidget {
       child: Text(
         label,
         style: YLText.caption.copyWith(
-            color: color, fontWeight: FontWeight.w600, fontSize: 10),
+          color: color,
+          fontWeight: FontWeight.w600,
+          fontSize: 10,
+        ),
       ),
     );
   }
@@ -203,8 +235,10 @@ class _InfoChip extends StatelessWidget {
           const SizedBox(width: 3),
           Text(
             label,
-            style: YLText.caption
-                .copyWith(fontSize: 10, color: YLColors.zinc500),
+            style: YLText.caption.copyWith(
+              fontSize: 10,
+              color: YLColors.zinc500,
+            ),
           ),
         ],
       ),

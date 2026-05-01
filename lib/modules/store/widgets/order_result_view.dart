@@ -171,24 +171,28 @@ class _SuccessView extends StatelessWidget {
       children: [
         const Icon(
           Icons.check_circle_rounded,
-          size: 64,
+          size: 52,
           color: YLColors.connected,
         ),
         const SizedBox(height: YLSpacing.md),
         Text(
           isEn ? 'Payment Successful' : '购买成功',
-          style: YLText.titleLarge.copyWith(fontWeight: FontWeight.w700),
+          style: YLText.titleMedium.copyWith(fontWeight: FontWeight.w700),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
         const SizedBox(height: 6),
         Text(
           isEn ? 'Your subscription has been activated.' : '订阅已开通，同步后即可使用。',
           style: YLText.body.copyWith(color: YLColors.zinc500),
           textAlign: TextAlign.center,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
         ),
-        const SizedBox(height: YLSpacing.xl),
+        const SizedBox(height: YLSpacing.lg),
         SizedBox(
           width: double.infinity,
-          height: 48,
+          height: 44,
           child: FilledButton(
             onPressed: onDone,
             style: FilledButton.styleFrom(
@@ -260,7 +264,9 @@ class _AwaitingView extends StatelessWidget {
         const SizedBox(height: YLSpacing.md),
         Text(
           isEn ? 'Awaiting Payment' : '等待支付',
-          style: YLText.titleLarge.copyWith(fontWeight: FontWeight.w700),
+          style: YLText.titleMedium.copyWith(fontWeight: FontWeight.w700),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
         const SizedBox(height: 6),
         Text(
@@ -269,6 +275,8 @@ class _AwaitingView extends StatelessWidget {
               : '请在浏览器中完成支付，支付后点击查询结果。',
           style: YLText.body.copyWith(color: YLColors.zinc500),
           textAlign: TextAlign.center,
+          maxLines: 3,
+          overflow: TextOverflow.ellipsis,
         ),
 
         // Trade No.
@@ -284,6 +292,8 @@ class _AwaitingView extends StatelessWidget {
                 color: YLColors.zinc400,
                 decoration: TextDecoration.underline,
               ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ),
@@ -294,7 +304,7 @@ class _AwaitingView extends StatelessWidget {
         if (state.paymentUrl.isNotEmpty)
           SizedBox(
             width: double.infinity,
-            height: 48,
+            height: 44,
             child: FilledButton(
               onPressed: () async {
                 final uri = Uri.tryParse(state.paymentUrl);
@@ -312,6 +322,8 @@ class _AwaitingView extends StatelessWidget {
               child: Text(
                 isEn ? 'Open Payment Page' : '重新打开支付页',
                 style: YLText.label.copyWith(fontWeight: FontWeight.w600),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ),
@@ -363,28 +375,32 @@ class _FailedView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-      return Column(
-        children: [
-          const Icon(
-            Icons.error_outline_rounded,
-            size: 56,
-            color: YLColors.error,
-          ),
+    return Column(
+      children: [
+        const Icon(
+          Icons.error_outline_rounded,
+          size: 52,
+          color: YLColors.error,
+        ),
         const SizedBox(height: YLSpacing.md),
         Text(
           isEn ? 'Order Failed' : '订单失败',
-          style: YLText.titleLarge.copyWith(fontWeight: FontWeight.w700),
+          style: YLText.titleMedium.copyWith(fontWeight: FontWeight.w700),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
         const SizedBox(height: 6),
         Text(
           state.message,
           style: YLText.body.copyWith(color: YLColors.zinc500),
           textAlign: TextAlign.center,
+          maxLines: 4,
+          overflow: TextOverflow.ellipsis,
         ),
-        const SizedBox(height: YLSpacing.xl),
+        const SizedBox(height: YLSpacing.lg),
         SizedBox(
           width: double.infinity,
-          height: 48,
+          height: 44,
           child: FilledButton(
             onPressed: onRetry,
             style: FilledButton.styleFrom(

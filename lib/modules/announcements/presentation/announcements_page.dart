@@ -108,7 +108,7 @@ class _AnnouncementsPageState extends ConsumerState<AnnouncementsPage> {
               sliver: SliverList.separated(
                 itemCount: list.length,
                 separatorBuilder: (_, _) =>
-                    const SizedBox(height: YLSpacing.md),
+                    const SizedBox(height: YLSpacing.sm),
                 itemBuilder: (context, i) =>
                     _AnnouncementTile(item: list[i], isDark: isDark),
               ),
@@ -161,7 +161,7 @@ class _AnnouncementTileState extends ConsumerState<_AnnouncementTile> {
           }
         },
         child: Container(
-          padding: const EdgeInsets.all(14),
+          padding: const EdgeInsets.all(YLSpacing.md),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(YLRadius.lg),
             border: Border.all(
@@ -191,7 +191,7 @@ class _AnnouncementTileState extends ConsumerState<_AnnouncementTile> {
                   Expanded(
                     child: Text(
                       item.title,
-                      style: YLText.titleMedium.copyWith(
+                      style: YLText.rowTitle.copyWith(
                         fontWeight: isRead ? FontWeight.w500 : FontWeight.w700,
                       ),
                       maxLines: _expanded ? null : 1,
@@ -210,7 +210,10 @@ class _AnnouncementTileState extends ConsumerState<_AnnouncementTile> {
                 const SizedBox(height: 3),
                 Text(
                   dateStr,
-                  style: YLText.caption.copyWith(color: YLColors.zinc400),
+                  style: YLText.badge.copyWith(
+                    color: YLColors.zinc400,
+                    fontWeight: FontWeight.w400,
+                  ),
                 ),
               ],
               if (_expanded && item.content.isNotEmpty) ...[

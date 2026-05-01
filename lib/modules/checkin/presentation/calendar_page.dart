@@ -341,10 +341,12 @@ class _MonthHeader extends StatelessWidget {
                 month: '${viewMonth.month}',
               ),
               style: YLText.titleLarge.copyWith(
-                fontSize: 22,
+                fontSize: 20,
                 fontWeight: FontWeight.w700,
                 letterSpacing: 0,
               ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
           _ChevronButton(
@@ -437,8 +439,8 @@ class _StatTile extends StatelessWidget {
             children: [
               TextSpan(
                 text: value,
-                style: YLText.titleLarge.copyWith(
-                  fontSize: 20,
+                style: YLText.stat.copyWith(
+                  fontSize: 18,
                   fontWeight: FontWeight.w700,
                   color: color ?? YLColors.primary,
                 ),

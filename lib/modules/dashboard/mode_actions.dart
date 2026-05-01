@@ -46,7 +46,8 @@ class ModeActions {
     ref.read(routingModeProvider.notifier).state = next;
     await SettingsService.setRoutingMode(next);
 
-    if (ref.read(coreStatusProvider) != CoreStatus.running) {
+    final status = ref.read(coreStatusProvider);
+    if (status != CoreStatus.running && status != CoreStatus.degraded) {
       // Not running: persistence is the whole win. No API call to make.
       return;
     }

@@ -8,6 +8,9 @@ import '../../core/kernel/core_manager.dart';
 import '../../core/platform/vpn_service.dart';
 import '../../core/profile/profile_service.dart';
 import '../../core/providers/core_provider.dart';
+import '../../core/tun/desktop_tun_diagnostics.dart';
+import '../../core/tun/desktop_tun_state.dart';
+import '../../core/tun/desktop_tun_telemetry.dart';
 import '../../i18n/app_strings.dart';
 import '../../shared/app_notifier.dart';
 import '../../shared/log_export_sources.dart';
@@ -80,6 +83,11 @@ class _ConnectionRepairPageState extends ConsumerState<ConnectionRepairPage> {
         } else {
           buffer.writeln('<not present>');
         }
+        buffer.writeln();
+      }
+      if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
+        buffer.writeln('═══ desktop_tun_diagnostics ═════════════════════════');
+        buffer.writeln(await _collectDesktopTunDiagnosticsText());
         buffer.writeln();
       }
       if (found == 0) {
@@ -196,7 +204,7 @@ class _ConnectionRepairPageState extends ConsumerState<ConnectionRepairPage> {
           SliverToBoxAdapter(
             child: YLSection(
               header: isEn ? 'Desktop TUN' : '桌面 TUN',
-              children: const [ServiceModeRow()],
+              children: const [ServiceModeRow(), _DesktopTunLayeredStatus()],
             ),
           ),
 
@@ -486,6 +494,77 @@ class _ConnectionRepairPageState extends ConsumerState<ConnectionRepairPage> {
   }
 }
 
+Future<String> _collectDesktopTunDiagnosticsText() async {
+  final commands = <(String, List<String>)>[];
+  if (Platform.isWindows) {
+    commands.addAll(const [
+      ('ipconfig', ['/all']),
+      ('route', ['print']),
+      ('netsh', ['interface', 'ipv4', 'show', 'interfaces']),
+      ('netsh', ['interface', 'ipv6', 'show', 'interfaces']),
+      ('netsh', ['winhttp', 'show', 'proxy']),
+      (
+        'powershell',
+        [
+          '-NoProfile',
+          '-Command',
+          'Get-NetAdapter | Select-Object Name,Status,InterfaceDescription | Format-Table -AutoSize',
+        ],
+      ),
+      (
+        'powershell',
+        [
+          '-NoProfile',
+          '-Command',
+          'Get-DnsClientServerAddress | Select-Object InterfaceAlias,AddressFamily,ServerAddresses | Format-Table -AutoSize',
+        ],
+      ),
+    ]);
+  } else if (Platform.isMacOS) {
+    commands.addAll(const [
+      ('ifconfig', []),
+      ('netstat', ['-rn']),
+      ('scutil', ['--dns']),
+      ('networksetup', ['-getdnsservers', 'Wi-Fi']),
+      ('route', ['-n', 'get', 'default']),
+      ('lsof', ['-i', ':9090']),
+    ]);
+  } else if (Platform.isLinux) {
+    commands.addAll(const [
+      ('ip', ['addr']),
+      ('ip', ['route']),
+      ('ip', ['-6', 'route']),
+      ('resolvectl', ['status']),
+      ('systemctl', ['status', 'systemd-resolved', '--no-pager']),
+      ('ss', ['-lntup']),
+      ('ls', ['-l', '/dev/net/tun']),
+    ]);
+  }
+
+  final buffer = StringBuffer();
+  for (final (exe, args) in commands) {
+    buffer.writeln('\$ $exe ${args.join(' ')}');
+    try {
+      final r = await Process.run(
+        exe,
+        args,
+      ).timeout(const Duration(seconds: 5));
+      buffer.writeln(_redactDiagnosticText('${r.stdout}\n${r.stderr}'));
+    } catch (e) {
+      buffer.writeln('<failed: $e>');
+    }
+    buffer.writeln();
+  }
+  return buffer.toString();
+}
+
+String _redactDiagnosticText(String input) {
+  return input
+      .replaceAll(RegExp(r'([A-Fa-f0-9]{2}[:-]){5}[A-Fa-f0-9]{2}'), '<mac>')
+      .replaceAll(RegExp(r'\b\d{1,3}(?:\.\d{1,3}){3}\b'), '<ip>')
+      .replaceAll(RegExp(r'Bearer\s+[A-Za-z0-9._~+-]+'), 'Bearer <redacted>');
+}
+
 // ── Helper widgets ──────────────────────────────────────────────────────────
 
 /// Connection status row — shows whether the core is currently running, or
@@ -527,12 +606,178 @@ class _StatusTile extends StatelessWidget {
   }
 }
 
+class _DesktopTunLayeredStatus extends ConsumerStatefulWidget {
+  const _DesktopTunLayeredStatus();
+
+  @override
+  ConsumerState<_DesktopTunLayeredStatus> createState() =>
+      _DesktopTunLayeredStatusState();
+}
+
+class _DesktopTunLayeredStatusState
+    extends ConsumerState<_DesktopTunLayeredStatus> {
+  bool _checking = false;
+
+  Future<void> _refresh() async {
+    if (_checking) return;
+    setState(() => _checking = true);
+    try {
+      final snapshot = await DesktopTunDiagnostics.instance.inspect(
+        api: CoreManager.instance.api,
+        mixedPort: CoreManager.instance.mixedPort,
+        mode: ref.read(connectionModeProvider),
+        tunStack: ref.read(desktopTunStackProvider),
+      );
+      ref.read(desktopTunHealthProvider.notifier).state = snapshot;
+      DesktopTunTelemetry.healthSnapshot(snapshot);
+    } finally {
+      if (mounted) setState(() => _checking = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final snapshot = ref.watch(desktopTunHealthProvider);
+    final mode = ref.watch(connectionModeProvider);
+    final isTun = mode == 'tun';
+    final rows = _rows(snapshot, isTun: isTun);
+    return Column(
+      children: [
+        YLListTile(
+          leading: YLSettingIcon(
+            icon: isTun ? Icons.hub_rounded : Icons.http_rounded,
+            color: isTun ? YLColors.tunConnected : YLColors.zinc500,
+          ),
+          title: '当前模式',
+          subtitle: isTun ? 'TUN · 分层诊断已启用' : '系统代理 · TUN 未开启',
+          trailing: _checking
+              ? YLListTrailing.loading()
+              : YLListTrailing.value('重新检测'),
+          onTap: _checking ? null : _refresh,
+        ),
+        for (final row in rows)
+          YLListTile(
+            leading: YLSettingIcon(icon: row.icon, color: row.color),
+            title: row.title,
+            subtitle: row.subtitle,
+            trailing: YLListTrailing.badge(
+              text: row.ok ? 'OK' : row.badge,
+              color: row.ok ? YLColors.connected : row.color,
+            ),
+          ),
+      ],
+    );
+  }
+
+  List<_TunDiagRow> _rows(DesktopTunSnapshot? s, {required bool isTun}) {
+    if (!isTun) {
+      return const [
+        _TunDiagRow(
+          title: 'TUN 层',
+          subtitle: '当前未使用 TUN，节点超时不会归因到 TUN',
+          ok: true,
+          badge: 'OFF',
+          icon: Icons.power_settings_new_rounded,
+          color: YLColors.zinc400,
+        ),
+      ];
+    }
+    if (s == null) {
+      return const [
+        _TunDiagRow(
+          title: 'TUN 状态',
+          subtitle: '尚未检测；点击重新检测',
+          ok: false,
+          badge: '待检测',
+          icon: Icons.help_rounded,
+          color: YLColors.connecting,
+        ),
+      ];
+    }
+    return [
+      _TunDiagRow(
+        title: 'App 层',
+        subtitle: s.systemProxyEnabled
+            ? 'TUN 与系统代理同时开启，可能造成控制面回环'
+            : 'mode=${s.mode} · stack=${s.tunStack}',
+        ok: !s.systemProxyEnabled,
+        badge: '冲突',
+        icon: Icons.desktop_windows_rounded,
+        color: s.systemProxyEnabled ? YLColors.error : YLColors.connected,
+      ),
+      _TunDiagRow(
+        title: 'Core 层',
+        subtitle: s.controllerOk ? 'mihomo 控制接口可访问' : 'mihomo 已启动但控制接口不可用',
+        ok: s.controllerOk,
+        badge: '失败',
+        icon: Icons.memory_rounded,
+        color: s.controllerOk ? YLColors.connected : YLColors.error,
+      ),
+      _TunDiagRow(
+        title: 'TUN 层',
+        subtitle: _tunLayerSubtitle(s),
+        ok: s.driverPresent && s.hasAdmin && s.interfacePresent,
+        badge: '异常',
+        icon: Icons.route_rounded,
+        color: (s.driverPresent && s.hasAdmin && s.interfacePresent)
+            ? YLColors.connected
+            : YLColors.error,
+      ),
+      _TunDiagRow(
+        title: 'Route / DNS',
+        subtitle: s.routeOk
+            ? (s.dnsOk ? '路由和 DNS 已验证' : 'DNS 未接管')
+            : 'TUN 网卡已创建，但路由未接管',
+        ok: s.routeOk && s.dnsOk,
+        badge: '异常',
+        icon: Icons.dns_rounded,
+        color: (s.routeOk && s.dnsOk) ? YLColors.connected : YLColors.error,
+      ),
+      _TunDiagRow(
+        title: '目标站层',
+        subtitle:
+            'Google ${s.googleOk ? "OK" : "失败"} · GitHub ${s.githubOk ? "OK" : "失败"}；Claude 403 会归因 AI 出口受限，不归因 TUN',
+        ok: s.googleOk || s.githubOk,
+        badge: '异常',
+        icon: Icons.public_rounded,
+        color: (s.googleOk || s.githubOk) ? YLColors.connected : YLColors.error,
+      ),
+    ];
+  }
+
+  String _tunLayerSubtitle(DesktopTunSnapshot s) {
+    if (!s.driverPresent) return 'TUN 驱动/设备缺失';
+    if (!s.hasAdmin) return '需要管理员权限或服务模式权限';
+    if (!s.interfacePresent) return 'TUN interface 未创建';
+    return 'TUN interface 已创建';
+  }
+}
+
+class _TunDiagRow {
+  const _TunDiagRow({
+    required this.title,
+    required this.subtitle,
+    required this.ok,
+    required this.badge,
+    required this.icon,
+    required this.color,
+  });
+
+  final String title;
+  final String subtitle;
+  final bool ok;
+  final String badge;
+  final IconData icon;
+  final Color color;
+}
+
 // ── Network diagnostics widget ─────────────────────────────────────────────
 
 class _DiagEndpoint {
   final String label;
   final String url;
-  const _DiagEndpoint(this.label, this.url);
+  final bool aiTarget;
+  const _DiagEndpoint(this.label, this.url, {this.aiTarget = false});
 }
 
 // User-facing labels abstract away internal endpoint URLs.
@@ -540,18 +785,24 @@ class _DiagEndpoint {
 // URLs exposed to the user.
 const _kDiagEndpoints = [
   _DiagEndpoint('Google', 'https://www.gstatic.com/generate_204'),
-  _DiagEndpoint('Cloudflare', 'https://cp.cloudflare.com/generate_204'),
+  _DiagEndpoint('GitHub', 'https://github.com/'),
+  _DiagEndpoint('Claude', 'https://claude.ai/', aiTarget: true),
+  _DiagEndpoint('ChatGPT', 'https://chatgpt.com/', aiTarget: true),
 ];
 
-enum _DiagStatus { idle, testing, success, failed }
+enum _DiagStatus { idle, testing, success, limited, failed }
 
 class _DiagResult {
   final _DiagStatus status;
   final int? latencyMs;
+  final int? statusCode;
+  final String? errorClass;
   final String? error;
   const _DiagResult({
     this.status = _DiagStatus.idle,
     this.latencyMs,
+    this.statusCode,
+    this.errorClass,
     this.error,
   });
 }
@@ -584,7 +835,7 @@ class _NetworkDiagnosticsState extends State<_NetworkDiagnostics> {
 
     final futures = <Future<_DiagResult>>[];
     for (final endpoint in _kDiagEndpoints) {
-      futures.add(_testEndpoint(endpoint.url));
+      futures.add(_testEndpoint(endpoint));
     }
 
     final results = await Future.wait(futures);
@@ -596,12 +847,12 @@ class _NetworkDiagnosticsState extends State<_NetworkDiagnostics> {
     }
   }
 
-  Future<_DiagResult> _testEndpoint(String url) async {
+  Future<_DiagResult> _testEndpoint(_DiagEndpoint endpoint) async {
     final client = HttpClient();
     client.connectionTimeout = const Duration(seconds: 5);
     try {
       final sw = Stopwatch()..start();
-      final request = await client.getUrl(Uri.parse(url));
+      final request = await client.getUrl(Uri.parse(endpoint.url));
       final response = await request.close().timeout(
         const Duration(seconds: 5),
       );
@@ -609,22 +860,68 @@ class _NetworkDiagnosticsState extends State<_NetworkDiagnostics> {
       // Drain the response body
       await response.drain<void>();
       final ms = sw.elapsedMilliseconds;
+      final statusCode = response.statusCode;
+      if (endpoint.aiTarget && (statusCode == 403 || statusCode == 429)) {
+        return _DiagResult(
+          status: _DiagStatus.limited,
+          latencyMs: ms,
+          statusCode: statusCode,
+          errorClass: statusCode == 403 ? 'ai_blocked' : 'http_429',
+          error: statusCode == 403 ? 'AI 出口受限' : 'AI 请求被限速',
+        );
+      }
       // Accept any non-server-error response as reachable
-      if (response.statusCode < 500) {
-        return _DiagResult(status: _DiagStatus.success, latencyMs: ms);
+      if (statusCode < 500) {
+        return _DiagResult(
+          status: _DiagStatus.success,
+          latencyMs: ms,
+          statusCode: statusCode,
+          errorClass: 'ok',
+        );
       }
       return _DiagResult(
         status: _DiagStatus.failed,
         latencyMs: ms,
-        error: 'HTTP ${response.statusCode}',
+        statusCode: statusCode,
+        errorClass: 'target_failed',
+        error: '目标站点 HTTP $statusCode',
       );
     } catch (e) {
       final msg = e.toString();
       if (msg.contains('TimeoutException')) {
-        return const _DiagResult(status: _DiagStatus.failed, error: '超时');
+        return const _DiagResult(
+          status: _DiagStatus.failed,
+          errorClass: 'timeout',
+          error: '节点或本地网络超时',
+        );
+      }
+      final lower = msg.toLowerCase();
+      if (lower.contains('failed host lookup') ||
+          lower.contains('nodename nor servname') ||
+          lower.contains('name or service not known')) {
+        return const _DiagResult(
+          status: _DiagStatus.failed,
+          errorClass: 'dns_failed',
+          error: 'DNS 解析失败',
+        );
+      }
+      if (lower.contains('handshake') || lower.contains('certificate')) {
+        return const _DiagResult(
+          status: _DiagStatus.failed,
+          errorClass: 'tls_failed',
+          error: 'TLS 握手失败',
+        );
+      }
+      if (lower.contains('connection reset')) {
+        return const _DiagResult(
+          status: _DiagStatus.failed,
+          errorClass: 'connection_reset',
+          error: '连接被重置',
+        );
       }
       return _DiagResult(
         status: _DiagStatus.failed,
+        errorClass: 'tcp_failed',
         error: msg.length > 40 ? '${msg.substring(0, 40)}...' : msg,
       );
     } finally {
@@ -677,6 +974,10 @@ class _DiagRow extends StatelessWidget {
         icon = Icons.check_circle_rounded;
         iconColor = YLColors.connected;
         break;
+      case _DiagStatus.limited:
+        icon = Icons.shield_rounded;
+        iconColor = YLColors.connecting;
+        break;
       case _DiagStatus.failed:
         icon = Icons.cancel_rounded;
         iconColor = YLColors.error;
@@ -691,6 +992,8 @@ class _DiagRow extends StatelessWidget {
         text: '${result.latencyMs}ms',
         color: result.status == _DiagStatus.success
             ? YLColors.connected
+            : result.status == _DiagStatus.limited
+            ? YLColors.connecting
             : YLColors.error,
       );
     } else {
@@ -708,7 +1011,14 @@ class _DiagRow extends StatelessWidget {
   String _subtitle(_DiagResult result) {
     if (result.status == _DiagStatus.idle) return '等待检测';
     if (result.status == _DiagStatus.testing) return '正在检测...';
-    if (result.status == _DiagStatus.success) return '连接正常';
+    if (result.status == _DiagStatus.success) {
+      return result.statusCode == null
+          ? '连接正常'
+          : '连接正常 · HTTP ${result.statusCode}';
+    }
+    if (result.status == _DiagStatus.limited) {
+      return result.error ?? 'AI 出口受限';
+    }
     return result.error ?? '未知错误';
   }
 }

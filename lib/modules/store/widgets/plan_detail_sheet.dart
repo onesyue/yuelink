@@ -33,7 +33,8 @@ class _PlanDetailSheetState extends ConsumerState<PlanDetailSheet> {
   void initState() {
     super.initState();
     final periods = widget.plan.availablePeriods;
-    _period = widget.initialPeriod ??
+    _period =
+        widget.initialPeriod ??
         ref.read(selectedPeriodProvider(widget.plan.id)) ??
         periods.firstOrNull ??
         PlanPeriod.monthly;
@@ -50,7 +51,7 @@ class _PlanDetailSheetState extends ConsumerState<PlanDetailSheet> {
       decoration: BoxDecoration(
         color: isDark ? YLColors.zinc900 : Colors.white,
         borderRadius: const BorderRadius.vertical(
-          top: Radius.circular(YLRadius.xxl),
+          top: Radius.circular(YLRadius.xl),
         ),
       ),
       child: SafeArea(
@@ -78,24 +79,30 @@ class _PlanDetailSheetState extends ConsumerState<PlanDetailSheet> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // ── Plan name ───────────────────────────────────
-                  Text(plan.name,
-                      style: YLText.titleLarge
-                          .copyWith(fontWeight: FontWeight.w700)),
-                  const SizedBox(height: YLSpacing.lg),
+                  Text(
+                    plan.name,
+                    style: YLText.titleLarge.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: YLSpacing.md),
 
                   // ── Spec grid ───────────────────────────────────
                   _SpecGrid(plan: plan, isEn: isEn),
-                  const SizedBox(height: YLSpacing.lg),
+                  const SizedBox(height: YLSpacing.md),
 
                   // ── Feature description ─────────────────────────
-                  if (plan.content != null && plan.content!.trim().isNotEmpty) ...[
+                  if (plan.content != null &&
+                      plan.content!.trim().isNotEmpty) ...[
                     Text(
                       isEn ? 'Features' : '套餐特点',
                       style: YLText.label.copyWith(color: YLColors.zinc500),
                     ),
                     const SizedBox(height: 6),
                     RichContent(content: plan.content),
-                    const SizedBox(height: YLSpacing.lg),
+                    const SizedBox(height: YLSpacing.md),
                   ],
 
                   // ── Period selector ─────────────────────────────
@@ -109,47 +116,53 @@ class _PlanDetailSheetState extends ConsumerState<PlanDetailSheet> {
                     selected: _period,
                     onChanged: (p) {
                       setState(() => _period = p);
-                      ref
-                          .read(selectedPeriodProvider(plan.id).notifier)
-                          .state = p;
+                      ref.read(selectedPeriodProvider(plan.id).notifier).state =
+                          p;
                     },
                   ),
 
-                  const SizedBox(height: YLSpacing.xl),
+                  const SizedBox(height: YLSpacing.lg),
 
                   // ── Price + buy button ──────────────────────────
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            plan.formattedPrice(_period),
-                            style: YLText.titleLarge.copyWith(
-                              fontSize: 26,
-                              fontWeight: FontWeight.w800,
-                              color: isDark ? Colors.white : YLColors.zinc900,
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              plan.formattedPrice(_period),
+                              style: YLText.price.copyWith(
+                                color: isDark ? Colors.white : YLColors.zinc900,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                          ),
-                          Text(
-                            '/ ${_period.label(isEn)}',
-                            style: YLText.caption
-                                .copyWith(color: YLColors.zinc500),
-                          ),
-                        ],
+                            Text(
+                              '/ ${_period.label(isEn)}',
+                              style: YLText.caption.copyWith(
+                                color: YLColors.zinc500,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
                       ),
-                      const Spacer(),
+                      const SizedBox(width: YLSpacing.md),
                       SizedBox(
-                        height: 46,
+                        height: 44,
                         child: FilledButton(
                           onPressed: () => _confirmPurchase(context),
                           style: FilledButton.styleFrom(
-                            backgroundColor:
-                                isDark ? Colors.white : YLColors.primary,
-                            foregroundColor:
-                                isDark ? YLColors.primary : Colors.white,
-                            padding: const EdgeInsets.symmetric(horizontal: 28),
+                            backgroundColor: isDark
+                                ? Colors.white
+                                : YLColors.primary,
+                            foregroundColor: isDark
+                                ? YLColors.primary
+                                : Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 18),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(YLRadius.md),
                             ),
@@ -158,8 +171,11 @@ class _PlanDetailSheetState extends ConsumerState<PlanDetailSheet> {
                             widget.isCurrentPlan
                                 ? (isEn ? 'Renew' : '续订')
                                 : (isEn ? 'Subscribe Now' : '立即订阅'),
-                            style: YLText.label
-                                .copyWith(fontWeight: FontWeight.w600),
+                            style: YLText.label.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                       ),
@@ -182,10 +198,7 @@ class _PlanDetailSheetState extends ConsumerState<PlanDetailSheet> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => PurchaseConfirmSheet(
-        plan: widget.plan,
-        period: _period,
-      ),
+      builder: (_) => PurchaseConfirmSheet(plan: widget.plan, period: _period),
     );
   }
 }
@@ -204,11 +217,7 @@ class _SpecGrid extends StatelessWidget {
     final items = [
       (isEn ? 'Traffic' : '流量', plan.trafficLabel, Icons.data_usage_rounded),
       (isEn ? 'Speed' : '速度', plan.speedLabel, Icons.speed_rounded),
-      (
-        isEn ? 'Devices' : '设备数',
-        plan.deviceLabel,
-        Icons.devices_rounded
-      ),
+      (isEn ? 'Devices' : '设备数', plan.deviceLabel, Icons.devices_rounded),
     ];
 
     return Row(
@@ -217,14 +226,16 @@ class _SpecGrid extends StatelessWidget {
           child: Container(
             margin: const EdgeInsets.only(right: 8),
             padding: const EdgeInsets.symmetric(
-                horizontal: YLSpacing.sm, vertical: 10),
+              horizontal: YLSpacing.sm,
+              vertical: 10,
+            ),
             decoration: BoxDecoration(
               color: isDark ? YLColors.zinc800 : YLColors.zinc50,
               borderRadius: BorderRadius.circular(YLRadius.md),
             ),
             child: Column(
               children: [
-                Icon(item.$3, size: 18, color: YLColors.zinc400),
+                Icon(item.$3, size: 16, color: YLColors.zinc400),
                 const SizedBox(height: 4),
                 Text(
                   item.$2,
@@ -232,10 +243,14 @@ class _SpecGrid extends StatelessWidget {
                     fontWeight: FontWeight.w600,
                     fontSize: 13,
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 Text(
                   item.$1,
                   style: YLText.caption.copyWith(color: YLColors.zinc500),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),

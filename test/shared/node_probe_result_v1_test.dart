@@ -44,25 +44,24 @@ void main() {
   Map<String, dynamic> onlyProbeEvent(int cursor) {
     return Telemetry.recentEvents()
         .skip(cursor)
-        .firstWhere(
-          (e) => e['event'] == TelemetryEvents.nodeProbeResultV1,
-        );
+        .firstWhere((e) => e['event'] == TelemetryEvents.nodeProbeResultV1);
   }
 
   test('classifyTarget covers the seven sites + transport bucket', () {
-    expect(NodeTelemetry.classifyTarget(
-        'https://www.gstatic.com/generate_204'), 'transport');
+    expect(
+      NodeTelemetry.classifyTarget('https://www.gstatic.com/generate_204'),
+      'transport',
+    );
     expect(NodeTelemetry.classifyTarget('https://www.google.com/'), 'google');
     expect(NodeTelemetry.classifyTarget('https://claude.ai/'), 'claude');
-    expect(NodeTelemetry.classifyTarget('https://api.anthropic.com/v1/'),
-        'claude');
+    expect(
+      NodeTelemetry.classifyTarget('https://api.anthropic.com/v1/'),
+      'claude',
+    );
     expect(NodeTelemetry.classifyTarget('https://chatgpt.com/'), 'chatgpt');
-    expect(NodeTelemetry.classifyTarget('https://chat.openai.com/'),
-        'chatgpt');
-    expect(NodeTelemetry.classifyTarget('https://www.netflix.com/'),
-        'netflix');
-    expect(NodeTelemetry.classifyTarget('https://www.youtube.com/'),
-        'youtube');
+    expect(NodeTelemetry.classifyTarget('https://chat.openai.com/'), 'chatgpt');
+    expect(NodeTelemetry.classifyTarget('https://www.netflix.com/'), 'netflix');
+    expect(NodeTelemetry.classifyTarget('https://www.youtube.com/'), 'youtube');
     expect(NodeTelemetry.classifyTarget('https://github.com/'), 'github');
     expect(NodeTelemetry.classifyTarget('https://example.com/'), 'other');
     expect(NodeTelemetry.classifyTarget('not-a-url'), 'other');
@@ -89,6 +88,11 @@ void main() {
       delayMs: 142,
       group: '悦 · 自动选择',
       connectionMode: 'systemProxy',
+      tunEnabled: false,
+      tunStack: 'mixed',
+      routeOk: true,
+      dnsOk: true,
+      controllerOk: true,
       coreVersion: 'v1.19.24',
     );
 
@@ -99,11 +103,41 @@ void main() {
     // platform, version, ts. Everything else under the event is from
     // recordProbeResult's props.
     const envelope = {
-      'event', 'client_id', 'session_id', 'seq', 'platform', 'version', 'ts',
+      'event',
+      'client_id',
+      'session_id',
+      'seq',
+      'platform',
+      'os_version',
+      'version',
+      'ts',
     };
     const allowedProps = {
-      'fp', 'type', 'group', 'target', 'ok', 'latency_ms', 'error_class',
-      'status_code', 'core_version', 'connection_mode',
+      'fp',
+      'type',
+      'group',
+      'node_name_hash',
+      'target',
+      'ok',
+      'status',
+      'latency_ms',
+      'timeout_ms',
+      'error_class',
+      'status_code',
+      'is_ai_target',
+      'core_version',
+      'connection_mode',
+      'mode',
+      'tun_enabled',
+      'tun_stack',
+      'route_ok',
+      'dns_ok',
+      'controller_ok',
+      'network_type',
+      'client_region',
+      'exit_country',
+      'exit_isp',
+      'sample_rate',
     };
     final allowed = <String>{...envelope, ...allowedProps};
     final unexpected = ev.keys.toSet().difference(allowed);
@@ -116,10 +150,21 @@ void main() {
     // Spot-check the values that ARE allowed.
     expect(ev['target'], 'transport');
     expect(ev['ok'], isTrue);
+    expect(ev['status'], 'ok');
     expect(ev['latency_ms'], 142);
+    expect(ev['timeout_ms'], 5000);
     expect(ev['group'], '悦 · 自动选择');
+    expect(ev['node_name_hash'], isA<String>());
     expect(ev['connection_mode'], 'systemProxy');
+    expect(ev['mode'], 'system_proxy');
+    expect(ev['tun_enabled'], isFalse);
+    expect(ev['tun_stack'], 'mixed');
+    expect(ev['route_ok'], isTrue);
+    expect(ev['dns_ok'], isTrue);
+    expect(ev['controller_ok'], isTrue);
     expect(ev['core_version'], 'v1.19.24');
+    expect(ev['is_ai_target'], isFalse);
+    expect(ev['sample_rate'], 1.0);
     expect(ev.containsKey('error_class'), isFalse);
   });
 
@@ -144,14 +189,71 @@ void main() {
       delayMs: -1,
       group: '悦 · AI',
       connectionMode: 'tun',
+      tunEnabled: true,
+      tunStack: 'mixed',
+      routeOk: false,
+      dnsOk: true,
+      controllerOk: true,
       timeoutMs: 5000,
     );
 
     final ev = onlyProbeEvent(cursor);
     expect(ev['target'], 'claude');
     expect(ev['ok'], isFalse);
+    expect(ev['status'], 'timeout');
     expect(ev['latency_ms'], 5000);
+    expect(ev['timeout_ms'], 5000);
     expect(ev['error_class'], 'timeout');
+    expect(ev['is_ai_target'], isTrue);
+    expect(ev['mode'], 'tun');
+    expect(ev['tun_enabled'], isTrue);
+    expect(ev['route_ok'], isFalse);
+  });
+
+  test('AI 403 is classified as ai_blocked, not node timeout', () {
+    final cursor = Telemetry.recentEvents().length;
+    NodeTelemetry.recordProbeResult(
+      fp: 'abcdabcdabcdabcd',
+      type: 'vless',
+      group: 'AI',
+      nodeNameHash: 'hashhashhashhash',
+      target: 'chatgpt',
+      ok: false,
+      latencyMs: 320,
+      timeoutMs: 5000,
+      statusCode: 403,
+      connectionMode: 'rule',
+      networkType: 'wifi',
+      sampleRate: 0.25,
+    );
+
+    final ev = onlyProbeEvent(cursor);
+    expect(ev['target'], 'chatgpt');
+    expect(ev['status_code'], 403);
+    expect(ev['error_class'], 'ai_blocked');
+    expect(ev['status'], 'ai_blocked');
+    expect(ev['is_ai_target'], isTrue);
+    expect(ev['mode'], 'rule');
+    expect(ev['network_type'], 'wifi');
+    expect(ev['sample_rate'], 0.25);
+  });
+
+  test('Reality auth failure has its own error class', () {
+    final cursor = Telemetry.recentEvents().length;
+    NodeTelemetry.recordProbeResult(
+      fp: 'bbbbbbbbbbbbbbbb',
+      type: 'vless',
+      target: 'transport',
+      ok: false,
+      latencyMs: 5000,
+      timeoutMs: 5000,
+      errorClass: 'REALITY authentication failed',
+    );
+
+    final ev = onlyProbeEvent(cursor);
+    expect(ev['error_class'], 'reality_auth_failed');
+    expect(ev['status'], 'reality_auth_failed');
+    expect(ev['is_ai_target'], isFalse);
   });
 
   test('event does NOT leak server / port / uuid / password / sni', () {
@@ -181,24 +283,47 @@ void main() {
 
     // No banned key may appear at any level of the event.
     const banned = [
-      'server', 'port', 'uuid', 'password', 'passwd',
-      'sni', 'servername', 'server-name', 'host',
-      'public-key', 'publickey', 'short-id', 'shortid',
-      'path', 'private-key', 'auth', 'psk',
+      'server',
+      'port',
+      'uuid',
+      'password',
+      'passwd',
+      'sni',
+      'servername',
+      'server-name',
+      'host',
+      'public-key',
+      'publickey',
+      'short-id',
+      'shortid',
+      'path',
+      'private-key',
+      'auth',
+      'psk',
     ];
     for (final k in banned) {
-      expect(ev.containsKey(k), isFalse,
-          reason: 'banned key "$k" leaked into event');
+      expect(
+        ev.containsKey(k),
+        isFalse,
+        reason: 'banned key "$k" leaked into event',
+      );
     }
 
     // No banned literal value either.
     final flatValues = ev.values.map((v) => v.toString()).toList();
     for (final secret in [
-      'a.example.com', 'secret-a', 'uuid-a', 'pk-a', 'sid-a',
+      'a.example.com',
+      'secret-a',
+      'uuid-a',
+      'pk-a',
+      'sid-a',
     ]) {
       for (final v in flatValues) {
-        expect(v.contains(secret), isFalse,
-            reason: 'secret "$secret" leaked in value "$v"');
+        expect(
+          v.contains(secret),
+          isFalse,
+          reason: 'secret "$secret" leaked in value "$v"',
+        );
       }
     }
   });
@@ -212,7 +337,9 @@ void main() {
       delayMs: 100,
     );
     final after = Telemetry.recentEvents().skip(cursor).toList();
-    expect(after.where((e) => e['event'] == TelemetryEvents.nodeProbeResultV1),
-        isEmpty);
+    expect(
+      after.where((e) => e['event'] == TelemetryEvents.nodeProbeResultV1),
+      isEmpty,
+    );
   });
 }

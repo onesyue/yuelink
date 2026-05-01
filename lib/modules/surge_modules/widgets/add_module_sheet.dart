@@ -88,10 +88,10 @@ class _AddModuleSheetState extends ConsumerState<AddModuleSheet> {
 
     return Padding(
       padding: EdgeInsets.only(
-        left: 20,
-        right: 20,
-        top: 20,
-        bottom: MediaQuery.viewInsetsOf(context).bottom + 20,
+        left: YLSpacing.lg,
+        right: YLSpacing.lg,
+        top: YLSpacing.lg,
+        bottom: MediaQuery.viewInsetsOf(context).bottom + YLSpacing.lg,
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -113,10 +113,12 @@ class _AddModuleSheetState extends ConsumerState<AddModuleSheet> {
           // Title
           Text(
             s.modulesLabel,
-            style: YLText.titleLarge.copyWith(
+            style: YLText.titleMedium.copyWith(
               color: primaryColor,
               fontWeight: FontWeight.w700,
             ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
           const SizedBox(height: 16),
 
@@ -154,7 +156,9 @@ class _AddModuleSheetState extends ConsumerState<AddModuleSheet> {
                       height: 18,
                       width: 18,
                       child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white),
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
                     )
                   : Text(s.moduleAdding.isEmpty ? 'Add' : 'Add'),
             ),
@@ -195,8 +199,11 @@ class _SuccessPanel extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.check_circle_rounded,
-                  size: 16, color: YLColors.connected),
+              const Icon(
+                Icons.check_circle_rounded,
+                size: 16,
+                color: YLColors.connected,
+              ),
               const SizedBox(width: 6),
               Text(
                 s.moduleAddSuccess,
@@ -219,7 +226,7 @@ class _SuccessPanel extends StatelessWidget {
           Text(
             unsupported > 0
                 ? '\u2713 $ruleCount ${s.moduleRuleCount.toLowerCase()}, '
-                    '\u26a0 $unsupported items not active'
+                      '\u26a0 $unsupported items not active'
                 : '\u2713 $ruleCount ${s.moduleRuleCount.toLowerCase()}',
             style: YLText.caption.copyWith(color: YLColors.zinc500),
           ),

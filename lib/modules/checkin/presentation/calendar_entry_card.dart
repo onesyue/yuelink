@@ -25,7 +25,7 @@ class CheckinCalendarEntryCard extends ConsumerWidget {
       borderRadius: BorderRadius.circular(YLRadius.lg),
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(YLSpacing.md),
         decoration: BoxDecoration(
           color: isDark ? YLColors.zinc800 : Colors.white,
           borderRadius: BorderRadius.circular(YLRadius.lg),
@@ -59,7 +59,11 @@ class CheckinCalendarEntryCard extends ConsumerWidget {
                 children: [
                   Text(
                     s.calendarEntryTitle,
-                    style: YLText.label.copyWith(fontWeight: FontWeight.w600),
+                    style: YLText.rowTitle.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 2),
                   Text(
@@ -71,8 +75,11 @@ class CheckinCalendarEntryCard extends ConsumerWidget {
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right_rounded,
-                size: 22, color: YLColors.zinc400),
+            const Icon(
+              Icons.chevron_right_rounded,
+              size: 22,
+              color: YLColors.zinc400,
+            ),
           ],
         ),
       ),

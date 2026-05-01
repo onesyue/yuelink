@@ -42,7 +42,7 @@ class YLSection extends StatelessWidget {
   final String? header;
 
   /// Optional caption below the section explaining what the rows
-  /// affect. Renders in zinc500 13pt with comfortable line height.
+  /// affect. Renders in zinc500 12pt with comfortable line height.
   final String? footer;
 
   /// Section rows. Almost always [YLListTile], but accepts any widget
@@ -182,21 +182,11 @@ class YLListTile extends StatelessWidget {
     final subtitleColor = isDark ? YLColors.zinc500 : YLColors.zinc500;
     final disabled = onTap == null;
 
-    // Title size matches Dashboard's `YLText.body` (14pt) so the two
-    // tabs read as the same family. Earlier 16pt was true to iOS
-    // Settings but felt heavy on this app where Dashboard is the
-    // visual anchor. User feedback 2026-04-29.
-    final titleStyle = YLText.body.copyWith(
-      fontSize: 14,
+    final titleStyle = YLText.rowTitle.copyWith(
       fontWeight: FontWeight.w400,
-      letterSpacing: 0,
       color: titleColor,
     );
-    final subtitleStyle = YLText.caption.copyWith(
-      fontSize: 12,
-      color: subtitleColor,
-      height: 1.3,
-    );
+    final subtitleStyle = YLText.rowSubtitle.copyWith(color: subtitleColor);
 
     return Material(
       color: Colors.transparent,
@@ -388,7 +378,7 @@ class _StatusBadge extends StatelessWidget {
         text,
         style: YLText.caption.copyWith(
           color: color,
-          fontSize: 11,
+          fontSize: YLText.badge.fontSize,
           fontWeight: FontWeight.w600,
           letterSpacing: 0,
         ),

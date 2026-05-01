@@ -144,6 +144,8 @@ class _PurchaseConfirmSheetState extends ConsumerState<PurchaseConfirmSheet> {
               Text(
                 isEn ? 'Confirm Order' : '确认订单',
                 style: YLText.titleMedium.copyWith(fontWeight: FontWeight.w700),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
 
               const SizedBox(height: YLSpacing.lg),
@@ -271,7 +273,7 @@ class _PurchaseConfirmSheetState extends ConsumerState<PurchaseConfirmSheet> {
               // ── Pay button ───────────────────────────────────────
               SizedBox(
                 width: double.infinity,
-                height: 48,
+                height: 44,
                 child: FilledButton(
                   onPressed: isLoading
                       ? null
@@ -298,6 +300,8 @@ class _PurchaseConfirmSheetState extends ConsumerState<PurchaseConfirmSheet> {
                   child: Text(
                     isEn ? 'Pay Now' : '前往支付',
                     style: YLText.label.copyWith(fontWeight: FontWeight.w600),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ),
@@ -568,14 +572,23 @@ class _Row extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label, style: YLText.body.copyWith(color: YLColors.zinc500)),
         Text(
-          value,
-          style:
-              valueStyle ??
-              YLText.body.copyWith(
-                color: isDark ? YLColors.zinc200 : YLColors.zinc800,
-              ),
+          label,
+          style: YLText.rowSubtitle.copyWith(color: YLColors.zinc500),
+        ),
+        const SizedBox(width: 12),
+        Flexible(
+          child: Text(
+            value,
+            textAlign: TextAlign.right,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style:
+                valueStyle ??
+                YLText.rowTitle.copyWith(
+                  color: isDark ? YLColors.zinc200 : YLColors.zinc800,
+                ),
+          ),
         ),
       ],
     );

@@ -68,11 +68,22 @@ class TelemetryEvents {
   static const coreRestarted = 'core_restarted';
 
   // Per-node probe (v1). Closed schema enforced by
-  // [NodeTelemetry.recordProbeResult] — only fp, type, group, target, ok,
-  // latency_ms, error_class, status_code, core_version, connection_mode
-  // (app_version + platform come from the envelope). NEVER server / port /
-  // uuid / password / sni / publicKey / shortId.
+  // [NodeTelemetry.recordProbeResult] — privacy-safe node hash, target,
+  // status/error, latency, mode, timeout/sample-rate and optional coarse
+  // network/exit metadata only. NEVER server / port / uuid / password / sni /
+  // publicKey / shortId / subscription URL.
   static const nodeProbeResultV1 = 'node_probe_result_v1';
+
+  // Desktop TUN lifecycle (v1). Closed schema emitted through
+  // DesktopTunTelemetry: booleans/classes only, never route tables, DNS server
+  // lists, node labels, servers, ports, UUIDs or subscription URLs.
+  static const desktopTunStartAttemptV1 = 'desktop_tun_start_attempt_v1';
+  static const desktopTunStartResultV1 = 'desktop_tun_start_result_v1';
+  static const desktopTunStopResultV1 = 'desktop_tun_stop_result_v1';
+  static const desktopTunRepairAttemptV1 = 'desktop_tun_repair_attempt_v1';
+  static const desktopTunRepairResultV1 = 'desktop_tun_repair_result_v1';
+  static const desktopTunHealthSnapshotV1 = 'desktop_tun_health_snapshot_v1';
+  static const desktopTunCleanupResultV1 = 'desktop_tun_cleanup_result_v1';
 
   // Errors
   static const crash = 'crash';
@@ -128,6 +139,7 @@ class Telemetry {
 
   static bool _enabled = false;
   static String _platform = '';
+  static String _osVersion = '';
   static String _version = '';
   static String _clientId = '';
   static String _sessionId = '';
@@ -138,6 +150,7 @@ class Telemetry {
   static Future<void> init() async {
     _enabled = await SettingsService.getTelemetryEnabled();
     _platform = _detectPlatform();
+    _osVersion = Platform.operatingSystemVersion;
     _sessionId = _uuid();
     _clientId = await _loadOrCreateClientId();
     try {
@@ -185,6 +198,7 @@ class Telemetry {
       'session_id': _sessionId,
       'seq': _sessionSeq++,
       'platform': _platform,
+      'os_version': _osVersion,
       'version': _version,
       'ts': DateTime.now().millisecondsSinceEpoch,
       if (props != null) ..._sanitizeProps(props),

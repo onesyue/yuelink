@@ -8,6 +8,7 @@ import '../kernel/core_manager.dart';
 import '../managers/core_heartbeat_manager.dart';
 import '../managers/core_lifecycle_manager.dart';
 import '../managers/system_proxy_manager.dart';
+import '../tun/desktop_tun_state.dart';
 
 // ──────────────────────────────────────────────────────────────────────────
 // App background state (battery optimization)
@@ -22,7 +23,7 @@ final appInBackgroundProvider = StateProvider<bool>((ref) => false);
 // Core state
 // ──────────────────────────────────────────────────────────────────────────
 
-enum CoreStatus { stopped, starting, running, stopping }
+enum CoreStatus { stopped, starting, running, degraded, stopping }
 
 final coreStatusProvider = StateProvider<CoreStatus>(
   (ref) => CoreStatus.stopped,
@@ -30,6 +31,14 @@ final coreStatusProvider = StateProvider<CoreStatus>(
 
 /// Last startup error message — shown on dashboard when core fails to start.
 final coreStartupErrorProvider = StateProvider<String?>((ref) => null);
+
+/// Last desktop TUN health snapshot. Null outside desktop TUN mode or before
+/// the first verification pass. This is deliberately separate from
+/// [coreStatusProvider]: the core may still be alive while TUN route/DNS is
+/// degraded, and the UI must not collapse that state into a fake "running".
+final desktopTunHealthProvider = StateProvider<DesktopTunSnapshot?>(
+  (ref) => null,
+);
 
 /// Whether the core is running in mock mode (no native library).
 final isMockModeProvider = Provider<bool>((ref) {

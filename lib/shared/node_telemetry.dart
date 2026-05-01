@@ -30,6 +30,8 @@ class NodeTelemetry {
   static final Map<String, String> _nameToType = {};
   static final Map<String, Map<String, dynamic>> _nameToMeta = {};
 
+  static const _aiTargets = {'claude', 'chatgpt'};
+
   /// Lookup a fingerprint by mihomo node name. Returns null when the node
   /// wasn't part of the most-recent inventory (e.g. edge case during a
   /// live profile swap). Callers should guard on null and skip telemetry.
@@ -298,13 +300,23 @@ class NodeTelemetry {
   ///   - `type`           lowercase protocol (vless / hysteria2 / …)
   ///   - `group`          proxy-group name (optional — null when called
   ///                       from a single-node test)
+  ///   - `node_name_hash` SHA-256/16 of the mihomo label, never raw label
   ///   - `target`         classifyTarget result, closed set
   ///   - `ok`             bool, derived from latency
+  ///   - `status`         `ok` or normalized error class
   ///   - `latency_ms`     int, clamped to [0, 60000]
-  ///   - `error_class`    `'timeout'` / `'socket'` / `'handshake'` / null
+  ///   - `timeout_ms`     probe budget when known
+  ///   - `error_class`    timeout / dns_failed / tcp_failed / tls_failed /
+  ///                       reality_auth_failed / http_403 / http_429 /
+  ///                       cloudflare_block / ai_blocked / unknown
   ///   - `status_code`    HTTP status when available (raw probe), else null
+  ///   - `is_ai_target`   bool for Claude / ChatGPT split
   ///   - `core_version`   mihomo version string (best-effort, may be empty)
-  ///   - `connection_mode` 'tun' / 'systemProxy' / etc. — caller resolves
+  ///   - `mode`           'global' / 'rule' / 'tun' / 'system_proxy' /
+  ///                       etc. — caller resolves
+  ///   - `sample_rate`    numeric sampling rate used by the caller
+  ///   - `network_type`, `client_region`, `exit_country`, `exit_isp`
+  ///                       coarse optional metadata when available
   ///
   /// Hard rule: this method MUST NOT include any of:
   /// `server / port / uuid / password / sni / servername / public-key /
@@ -314,15 +326,35 @@ class NodeTelemetry {
     required String fp,
     required String type,
     String? group,
+    String? nodeNameHash,
     required String target,
     required bool ok,
     required int latencyMs,
+    int? timeoutMs,
     String? errorClass,
     int? statusCode,
     String? coreVersion,
     String? connectionMode,
+    bool? tunEnabled,
+    String? tunStack,
+    bool? routeOk,
+    bool? dnsOk,
+    bool? controllerOk,
+    String? networkType,
+    String? clientRegion,
+    String? exitCountry,
+    String? exitIsp,
+    double sampleRate = 1.0,
   }) {
     if (!Telemetry.isEnabled) return;
+    final normalizedError = normalizeErrorClass(
+      target: target,
+      ok: ok,
+      statusCode: statusCode,
+      errorClass: errorClass,
+    );
+    final status = ok ? 'ok' : normalizedError;
+    final isAiTarget = _aiTargets.contains(target);
     Telemetry.event(
       TelemetryEvents.nodeProbeResultV1,
       // Failed probes are diagnostically valuable — survive buffer prune.
@@ -331,18 +363,76 @@ class NodeTelemetry {
         'fp': fp,
         'type': type.toLowerCase(),
         if (group != null && group.isNotEmpty) 'group': group,
+        if (nodeNameHash != null && nodeNameHash.isNotEmpty)
+          'node_name_hash': nodeNameHash,
         'target': target,
         'ok': ok,
+        'status': status,
         'latency_ms': latencyMs.clamp(0, 60000),
-        if (errorClass != null && errorClass.isNotEmpty)
-          'error_class': errorClass,
+        if (timeoutMs != null) 'timeout_ms': timeoutMs.clamp(0, 60000),
+        if (!ok) 'error_class': normalizedError,
         'status_code': ?statusCode,
+        'is_ai_target': isAiTarget,
         if (coreVersion != null && coreVersion.isNotEmpty)
           'core_version': coreVersion,
         if (connectionMode != null && connectionMode.isNotEmpty)
           'connection_mode': connectionMode,
+        if (connectionMode != null && connectionMode.isNotEmpty)
+          'mode': _normalizeMode(connectionMode),
+        'tun_enabled': ?tunEnabled,
+        if (tunStack != null && tunStack.isNotEmpty) 'tun_stack': tunStack,
+        'route_ok': ?routeOk,
+        'dns_ok': ?dnsOk,
+        'controller_ok': ?controllerOk,
+        if (networkType != null && networkType.isNotEmpty)
+          'network_type': networkType,
+        if (clientRegion != null && clientRegion.isNotEmpty)
+          'client_region': clientRegion,
+        if (exitCountry != null && exitCountry.isNotEmpty)
+          'exit_country': exitCountry,
+        if (exitIsp != null && exitIsp.isNotEmpty) 'exit_isp': exitIsp,
+        'sample_rate': sampleRate.clamp(0.0, 1.0),
       },
     );
+  }
+
+  static String normalizeErrorClass({
+    required String target,
+    required bool ok,
+    int? statusCode,
+    String? errorClass,
+  }) {
+    if (ok) return 'ok';
+    final raw = (errorClass ?? '').trim().toLowerCase();
+    if (raw.contains('reality') && raw.contains('auth')) {
+      return 'reality_auth_failed';
+    }
+    if (raw == 'context deadline exceeded') return 'timeout';
+    if (raw == 'socket') return 'tcp_failed';
+    if (raw == 'handshake') return 'tls_failed';
+    if (raw == 'dns_fail') return 'dns_failed';
+    if (raw == 'cloudflare_block' || raw == 'ai_blocked') return raw;
+    const allowed = {
+      'timeout',
+      'dns_failed',
+      'tcp_failed',
+      'tls_failed',
+      'reality_auth_failed',
+      'proxy_auth_failed',
+      'connection_reset',
+      'http_403',
+      'http_429',
+      'cloudflare_block',
+      'ai_blocked',
+      'unknown',
+    };
+    if (allowed.contains(raw)) return raw;
+    if (statusCode == 1020) return 'cloudflare_block';
+    if (statusCode == 403) {
+      return _aiTargets.contains(target) ? 'ai_blocked' : 'http_403';
+    }
+    if (statusCode == 429) return 'http_429';
+    return raw.isEmpty ? 'unknown' : 'unknown';
   }
 
   /// Convenience overload: resolves fp + type from the in-process
@@ -359,7 +449,17 @@ class NodeTelemetry {
     String? group,
     String? coreVersion,
     String? connectionMode,
+    bool? tunEnabled,
+    String? tunStack,
+    bool? routeOk,
+    bool? dnsOk,
+    bool? controllerOk,
+    String? networkType,
+    String? clientRegion,
+    String? exitCountry,
+    String? exitIsp,
     int timeoutMs = 5000,
+    double sampleRate = 1.0,
   }) {
     final meta = _nameToMeta[name];
     final fp = meta?['fp'] as String? ?? _nameToFp[name];
@@ -370,13 +470,43 @@ class NodeTelemetry {
       fp: fp,
       type: type,
       group: group,
+      nodeNameHash: _hashText(name),
       target: classifyTarget(testUrl),
       ok: ok,
       latencyMs: ok ? delayMs : timeoutMs,
+      timeoutMs: timeoutMs,
       errorClass: ok ? null : 'timeout',
       coreVersion: coreVersion,
       connectionMode: connectionMode,
+      tunEnabled: tunEnabled,
+      tunStack: tunStack,
+      routeOk: routeOk,
+      dnsOk: dnsOk,
+      controllerOk: controllerOk,
+      networkType: networkType,
+      clientRegion: clientRegion,
+      exitCountry: exitCountry,
+      exitIsp: exitIsp,
+      sampleRate: sampleRate,
     );
+  }
+
+  static String _normalizeMode(String value) {
+    switch (value) {
+      case 'systemProxy':
+        return 'system_proxy';
+      case 'tun':
+      case 'rule':
+      case 'global':
+      case 'direct':
+        return value;
+      default:
+        return value.toLowerCase();
+    }
+  }
+
+  static String _hashText(String value) {
+    return sha256.convert(utf8.encode(value)).toString().substring(0, 16);
   }
 
   static String _nodeType(Map<dynamic, dynamic> proxy) {

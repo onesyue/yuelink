@@ -542,14 +542,14 @@ class _ProfileRow extends ConsumerWidget {
 
     return SettingsCard(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
+        padding: const EdgeInsets.fromLTRB(14, 16, 14, 16),
         child: Column(
           children: [
             Row(
               children: [
                 Container(
-                  width: 44,
-                  height: 44,
+                  width: 40,
+                  height: 40,
                   decoration: BoxDecoration(
                     color: isDark ? YLColors.zinc700 : YLColors.zinc200,
                     shape: BoxShape.circle,
@@ -560,7 +560,7 @@ class _ProfileRow extends ConsumerWidget {
                           ? email[0].toUpperCase()
                           : '?',
                       style: TextStyle(
-                        fontSize: 18,
+                        fontSize: 16,
                         fontWeight: FontWeight.w600,
                         color: isDark ? YLColors.zinc300 : YLColors.zinc600,
                       ),
@@ -574,7 +574,7 @@ class _ProfileRow extends ConsumerWidget {
                     children: [
                       Text(
                         email,
-                        style: YLText.titleMedium.copyWith(
+                        style: YLText.rowTitle.copyWith(
                           fontWeight: FontWeight.w600,
                           color: isDark ? Colors.white : YLColors.zinc900,
                         ),
@@ -593,10 +593,12 @@ class _ProfileRow extends ConsumerWidget {
                         ),
                         child: Text(
                           plan,
-                          style: YLText.caption.copyWith(
+                          style: YLText.badge.copyWith(
                             fontWeight: FontWeight.w500,
                             color: isDark ? YLColors.zinc300 : YLColors.zinc600,
                           ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],

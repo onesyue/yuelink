@@ -206,7 +206,7 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
                     YLInfoRow(
                       label: s.routingModeSetting,
                       trailing: SizedBox(
-                        width: 200,
+                        width: 180,
                         child: SegmentedButton<String>(
                           showSelectedIcon: false,
                           style: SegmentedButton.styleFrom(

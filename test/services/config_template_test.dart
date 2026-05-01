@@ -49,7 +49,9 @@ find-process-mode: off
         expect(result, contains('stack: mixed'));
         expect(result, contains('auto-route: true'));
         expect(result, contains('auto-detect-interface: true'));
+        expect(result, contains('strict-route:'));
         expect(result, contains('dns-hijack:'));
+        expect(result, contains('- tcp://any:53'));
         // v1.0.22 P1-2: Windows TUN now defaults to strict (was always);
         // macOS keeps always pending similar reports.
         if (Platform.isWindows) {
@@ -155,6 +157,21 @@ dns:
         // does override — covered separately above.)
         expect(result, contains('find-process-mode: always'));
       }
+    });
+
+    test('respect-rules DNS does not force prefer-h3', () {
+      const config = '''
+mixed-port: 7890
+dns:
+  enable: true
+  respect-rules: true
+  enhanced-mode: fake-ip
+  prefer-h3: true
+''';
+      final result = ConfigTemplate.process(config);
+      expect(result, contains('respect-rules: true'));
+      expect(result, isNot(contains('prefer-h3: true')));
+      expect(result, contains('proxy-server-nameserver:'));
     });
   });
 

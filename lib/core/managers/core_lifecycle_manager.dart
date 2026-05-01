@@ -17,6 +17,9 @@ import '../../shared/event_log.dart';
 import '../../shared/nps_service.dart';
 import '../../shared/telemetry.dart';
 import '../service/service_manager.dart';
+import '../tun/desktop_tun_diagnostics.dart';
+import '../tun/desktop_tun_state.dart';
+import '../tun/desktop_tun_telemetry.dart';
 import 'system_proxy_manager.dart';
 
 /// Owns the connect / disconnect / hot-switch lifecycle.
@@ -33,6 +36,7 @@ class CoreLifecycleManager {
   final Ref ref;
 
   Future<bool> start(String configYaml) async {
+    final startWatch = Stopwatch()..start();
     debugPrint(
       '[CoreLifecycle] start() called, config length: ${configYaml.length}',
     );
@@ -63,11 +67,22 @@ class CoreLifecycleManager {
     // bound yet" (wait + retry — the post-install race that used to force
     // users to 'refresh once then click connect').
     final connMode = ref.read(connectionModeProvider);
+    final isDesktopTun =
+        connMode == 'tun' &&
+        (Platform.isMacOS || Platform.isWindows || Platform.isLinux);
+    if (isDesktopTun) {
+      DesktopTunTelemetry.startAttempt(
+        platform: Platform.operatingSystem,
+        mode: 'tun',
+        tunStack: ref.read(desktopTunStackProvider),
+      );
+    }
     if (connMode == 'tun' &&
         (Platform.isMacOS || Platform.isWindows || Platform.isLinux)) {
       final installed = await ServiceManager.isInstalled();
       if (!installed) {
         ref.read(coreStatusProvider.notifier).state = CoreStatus.stopped;
+        ref.read(desktopTunHealthProvider.notifier).state = null;
         const detail =
             'TUN 模式需要安装"服务模式"辅助程序。\n'
             '请前往设置 → 连接修复 → 桌面 TUN → 安装服务，然后再连接。';
@@ -115,13 +130,6 @@ class CoreLifecycleManager {
         return false;
       }
 
-      ref.read(coreStatusProvider.notifier).state = CoreStatus.running;
-      EventLog.write('[Core] connect_ok');
-      Telemetry.event(TelemetryEvents.connectOk);
-      // First-ever successful connect becomes the NPS anchor (24h later).
-      unawaited(NpsService.markFirstConnect());
-      AppNotifier.success(S.current.msgConnected);
-
       // Apply routing mode (non-blocking — errors logged, not thrown)
       await _applyRoutingMode(manager);
 
@@ -137,13 +145,54 @@ class CoreLifecycleManager {
       // user flipped the setting mid-connect.
       if (!manager.isMockMode &&
           (Platform.isMacOS || Platform.isWindows || Platform.isLinux)) {
-        if (connMode == 'tun' && Platform.isMacOS) {
-          await SystemProxyManager.setTunDns();
+        if (connMode == 'tun') {
+          // TUN and system proxy must not fight. Clearing first also prevents
+          // the later TUN verification probes from accidentally succeeding
+          // through a stale 127.0.0.1 system proxy.
+          await SystemProxyManager.clear();
+          if (Platform.isMacOS) {
+            await SystemProxyManager.setTunDns();
+          }
         } else if (connMode == 'systemProxy' &&
             ref.read(systemProxyOnConnectProvider)) {
           await applySystemProxy();
         }
       }
+
+      if (isDesktopTun && !manager.isMockMode) {
+        final snapshot = await DesktopTunDiagnostics.instance.inspect(
+          api: manager.api,
+          mixedPort: manager.mixedPort,
+          mode: connMode,
+          tunStack: ref.read(desktopTunStackProvider),
+        );
+        final finalSnapshot = snapshot.copyWith(
+          elapsedMs: startWatch.elapsedMilliseconds,
+        );
+        ref.read(desktopTunHealthProvider.notifier).state = finalSnapshot;
+        DesktopTunTelemetry.startResult(finalSnapshot);
+        DesktopTunTelemetry.healthSnapshot(finalSnapshot);
+        if (!finalSnapshot.runningVerified) {
+          ref.read(coreStatusProvider.notifier).state = CoreStatus.degraded;
+          ref.read(coreStartupErrorProvider.notifier).state =
+              finalSnapshot.userMessage;
+          EventLog.write(
+            '[Core] desktop_tun_degraded '
+            'error=${finalSnapshot.errorClass} state=${finalSnapshot.state.wireName}',
+          );
+          AppNotifier.warning(finalSnapshot.userMessage);
+          return true;
+        }
+      } else {
+        ref.read(desktopTunHealthProvider.notifier).state = null;
+      }
+
+      ref.read(coreStatusProvider.notifier).state = CoreStatus.running;
+      EventLog.write('[Core] connect_ok');
+      Telemetry.event(TelemetryEvents.connectOk);
+      // First-ever successful connect becomes the NPS anchor (24h later).
+      unawaited(NpsService.markFirstConnect());
+      AppNotifier.success(S.current.msgConnected);
 
       // Initial proxy-data fetch is handled by ProxyGroupsNotifier's
       // `ref.listen<CoreStatus>` (registered in its build()), plus an
@@ -206,6 +255,9 @@ class CoreLifecycleManager {
     // if the user puts the app away within the flush window.
     await SettingsService.setManualStopped(true);
     ref.read(coreStatusProvider.notifier).state = CoreStatus.stopping;
+    final wasDesktopTun =
+        ref.read(connectionModeProvider) == 'tun' &&
+        (Platform.isMacOS || Platform.isWindows || Platform.isLinux);
 
     try {
       // Always clear system proxy on stop — even if the user disabled
@@ -219,6 +271,18 @@ class CoreLifecycleManager {
 
       final manager = CoreManager.instance;
       await manager.stop();
+      if (wasDesktopTun) {
+        final cleanup = await DesktopTunDiagnostics.instance.cleanupSnapshot(
+          mixedPort: manager.mixedPort,
+          mode: 'tun',
+          tunStack: ref.read(desktopTunStackProvider),
+        );
+        ref.read(desktopTunHealthProvider.notifier).state = cleanup;
+        DesktopTunTelemetry.stopResult(cleanup);
+        DesktopTunTelemetry.cleanupResult(cleanup);
+      } else {
+        ref.read(desktopTunHealthProvider.notifier).state = null;
+      }
 
       AppNotifier.info(S.current.msgDisconnected);
     } catch (e) {
@@ -374,7 +438,7 @@ class CoreLifecycleManager {
 
   Future<void> toggle(String configYaml) async {
     final status = ref.read(coreStatusProvider);
-    if (status == CoreStatus.running) {
+    if (status == CoreStatus.running || status == CoreStatus.degraded) {
       await stop();
     } else if (status == CoreStatus.stopped) {
       await start(configYaml);

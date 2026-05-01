@@ -39,7 +39,7 @@ class AppearanceSection extends ConsumerWidget {
               YLInfoRow(
                 label: s.themeLabel,
                 trailing: SizedBox(
-                  width: 240,
+                  width: 204,
                   child: SegmentedButton<ThemeMode>(
                     showSelectedIcon: false,
                     style: SegmentedButton.styleFrom(
@@ -48,11 +48,17 @@ class AppearanceSection extends ConsumerWidget {
                     ),
                     segments: [
                       ButtonSegment(
-                          value: ThemeMode.system, label: Text(s.themeSystem)),
+                        value: ThemeMode.system,
+                        label: Text(s.themeSystem),
+                      ),
                       ButtonSegment(
-                          value: ThemeMode.light, label: Text(s.themeLight)),
+                        value: ThemeMode.light,
+                        label: Text(s.themeLight),
+                      ),
                       ButtonSegment(
-                          value: ThemeMode.dark, label: Text(s.themeDark)),
+                        value: ThemeMode.dark,
+                        label: Text(s.themeDark),
+                      ),
                     ],
                     selected: {theme},
                     onSelectionChanged: (v) {
@@ -79,7 +85,7 @@ class AppearanceSection extends ConsumerWidget {
               YLInfoRow(
                 label: s.sectionLanguage,
                 trailing: SizedBox(
-                  width: 160,
+                  width: 144,
                   child: SegmentedButton<String>(
                     showSelectedIcon: false,
                     style: SegmentedButton.styleFrom(
@@ -88,9 +94,13 @@ class AppearanceSection extends ConsumerWidget {
                     ),
                     segments: [
                       ButtonSegment(
-                          value: 'zh', label: Text(s.languageChinese)),
+                        value: 'zh',
+                        label: Text(s.languageChinese),
+                      ),
                       ButtonSegment(
-                          value: 'en', label: Text(s.languageEnglish)),
+                        value: 'en',
+                        label: Text(s.languageEnglish),
+                      ),
                     ],
                     selected: {language},
                     onSelectionChanged: (v) async {

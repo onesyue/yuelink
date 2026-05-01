@@ -75,7 +75,7 @@ class _OrderDetailSheetState extends ConsumerState<OrderDetailSheet> {
       decoration: BoxDecoration(
         color: isDark ? YLColors.zinc900 : Colors.white,
         borderRadius: const BorderRadius.vertical(
-          top: Radius.circular(YLRadius.xxl),
+          top: Radius.circular(YLRadius.xl),
         ),
       ),
       child: SafeArea(
@@ -83,7 +83,7 @@ class _OrderDetailSheetState extends ConsumerState<OrderDetailSheet> {
         child: Padding(
           padding: const EdgeInsets.symmetric(
             horizontal: YLSpacing.lg,
-            vertical: YLSpacing.md,
+            vertical: YLSpacing.sm,
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -103,11 +103,13 @@ class _OrderDetailSheetState extends ConsumerState<OrderDetailSheet> {
               Text(
                 isEn ? 'Order Detail' : '订单详情',
                 style: YLText.titleMedium.copyWith(fontWeight: FontWeight.w700),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-              const SizedBox(height: YLSpacing.lg),
+              const SizedBox(height: YLSpacing.md),
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.all(YLSpacing.md),
+                padding: const EdgeInsets.all(YLSpacing.sm),
                 decoration: BoxDecoration(
                   color: isDark ? YLColors.zinc800 : YLColors.zinc50,
                   borderRadius: BorderRadius.circular(YLRadius.lg),
@@ -131,6 +133,7 @@ class _OrderDetailSheetState extends ConsumerState<OrderDetailSheet> {
                       value: order.formattedAmount,
                       isDark: isDark,
                       valueStyle: YLText.body.copyWith(
+                        fontSize: 14,
                         fontWeight: FontWeight.w600,
                         color: isDark ? Colors.white : YLColors.zinc900,
                       ),
@@ -141,6 +144,7 @@ class _OrderDetailSheetState extends ConsumerState<OrderDetailSheet> {
                       value: _statusLabel(order.status, isEn),
                       isDark: isDark,
                       valueStyle: YLText.body.copyWith(
+                        fontSize: 14,
                         color: _statusColor(order.status),
                         fontWeight: FontWeight.w500,
                       ),
@@ -172,6 +176,8 @@ class _OrderDetailSheetState extends ConsumerState<OrderDetailSheet> {
                         valueStyle: YLText.caption.copyWith(
                           color: YLColors.zinc400,
                           decoration: TextDecoration.underline,
+                          fontFamily: 'monospace',
+                          fontSize: 12,
                         ),
                         oneline: false,
                       ),
@@ -179,7 +185,7 @@ class _OrderDetailSheetState extends ConsumerState<OrderDetailSheet> {
                   ],
                 ),
               ),
-              const SizedBox(height: YLSpacing.lg),
+              const SizedBox(height: YLSpacing.md),
               if (order.status == OrderStatus.pending) ...[
                 PaymentMethodSelector(
                   selectedId: _selectedMethodId,
@@ -188,7 +194,7 @@ class _OrderDetailSheetState extends ConsumerState<OrderDetailSheet> {
                 ),
                 SizedBox(
                   width: double.infinity,
-                  height: 46,
+                  height: 44,
                   child: FilledButton(
                     onPressed: (_paying || _cancelling) ? null : _payNow,
                     style: FilledButton.styleFrom(
@@ -218,7 +224,7 @@ class _OrderDetailSheetState extends ConsumerState<OrderDetailSheet> {
                 const SizedBox(height: 8),
                 SizedBox(
                   width: double.infinity,
-                  height: 42,
+                  height: 40,
                   child: OutlinedButton(
                     onPressed: (_cancelling || _paying) ? null : _cancelOrder,
                     style: OutlinedButton.styleFrom(
@@ -342,19 +348,29 @@ class _DetailRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final valStyle =
         valueStyle ??
-        YLText.body.copyWith(
+        YLText.rowTitle.copyWith(
           color: isDark ? YLColors.zinc200 : YLColors.zinc800,
         );
 
     if (oneline) {
       return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6),
+        padding: const EdgeInsets.symmetric(vertical: 7),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(label, style: YLText.body.copyWith(color: YLColors.zinc500)),
+            Text(
+              label,
+              style: YLText.rowSubtitle.copyWith(color: YLColors.zinc500),
+            ),
+            const SizedBox(width: YLSpacing.md),
             Flexible(
-              child: Text(value, style: valStyle, textAlign: TextAlign.end),
+              child: Text(
+                value,
+                style: valStyle,
+                textAlign: TextAlign.end,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),
@@ -362,13 +378,16 @@ class _DetailRow extends StatelessWidget {
     }
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.symmetric(vertical: 7),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: YLText.body.copyWith(color: YLColors.zinc500)),
+          Text(
+            label,
+            style: YLText.rowSubtitle.copyWith(color: YLColors.zinc500),
+          ),
           const SizedBox(height: 2),
-          Text(value, style: valStyle),
+          SelectableText(value, style: valStyle),
         ],
       ),
     );

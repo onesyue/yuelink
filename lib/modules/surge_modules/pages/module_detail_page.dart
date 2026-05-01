@@ -128,32 +128,34 @@ class _ModuleDetailPageState extends ConsumerState<ModuleDetailPage> {
                         Expanded(
                           child: Text(
                             module.name,
-                            style: YLText.titleMedium.copyWith(
+                            style: YLText.rowTitle.copyWith(
+                              fontWeight: FontWeight.w600,
                               color: isDark ? Colors.white : YLColors.zinc900,
                             ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                         if (module.versionTag != null)
-                          _Chip(
-                            label: 'v${module.versionTag}',
-                            isDark: isDark,
-                          ),
+                          _Chip(label: 'v${module.versionTag}', isDark: isDark),
                       ],
                     ),
                     if (module.desc.isNotEmpty) ...[
                       const SizedBox(height: YLSpacing.xs),
                       Text(
                         module.desc,
-                        style: YLText.body.copyWith(color: YLColors.zinc500),
+                        style: YLText.rowSubtitle.copyWith(
+                          color: YLColors.zinc500,
+                        ),
+                        maxLines: 4,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ],
                     if (module.author != null) ...[
                       const SizedBox(height: YLSpacing.xs),
                       Text(
                         'by ${module.author}',
-                        style: YLText.caption.copyWith(
-                          color: YLColors.zinc400,
-                        ),
+                        style: YLText.caption.copyWith(color: YLColors.zinc400),
                       ),
                     ],
                   ],
@@ -230,9 +232,7 @@ class _ModuleDetailPageState extends ConsumerState<ModuleDetailPage> {
                         Text(
                           '${module.rules.length} routing rules',
                           style: YLText.body.copyWith(
-                            color: isDark
-                                ? YLColors.zinc300
-                                : YLColors.zinc700,
+                            color: isDark ? YLColors.zinc300 : YLColors.zinc700,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
@@ -386,9 +386,7 @@ class _ModuleDetailPageState extends ConsumerState<ModuleDetailPage> {
                       label: 'Checksum',
                       value: module.checksum.substring(
                         0,
-                        module.checksum.length > 8
-                            ? 8
-                            : module.checksum.length,
+                        module.checksum.length > 8 ? 8 : module.checksum.length,
                       ),
                       isDark: isDark,
                       monospace: true,
@@ -448,7 +446,7 @@ class _SectionCard extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(YLSpacing.lg),
+      padding: const EdgeInsets.all(YLSpacing.md),
       decoration: BoxDecoration(
         color: isDark ? YLColors.zinc900 : Colors.white,
         borderRadius: BorderRadius.circular(YLRadius.lg),
@@ -484,16 +482,21 @@ class _StatRow extends StatelessWidget {
             child: Text(
               label,
               style: YLText.body.copyWith(
+                fontSize: 14,
                 color: isDark ? YLColors.zinc300 : YLColors.zinc700,
               ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
           Text(
             value,
-            style: YLText.body.copyWith(
+            style: YLText.rowSubtitle.copyWith(
               color: isDark ? YLColors.zinc400 : YLColors.zinc500,
               fontWeight: FontWeight.w500,
             ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),
@@ -525,6 +528,8 @@ class _MetaRow extends StatelessWidget {
             child: Text(
               label,
               style: YLText.caption.copyWith(color: YLColors.zinc500),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
           Expanded(
@@ -570,12 +575,19 @@ class _ActiveRow extends StatelessWidget {
         Expanded(
           child: Text(
             label,
-            style: YLText.body.copyWith(
+            style: YLText.rowTitle.copyWith(
               color: isDark ? YLColors.zinc300 : YLColors.zinc700,
             ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ),
-        Text(detail, style: YLText.caption.copyWith(color: YLColors.zinc400)),
+        Text(
+          detail,
+          style: YLText.caption.copyWith(color: YLColors.zinc400),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
       ],
     );
   }
@@ -614,9 +626,11 @@ class _UnsupportedRow extends StatelessWidget {
               children: [
                 Text(
                   label,
-                  style: YLText.body.copyWith(
+                  style: YLText.rowTitle.copyWith(
                     color: isDark ? YLColors.zinc300 : YLColors.zinc700,
                   ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 Text(
                   hint,
@@ -655,7 +669,10 @@ class _Chip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: YLSpacing.sm, vertical: 3),
+      padding: const EdgeInsets.symmetric(
+        horizontal: YLSpacing.sm,
+        vertical: 3,
+      ),
       decoration: BoxDecoration(
         color: isDark ? YLColors.zinc800 : YLColors.zinc100,
         borderRadius: BorderRadius.circular(YLRadius.sm),

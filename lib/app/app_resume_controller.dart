@@ -22,6 +22,9 @@ import '../core/platform/vpn_service.dart';
 import '../core/profile/profile_service.dart';
 import '../core/providers/core_provider.dart';
 import '../core/storage/settings_service.dart';
+import '../core/tun/desktop_tun_diagnostics.dart';
+import '../core/tun/desktop_tun_repair_service.dart';
+import '../core/tun/desktop_tun_telemetry.dart';
 
 /// One-shot event published by [AppResumeController] when iOS reports a
 /// tunnel that connected then dropped within 10 s — the signature of an
@@ -77,6 +80,7 @@ class AppResumeController {
   bool _transportRestartInFlight = false;
   Timer? _networkPollTimer;
   String? _lastNetworkSignature;
+  final DesktopTunRepairService _desktopTunRepair = DesktopTunRepairService();
 
   /// Wire up the platform VPN-service callbacks. Call once from
   /// `initState` on Android / iOS / macOS. Idempotent — internally
@@ -548,7 +552,7 @@ class AppResumeController {
     //    respect it. The guard stays up until auto-connect also completes —
     //    this prevents the status listener from firing "unexpected
     //    disconnect" during the brief stopped→running transition.
-    if (status != CoreStatus.running) {
+    if (status != CoreStatus.running && status != CoreStatus.degraded) {
       // Respect the user's explicit stop. userStoppedProvider is set to
       // true by CoreLifecycleManager.stop() and only cleared on a fresh
       // start(). When it's true, the user tapped disconnect — state must
@@ -654,7 +658,7 @@ class AppResumeController {
       return;
     }
 
-    // 3. Normal case: Dart says running — verify core is still alive
+    // 3. Normal case: Dart says running/degraded — verify core is still alive
     try {
       final health = await RecoveryManager.checkCoreHealth();
       if (!health.alive || !health.apiOk) {
@@ -687,9 +691,75 @@ class AppResumeController {
         // immediately triggers restore instead of waiting for the 30 s
         // heartbeat round.
         unawaited(_proxyTamperCheck());
+        unawaited(_desktopTunResumeCheck());
       }
     } catch (e) {
       debugPrint('[Resume] resume check failed: $e');
+    }
+  }
+
+  Future<void> _desktopTunResumeCheck() async {
+    if (!(Platform.isMacOS || Platform.isWindows || Platform.isLinux)) return;
+    if (ref.read(connectionModeProvider) != 'tun') return;
+    if (ref.read(userStoppedProvider)) return;
+    try {
+      final snapshot = await DesktopTunDiagnostics.instance.inspect(
+        api: CoreManager.instance.api,
+        mixedPort: CoreManager.instance.mixedPort,
+        mode: 'tun',
+        tunStack: ref.read(desktopTunStackProvider),
+      );
+      ref.read(desktopTunHealthProvider.notifier).state = snapshot;
+      DesktopTunTelemetry.healthSnapshot(snapshot);
+      if (snapshot.runningVerified) {
+        if (ref.read(coreStatusProvider) == CoreStatus.degraded) {
+          ref.read(coreStatusProvider.notifier).state = CoreStatus.running;
+          ref.read(coreStartupErrorProvider.notifier).state = null;
+        }
+        return;
+      }
+
+      ref.read(coreStatusProvider.notifier).state = CoreStatus.degraded;
+      ref.read(coreStartupErrorProvider.notifier).state = snapshot.userMessage;
+      final plan = _desktopTunRepair.plan(snapshot);
+      DesktopTunTelemetry.repairAttempt(snapshot, plan.action);
+      await _desktopTunRepair.runThrottled(plan, () async {
+        if (!plan.canRunAutomatically) return;
+        if (plan.action == 'clear_system_proxy' ||
+            plan.action == 'reapply_dns' ||
+            plan.action == 'reapply_route' ||
+            plan.action == 'refresh_state') {
+          await SystemProxyManager.clear();
+          if (Platform.isMacOS) await SystemProxyManager.setTunDns();
+          try {
+            await CoreManager.instance.api.closeAllConnections();
+            await CoreManager.instance.api.flushFakeIpCache();
+          } catch (_) {}
+          return;
+        }
+        if (plan.action == 'restart_core' ||
+            plan.action == 'cleanup_and_restart') {
+          final activeId = await SettingsService.getActiveProfileId();
+          if (activeId == null) return;
+          final config = await ProfileService.loadConfig(activeId);
+          if (config == null) return;
+          await ref.read(coreActionsProvider).restart(config);
+        }
+      });
+      final after = await DesktopTunDiagnostics.instance.inspect(
+        api: CoreManager.instance.api,
+        mixedPort: CoreManager.instance.mixedPort,
+        mode: 'tun',
+        tunStack: ref.read(desktopTunStackProvider),
+      );
+      ref.read(desktopTunHealthProvider.notifier).state = after;
+      DesktopTunTelemetry.repairResult(after, plan.action);
+      if (after.runningVerified) {
+        ref.read(coreStatusProvider.notifier).state = CoreStatus.running;
+        ref.read(coreStartupErrorProvider.notifier).state = null;
+      }
+    } catch (e) {
+      debugPrint('[Resume] desktop TUN health/repair failed: $e');
     }
   }
 

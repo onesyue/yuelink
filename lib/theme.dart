@@ -65,24 +65,60 @@ class YLText {
   YLText._();
 
   static const display = TextStyle(
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: FontWeight.w700,
     height: 1.16,
     letterSpacing: 0,
     fontFeatures: [FontFeature.tabularFigures()],
   );
 
+  static const pageTitle = TextStyle(
+    fontSize: 24,
+    fontWeight: FontWeight.w700,
+    height: 1.18,
+    letterSpacing: 0,
+    fontFeatures: [FontFeature.tabularFigures()],
+  );
+
+  static const collapsedTitle = TextStyle(
+    fontSize: 17,
+    fontWeight: FontWeight.w600,
+    height: 1.24,
+    letterSpacing: 0,
+  );
+
   static const titleLarge = TextStyle(
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: FontWeight.w600,
     height: 1.26,
     letterSpacing: 0,
   );
 
   static const titleMedium = TextStyle(
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: FontWeight.w600,
     height: 1.32,
+    letterSpacing: 0,
+  );
+
+  static const rowTitle = TextStyle(
+    fontSize: 14,
+    fontWeight: FontWeight.w400,
+    height: 1.32,
+    letterSpacing: 0,
+  );
+
+  static const rowSubtitle = TextStyle(
+    fontSize: 12,
+    fontWeight: FontWeight.w400,
+    height: 1.3,
+    letterSpacing: 0,
+  );
+
+  static const badge = TextStyle(
+    fontSize: 11,
+    fontWeight: FontWeight.w600,
+    height: 1.2,
     letterSpacing: 0,
   );
 
@@ -115,6 +151,30 @@ class YLText {
     fontFeatures: [FontFeature.tabularFigures()],
   );
 
+  static const monoSmall = TextStyle(
+    fontSize: 12,
+    fontWeight: FontWeight.w500,
+    height: 1.34,
+    fontFamily: 'monospace',
+    fontFeatures: [FontFeature.tabularFigures()],
+  );
+
+  static const price = TextStyle(
+    fontSize: 22,
+    fontWeight: FontWeight.w700,
+    height: 1.12,
+    letterSpacing: 0,
+    fontFeatures: [FontFeature.tabularFigures()],
+  );
+
+  static const stat = TextStyle(
+    fontSize: 20,
+    fontWeight: FontWeight.w700,
+    height: 1.15,
+    letterSpacing: 0,
+    fontFeatures: [FontFeature.tabularFigures()],
+  );
+
   /// iOS-style tabular figures — numbers align in fixed-width columns
   /// so digits don't shift when values update.
   static const tabularNums = [FontFeature.tabularFigures()];
@@ -138,8 +198,8 @@ class YLSpacing {
 class YLRadius {
   YLRadius._();
   static const sm = 6.0;
-  static const md = 10.0;
-  static const lg = 14.0;
+  static const md = 8.0;
+  static const lg = 12.0;
   static const xl = 20.0;
   static const xxl = 28.0;
   static const pill = 999.0;
@@ -300,7 +360,7 @@ ThemeData buildTheme(
       color: surface,
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(YLRadius.xl),
+        borderRadius: BorderRadius.circular(YLRadius.lg),
         side: BorderSide(color: border, width: 0.5), // Hairline borders
       ),
     ),
@@ -500,7 +560,7 @@ class YLSurface extends StatelessWidget {
       padding: padding,
       decoration: BoxDecoration(
         color: isDark ? YLColors.zinc900 : Colors.white,
-        borderRadius: BorderRadius.circular(YLRadius.xl),
+        borderRadius: BorderRadius.circular(YLRadius.lg),
         border: Border.all(
           color: isDark
               ? Colors.white.withValues(alpha: 0.08)
@@ -517,7 +577,7 @@ class YLSurface extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(YLRadius.xl),
+          borderRadius: BorderRadius.circular(YLRadius.lg),
           child: content,
         ),
       );

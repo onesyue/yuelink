@@ -326,6 +326,7 @@ class _OverwritePageState extends State<OverwritePage> {
           else
             ReorderableListView.builder(
               shrinkWrap: true,
+              buildDefaultDragHandles: false,
               physics: const NeverScrollableScrollPhysics(),
               padding: EdgeInsets.zero,
               itemCount: _data.rules.length,
@@ -337,31 +338,13 @@ class _OverwritePageState extends State<OverwritePage> {
                 });
               },
               itemBuilder: (context, i) {
-                return ListTile(
+                return _RuleRow(
                   key: ValueKey(_data.rules[i] + i.toString()),
-                  dense: true,
-                  leading: Icon(
-                    Icons.drag_handle,
-                    size: 18,
-                    color: isDark ? YLColors.zinc500 : YLColors.zinc400,
-                  ),
-                  title: Text(
-                    _data.rules[i],
-                    style: TextStyle(
-                      fontFamily: 'monospace',
-                      fontSize: 12,
-                      color: isDark ? YLColors.zinc200 : YLColors.zinc800,
-                    ),
-                  ),
-                  trailing: IconButton(
-                    icon: const Icon(
-                      Icons.delete_rounded,
-                      size: 18,
-                      color: YLColors.error,
-                    ),
-                    onPressed: () => setState(() => _data.rules.removeAt(i)),
-                  ),
+                  index: i,
+                  text: _data.rules[i],
+                  isDark: isDark,
                   onTap: () => _editRule(s, i),
+                  onDelete: () => setState(() => _data.rules.removeAt(i)),
                 );
               },
             ),
@@ -427,6 +410,8 @@ class _OverwritePageState extends State<OverwritePage> {
               style: YLText.caption.copyWith(
                 color: isDark ? YLColors.zinc400 : YLColors.zinc500,
               ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
           tilePadding: const EdgeInsets.symmetric(horizontal: YLSpacing.lg),
@@ -478,6 +463,9 @@ class _OverwritePageState extends State<OverwritePage> {
             TextField(
               controller: _portCtrl,
               keyboardType: TextInputType.number,
+              style: YLText.monoSmall.copyWith(
+                color: isDark ? YLColors.zinc200 : YLColors.zinc800,
+              ),
               decoration: InputDecoration(
                 hintText: s.overwritePortHint,
                 border: const OutlineInputBorder(),
@@ -542,6 +530,71 @@ class _OverwritePageState extends State<OverwritePage> {
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+class _RuleRow extends StatelessWidget {
+  const _RuleRow({
+    super.key,
+    required this.index,
+    required this.text,
+    required this.isDark,
+    required this.onTap,
+    required this.onDelete,
+  });
+
+  final int index;
+  final String text;
+  final bool isDark;
+  final VoidCallback onTap;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: YLSpacing.md,
+            vertical: YLSpacing.sm,
+          ),
+          child: Row(
+            children: [
+              ReorderableDragStartListener(
+                index: index,
+                child: Icon(
+                  Icons.drag_handle,
+                  size: 18,
+                  color: isDark ? YLColors.zinc500 : YLColors.zinc400,
+                ),
+              ),
+              const SizedBox(width: YLSpacing.sm),
+              Expanded(
+                child: Text(
+                  text,
+                  style: YLText.monoSmall.copyWith(
+                    color: isDark ? YLColors.zinc200 : YLColors.zinc800,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              IconButton(
+                tooltip: S.of(context).delete,
+                icon: const Icon(
+                  Icons.delete_rounded,
+                  size: 18,
+                  color: YLColors.error,
+                ),
+                onPressed: onDelete,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

@@ -267,6 +267,7 @@ class ServiceManager {
           _windowsInstallScript(
             helperSource: binaries.helperPath,
             mihomoSource: binaries.mihomoPath,
+            wintunSource: binaries.wintunPath,
             configSource: configFile.path,
           ),
         );
@@ -355,6 +356,9 @@ Stop-Service -Name $serviceName -Force -ErrorAction SilentlyContinue
 Start-Sleep -Seconds 1
 Copy-Item -Force __HELPER_SRC__ __HELPER_DST__
 Copy-Item -Force __MIHOMO_SRC__ __MIHOMO_DST__
+if (__WINTUN_PRESENT__ -eq 1) {
+  Copy-Item -Force __WINTUN_SRC__ (Join-Path __SERVICE_DIR__ "wintun.dll")
+}
 Start-Service -Name $serviceName
 '''
               .replaceAll('__SERVICE_NAME__', AppConstants.desktopServiceName)
@@ -373,6 +377,18 @@ Start-Service -Name $serviceName
               .replaceAll(
                 '__MIHOMO_DST__',
                 _powershellQuoted(_windowsInstalledMihomoPath),
+              )
+              .replaceAll(
+                '__SERVICE_DIR__',
+                _powershellQuoted(_windowsServiceDir),
+              )
+              .replaceAll(
+                '__WINTUN_PRESENT__',
+                binaries.wintunPath == null ? '0' : '1',
+              )
+              .replaceAll(
+                '__WINTUN_SRC__',
+                _powershellQuoted(binaries.wintunPath ?? ''),
               );
       final tempDir = await Directory.systemTemp.createTemp('yuelink_update_');
       try {
@@ -489,6 +505,26 @@ Start-Service -Name $serviceName
       (path) => File(path).existsSync(),
       orElse: () => '',
     );
+    String? wintunPath;
+    if (Platform.isWindows) {
+      final wintunCandidates = <String>[
+        '$execDir\\wintun.dll',
+        '$cwd\\windows\\libs\\amd64\\wintun.dll',
+        '$cwd\\windows\\libs\\arm64\\wintun.dll',
+        '$cwd\\service\\build\\windows-amd64\\wintun.dll',
+        '$cwd\\service\\build\\windows-arm64\\wintun.dll',
+      ];
+      wintunPath = wintunCandidates.firstWhere(
+        (path) => File(path).existsSync(),
+        orElse: () => '',
+      );
+      if (wintunPath.isEmpty) {
+        EventLog.write(
+          '[Service] wintun.dll missing. tried=${wintunCandidates.join("|")}',
+        );
+        wintunPath = null;
+      }
+    }
 
     if (helperPath.isEmpty || mihomoPath.isEmpty) {
       // Log every candidate path we checked so next-time diagnosis doesn't
@@ -509,7 +545,11 @@ Start-Service -Name $serviceName
       );
     }
 
-    return _ServiceBinaries(helperPath: helperPath, mihomoPath: mihomoPath);
+    return _ServiceBinaries(
+      helperPath: helperPath,
+      mihomoPath: mihomoPath,
+      wintunPath: wintunPath,
+    );
   }
 
   static Future<void> _waitUntilReachable({
@@ -806,6 +846,7 @@ rm -rf ${_shellQuote(_macServiceDir)}
   static String _windowsInstallScript({
     required String helperSource,
     required String mihomoSource,
+    String? wintunSource,
     required String configSource,
   }) {
     return r'''
@@ -815,9 +856,11 @@ $serviceName = '__SERVICE_NAME__'
 $serviceDir = __SERVICE_DIR__
 $helperSrc = __HELPER_SRC__
 $mihomoSrc = __MIHOMO_SRC__
+$wintunSrc = __WINTUN_SRC__
 $configSrc = __CONFIG_SRC__
 $helperDst = __HELPER_DST__
 $mihomoDst = __MIHOMO_DST__
+$wintunDst = Join-Path $serviceDir "wintun.dll"
 $configDst = __CONFIG_DST__
 
 # Stop and delete the existing service if present.
@@ -841,6 +884,11 @@ if (Get-Service -Name $serviceName -ErrorAction SilentlyContinue) {
 New-Item -ItemType Directory -Force -Path $serviceDir | Out-Null
 Copy-Item -Force $helperSrc $helperDst
 Copy-Item -Force $mihomoSrc $mihomoDst
+if ($wintunSrc -ne '') {
+  Copy-Item -Force $wintunSrc $wintunDst
+} else {
+  Write-Warning "wintun.dll not bundled; TUN start may fail with missing_driver"
+}
 Copy-Item -Force $configSrc $configDst
 
 $binPath = '"' + $helperDst + '" -config "' + $configDst + '"'
@@ -873,6 +921,7 @@ Start-Service -Name $serviceName
         .replaceAll('__SERVICE_DIR__', _powershellQuoted(_windowsServiceDir))
         .replaceAll('__HELPER_SRC__', _powershellQuoted(helperSource))
         .replaceAll('__MIHOMO_SRC__', _powershellQuoted(mihomoSource))
+        .replaceAll('__WINTUN_SRC__', _powershellQuoted(wintunSource ?? ''))
         .replaceAll('__CONFIG_SRC__', _powershellQuoted(configSource))
         .replaceAll(
           '__HELPER_DST__',
@@ -1109,6 +1158,11 @@ rm -rf ${_shellQuote(_linuxServiceDir)}
 class _ServiceBinaries {
   final String helperPath;
   final String mihomoPath;
+  final String? wintunPath;
 
-  const _ServiceBinaries({required this.helperPath, required this.mihomoPath});
+  const _ServiceBinaries({
+    required this.helperPath,
+    required this.mihomoPath,
+    this.wintunPath,
+  });
 }

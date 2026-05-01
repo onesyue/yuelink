@@ -99,7 +99,7 @@ class SettingsCard extends StatelessWidget {
 
 /// A single settings row with a label on the left and a value or
 /// trailing widget on the right. Visual anatomy matches `YLListTile`
-/// (16dp horizontal padding, 12dp vertical, 16pt title) so old and new
+/// (16dp horizontal padding, 8-12dp vertical, 14pt title) so old and new
 /// rows line up when mixed inside the same section.
 class YLInfoRow extends StatelessWidget {
   final String label;
@@ -147,10 +147,8 @@ class YLInfoRow extends StatelessWidget {
               label,
               style:
                   labelStyle ??
-                  YLText.body.copyWith(
-                    fontSize: 14,
+                  YLText.rowTitle.copyWith(
                     fontWeight: FontWeight.w400,
-                    letterSpacing: 0,
                     color: labelColor,
                   ),
             ),
@@ -160,7 +158,9 @@ class YLInfoRow extends StatelessWidget {
               padding: const EdgeInsets.only(right: 6),
               child: Text(
                 value!,
-                style: YLText.body.copyWith(fontSize: 13, color: valueColor),
+                style: YLText.caption.copyWith(fontSize: 12, color: valueColor),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ?trailing,
@@ -209,22 +209,20 @@ class YLSettingsRow extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: YLText.body.copyWith(
-                    fontSize: 14,
+                  style: YLText.rowTitle.copyWith(
                     fontWeight: FontWeight.w400,
-                    letterSpacing: 0,
                     color: titleColor,
                   ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 if (description != null) ...[
                   const SizedBox(height: 2),
                   Text(
                     description!,
-                    style: YLText.caption.copyWith(
-                      fontSize: 12,
-                      color: descColor,
-                      height: 1.3,
-                    ),
+                    style: YLText.rowSubtitle.copyWith(color: descColor),
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ],

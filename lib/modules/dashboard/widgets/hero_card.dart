@@ -15,19 +15,17 @@ class HeroCard extends ConsumerWidget {
   final CoreStatus status;
   final VoidCallback onToggle;
 
-  const HeroCard({
-    super.key,
-    required this.status,
-    required this.onToggle,
-  });
+  const HeroCard({super.key, required this.status, required this.onToggle});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final s = S.of(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isRunning = status == CoreStatus.running;
+    final isDegraded = status == CoreStatus.degraded;
     final isTransitioning =
         status == CoreStatus.starting || status == CoreStatus.stopping;
+    final tunSnapshot = ref.watch(desktopTunHealthProvider);
 
     // Active node — uses derived provider so HeroCard only rebuilds when
     // the main group's selected node changes, not on any group mutation.
@@ -36,7 +34,9 @@ class HeroCard extends ConsumerWidget {
     if (isRunning) {
       final info = ref.watch(activeProxyInfoProvider);
       if (info != null) {
-        activeNodeName = info.nodeName.isNotEmpty ? info.nodeName : s.directAuto;
+        activeNodeName = info.nodeName.isNotEmpty
+            ? info.nodeName
+            : s.directAuto;
         activeNodeGroup = info.groupName;
       } else {
         // Status is running but the proxy graph hasn't materialised yet
@@ -56,21 +56,24 @@ class HeroCard extends ConsumerWidget {
     // Pills data — select() narrows rebuilds to only when active name changes.
     final activeId = ref.watch(activeProfileIdProvider);
     final routingMode = ref.watch(routingModeProvider);
-    final profileName = ref.watch(profilesProvider.select((async) =>
-        async.whenOrNull(
-          data: (list) =>
-              list.where((p) => p.id == activeId).firstOrNull?.name,
-        )));
+    final profileName = ref.watch(
+      profilesProvider.select(
+        (async) => async.whenOrNull(
+          data: (list) => list.where((p) => p.id == activeId).firstOrNull?.name,
+        ),
+      ),
+    );
 
     final routeLabel = routingMode == 'rule'
         ? s.routeModeRule
         : routingMode == 'global'
-            ? s.routeModeGlobal
-            : s.routeModeDirect;
+        ? s.routeModeGlobal
+        : s.routeModeDirect;
 
     // Connection mode pill (desktop only — mobile is always VPN/TUN)
     final connectionMode = ref.watch(connectionModeProvider);
-    final showModePill = isRunning &&
+    final showModePill =
+        isRunning &&
         (Theme.of(context).platform == TargetPlatform.macOS ||
             Theme.of(context).platform == TargetPlatform.windows ||
             Theme.of(context).platform == TargetPlatform.linux);
@@ -79,7 +82,9 @@ class HeroCard extends ConsumerWidget {
 
     // Active "running" accent: emerald for system-proxy, indigo for TUN.
     // Gives the user a mode signal even before reading the pill text.
-    final runningAccent = YLColors.runningAccent(tun: isTun);
+    final runningAccent = isDegraded
+        ? YLColors.connecting
+        : YLColors.runningAccent(tun: isTun);
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -90,8 +95,8 @@ class HeroCard extends ConsumerWidget {
           color: isRunning
               ? runningAccent.withValues(alpha: 0.30)
               : (isDark
-                  ? Colors.white.withValues(alpha: 0.08)
-                  : Colors.black.withValues(alpha: 0.08)),
+                    ? Colors.white.withValues(alpha: 0.08)
+                    : Colors.black.withValues(alpha: 0.08)),
           width: isRunning ? 1.0 : 0.5,
         ),
         boxShadow: YLShadow.hero(context),
@@ -103,10 +108,12 @@ class HeroCard extends ConsumerWidget {
           Row(
             children: [
               _PulsingStatusDot(
-                color: isRunning
+                color: isRunning || isDegraded
                     ? runningAccent
-                    : (isTransitioning ? YLColors.connecting : YLColors.zinc400),
-                pulsing: status == CoreStatus.starting,
+                    : (isTransitioning
+                          ? YLColors.connecting
+                          : YLColors.zinc400),
+                pulsing: status == CoreStatus.starting || isDegraded,
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -114,24 +121,27 @@ class HeroCard extends ConsumerWidget {
                   duration: const Duration(milliseconds: 250),
                   layoutBuilder: (currentChild, previousChildren) => Stack(
                     alignment: Alignment.centerLeft,
-                    children: [
-                      ...previousChildren,
-                      ?currentChild,
-                    ],
+                    children: [...previousChildren, ?currentChild],
                   ),
                   child: Text(
                     isRunning
                         ? s.statusConnected
+                        : isDegraded
+                        ? '连接异常'
                         : (isTransitioning
-                            ? s.statusProcessing
-                            : s.statusDisconnected),
+                              ? s.statusProcessing
+                              : s.statusDisconnected),
                     key: ValueKey<String>(
                       isRunning
                           ? 'connected'
+                          : isDegraded
+                          ? 'degraded'
                           : (isTransitioning ? 'processing' : 'disconnected'),
                     ),
                     style: YLText.label.copyWith(
-                      color: isRunning ? runningAccent : YLColors.zinc500,
+                      color: (isRunning || isDegraded)
+                          ? runningAccent
+                          : YLColors.zinc500,
                       fontWeight: FontWeight.w600,
                     ),
                     maxLines: 1,
@@ -167,8 +177,11 @@ class HeroCard extends ConsumerWidget {
                   ),
                 ),
                 if (isRunning)
-                  const Icon(Icons.chevron_right_rounded,
-                      size: 18, color: YLColors.zinc400),
+                  const Icon(
+                    Icons.chevron_right_rounded,
+                    size: 18,
+                    color: YLColors.zinc400,
+                  ),
               ],
             ),
           ),
@@ -218,12 +231,16 @@ class HeroCard extends ConsumerWidget {
           ],
 
           // Startup error banner with expandable report
-          if (!isRunning && !isTransitioning) ...[
-            Consumer(builder: (context, ref, _) {
-              final error = ref.watch(coreStartupErrorProvider);
-              if (error == null) return const SizedBox.shrink();
-              return StartupErrorBanner(error: error);
-            }),
+          if ((!isRunning && !isTransitioning) || isDegraded) ...[
+            Consumer(
+              builder: (context, ref, _) {
+                final error =
+                    tunSnapshot?.userMessage ??
+                    ref.watch(coreStartupErrorProvider);
+                if (error == null) return const SizedBox.shrink();
+                return StartupErrorBanner(error: error);
+              },
+            ),
           ],
         ],
       ),
@@ -268,7 +285,8 @@ class PowerButton extends StatelessWidget {
 
     if (isTransitioning) {
       return const SizedBox(
-        width: 44, height: 44,
+        width: 44,
+        height: 44,
         child: CupertinoActivityIndicator(radius: 12),
       );
     }
@@ -309,10 +327,7 @@ class _PulsingStatusDot extends StatefulWidget {
   final Color color;
   final bool pulsing;
 
-  const _PulsingStatusDot({
-    required this.color,
-    required this.pulsing,
-  });
+  const _PulsingStatusDot({required this.color, required this.pulsing});
 
   @override
   State<_PulsingStatusDot> createState() => _PulsingStatusDotState();
@@ -374,6 +389,7 @@ class Pill extends StatelessWidget {
   final bool primary;
   final Color? accent;
   final VoidCallback? onTap;
+
   /// Optional hover/long-press hint. v1.0.22 P2-1 — exists so the
   /// "Pills are tappable" affordance is discoverable without
   /// dedicated onboarding UI; users on multiple platforms reported
@@ -398,21 +414,23 @@ class Pill extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         color: primary
             ? (isDark
-                ? tint.withValues(alpha: 0.12)
-                : tint.withValues(alpha: 0.08))
+                  ? tint.withValues(alpha: 0.12)
+                  : tint.withValues(alpha: 0.08))
             : (isDark
-                ? Colors.white.withValues(alpha: 0.06)
-                : Colors.black.withValues(alpha: 0.04)),
+                  ? Colors.white.withValues(alpha: 0.06)
+                  : Colors.black.withValues(alpha: 0.04)),
       ),
-      child: Text(label,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: YLText.caption.copyWith(
-            fontWeight: primary ? FontWeight.w600 : FontWeight.w500,
-            color: primary
-                ? tint
-                : (isDark ? YLColors.zinc400 : YLColors.zinc600),
-          )),
+      child: Text(
+        label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: YLText.caption.copyWith(
+          fontWeight: primary ? FontWeight.w600 : FontWeight.w500,
+          color: primary
+              ? tint
+              : (isDark ? YLColors.zinc400 : YLColors.zinc600),
+        ),
+      ),
     );
     if (onTap == null) return container;
     // Wrap in Material + InkWell for ripple feedback so tappable Pills

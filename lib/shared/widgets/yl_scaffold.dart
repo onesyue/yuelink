@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../theme.dart';
 
+enum YLTitleMode { compact, large }
+
 /// iOS 26-style large title scaffold.
 ///
 /// Wraps Material's `SliverAppBar.large` (which already implements the
@@ -51,6 +53,11 @@ class YLLargeTitleScaffold extends StatelessWidget {
   /// labels the current area; route-level pages keep the large title.
   final bool showTitleBar;
 
+  /// Title density. Secondary tool pages default to [YLTitleMode.compact]
+  /// so they don't render marketing-scale 32pt headers. Entry pages that
+  /// genuinely need a hero-like first viewport can opt into [large].
+  final YLTitleMode titleMode;
+
   /// Pull-to-refresh callback. When non-null the scroll view is wrapped
   /// in a `RefreshIndicator` so dragging from the top triggers it.
   final Future<void> Function()? onRefresh;
@@ -73,6 +80,7 @@ class YLLargeTitleScaffold extends StatelessWidget {
     this.bottomSafe = true,
     this.bottomBar,
     this.showTitleBar = true,
+    this.titleMode = YLTitleMode.compact,
     this.onRefresh,
     this.maxContentWidth = 720,
   });
@@ -82,11 +90,15 @@ class YLLargeTitleScaffold extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bg = isDark ? YLColors.zinc950 : YLColors.zinc100;
     final fg = isDark ? Colors.white : YLColors.zinc900;
+    final isLargeTitle = titleMode == YLTitleMode.large;
+    final expandedTitleSize = isLargeTitle ? 30.0 : 24.0;
+    final expandedHeight = isLargeTitle ? 152.0 : 112.0;
 
     final body = CustomScrollView(
       slivers: [
         if (showTitleBar)
           SliverAppBar.large(
+            expandedHeight: expandedHeight,
             backgroundColor: bg,
             surfaceTintColor: Colors.transparent,
             elevation: 0,
@@ -99,8 +111,9 @@ class YLLargeTitleScaffold extends StatelessWidget {
             actions: actions,
             title: Text(
               title,
-              style: YLText.titleLarge.copyWith(
-                fontSize: 18,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: YLText.collapsedTitle.copyWith(
                 fontWeight: FontWeight.w600,
                 color: fg,
               ),
@@ -108,16 +121,19 @@ class YLLargeTitleScaffold extends StatelessWidget {
             flexibleSpace: FlexibleSpaceBar(
               titlePadding: const EdgeInsetsDirectional.only(
                 start: YLSpacing.lg,
-                bottom: YLSpacing.md,
+                bottom: YLSpacing.sm,
               ),
               title: Text(
                 title,
-                style: YLText.display.copyWith(
-                  fontSize: 32,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0,
-                  color: fg,
-                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: (isLargeTitle ? YLText.display : YLText.pageTitle)
+                    .copyWith(
+                      fontSize: expandedTitleSize,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0,
+                      color: fg,
+                    ),
               ),
               collapseMode: CollapseMode.pin,
             ),

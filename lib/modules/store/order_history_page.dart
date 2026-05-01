@@ -145,73 +145,91 @@ class _OrderItem extends StatelessWidget {
     final statusColor = _statusColor(order.status);
     final dateStr = _formatDate(order.createdDate);
 
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(YLSpacing.md),
-        decoration: BoxDecoration(
-          color: isDark ? YLColors.zinc800 : Colors.white,
-          borderRadius: BorderRadius.circular(YLRadius.lg),
-          border: Border.all(
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.06)
-                : Colors.black.withValues(alpha: 0.06),
-            width: 0.5,
-          ),
-          boxShadow: YLShadow.card(context),
-        ),
-        child: Row(
-          children: [
-            // Status dot
-            Container(
-              width: 8,
-              height: 8,
-              margin: const EdgeInsets.only(right: 12),
-              decoration: BoxDecoration(
-                color: statusColor,
-                shape: BoxShape.circle,
-              ),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(YLRadius.lg),
+        child: Container(
+          padding: const EdgeInsets.all(YLSpacing.md),
+          decoration: BoxDecoration(
+            color: isDark ? YLColors.zinc800 : Colors.white,
+            borderRadius: BorderRadius.circular(YLRadius.lg),
+            border: Border.all(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.06)
+                  : Colors.black.withValues(alpha: 0.06),
+              width: 0.5,
             ),
+            boxShadow: YLShadow.card(context),
+          ),
+          child: Row(
+            children: [
+              // Status dot
+              Container(
+                width: 8,
+                height: 8,
+                margin: const EdgeInsets.only(right: 12),
+                decoration: BoxDecoration(
+                  color: statusColor,
+                  shape: BoxShape.circle,
+                ),
+              ),
 
-            // Plan + period
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              // Plan + period
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      order.planName ?? (isEn ? 'Plan' : '套餐'),
+                      style: YLText.rowTitle.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${_periodLabel(order.period, isEn)} · $dateStr',
+                      style: YLText.rowSubtitle.copyWith(
+                        color: YLColors.zinc500,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+
+              // Amount + status
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    order.planName ?? (isEn ? 'Plan' : '套餐'),
-                    style: YLText.body.copyWith(fontWeight: FontWeight.w600),
+                    order.formattedAmount,
+                    style: YLText.rowTitle.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 2),
-                  Text(
-                    '${_periodLabel(order.period, isEn)} · $dateStr',
-                    style: YLText.caption.copyWith(color: YLColors.zinc500),
+                  _OrderStatusBadge(
+                    label: _statusLabel(order.status, isEn),
+                    color: statusColor,
                   ),
                 ],
               ),
-            ),
 
-            // Amount + status
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  order.formattedAmount,
-                  style: YLText.body.copyWith(fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  _statusLabel(order.status, isEn),
-                  style: YLText.caption.copyWith(color: statusColor),
-                ),
-              ],
-            ),
-
-            const SizedBox(width: 4),
-            const Icon(Icons.chevron_right, size: 16, color: YLColors.zinc400),
-          ],
+              const SizedBox(width: 4),
+              const Icon(
+                Icons.chevron_right,
+                size: 16,
+                color: YLColors.zinc400,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -251,6 +269,31 @@ class _OrderItem extends StatelessWidget {
 
   String _formatDate(DateTime dt) {
     return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+  }
+}
+
+class _OrderStatusBadge extends StatelessWidget {
+  const _OrderStatusBadge({required this.label, required this.color});
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: isDark ? 0.18 : 0.12),
+        borderRadius: BorderRadius.circular(YLRadius.pill),
+      ),
+      child: Text(
+        label,
+        style: YLText.badge.copyWith(color: color),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+    );
   }
 }
 

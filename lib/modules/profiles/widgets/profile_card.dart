@@ -45,30 +45,32 @@ class ProfileCard extends StatelessWidget {
     final sub = profile.subInfo;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: EdgeInsets.zero,
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: isActive
             ? (isDark
-                ? YLColors.primaryDark.withValues(alpha: 0.10)
-                : YLColors.primaryLight)
+                  ? YLColors.primaryDark.withValues(alpha: 0.10)
+                  : YLColors.primaryLight)
             : (isDark ? YLColors.zinc800 : Colors.white),
-        borderRadius: BorderRadius.circular(YLRadius.xl),
+        borderRadius: BorderRadius.circular(YLRadius.lg),
         border: Border.all(
           color: isActive
               ? (isDark
-                  ? YLColors.primaryDark.withValues(alpha: 0.30)
-                  : YLColors.primary.withValues(alpha: 0.20))
-              : (isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.08)),
+                    ? YLColors.primaryDark.withValues(alpha: 0.30)
+                    : YLColors.primary.withValues(alpha: 0.20))
+              : (isDark
+                    ? Colors.white.withValues(alpha: 0.08)
+                    : Colors.black.withValues(alpha: 0.08)),
           width: 0.5,
         ),
         boxShadow: YLShadow.card(context),
       ),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(YLRadius.xl),
+        borderRadius: BorderRadius.circular(YLRadius.lg),
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(YLSpacing.md),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -76,9 +78,7 @@ class ProfileCard extends StatelessWidget {
               Row(
                 children: [
                   Icon(
-                    isActive
-                        ? Icons.check_circle
-                        : Icons.circle_outlined,
+                    isActive ? Icons.check_circle : Icons.circle_outlined,
                     color: isActive
                         ? (isDark ? YLColors.primaryDark : YLColors.primary)
                         : (isDark ? YLColors.zinc400 : YLColors.zinc500),
@@ -86,8 +86,14 @@ class ProfileCard extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: Text(profile.name,
-                        style: YLText.titleMedium),
+                    child: Text(
+                      profile.name,
+                      style: YLText.rowTitle.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                   PopupMenuButton<String>(
                     onSelected: (action) {
@@ -101,8 +107,7 @@ class ProfileCard extends StatelessWidget {
                         case 'export':
                           onExport();
                         case 'copy':
-                          Clipboard.setData(
-                              ClipboardData(text: profile.url));
+                          Clipboard.setData(ClipboardData(text: profile.url));
                           AppNotifier.success(s.copiedLink);
                         case 'delete':
                           onDelete();
@@ -110,21 +115,24 @@ class ProfileCard extends StatelessWidget {
                     },
                     itemBuilder: (_) => [
                       PopupMenuItem(
-                          value: 'update',
-                          child: Text(s.updateSubscription)),
+                        value: 'update',
+                        child: Text(s.updateSubscription),
+                      ),
                       PopupMenuItem(value: 'edit', child: Text(s.edit)),
+                      PopupMenuItem(value: 'config', child: Text(s.viewConfig)),
                       PopupMenuItem(
-                          value: 'config', child: Text(s.viewConfig)),
-                      PopupMenuItem(
-                          value: 'export', child: Text(s.exportProfile)),
-                      PopupMenuItem(
-                          value: 'copy', child: Text(s.copyLink)),
+                        value: 'export',
+                        child: Text(s.exportProfile),
+                      ),
+                      PopupMenuItem(value: 'copy', child: Text(s.copyLink)),
                       const PopupMenuDivider(),
                       PopupMenuItem(
-                          value: 'delete',
-                          child: Text(s.delete,
-                              style:
-                                  const TextStyle(color: Colors.red))),
+                        value: 'delete',
+                        child: Text(
+                          s.delete,
+                          style: const TextStyle(color: Colors.red),
+                        ),
+                      ),
                     ],
                   ),
                 ],
@@ -149,27 +157,29 @@ class ProfileCard extends StatelessWidget {
                   children: [
                     Text(
                       s.usageLabel(
-                        formatBytes(
-                            (sub.upload ?? 0) + (sub.download ?? 0)),
+                        formatBytes((sub.upload ?? 0) + (sub.download ?? 0)),
                         formatBytes(sub.total ?? 0),
                       ),
                       style: YLText.caption,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                     const Spacer(),
                     if (sub.expire != null)
                       Text(
                         sub.isExpired
                             ? s.expired
-                            : s.daysRemaining(
-                                sub.daysRemaining ?? 0),
+                            : s.daysRemaining(sub.daysRemaining ?? 0),
                         style: YLText.caption.copyWith(
                           color: sub.isExpired
                               ? YLColors.error
                               : (sub.daysRemaining != null &&
-                                      sub.daysRemaining! < 7)
-                                  ? Colors.orange
-                                  : YLColors.zinc500,
+                                    sub.daysRemaining! < 7)
+                              ? Colors.orange
+                              : YLColors.zinc500,
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                   ],
                 ),
@@ -182,18 +192,26 @@ class ProfileCard extends StatelessWidget {
                   children: [
                     Text(
                       s.updatedAt(_formatTime(profile.lastUpdated!)),
-                      style: YLText.caption.copyWith(
-                          color: YLColors.zinc500),
+                      style: YLText.caption.copyWith(color: YLColors.zinc500),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                     if (_isStale(profile)) ...[
                       const SizedBox(width: 6),
-                      Icon(Icons.warning_amber_rounded,
-                          size: 14,
-                          color: Colors.orange.shade700),
+                      Icon(
+                        Icons.warning_amber_rounded,
+                        size: 14,
+                        color: Colors.orange.shade700,
+                      ),
                       const SizedBox(width: 2),
-                      Text(s.needsUpdate,
-                          style: YLText.caption.copyWith(
-                              color: Colors.orange.shade700)),
+                      Text(
+                        s.needsUpdate,
+                        style: YLText.caption.copyWith(
+                          color: Colors.orange.shade700,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ],
                   ],
                 ),
@@ -223,7 +241,6 @@ class ProfileCard extends StatelessWidget {
   }
 }
 
-
 // ── Swipe-to-delete helpers ───────────────────────────────────────────────
 
 /// Red background shown behind a profile row while the user is dragging
@@ -235,7 +252,7 @@ class ProfileSwipeDeleteBackground extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 6),
-      padding: const EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
         color: const Color(0xFFE53935),
         borderRadius: BorderRadius.circular(12),
@@ -275,23 +292,27 @@ Future<bool> showProfileDeleteConfirmSheet(
     showDragHandle: true,
     backgroundColor: isDark ? const Color(0xFF18181B) : Colors.white,
     shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      borderRadius: BorderRadius.vertical(top: Radius.circular(YLRadius.xl)),
     ),
     builder: (ctx) => Padding(
-      padding: const EdgeInsets.fromLTRB(20, 4, 20, 28),
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(s.confirmDelete,
-              style: Theme.of(ctx).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  )),
+          Text(
+            s.confirmDelete,
+            style: Theme.of(
+              ctx,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+          ),
           const SizedBox(height: 8),
-          Text(s.confirmDeleteMessage(profile.name),
-              style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(
-                    color: isDark ? Colors.white70 : Colors.black54,
-                  )),
+          Text(
+            s.confirmDeleteMessage(profile.name),
+            style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(
+              color: isDark ? Colors.white70 : Colors.black54,
+            ),
+          ),
           const SizedBox(height: 20),
           FilledButton(
             onPressed: () async {
@@ -304,16 +325,14 @@ Future<bool> showProfileDeleteConfirmSheet(
             },
             style: FilledButton.styleFrom(
               backgroundColor: const Color(0xFFE53935),
-              minimumSize: const Size.fromHeight(48),
+              minimumSize: const Size.fromHeight(44),
             ),
             child: Text(s.delete),
           ),
           const SizedBox(height: 8),
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            style: TextButton.styleFrom(
-              minimumSize: const Size.fromHeight(44),
-            ),
+            style: TextButton.styleFrom(minimumSize: const Size.fromHeight(40)),
             child: Text(s.cancel),
           ),
         ],

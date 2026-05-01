@@ -568,8 +568,10 @@ class ConfigTemplate {
       ..write('  stack: $normalizedStack\n')
       ..write('  auto-route: true\n')
       ..write('  auto-detect-interface: true\n')
+      ..write('  strict-route: ${Platform.isWindows ? 'true' : 'false'}\n')
       ..write('  dns-hijack:\n')
       ..write('    - any:53\n')
+      ..write('    - tcp://any:53\n')
       ..write('  mtu: ${AppConstants.defaultTunMtu}\n');
 
     // TUN bypass: exclude addresses from TUN routing
@@ -948,11 +950,17 @@ class ConfigTemplate {
       // Detect from existing list items, or use indent + 2 spaces.
       final listMatch = RegExp(r'\n( +)- ').firstMatch(dnsSection);
       final entryIndent = listMatch?.group(1) ?? '$indent  ';
+      final respectRulesEnabled = RegExp(
+        r'respect-rules:\s*true\b',
+      ).hasMatch(dnsSection);
 
       // Fix 1b: inject prefer-h3 for DNS-over-HTTPS/3 (QUIC).
       // Benefits: faster DNS resolution over QUIC (matches hy2 transport),
       // avoids TCP DNS blocking on some networks.
-      if (!dnsSection.contains('prefer-h3')) {
+      // mihomo documents respect-rules as requiring proxy-server-nameserver;
+      // prefer-h3 is intentionally not forced when respect-rules is enabled
+      // because H3 bootstrap can conflict with rule-resolved proxy DNS.
+      if (!respectRulesEnabled && !dnsSection.contains('prefer-h3')) {
         final injection = '${indent}prefer-h3: true\n';
         config =
             config.substring(0, afterDns) +
@@ -961,6 +969,16 @@ class ConfigTemplate {
         dnsEnd += injection.length;
         afterDns += injection.length;
         dnsSection = config.substring(dnsMatch.start, dnsEnd);
+      } else if (respectRulesEnabled) {
+        dnsSection = dnsSection.replaceFirst(
+          RegExp(r'\n\s*prefer-h3:\s*true\s*\n'),
+          '\n',
+        );
+        config =
+            config.substring(0, dnsMatch.start) +
+            dnsSection +
+            config.substring(dnsEnd);
+        dnsEnd = dnsMatch.start + dnsSection.length;
       }
 
       if (!dnsSection.contains('nameserver-policy:')) {

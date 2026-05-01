@@ -11,11 +11,7 @@ class ModuleCard extends ConsumerWidget {
   final ModuleRecord module;
   final VoidCallback? onTap;
 
-  const ModuleCard({
-    super.key,
-    required this.module,
-    this.onTap,
-  });
+  const ModuleCard({super.key, required this.module, this.onTap});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -24,10 +20,13 @@ class ModuleCard extends ConsumerWidget {
     return YLSurface(
       padding: EdgeInsets.zero,
       child: InkWell(
-        borderRadius: BorderRadius.circular(YLRadius.xl),
+        borderRadius: BorderRadius.circular(YLRadius.lg),
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          padding: const EdgeInsets.symmetric(
+            horizontal: YLSpacing.md,
+            vertical: YLSpacing.sm,
+          ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
@@ -69,10 +68,8 @@ class ModuleCard extends ConsumerWidget {
                       const SizedBox(height: 2),
                       Text(
                         module.desc,
-                        style: YLText.caption.copyWith(
-                          color: YLColors.zinc500,
-                        ),
-                        maxLines: 1,
+                        style: YLText.caption.copyWith(color: YLColors.zinc500),
+                        maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ],
@@ -83,7 +80,10 @@ class ModuleCard extends ConsumerWidget {
                       runSpacing: 4,
                       children: [
                         // Rule count badge
-                        _RuleCountBadge(count: module.rules.length, isDark: isDark),
+                        _RuleCountBadge(
+                          count: module.rules.length,
+                          isDark: isDark,
+                        ),
                         // Compatibility badge
                         CompatibilityBadge(counts: module.unsupportedCounts),
                       ],
@@ -103,7 +103,11 @@ class ModuleCard extends ConsumerWidget {
                 ),
               ),
               // Trailing chevron
-              const Icon(Icons.chevron_right, size: 18, color: YLColors.zinc400),
+              const Icon(
+                Icons.chevron_right,
+                size: 18,
+                color: YLColors.zinc400,
+              ),
             ],
           ),
         ),
@@ -132,9 +136,7 @@ class _RuleCountBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: isDark
-            ? YLColors.zinc700
-            : YLColors.zinc100,
+        color: isDark ? YLColors.zinc700 : YLColors.zinc100,
         borderRadius: BorderRadius.circular(6),
       ),
       child: Text(
@@ -142,6 +144,7 @@ class _RuleCountBadge extends StatelessWidget {
         style: YLText.caption.copyWith(
           color: isDark ? YLColors.zinc300 : YLColors.zinc600,
           fontWeight: FontWeight.w500,
+          fontSize: 11,
         ),
       ),
     );

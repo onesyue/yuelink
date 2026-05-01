@@ -57,6 +57,7 @@ String formatTrayStatusLine({
 }) {
   if (!isLoggedIn) return 'YueLink · 未登录';
   if (status == CoreStatus.starting) return 'YueLink · 连接中...';
+  if (status == CoreStatus.degraded) return 'YueLink · 连接异常';
   if (status != CoreStatus.running) return 'YueLink · 未连接';
 
   final routing = switch (routingMode) {
@@ -65,19 +66,14 @@ String formatTrayStatusLine({
     'direct' => '直连',
     _ => routingMode,
   };
-  final connection =
-      isDesktop ? (connectionMode == 'tun' ? 'TUN' : '系统代理') : null;
+  final connection = isDesktop
+      ? (connectionMode == 'tun' ? 'TUN' : '系统代理')
+      : null;
   final node = (currentNode != null && currentNode.isNotEmpty)
       ? _truncateForTray(currentNode, 16)
       : null;
 
-  return [
-    'YueLink',
-    '已连接',
-    routing,
-    ?connection,
-    ?node,
-  ].join(' · ');
+  return ['YueLink', '已连接', routing, ?connection, ?node].join(' · ');
 }
 
 String _truncateForTray(String s, int max) =>
