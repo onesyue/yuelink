@@ -350,11 +350,10 @@ class _MobileOnboarding extends StatelessWidget {
                             const SizedBox(height: 32),
                             Text(
                               step.title,
-                              style: YLText.titleLarge.copyWith(
-                                fontSize: 22,
-                                fontWeight: FontWeight.w700,
-                                color:
-                                    isDark ? Colors.white : YLColors.zinc900,
+                              style: YLText.pageTitle.copyWith(
+                                color: isDark
+                                    ? Colors.white
+                                    : YLColors.zinc900,
                               ),
                               textAlign: TextAlign.center,
                             ),

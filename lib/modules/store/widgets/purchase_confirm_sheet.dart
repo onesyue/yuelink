@@ -580,7 +580,7 @@ class _Row extends StatelessWidget {
         Flexible(
           child: Text(
             value,
-            textAlign: TextAlign.right,
+            textAlign: TextAlign.end,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style:

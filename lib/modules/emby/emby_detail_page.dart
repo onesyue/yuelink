@@ -404,11 +404,7 @@ class _EmbyDetailPageState extends State<EmbyDetailPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(widget.itemName,
-              style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  height: 1.2)),
+              style: YLText.pageTitle.copyWith(color: Colors.white)),
           if (metaParts.isNotEmpty) ...[
             const SizedBox(height: 8),
             Wrap(

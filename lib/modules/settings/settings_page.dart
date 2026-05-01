@@ -763,9 +763,9 @@ class _MineTrafficSection extends ConsumerWidget {
                 Expanded(
                   child: Text(
                     '$usedStr / $totalStr',
-                    style: YLText.label.copyWith(
-                      fontWeight: FontWeight.w600,
+                    style: YLText.titleMedium.copyWith(
                       color: isDark ? Colors.white : YLColors.zinc900,
+                      fontFeatures: YLText.tabularNums,
                     ),
                     overflow: TextOverflow.ellipsis,
                     textAlign: TextAlign.end,

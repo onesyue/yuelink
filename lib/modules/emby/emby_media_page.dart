@@ -436,12 +436,7 @@ class _EmbyMediaPageState extends State<EmbyMediaPage> {
                 children: [
                   Text(
                     item.name,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      height: 1.2,
-                    ),
+                    style: YLText.pageTitle.copyWith(color: Colors.white),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
