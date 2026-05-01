@@ -37,6 +37,52 @@ class CoreLifecycleManager {
 
   static Future<void> _operationQueue = Future<void>.value();
 
+  /// Queue a low-level core stop that is triggered by failure recovery rather
+  /// than by an explicit user disconnect.
+  ///
+  /// Recovery paths must not call [stop], because that marks
+  /// `manualStopped=true` and suppresses later auto-recovery. They also must
+  /// not call `CoreManager.instance.stop()` directly, because doing so can race
+  /// with a user-driven start / hot-switch operation. This helper gives
+  /// recovery code the same serialization guarantee without changing user
+  /// intent state.
+  static Future<void> stopCoreForRecovery() {
+    return _runExclusiveStatic(
+      'recoveryStop',
+      () => CoreManager.instance.stop(),
+    );
+  }
+
+  static Future<T> _runExclusiveStatic<T>(
+    String operation,
+    Future<T> Function() body,
+  ) {
+    final completer = Completer<T>();
+    final queuedAt = DateTime.now();
+    _operationQueue = _operationQueue
+        .catchError((_) {
+          // Keep the lifecycle queue alive after a failed previous operation.
+        })
+        .then((_) async {
+          final waitMs = DateTime.now().difference(queuedAt).inMilliseconds;
+          EventLog.write(
+            '[CoreLifecycle] op_begin op=$operation waitMs=$waitMs',
+          );
+          try {
+            final result = await body();
+            EventLog.write('[CoreLifecycle] op_end op=$operation');
+            if (!completer.isCompleted) completer.complete(result);
+          } catch (e, st) {
+            EventLog.write(
+              '[CoreLifecycle] op_error op=$operation '
+              'error=${e.toString().split('\n').first}',
+            );
+            if (!completer.isCompleted) completer.completeError(e, st);
+          }
+        });
+    return completer.future;
+  }
+
   Future<T> _runExclusive<T>(String operation, Future<T> Function() body) {
     final completer = Completer<T>();
     final queuedAt = DateTime.now();

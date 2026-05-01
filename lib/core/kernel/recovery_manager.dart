@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/legacy.dart';
 import '../../domain/models/traffic.dart';
 import '../../domain/models/traffic_history.dart';
 import '../providers/core_provider.dart';
+import '../managers/core_lifecycle_manager.dart';
 import '../storage/settings_service.dart';
 import 'core_manager.dart';
 
@@ -77,7 +78,7 @@ class RecoveryManager {
     if (clearDesktopProxy && (Platform.isMacOS || Platform.isWindows)) {
       CoreActions.clearSystemProxyStatic().catchError((_) {});
     }
-    CoreManager.instance.stop().catchError((_) {});
+    CoreLifecycleManager.stopCoreForRecovery().catchError((_) {});
   }
 
   // ── Shared alive check ────────────────────────────────────────────────
@@ -87,17 +88,17 @@ class RecoveryManager {
   /// On iOS the Go core runs in a separate process so FFI `IsRunning`
   /// always returns false in the main app. Only the REST API check works.
   static Future<({bool alive, bool apiOk, String apiReason})>
-      checkCoreHealth() async {
+  checkCoreHealth() async {
     final manager = CoreManager.instance;
     // Snapshot returns a classified reason (`'ok'` / `'socket'` /
     // `'timeout'` / `'http_<N>'` / `'other'`) so heartbeat can write
     // it to EventLog instead of just "down" — useful for
     // distinguishing transient network flap from a wedged mihomo
     // when triaging user reports.
-    final snap = await manager.api
-        .healthSnapshot()
-        .timeout(const Duration(seconds: 2),
-            onTimeout: () => (ok: false, reason: 'timeout'));
+    final snap = await manager.api.healthSnapshot().timeout(
+      const Duration(seconds: 2),
+      onTimeout: () => (ok: false, reason: 'timeout'),
+    );
     var isDesktopTunService = false;
     if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
       final connectionMode = await SettingsService.getConnectionMode();
@@ -128,8 +129,9 @@ void resetCoreToStopped(dynamic ref, {bool clearDesktopProxy = true}) {
     status: (ref as dynamic).read(coreStatusProvider.notifier),
     traffic: (ref as dynamic).read(trafficProvider.notifier),
     history: (ref as dynamic).read(trafficHistoryProvider.notifier),
-    historyVersion:
-        (ref as dynamic).read(trafficHistoryVersionProvider.notifier),
+    historyVersion: (ref as dynamic).read(
+      trafficHistoryVersionProvider.notifier,
+    ),
     clearDesktopProxy: clearDesktopProxy,
   );
 }

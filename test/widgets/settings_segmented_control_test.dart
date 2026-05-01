@@ -16,14 +16,17 @@ void main() {
       home: MediaQuery(
         data: MediaQueryData(textScaler: TextScaler.linear(textScale)),
         child: Scaffold(
-          body: Center(child: SizedBox(width: width, child: child)),
+          body: Center(
+            child: SizedBox(width: width, child: child),
+          ),
         ),
       ),
     );
   }
 
-  testWidgets('adaptive segmented control keeps Chinese labels single line',
-      (tester) async {
+  testWidgets('adaptive segmented control keeps Chinese labels single line', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       harness(
         textScale: 1.6,
@@ -46,8 +49,9 @@ void main() {
     expect(systemText.overflow, TextOverflow.ellipsis);
   });
 
-  testWidgets('settings row stacks complex trailing control on narrow width',
-      (tester) async {
+  testWidgets('settings row stacks complex trailing control on narrow width', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       harness(
         width: 250,
@@ -75,8 +79,9 @@ void main() {
     }
   });
 
-  testWidgets('adaptive segmented control handles English without overflow',
-      (tester) async {
+  testWidgets('adaptive segmented control handles English without overflow', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       harness(
         width: 260,
@@ -95,5 +100,43 @@ void main() {
 
     expect(tester.takeException(), isNull);
     expect(tester.widget<Text>(find.text('Follow System')).maxLines, 1);
+  });
+
+  testWidgets('targeted zh/en setting labels stay single-line', (tester) async {
+    const labels = [
+      '跟随系统',
+      '最小化到托盘',
+      '路由模式',
+      '自动',
+      '系统',
+      'Light',
+      'Dark',
+      'Auto',
+      'Follow System',
+      'Minimize to Tray',
+    ];
+
+    await tester.pumpWidget(
+      harness(
+        width: 260,
+        textScale: 1.6,
+        child: YLAdaptiveSegmentedControl<String>(
+          selectedValue: labels.first,
+          segments: [
+            for (final label in labels)
+              YLAdaptiveSegment(value: label, label: label),
+          ],
+          onChanged: (_) {},
+        ),
+      ),
+    );
+
+    expect(tester.takeException(), isNull);
+    for (final label in labels) {
+      final text = tester.widget<Text>(find.text(label));
+      expect(text.maxLines, 1, reason: label);
+      expect(text.softWrap, isFalse, reason: label);
+      expect(text.overflow, TextOverflow.ellipsis, reason: label);
+    }
   });
 }
