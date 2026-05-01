@@ -443,20 +443,10 @@ class _SectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(YLSpacing.md),
-      decoration: BoxDecoration(
-        color: isDark ? YLColors.zinc900 : Colors.white,
-        borderRadius: BorderRadius.circular(YLRadius.lg),
-        border: Border.all(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.06)
-              : Colors.black.withValues(alpha: 0.06),
-          width: 0.5,
-        ),
-      ),
+      decoration: YLGlass.surfaceDecoration(context, elevated: false),
       child: child,
     );
   }

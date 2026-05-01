@@ -88,19 +88,21 @@ class HeroCard extends ConsumerWidget {
 
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: isDark ? YLColors.zinc800 : Colors.white,
-        borderRadius: BorderRadius.circular(YLRadius.xxl),
-        border: Border.all(
-          color: isRunning
-              ? runningAccent.withValues(alpha: 0.30)
-              : (isDark
-                    ? Colors.white.withValues(alpha: 0.08)
-                    : Colors.black.withValues(alpha: 0.08)),
-          width: isRunning ? 1.0 : 0.5,
-        ),
-        boxShadow: YLShadow.hero(context),
-      ),
+      decoration:
+          YLGlass.surfaceDecoration(
+            context,
+            radius: YLRadius.xxl,
+            strong: true,
+          ).copyWith(
+            border: Border.all(
+              color: isRunning
+                  ? runningAccent.withValues(alpha: 0.30)
+                  : (isDark
+                        ? Colors.white.withValues(alpha: 0.08)
+                        : Colors.white.withValues(alpha: 0.72)),
+              width: isRunning ? 1.0 : 0.5,
+            ),
+          ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

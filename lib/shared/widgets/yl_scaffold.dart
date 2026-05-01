@@ -89,6 +89,9 @@ class YLLargeTitleScaffold extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bg = isDark ? YLColors.zinc950 : YLColors.zinc100;
+    final appBarBg = isDark
+        ? YLColors.zinc950.withValues(alpha: 0.84)
+        : Colors.white.withValues(alpha: 0.72);
     final fg = isDark ? Colors.white : YLColors.zinc900;
     final isLargeTitle = titleMode == YLTitleMode.large;
     const expandedTitleSize = 30.0;
@@ -100,7 +103,7 @@ class YLLargeTitleScaffold extends StatelessWidget {
           if (isLargeTitle)
             SliverAppBar.large(
               expandedHeight: expandedHeight,
-              backgroundColor: bg,
+              backgroundColor: appBarBg,
               surfaceTintColor: Colors.transparent,
               elevation: 0,
               scrolledUnderElevation: 0,
@@ -140,7 +143,7 @@ class YLLargeTitleScaffold extends StatelessWidget {
             )
           else
             SliverAppBar(
-              backgroundColor: bg,
+              backgroundColor: appBarBg,
               surfaceTintColor: Colors.transparent,
               elevation: 0,
               scrolledUnderElevation: 0,
@@ -203,9 +206,12 @@ class YLLargeTitleScaffold extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: bg,
-      body: SafeArea(
-        bottom: bottomSafe && bottomBar == null,
-        child: constrained,
+      body: DecoratedBox(
+        decoration: YLGlass.pageBackground(context),
+        child: SafeArea(
+          bottom: bottomSafe && bottomBar == null,
+          child: constrained,
+        ),
       ),
       bottomNavigationBar: bottomBar,
     );

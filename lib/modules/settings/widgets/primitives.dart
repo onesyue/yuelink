@@ -86,11 +86,10 @@ class SettingsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     return ClipRRect(
       borderRadius: BorderRadius.circular(YLRadius.lg),
-      child: Container(
-        color: isDark ? YLColors.zinc900 : Colors.white,
+      child: DecoratedBox(
+        decoration: YLGlass.surfaceDecoration(context, elevated: false),
         child: child,
       ),
     );

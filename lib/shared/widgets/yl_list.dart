@@ -64,7 +64,6 @@ class YLSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final surface = isDark ? YLColors.zinc900 : Colors.white;
     final divider = isDark
         ? Colors.white.withValues(alpha: 0.06)
         : Colors.black.withValues(alpha: 0.06);
@@ -112,8 +111,8 @@ class YLSection extends StatelessWidget {
             ),
           ClipRRect(
             borderRadius: BorderRadius.circular(YLRadius.lg),
-            child: Container(
-              color: surface,
+            child: DecoratedBox(
+              decoration: YLGlass.surfaceDecoration(context, elevated: false),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: rows,

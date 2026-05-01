@@ -26,17 +26,7 @@ class NoticesCard extends ConsumerWidget {
         return Container(
           width: double.infinity,
           padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: isDark ? YLColors.zinc800 : Colors.white,
-            borderRadius: BorderRadius.circular(YLRadius.xl),
-            border: Border.all(
-              color: isDark
-                  ? Colors.white.withValues(alpha: 0.08)
-                  : Colors.black.withValues(alpha: 0.08),
-              width: 0.5,
-            ),
-            boxShadow: YLShadow.card(context),
-          ),
+          decoration: YLGlass.surfaceDecoration(context, radius: YLRadius.xl),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -63,11 +53,14 @@ class NoticesCard extends ConsumerWidget {
                       borderRadius: BorderRadius.circular(YLRadius.sm),
                       onTap: () => Navigator.of(context).push(
                         MaterialPageRoute(
-                            builder: (_) => const AnnouncementsPage()),
+                          builder: (_) => const AnnouncementsPage(),
+                        ),
                       ),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 4),
+                          horizontal: 6,
+                          vertical: 4,
+                        ),
                         child: Text(
                           S.current.viewAll,
                           style: YLText.caption.copyWith(
@@ -193,7 +186,9 @@ class _NoticeTile extends StatelessWidget {
               ),
             const SizedBox(height: 12),
             Divider(
-                height: 1, color: isDark ? YLColors.zinc700 : YLColors.zinc200),
+              height: 1,
+              color: isDark ? YLColors.zinc700 : YLColors.zinc200,
+            ),
             // 内容
             Expanded(
               child: SingleChildScrollView(

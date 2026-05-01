@@ -18,7 +18,6 @@ class CheckinCalendarEntryCard extends ConsumerWidget {
     if (!auth.isLoggedIn) return const SizedBox.shrink();
 
     final s = S.of(context);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return InkWell(
       onTap: () => CheckinCalendarPage.push(context),
@@ -26,17 +25,7 @@ class CheckinCalendarEntryCard extends ConsumerWidget {
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.all(YLSpacing.md),
-        decoration: BoxDecoration(
-          color: isDark ? YLColors.zinc800 : Colors.white,
-          borderRadius: BorderRadius.circular(YLRadius.lg),
-          border: Border.all(
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.08)
-                : Colors.black.withValues(alpha: 0.08),
-            width: 0.5,
-          ),
-          boxShadow: YLShadow.card(context),
-        ),
+        decoration: YLGlass.surfaceDecoration(context, elevated: false),
         child: Row(
           children: [
             Container(

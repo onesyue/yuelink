@@ -34,7 +34,8 @@ class OverviewCard extends ConsumerWidget {
         profileName = active.name;
         if (active.lastUpdated != null) {
           final dt = active.lastUpdated!;
-          lastUpdated = '${dt.month}/${dt.day} '
+          lastUpdated =
+              '${dt.month}/${dt.day} '
               '${dt.hour.toString().padLeft(2, '0')}:'
               '${dt.minute.toString().padLeft(2, '0')}';
         }
@@ -45,17 +46,7 @@ class OverviewCard extends ConsumerWidget {
 
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDark ? YLColors.zinc800 : Colors.white,
-        borderRadius: BorderRadius.circular(YLRadius.xl),
-        border: Border.all(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.08)
-              : Colors.black.withValues(alpha: 0.08),
-          width: 0.5,
-        ),
-        boxShadow: YLShadow.card(context),
-      ),
+      decoration: YLGlass.surfaceDecoration(context, radius: YLRadius.xl),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -63,7 +54,9 @@ class OverviewCard extends ConsumerWidget {
           Row(
             children: [
               Icon(
-                hasProfile ? Icons.description_rounded : Icons.warning_amber_rounded,
+                hasProfile
+                    ? Icons.description_rounded
+                    : Icons.warning_amber_rounded,
                 size: 14,
                 color: hasProfile ? YLColors.zinc400 : YLColors.connecting,
               ),
@@ -152,13 +145,15 @@ class _OverviewPill extends StatelessWidget {
           Icon(icon, size: 12, color: YLColors.zinc400),
           const SizedBox(width: 4),
           Flexible(
-            child: Text(label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: YLText.caption.copyWith(
-                  fontSize: 11,
-                  color: isDark ? YLColors.zinc400 : YLColors.zinc600,
-                )),
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: YLText.caption.copyWith(
+                fontSize: 11,
+                color: isDark ? YLColors.zinc400 : YLColors.zinc600,
+              ),
+            ),
           ),
         ],
       ),
@@ -174,25 +169,65 @@ class _OverviewPill extends StatelessWidget {
 _ErrorInfo _resolveErrorInfo(String errorCode, S s) {
   switch (errorCode) {
     case StartupError.soLoadFailed:
-      return _ErrorInfo(title: s.errNativeLib, hint: s.errNativeLibHint, action: _ErrorAction.repair);
+      return _ErrorInfo(
+        title: s.errNativeLib,
+        hint: s.errNativeLibHint,
+        action: _ErrorAction.repair,
+      );
     case StartupError.initCoreFailed:
-      return _ErrorInfo(title: s.errCoreInit, hint: s.errCoreInitHint, action: _ErrorAction.repair);
+      return _ErrorInfo(
+        title: s.errCoreInit,
+        hint: s.errCoreInitHint,
+        action: _ErrorAction.repair,
+      );
     case StartupError.vpnPermissionDenied:
-      return _ErrorInfo(title: s.errVpnDenied, hint: s.errVpnDeniedHint, action: _ErrorAction.repair);
+      return _ErrorInfo(
+        title: s.errVpnDenied,
+        hint: s.errVpnDeniedHint,
+        action: _ErrorAction.repair,
+      );
     case StartupError.vpnFdInvalid:
-      return _ErrorInfo(title: s.errTunnel, hint: s.errTunnelHint, action: _ErrorAction.repair);
+      return _ErrorInfo(
+        title: s.errTunnel,
+        hint: s.errTunnelHint,
+        action: _ErrorAction.repair,
+      );
     case StartupError.configBuildFailed:
-      return _ErrorInfo(title: s.errConfig, hint: s.errConfigHint, action: _ErrorAction.repair);
+      return _ErrorInfo(
+        title: s.errConfig,
+        hint: s.errConfigHint,
+        action: _ErrorAction.repair,
+      );
     case StartupError.coreStartFailed:
-      return _ErrorInfo(title: s.errCoreStart, hint: s.errCoreStartHint, action: _ErrorAction.report);
+      return _ErrorInfo(
+        title: s.errCoreStart,
+        hint: s.errCoreStartHint,
+        action: _ErrorAction.report,
+      );
     case StartupError.apiTimeout:
-      return _ErrorInfo(title: s.errApiTimeout, hint: s.errApiTimeoutHint, action: _ErrorAction.report);
+      return _ErrorInfo(
+        title: s.errApiTimeout,
+        hint: s.errApiTimeoutHint,
+        action: _ErrorAction.report,
+      );
     case StartupError.coreDiedAfterStart:
-      return _ErrorInfo(title: s.errCoreCrash, hint: s.errCoreCrashHint, action: _ErrorAction.report);
+      return _ErrorInfo(
+        title: s.errCoreCrash,
+        hint: s.errCoreCrashHint,
+        action: _ErrorAction.report,
+      );
     case StartupError.geoFilesFailed:
-      return _ErrorInfo(title: s.errGeo, hint: s.errGeoHint, action: _ErrorAction.repair);
+      return _ErrorInfo(
+        title: s.errGeo,
+        hint: s.errGeoHint,
+        action: _ErrorAction.repair,
+      );
     default:
-      return _ErrorInfo(title: s.errGeneric, hint: s.errGenericHint, action: _ErrorAction.repair);
+      return _ErrorInfo(
+        title: s.errGeneric,
+        hint: s.errGenericHint,
+        action: _ErrorAction.repair,
+      );
   }
 }
 
@@ -202,7 +237,11 @@ class _ErrorInfo {
   final String title;
   final String hint;
   final _ErrorAction action;
-  const _ErrorInfo({required this.title, required this.hint, required this.action});
+  const _ErrorInfo({
+    required this.title,
+    required this.hint,
+    required this.action,
+  });
 }
 
 /// Extract the error code (e.g. 'E006_CORE_START_FAILED') from failureSummary.
@@ -223,9 +262,9 @@ class _StartupErrorBannerState extends State<StartupErrorBanner> {
   bool _expanded = false;
 
   void _goToRepair() {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const ConnectionRepairPage()),
-    );
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const ConnectionRepairPage()));
   }
 
   @override
@@ -269,7 +308,11 @@ class _StartupErrorBannerState extends State<StartupErrorBanner> {
                   children: [
                     const Padding(
                       padding: EdgeInsets.only(top: 1),
-                      child: Icon(Icons.error_rounded, size: 16, color: Colors.red),
+                      child: Icon(
+                        Icons.error_rounded,
+                        size: 16,
+                        color: Colors.red,
+                      ),
                     ),
                     const SizedBox(width: 8),
                     Expanded(

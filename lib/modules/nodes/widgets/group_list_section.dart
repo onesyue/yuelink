@@ -38,29 +38,25 @@ class GroupListSection extends ConsumerWidget {
     final delays = sortMode == NodeSortMode.defaultOrder
         ? const <String, int>{}
         : ref.watch(delayResultsProvider);
-    final nodeList =
-        sortAndFilterNodes(group.all, sortMode, delays, searchQuery);
+    final nodeList = sortAndFilterNodes(
+      group.all,
+      sortMode,
+      delays,
+      searchQuery,
+    );
     final isFiltered = searchQuery.trim().isNotEmpty;
 
     return Container(
-      decoration: BoxDecoration(
-        color: isDark ? YLColors.zinc800 : Colors.white,
-        borderRadius: BorderRadius.circular(YLRadius.xl),
-        border: Border.all(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.08)
-              : Colors.black.withValues(alpha: 0.08),
-          width: 0.5,
-        ),
-        boxShadow: YLShadow.card(context),
-      ),
+      decoration: YLGlass.surfaceDecoration(context, radius: YLRadius.xl),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Group header (non-expandable)
           Padding(
             padding: const EdgeInsets.symmetric(
-                horizontal: YLSpacing.md, vertical: YLSpacing.sm),
+              horizontal: YLSpacing.md,
+              vertical: YLSpacing.sm,
+            ),
             child: Row(
               children: [
                 Expanded(
@@ -111,7 +107,8 @@ class GroupListSection extends ConsumerWidget {
                               .read(delayTestProvider)
                               .testGroup(group.name, group.all);
                           AppNotifier.info(
-                              S.of(context).testingGroup(group.name));
+                            S.of(context).testingGroup(group.name),
+                          );
                         },
                   icon: isGroupTesting
                       ? const CupertinoActivityIndicator(radius: 7)
@@ -132,10 +129,7 @@ class GroupListSection extends ConsumerWidget {
               return RepaintBoundary(
                 child: Column(
                   children: [
-                    NodeTile(
-                      name: nodeName,
-                      groupName: group.name,
-                    ),
+                    NodeTile(name: nodeName, groupName: group.name),
                     if (i < nodeList.length - 1)
                       const Divider(height: 1, indent: 48),
                   ],
@@ -153,7 +147,11 @@ class _Badge extends StatelessWidget {
   final String label;
   final bool isDark;
   final bool accent;
-  const _Badge({required this.label, required this.isDark, this.accent = false});
+  const _Badge({
+    required this.label,
+    required this.isDark,
+    this.accent = false,
+  });
 
   @override
   Widget build(BuildContext context) {

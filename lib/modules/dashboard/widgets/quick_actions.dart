@@ -55,28 +55,20 @@ class QuickActions extends ConsumerWidget {
     final rowChildren = <Widget>[];
     for (var i = 0; i < actions.length; i++) {
       if (i > 0) rowChildren.add(_VerticalDivider(isDark: isDark));
-      rowChildren.add(Expanded(
-        child: _ActionTile(
-          icon: actions[i].icon,
-          label: actions[i].label,
-          isDark: isDark,
-          onTap: actions[i].onTap,
+      rowChildren.add(
+        Expanded(
+          child: _ActionTile(
+            icon: actions[i].icon,
+            label: actions[i].label,
+            isDark: isDark,
+            onTap: actions[i].onTap,
+          ),
         ),
-      ));
+      );
     }
 
     return Container(
-      decoration: BoxDecoration(
-        color: isDark ? YLColors.zinc800 : Colors.white,
-        borderRadius: BorderRadius.circular(YLRadius.lg),
-        border: Border.all(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.08)
-              : Colors.black.withValues(alpha: 0.08),
-          width: 0.5,
-        ),
-        boxShadow: YLShadow.card(context),
-      ),
+      decoration: YLGlass.surfaceDecoration(context, elevated: false),
       child: Row(children: rowChildren),
     );
   }

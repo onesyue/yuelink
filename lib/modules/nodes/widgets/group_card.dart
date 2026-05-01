@@ -56,8 +56,10 @@ class _GroupCardState extends ConsumerState<GroupCard>
       duration: const Duration(milliseconds: 250),
       value: _expanded ? 1.0 : 0.0,
     );
-    _expandAnim =
-        CurvedAnimation(parent: _animController, curve: Curves.easeOutCubic);
+    _expandAnim = CurvedAnimation(
+      parent: _animController,
+      curve: Curves.easeOutCubic,
+    );
     _chevronAnim = Tween<double>(begin: 0, end: 0.5).animate(_expandAnim);
   }
 
@@ -93,8 +95,11 @@ class _GroupCardState extends ConsumerState<GroupCard>
     final group = widget.group;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     // Only rebuild when testing state for THIS group's nodes changes
-    final isGroupTesting = ref.watch(delayTestingProvider.select(
-        (set) => set.any((n) => group.all.contains(n))));
+    final isGroupTesting = ref.watch(
+      delayTestingProvider.select(
+        (set) => set.any((n) => group.all.contains(n)),
+      ),
+    );
     // Only rebuild when sort-relevant delays change (not every single node update)
     final sortMode = widget.sortMode;
     final delays = sortMode == NodeSortMode.defaultOrder
@@ -104,21 +109,15 @@ class _GroupCardState extends ConsumerState<GroupCard>
     // Matches the type-badge pill visual style (same _Badge widget).
     final showSmartHeader = sortMode == NodeSortMode.smartRecommend;
     final nodeList = sortAndFilterNodes(
-        group.all, sortMode, delays, widget.searchQuery);
+      group.all,
+      sortMode,
+      delays,
+      widget.searchQuery,
+    );
     final isFiltered = widget.searchQuery.trim().isNotEmpty;
 
     return Container(
-      decoration: BoxDecoration(
-        color: isDark ? YLColors.zinc800 : Colors.white,
-        borderRadius: BorderRadius.circular(YLRadius.xl),
-        border: Border.all(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.08)
-              : Colors.black.withValues(alpha: 0.08),
-          width: 0.5,
-        ),
-        boxShadow: YLShadow.card(context),
-      ),
+      decoration: YLGlass.surfaceDecoration(context, radius: YLRadius.xl),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -141,8 +140,11 @@ class _GroupCardState extends ConsumerState<GroupCard>
                 children: [
                   RotationTransition(
                     turns: _chevronAnim,
-                    child: const Icon(Icons.expand_more_rounded,
-                        size: 20, color: YLColors.zinc400),
+                    child: const Icon(
+                      Icons.expand_more_rounded,
+                      size: 20,
+                      color: YLColors.zinc400,
+                    ),
                   ),
                   const SizedBox(width: YLSpacing.sm),
                   Expanded(
@@ -204,7 +206,8 @@ class _GroupCardState extends ConsumerState<GroupCard>
                                 .read(delayTestProvider)
                                 .testGroup(group.name, group.all);
                             AppNotifier.info(
-                                S.of(context).testingGroup(group.name));
+                              S.of(context).testingGroup(group.name),
+                            );
                           },
                     icon: isGroupTesting
                         ? const CupertinoActivityIndicator(radius: 7)
@@ -229,8 +232,15 @@ class _GroupCardState extends ConsumerState<GroupCard>
             child: _expanded
                 ? Column(
                     children: [
-                      Divider(height: 1, thickness: 0.5, indent: 16, endIndent: 16,
-                        color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.06)),
+                      Divider(
+                        height: 1,
+                        thickness: 0.5,
+                        indent: 16,
+                        endIndent: 16,
+                        color: isDark
+                            ? Colors.white.withValues(alpha: 0.06)
+                            : Colors.black.withValues(alpha: 0.06),
+                      ),
                       Padding(
                         padding: const EdgeInsets.all(YLSpacing.sm),
                         child: LayoutBuilder(
@@ -244,11 +254,12 @@ class _GroupCardState extends ConsumerState<GroupCard>
                                     .clamp(1, 4);
                             final itemWidth =
                                 (constraints.maxWidth - spacing * (cols - 1)) /
-                                    cols;
+                                cols;
                             // Cap visible nodes to avoid 200+ widgets in memory.
                             // User taps "show all" to override.
                             const maxVisible = 60;
-                            final capped = !_showAll && nodeList.length > maxVisible;
+                            final capped =
+                                !_showAll && nodeList.length > maxVisible;
                             final visible = capped
                                 ? nodeList.sublist(0, maxVisible)
                                 : nodeList;
@@ -259,21 +270,24 @@ class _GroupCardState extends ConsumerState<GroupCard>
                                   spacing: spacing,
                                   runSpacing: spacing,
                                   children: visible
-                                      .map((name) => SizedBox(
-                                            width: itemWidth,
-                                            child: RepaintBoundary(
-                                              child: NodeCardItem(
-                                                name: name,
-                                                groupName: group.name,
-                                              ),
+                                      .map(
+                                        (name) => SizedBox(
+                                          width: itemWidth,
+                                          child: RepaintBoundary(
+                                            child: NodeCardItem(
+                                              name: name,
+                                              groupName: group.name,
                                             ),
-                                          ))
+                                          ),
+                                        ),
+                                      )
                                       .toList(),
                                 ),
                                 if (capped)
                                   Center(
                                     child: TextButton(
-                                      onPressed: () => setState(() => _showAll = true),
+                                      onPressed: () =>
+                                          setState(() => _showAll = true),
                                       child: Text(
                                         '展开全部 ${nodeList.length} 个节点',
                                         style: YLText.caption.copyWith(
@@ -300,11 +314,7 @@ class _GroupCardState extends ConsumerState<GroupCard>
 // ── NodeCardItem — compact node card for the responsive grid ────────────────
 
 class NodeCardItem extends ConsumerStatefulWidget {
-  const NodeCardItem({
-    super.key,
-    required this.name,
-    required this.groupName,
-  });
+  const NodeCardItem({super.key, required this.name, required this.groupName});
 
   final String name;
   final String groupName;
@@ -339,8 +349,7 @@ class _NodeCardItemState extends ConsumerState<NodeCardItem> {
   }
 
   Widget _buildName(BuildContext context, bool isSelected, bool isDark) {
-    final query =
-        ref.watch(nodeSearchQueryProvider).trim().toLowerCase();
+    final query = ref.watch(nodeSearchQueryProvider).trim().toLowerCase();
     final name = widget.name;
     final baseStyle = YLText.body.copyWith(
       fontSize: 13,
@@ -350,14 +359,22 @@ class _NodeCardItemState extends ConsumerState<NodeCardItem> {
           : (isDark ? Colors.white70 : YLColors.zinc700),
     );
     if (query.isEmpty) {
-      return Text(name,
-          style: baseStyle, maxLines: 1, overflow: TextOverflow.ellipsis);
+      return Text(
+        name,
+        style: baseStyle,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      );
     }
     final lower = name.toLowerCase();
     final idx = lower.indexOf(query);
     if (idx < 0) {
-      return Text(name,
-          style: baseStyle, maxLines: 1, overflow: TextOverflow.ellipsis);
+      return Text(
+        name,
+        style: baseStyle,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      );
     }
     return Text.rich(
       TextSpan(
@@ -401,16 +418,16 @@ class _NodeCardItemState extends ConsumerState<NodeCardItem> {
         decoration: BoxDecoration(
           color: isSelected
               ? (isDark
-                  ? YLColors.connected.withValues(alpha: 0.15)
-                  : YLColors.connected.withValues(alpha: 0.08))
+                    ? YLColors.connected.withValues(alpha: 0.15)
+                    : YLColors.connected.withValues(alpha: 0.08))
               : (isDark ? YLColors.zinc800 : YLColors.zinc50),
           borderRadius: BorderRadius.circular(YLRadius.md),
           border: Border.all(
             color: isSelected
                 ? YLColors.connected.withValues(alpha: 0.35)
                 : (isDark
-                    ? Colors.white.withValues(alpha: 0.06)
-                    : Colors.black.withValues(alpha: 0.06)),
+                      ? Colors.white.withValues(alpha: 0.06)
+                      : Colors.black.withValues(alpha: 0.06)),
             width: 0.5,
           ),
         ),
@@ -423,9 +440,8 @@ class _NodeCardItemState extends ConsumerState<NodeCardItem> {
                 Expanded(child: _buildName(context, isSelected, isDark)),
                 // Star / favorite button
                 GestureDetector(
-                  onTap: () => ref
-                      .read(favoritesProvider.notifier)
-                      .toggle(widget.name),
+                  onTap: () =>
+                      ref.read(favoritesProvider.notifier).toggle(widget.name),
                   child: Padding(
                     padding: const EdgeInsets.only(left: 4),
                     child: Icon(
@@ -441,23 +457,31 @@ class _NodeCardItemState extends ConsumerState<NodeCardItem> {
                 if (_isSwitching)
                   const CupertinoActivityIndicator(radius: 6)
                 else if (isSelected)
-                  const Icon(Icons.check_circle_rounded,
-                      size: 13, color: YLColors.connected),
+                  const Icon(
+                    Icons.check_circle_rounded,
+                    size: 13,
+                    color: YLColors.connected,
+                  ),
               ],
             ),
             const SizedBox(height: 4),
             Row(
               children: [
                 if (nodeType != null) ...[
-                  _Badge(label: nodeType, isDark: isDark,
-                      protocolColor: protocolColor(nodeType)),
+                  _Badge(
+                    label: nodeType,
+                    isDark: isDark,
+                    protocolColor: protocolColor(nodeType),
+                  ),
                   const SizedBox(width: 4),
                 ],
                 Flexible(
                   child: GestureDetector(
                     onTap: isTesting
                         ? null
-                        : () => ref.read(delayTestProvider).testDelay(widget.name),
+                        : () => ref
+                              .read(delayTestProvider)
+                              .testDelay(widget.name),
                     child: YLDelayBadge(delay: delay, testing: isTesting),
                   ),
                 ),

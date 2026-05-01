@@ -41,7 +41,6 @@ class CertGuidePage extends ConsumerWidget {
             delegate: SliverChildListDelegate([
               // ── CA Status card ──────────────────────────────────────────
               _SectionCard(
-                isDark: isDark,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -313,7 +312,6 @@ class _StepList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return _SectionCard(
-      isDark: isDark,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -360,26 +358,16 @@ class _StepList extends StatelessWidget {
 }
 
 class _SectionCard extends StatelessWidget {
-  final bool isDark;
   final Widget child;
 
-  const _SectionCard({required this.isDark, required this.child});
+  const _SectionCard({required this.child});
 
   @override
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(YLSpacing.lg),
-      decoration: BoxDecoration(
-        color: isDark ? YLColors.zinc900 : Colors.white,
-        borderRadius: BorderRadius.circular(YLRadius.lg),
-        border: Border.all(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.06)
-              : Colors.black.withValues(alpha: 0.06),
-          width: 0.5,
-        ),
-      ),
+      decoration: YLGlass.surfaceDecoration(context, elevated: false),
       child: child,
     );
   }

@@ -258,6 +258,110 @@ class YLShadow {
   }
 }
 
+// ── Glass material tokens ────────────────────────────────────────────────────
+
+class YLGlass {
+  YLGlass._();
+
+  static Color surface(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return isDark
+        ? YLColors.zinc900.withValues(alpha: 0.78)
+        : Colors.white.withValues(alpha: 0.72);
+  }
+
+  static Color strongSurface(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return isDark
+        ? YLColors.zinc900.withValues(alpha: 0.88)
+        : Colors.white.withValues(alpha: 0.86);
+  }
+
+  static Color border(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return isDark
+        ? Colors.white.withValues(alpha: 0.10)
+        : Colors.white.withValues(alpha: 0.72);
+  }
+
+  static Color hairline(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return isDark
+        ? Colors.white.withValues(alpha: 0.07)
+        : Colors.black.withValues(alpha: 0.055);
+  }
+
+  static BoxDecoration pageBackground(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final accent = YLColors.currentAccent;
+    if (isDark) {
+      return BoxDecoration(
+        color: YLColors.zinc950,
+        gradient: RadialGradient(
+          center: const Alignment(0.72, -1.12),
+          radius: 1.18,
+          colors: [
+            accent.withValues(alpha: 0.13),
+            YLColors.zinc950.withValues(alpha: 0.0),
+          ],
+          stops: const [0.0, 1.0],
+        ),
+      );
+    }
+    return BoxDecoration(
+      color: YLColors.zinc100,
+      gradient: LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          Colors.white,
+          accent.withValues(alpha: 0.045),
+          YLColors.zinc100,
+        ],
+        stops: const [0.0, 0.42, 1.0],
+      ),
+    );
+  }
+
+  static BoxDecoration surfaceDecoration(
+    BuildContext context, {
+    double radius = YLRadius.lg,
+    bool elevated = true,
+    bool strong = false,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final base = strong ? strongSurface(context) : surface(context);
+    return BoxDecoration(
+      color: base,
+      borderRadius: BorderRadius.circular(radius),
+      border: Border.all(color: border(context), width: 0.7),
+      gradient: LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          Colors.white.withValues(alpha: isDark ? 0.055 : 0.30),
+          base,
+        ],
+      ),
+      boxShadow: elevated
+          ? [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.30 : 0.08),
+                blurRadius: 18,
+                spreadRadius: -12,
+                offset: const Offset(0, 10),
+              ),
+              BoxShadow(
+                color: Colors.white.withValues(alpha: isDark ? 0.03 : 0.42),
+                blurRadius: 1,
+                offset: const Offset(0, 1),
+              ),
+            ]
+          : const [],
+    );
+  }
+}
+
 // ── Theme factory ─────────────────────────────────────────────────────────────
 
 ThemeData buildTheme(
@@ -371,11 +475,18 @@ ThemeData buildTheme(
     // Surfaces
     cardTheme: CardThemeData(
       elevation: 0,
-      color: surface,
+      color: isDark
+          ? YLColors.zinc900.withValues(alpha: 0.86)
+          : Colors.white.withValues(alpha: 0.86),
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(YLRadius.lg),
-        side: BorderSide(color: border, width: 0.5), // Hairline borders
+        side: BorderSide(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.10)
+              : Colors.white.withValues(alpha: 0.72),
+          width: 0.7,
+        ),
       ),
     ),
 
@@ -405,14 +516,26 @@ ThemeData buildTheme(
     inputDecorationTheme: InputDecorationTheme(
       isDense: true,
       filled: true,
-      fillColor: isDark ? YLColors.zinc900 : Colors.white,
+      fillColor: isDark
+          ? YLColors.zinc900.withValues(alpha: 0.74)
+          : Colors.white.withValues(alpha: 0.76),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(YLRadius.md),
-        borderSide: BorderSide(color: border, width: 1),
+        borderSide: BorderSide(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.10)
+              : Colors.white.withValues(alpha: 0.70),
+          width: 1,
+        ),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(YLRadius.md),
-        borderSide: BorderSide(color: border, width: 1),
+        borderSide: BorderSide(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.10)
+              : Colors.white.withValues(alpha: 0.70),
+          width: 1,
+        ),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(YLRadius.md),
@@ -567,22 +690,10 @@ class YLSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     Widget content = Container(
       margin: margin,
       padding: padding,
-      decoration: BoxDecoration(
-        color: isDark ? YLColors.zinc900 : Colors.white,
-        borderRadius: BorderRadius.circular(YLRadius.lg),
-        border: Border.all(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.08)
-              : Colors.black.withValues(alpha: 0.07),
-          width: 0.5,
-        ),
-        boxShadow: YLShadow.card(context),
-      ),
+      decoration: YLGlass.surfaceDecoration(context),
       child: child,
     );
 

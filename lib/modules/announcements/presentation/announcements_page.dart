@@ -150,7 +150,7 @@ class _AnnouncementTileState extends ConsumerState<_AnnouncementTile> {
     }
 
     return Material(
-      color: isDark ? YLColors.zinc800 : Colors.white,
+      color: Colors.transparent,
       borderRadius: BorderRadius.circular(YLRadius.lg),
       child: InkWell(
         borderRadius: BorderRadius.circular(YLRadius.lg),
@@ -162,15 +162,7 @@ class _AnnouncementTileState extends ConsumerState<_AnnouncementTile> {
         },
         child: Container(
           padding: const EdgeInsets.all(YLSpacing.md),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(YLRadius.lg),
-            border: Border.all(
-              color: isDark
-                  ? Colors.white.withValues(alpha: 0.08)
-                  : Colors.black.withValues(alpha: 0.08),
-              width: 0.5,
-            ),
-          ),
+          decoration: YLGlass.surfaceDecoration(context, elevated: false),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [

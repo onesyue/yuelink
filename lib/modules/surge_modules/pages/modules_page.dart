@@ -48,7 +48,9 @@ class ModulesPage extends ConsumerWidget {
       );
     } else {
       // MITM Engine card (always shown when modules exist)
-      bodyChildren.add(_MitmEngineCard(hasMitmHostnames: totalMitmHostnames > 0));
+      bodyChildren.add(
+        _MitmEngineCard(hasMitmHostnames: totalMitmHostnames > 0),
+      );
       bodyChildren.add(const SizedBox(height: YLSpacing.md));
 
       // Header summary
@@ -196,18 +198,21 @@ class _MitmEngineCard extends ConsumerWidget {
         : s.mitmEngineStopped;
 
     return Container(
-      decoration: BoxDecoration(
-        color: isDark ? YLColors.zinc900 : Colors.white,
-        borderRadius: BorderRadius.circular(YLRadius.lg),
-        border: Border.all(
-          color: engine.running
-              ? YLColors.connected.withValues(alpha: 0.25)
-              : (isDark
-                    ? Colors.white.withValues(alpha: 0.06)
-                    : Colors.black.withValues(alpha: 0.06)),
-          width: 0.5,
-        ),
-      ),
+      decoration:
+          YLGlass.surfaceDecoration(
+            context,
+            elevated: false,
+            strong: engine.running,
+          ).copyWith(
+            border: Border.all(
+              color: engine.running
+                  ? YLColors.connected.withValues(alpha: 0.25)
+                  : (isDark
+                        ? Colors.white.withValues(alpha: 0.06)
+                        : Colors.white.withValues(alpha: 0.72)),
+              width: 0.5,
+            ),
+          ),
       padding: const EdgeInsets.symmetric(
         horizontal: YLSpacing.lg,
         vertical: YLSpacing.md,
@@ -317,9 +322,7 @@ class _MitmEngineCard extends ConsumerWidget {
                 icon: const Icon(Icons.verified_user_rounded, size: 16),
                 label: Text(s.mitmCertTitle),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: isDark
-                      ? YLColors.zinc300
-                      : YLColors.zinc600,
+                  foregroundColor: isDark ? YLColors.zinc300 : YLColors.zinc600,
                   side: BorderSide(
                     color: isDark
                         ? Colors.white.withValues(alpha: 0.12)

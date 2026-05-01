@@ -60,17 +60,7 @@ class _LiveStatusCardState extends ConsumerState<LiveStatusCard> {
       },
       child: Container(
         padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: isDark ? YLColors.zinc800 : Colors.white,
-          borderRadius: BorderRadius.circular(YLRadius.xl),
-          border: Border.all(
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.08)
-                : Colors.black.withValues(alpha: 0.08),
-            width: 0.5,
-          ),
-          boxShadow: YLShadow.card(context),
-        ),
+        decoration: YLGlass.surfaceDecoration(context, radius: YLRadius.xl),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

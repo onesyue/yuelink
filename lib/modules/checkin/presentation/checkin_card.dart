@@ -26,17 +26,7 @@ class CheckinCard extends ConsumerWidget {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDark ? YLColors.zinc800 : Colors.white,
-        borderRadius: BorderRadius.circular(YLRadius.lg),
-        border: Border.all(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.08)
-              : Colors.black.withValues(alpha: 0.08),
-          width: 0.5,
-        ),
-        boxShadow: YLShadow.card(context),
-      ),
+      decoration: YLGlass.surfaceDecoration(context, elevated: false),
       child: Row(
         children: [
           // ── Icon ─────────────────────────────────────────────────
@@ -47,22 +37,22 @@ class CheckinCard extends ConsumerWidget {
               color: state.checkedInOnOtherDevice
                   ? Colors.orange.withValues(alpha: 0.12)
                   : state.checkedIn
-                      ? const Color(0xFF22C55E).withValues(alpha: 0.12)
-                      : (isDark ? YLColors.zinc700 : YLColors.zinc100),
+                  ? const Color(0xFF22C55E).withValues(alpha: 0.12)
+                  : (isDark ? YLColors.zinc700 : YLColors.zinc100),
               borderRadius: BorderRadius.circular(YLRadius.lg),
             ),
             child: Icon(
               state.checkedInOnOtherDevice
                   ? Icons.devices_rounded
                   : state.checkedIn
-                      ? Icons.check_circle_rounded
-                      : Icons.calendar_today_rounded,
+                  ? Icons.check_circle_rounded
+                  : Icons.calendar_today_rounded,
               size: 20,
               color: state.checkedInOnOtherDevice
                   ? Colors.orange
                   : state.checkedIn
-                      ? const Color(0xFF22C55E)
-                      : YLColors.zinc400,
+                  ? const Color(0xFF22C55E)
+                  : YLColors.zinc400,
             ),
           ),
           const SizedBox(width: 12),
@@ -84,7 +74,8 @@ class CheckinCard extends ConsumerWidget {
                       text = s.checkinOtherDevice;
                     } else if (state.checkedIn) {
                       final r = state.lastResult;
-                      final hasReward = r != null &&
+                      final hasReward =
+                          r != null &&
                           r.amountText.isNotEmpty &&
                           r.amountText != '0 MB';
                       final base = hasReward
@@ -119,8 +110,7 @@ class CheckinCard extends ConsumerWidget {
             IconButton(
               tooltip: s.calendarTitle,
               padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(
-                  minWidth: 36, minHeight: 36),
+              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
               visualDensity: VisualDensity.compact,
               onPressed: () => CheckinCalendarPage.push(context),
               icon: const Icon(
@@ -135,8 +125,7 @@ class CheckinCard extends ConsumerWidget {
           // ── Button / Badge ────────────────────────────────────────
           if (state.checkedInOnOtherDevice)
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
                 color: Colors.orange.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(YLRadius.pill),
@@ -151,8 +140,7 @@ class CheckinCard extends ConsumerWidget {
             )
           else if (state.checkedIn)
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
                 color: const Color(0xFF22C55E).withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(YLRadius.pill),
@@ -172,7 +160,9 @@ class CheckinCard extends ConsumerWidget {
                   : () => ref.read(checkinProvider.notifier).checkin(),
               style: FilledButton.styleFrom(
                 padding: const EdgeInsets.symmetric(
-                    horizontal: 16, vertical: 8),
+                  horizontal: 16,
+                  vertical: 8,
+                ),
                 minimumSize: Size.zero,
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 shape: RoundedRectangleBorder(
@@ -184,10 +174,11 @@ class CheckinCard extends ConsumerWidget {
                       width: 14,
                       height: 14,
                       child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white),
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
                     )
-                  : Text(s.checkinAction,
-                      style: const TextStyle(fontSize: 12)),
+                  : Text(s.checkinAction, style: const TextStyle(fontSize: 12)),
             ),
         ],
       ),

@@ -47,13 +47,7 @@ class ProfileCard extends StatelessWidget {
     return Container(
       margin: EdgeInsets.zero,
       clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        color: isActive
-            ? (isDark
-                  ? YLColors.primaryDark.withValues(alpha: 0.10)
-                  : YLColors.primaryLight)
-            : (isDark ? YLColors.zinc800 : Colors.white),
-        borderRadius: BorderRadius.circular(YLRadius.lg),
+      decoration: YLGlass.surfaceDecoration(context, strong: isActive).copyWith(
         border: Border.all(
           color: isActive
               ? (isDark
@@ -61,10 +55,9 @@ class ProfileCard extends StatelessWidget {
                     : YLColors.primary.withValues(alpha: 0.20))
               : (isDark
                     ? Colors.white.withValues(alpha: 0.08)
-                    : Colors.black.withValues(alpha: 0.08)),
+                    : Colors.white.withValues(alpha: 0.72)),
           width: 0.5,
         ),
-        boxShadow: YLShadow.card(context),
       ),
       child: InkWell(
         onTap: onTap,

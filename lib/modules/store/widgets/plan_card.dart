@@ -34,19 +34,17 @@ class PlanCard extends ConsumerWidget {
         onTap: () => _showDetail(context, ref, selectedPeriod),
         borderRadius: BorderRadius.circular(YLRadius.lg),
         child: Container(
-          decoration: BoxDecoration(
-            color: isDark ? YLColors.zinc900 : Colors.white,
-            borderRadius: BorderRadius.circular(YLRadius.lg),
-            border: Border.all(
-              color: isCurrentPlan
-                  ? YLColors.connected.withValues(alpha: 0.5)
-                  : (isDark
-                        ? Colors.white.withValues(alpha: 0.08)
-                        : Colors.black.withValues(alpha: 0.06)),
-              width: isCurrentPlan ? 1.0 : 0.5,
-            ),
-            boxShadow: YLShadow.card(context),
-          ),
+          decoration: YLGlass.surfaceDecoration(context, strong: isCurrentPlan)
+              .copyWith(
+                border: Border.all(
+                  color: isCurrentPlan
+                      ? YLColors.connected.withValues(alpha: 0.5)
+                      : (isDark
+                            ? Colors.white.withValues(alpha: 0.08)
+                            : Colors.white.withValues(alpha: 0.72)),
+                  width: isCurrentPlan ? 1.0 : 0.5,
+                ),
+              ),
           child: Padding(
             padding: const EdgeInsets.all(YLSpacing.md),
             child: Column(
