@@ -810,30 +810,35 @@ class YLPillSegmentedControl<T> extends StatelessWidget {
             : Colors.black.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(YLRadius.pill),
       ),
-      child: Row(
+      child: Wrap(
+        spacing: 2,
+        runSpacing: 2,
+        alignment: WrapAlignment.center,
         children: List.generate(values.length, (index) {
           final isSelected = values[index] == selectedValue;
-          return Expanded(
-            child: GestureDetector(
-              onTap: () => onChanged(values[index]),
-              behavior: HitTestBehavior.opaque,
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                decoration: BoxDecoration(
+          return GestureDetector(
+            onTap: () => onChanged(values[index]),
+            behavior: HitTestBehavior.opaque,
+            child: Container(
+              constraints: const BoxConstraints(minWidth: 42, minHeight: 32),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? (isDark ? YLColors.surfaceDark : YLColors.surfaceLight)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(YLRadius.pill),
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                labels[index],
+                maxLines: 1,
+                softWrap: false,
+                overflow: TextOverflow.ellipsis,
+                style: YLText.label.copyWith(
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
                   color: isSelected
-                      ? (isDark ? YLColors.surfaceDark : YLColors.surfaceLight)
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(YLRadius.pill),
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  labels[index],
-                  style: YLText.label.copyWith(
-                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                    color: isSelected
-                        ? (isDark ? Colors.white : Colors.black)
-                        : YLColors.zinc500,
-                  ),
+                      ? (isDark ? Colors.white : Colors.black)
+                      : YLColors.zinc500,
                 ),
               ),
             ),

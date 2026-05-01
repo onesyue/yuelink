@@ -135,35 +135,80 @@ class YLInfoRow extends StatelessWidget {
         horizontal: YLSpacing.lg,
         vertical: YLSpacing.md,
       ),
-      child: Row(
-        children: [
-          if (leading != null) ...[
-            leading!,
-            const SizedBox(width: YLSpacing.md),
-          ],
-          Expanded(
-            child: Text(
-              label,
-              style:
-                  labelStyle ??
-                  YLText.rowTitle.copyWith(
-                    fontWeight: FontWeight.w400,
-                    color: labelColor,
-                  ),
-            ),
-          ),
-          if (value != null)
-            Padding(
-              padding: const EdgeInsets.only(right: 6),
-              child: Text(
-                value!,
-                style: YLText.caption.copyWith(fontSize: 12, color: valueColor),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final labelWidget = Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (leading != null) ...[
+                leading!,
+                const SizedBox(width: YLSpacing.md),
+              ],
+              Flexible(
+                child: Text(
+                  label,
+                  style:
+                      labelStyle ??
+                      YLText.rowTitle.copyWith(
+                        fontWeight: FontWeight.w400,
+                        color: labelColor,
+                      ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-            ),
-          ?trailing,
-        ],
+            ],
+          );
+
+          // Narrow rows with adaptive segmented controls should stack instead
+          // of squeezing Chinese labels into wrapped text or causing Windows
+          // text-overpaint. Simple trailing widgets (switches, chevrons) stay
+          // inline so ordinary settings rows keep their familiar shape.
+          final shouldStackTrailing =
+              trailing is YLAdaptiveSegmentedControl &&
+              constraints.maxWidth < 360;
+          if (trailing != null && value == null && shouldStackTrailing) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                labelWidget,
+                const SizedBox(height: YLSpacing.sm),
+                Align(alignment: Alignment.centerRight, child: trailing!),
+              ],
+            );
+          }
+
+          return Row(
+            children: [
+              Expanded(child: labelWidget),
+              if (value != null)
+                Flexible(
+                  fit: FlexFit.loose,
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: Text(
+                      value!,
+                      style: YLText.caption.copyWith(
+                        fontSize: 12,
+                        color: valueColor,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.right,
+                    ),
+                  ),
+                ),
+              if (trailing != null)
+                Flexible(
+                  fit: FlexFit.loose,
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: trailing!,
+                  ),
+                ),
+            ],
+          );
+        },
       ),
     );
 
@@ -174,6 +219,138 @@ class YLInfoRow extends StatelessWidget {
       );
     }
     return Opacity(opacity: enabled ? 1.0 : 0.5, child: content);
+  }
+}
+
+class YLAdaptiveSegment<T> {
+  final T value;
+  final String label;
+
+  const YLAdaptiveSegment({required this.value, required this.label});
+}
+
+/// Compact segmented control for settings rows.
+///
+/// Material's `SegmentedButton` distributes fixed row width across every
+/// segment; on zh-CN Windows with 1.3x+ text scale that squeezed labels such
+/// as "跟随系统" into two lines and sometimes overpainted neighbouring rows.
+/// This control is content-sized, keeps every label to one line, and lets the
+/// segments wrap as whole pills when the row is genuinely too narrow.
+class YLAdaptiveSegmentedControl<T> extends StatelessWidget {
+  final List<YLAdaptiveSegment<T>> segments;
+  final T selectedValue;
+  final ValueChanged<T> onChanged;
+  final String? semanticLabel;
+
+  const YLAdaptiveSegmentedControl({
+    super.key,
+    required this.segments,
+    required this.selectedValue,
+    required this.onChanged,
+    this.semanticLabel,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final borderColor = isDark
+        ? Colors.white.withValues(alpha: 0.08)
+        : Colors.black.withValues(alpha: 0.06);
+    final trackColor = isDark
+        ? Colors.white.withValues(alpha: 0.07)
+        : Colors.black.withValues(alpha: 0.045);
+
+    return Semantics(
+      label: semanticLabel,
+      button: true,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: trackColor,
+          borderRadius: BorderRadius.circular(YLRadius.lg),
+          border: Border.all(color: borderColor, width: 0.5),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(3),
+          child: Wrap(
+            alignment: WrapAlignment.end,
+            spacing: 2,
+            runSpacing: 2,
+            children: [
+              for (final segment in segments)
+                _YLAdaptiveSegmentButton<T>(
+                  segment: segment,
+                  selected: segment.value == selectedValue,
+                  onTap: () => onChanged(segment.value),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _YLAdaptiveSegmentButton<T> extends StatelessWidget {
+  final YLAdaptiveSegment<T> segment;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _YLAdaptiveSegmentButton({
+    required this.segment,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final fg = selected
+        ? (isDark ? Colors.white : YLColors.zinc900)
+        : (isDark ? YLColors.zinc400 : YLColors.zinc600);
+    final selectedBg = isDark
+        ? Colors.white.withValues(alpha: 0.14)
+        : Colors.white.withValues(alpha: 0.88);
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(YLRadius.md),
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          curve: Curves.easeOutCubic,
+          constraints: const BoxConstraints(minHeight: 30, minWidth: 42),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: selected ? selectedBg : Colors.transparent,
+            borderRadius: BorderRadius.circular(YLRadius.md),
+            boxShadow: selected
+                ? [
+                    BoxShadow(
+                      color: Colors.black.withValues(
+                        alpha: isDark ? 0.16 : 0.08,
+                      ),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Text(
+            segment.label,
+            maxLines: 1,
+            softWrap: false,
+            overflow: TextOverflow.ellipsis,
+            style: YLText.caption.copyWith(
+              fontSize: 12,
+              height: 1.1,
+              fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+              color: fg,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 

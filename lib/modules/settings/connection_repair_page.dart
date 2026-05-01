@@ -89,7 +89,7 @@ class _ConnectionRepairPageState extends ConsumerState<ConnectionRepairPage> {
       }
       if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
         buffer.writeln('═══ desktop_tun_diagnostics ═════════════════════════');
-        buffer.writeln(await _collectDesktopTunDiagnosticsText());
+        buffer.writeln(await _collectDesktopTunDiagnosticsText(ref));
         buffer.writeln();
       }
       if (found == 0) {
@@ -204,9 +204,12 @@ class _ConnectionRepairPageState extends ConsumerState<ConnectionRepairPage> {
     if (_busy) return;
     setState(() => _busy = true);
     try {
-      // Stop core first to avoid conflicts
+      // Stop through the lifecycle manager, not CoreManager directly. The
+      // lifecycle path is the only one that clears system proxy, restores
+      // macOS TUN DNS, records desktop_tun_* telemetry, and drives the UI
+      // status back through `stopping -> stopped`.
       if (CoreManager.instance.isRunning) {
-        await CoreManager.instance.stop();
+        await ref.read(coreActionsProvider).stop();
       }
       final ok = await action();
       if (mounted) {
@@ -263,10 +266,7 @@ class _ConnectionRepairPageState extends ConsumerState<ConnectionRepairPage> {
               child: FilledButton.icon(
                 onPressed: _busy
                     ? null
-                    : () => _run(
-                        s.repairOneClick,
-                        _oneClickRepairAndReconnect,
-                      ),
+                    : () => _run(s.repairOneClick, _oneClickRepairAndReconnect),
                 icon: _busy
                     ? const SizedBox(
                         width: 16,
@@ -526,7 +526,7 @@ class _ConnectionRepairPageState extends ConsumerState<ConnectionRepairPage> {
   }
 }
 
-Future<String> _collectDesktopTunDiagnosticsText() async {
+Future<String> _collectDesktopTunDiagnosticsText(WidgetRef ref) async {
   final commands = <(String, List<String>)>[];
   if (Platform.isWindows) {
     commands.addAll(const [
@@ -574,6 +574,8 @@ Future<String> _collectDesktopTunDiagnosticsText() async {
   }
 
   final buffer = StringBuffer();
+  buffer.writeln(await _collectDesktopTunSnapshotText(ref));
+  buffer.writeln();
   for (final (exe, args) in commands) {
     buffer.writeln('\$ $exe ${args.join(' ')}');
     try {
@@ -587,6 +589,50 @@ Future<String> _collectDesktopTunDiagnosticsText() async {
       buffer.writeln('<failed: $e>');
     }
     buffer.writeln();
+  }
+  return buffer.toString();
+}
+
+Future<String> _collectDesktopTunSnapshotText(WidgetRef ref) async {
+  final buffer = StringBuffer();
+  final manager = CoreManager.instance;
+  final mode = ref.read(connectionModeProvider);
+  final tunStack = ref.read(desktopTunStackProvider);
+  buffer.writeln('structured_snapshot:');
+  buffer.writeln('  mode: $mode');
+  buffer.writeln('  tun_stack: $tunStack');
+  buffer.writeln('  core_running: ${manager.isRunning}');
+  buffer.writeln('  mixed_port: ${manager.mixedPort}');
+  try {
+    final snapshot = await DesktopTunDiagnostics.instance.inspect(
+      api: manager.api,
+      mixedPort: manager.mixedPort,
+      mode: mode,
+      tunStack: tunStack,
+    );
+    ref.read(desktopTunHealthProvider.notifier).state = snapshot;
+    DesktopTunTelemetry.healthSnapshot(snapshot);
+    buffer
+      ..writeln('  state: ${snapshot.state.wireName}')
+      ..writeln('  error_class: ${snapshot.errorClass}')
+      ..writeln('  user_message: ${snapshot.userMessage}')
+      ..writeln('  repair_action: ${snapshot.repairAction}')
+      ..writeln('  driver_present: ${snapshot.driverPresent}')
+      ..writeln('  has_admin: ${snapshot.hasAdmin}')
+      ..writeln('  controller_ok: ${snapshot.controllerOk}')
+      ..writeln('  interface_present: ${snapshot.interfacePresent}')
+      ..writeln('  route_ok: ${snapshot.routeOk}')
+      ..writeln('  dns_ok: ${snapshot.dnsOk}')
+      ..writeln('  ipv6_enabled: ${snapshot.ipv6Enabled}')
+      ..writeln('  system_proxy_enabled: ${snapshot.systemProxyEnabled}')
+      ..writeln('  proxy_guard_active: ${snapshot.proxyGuardActive}')
+      ..writeln('  transport_ok: ${snapshot.transportOk}')
+      ..writeln('  google_ok: ${snapshot.googleOk}')
+      ..writeln('  github_ok: ${snapshot.githubOk}')
+      ..writeln('  repair_suggested: ${snapshot.needsRepair}')
+      ..writeln('  running_verified: ${snapshot.runningVerified}');
+  } catch (e) {
+    buffer.writeln('  inspect_failed: ${e.toString().split('\n').first}');
   }
   return buffer.toString();
 }

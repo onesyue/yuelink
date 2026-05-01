@@ -205,47 +205,39 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
                     Divider(height: 1, thickness: 0.5, color: dividerColor),
                     YLInfoRow(
                       label: s.routingModeSetting,
-                      trailing: SizedBox(
-                        width: 180,
-                        child: SegmentedButton<String>(
-                          showSelectedIcon: false,
-                          style: SegmentedButton.styleFrom(
-                            visualDensity: VisualDensity.compact,
-                            textStyle: const TextStyle(fontSize: 12),
+                      trailing: YLAdaptiveSegmentedControl<String>(
+                        semanticLabel: s.routingModeSetting,
+                        selectedValue: routingMode,
+                        segments: [
+                          YLAdaptiveSegment(
+                            value: 'rule',
+                            label: s.routeModeRule,
                           ),
-                          segments: [
-                            ButtonSegment(
-                              value: 'rule',
-                              label: Text(s.routeModeRule),
-                            ),
-                            ButtonSegment(
-                              value: 'global',
-                              label: Text(s.routeModeGlobal),
-                            ),
-                            ButtonSegment(
-                              value: 'direct',
-                              label: Text(s.routeModeDirect),
-                            ),
-                          ],
-                          selected: {routingMode},
-                          onSelectionChanged: (v) async {
-                            final mode = v.first;
-                            if (mode == routingMode) return;
-                            ref.read(routingModeProvider.notifier).state = mode;
-                            await SettingsService.setRoutingMode(mode);
-                            Telemetry.event(
-                              TelemetryEvents.routingModeChange,
-                              props: {'mode': mode},
-                            );
-                            if (status == CoreStatus.running) {
-                              try {
-                                await CoreManager.instance.api.setRoutingMode(
-                                  mode,
-                                );
-                              } catch (_) {}
-                            }
-                          },
-                        ),
+                          YLAdaptiveSegment(
+                            value: 'global',
+                            label: s.routeModeGlobal,
+                          ),
+                          YLAdaptiveSegment(
+                            value: 'direct',
+                            label: s.routeModeDirect,
+                          ),
+                        ],
+                        onChanged: (mode) async {
+                          if (mode == routingMode) return;
+                          ref.read(routingModeProvider.notifier).state = mode;
+                          await SettingsService.setRoutingMode(mode);
+                          Telemetry.event(
+                            TelemetryEvents.routingModeChange,
+                            props: {'mode': mode},
+                          );
+                          if (status == CoreStatus.running) {
+                            try {
+                              await CoreManager.instance.api.setRoutingMode(
+                                mode,
+                              );
+                            } catch (_) {}
+                          }
+                        },
                       ),
                     ),
                     Divider(height: 1, thickness: 0.5, color: dividerColor),

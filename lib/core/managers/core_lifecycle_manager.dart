@@ -35,7 +35,45 @@ class CoreLifecycleManager {
 
   final Ref ref;
 
-  Future<bool> start(String configYaml) async {
+  static Future<void> _operationQueue = Future<void>.value();
+
+  Future<T> _runExclusive<T>(String operation, Future<T> Function() body) {
+    final completer = Completer<T>();
+    final queuedAt = DateTime.now();
+    _operationQueue = _operationQueue
+        .catchError((_) {
+          // Keep the lifecycle queue alive after a failed previous operation.
+        })
+        .then((_) async {
+          final waitMs = DateTime.now().difference(queuedAt).inMilliseconds;
+          final status = ref.read(coreStatusProvider);
+          EventLog.write(
+            '[CoreLifecycle] op_begin op=$operation status=${status.name} '
+            'waitMs=$waitMs',
+          );
+          try {
+            final result = await body();
+            EventLog.write(
+              '[CoreLifecycle] op_end op=$operation '
+              'status=${ref.read(coreStatusProvider).name}',
+            );
+            if (!completer.isCompleted) completer.complete(result);
+          } catch (e, st) {
+            EventLog.write(
+              '[CoreLifecycle] op_error op=$operation '
+              'error=${e.toString().split('\n').first}',
+            );
+            if (!completer.isCompleted) completer.completeError(e, st);
+          }
+        });
+    return completer.future;
+  }
+
+  Future<bool> start(String configYaml) {
+    return _runExclusive('start', () => _startUnlocked(configYaml));
+  }
+
+  Future<bool> _startUnlocked(String configYaml) async {
     final startWatch = Stopwatch()..start();
     debugPrint(
       '[CoreLifecycle] start() called, config length: ${configYaml.length}',
@@ -245,7 +283,11 @@ class CoreLifecycleManager {
     }
   }
 
-  Future<void> stop() async {
+  Future<void> stop() {
+    return _runExclusive('stop', _stopUnlocked);
+  }
+
+  Future<void> _stopUnlocked() async {
     ref.read(userStoppedProvider.notifier).state = true;
     // Persist the stop intent BEFORE doing any teardown work — engine
     // recreate / process kill can happen at any point during a normal
@@ -311,7 +353,15 @@ class CoreLifecycleManager {
   ///
   /// Returns whether the runtime switch actually took effect. Callers use this
   /// to revert optimistic provider/settings changes when TUN setup fails.
-  Future<bool> hotSwitchConnectionMode(
+  Future<bool> hotSwitchConnectionMode(String newMode, {String? fallbackMode}) {
+    return _runExclusive(
+      'hotSwitchConnectionMode',
+      () =>
+          _hotSwitchConnectionModeUnlocked(newMode, fallbackMode: fallbackMode),
+    );
+  }
+
+  Future<bool> _hotSwitchConnectionModeUnlocked(
     String newMode, {
     String? fallbackMode,
   }) async {
@@ -401,7 +451,7 @@ class CoreLifecycleManager {
     }
 
     EventLog.write('[Core] connection_mode_restart mode=$newMode');
-    final ok = await restart(config);
+    final ok = await _restartUnlocked(config);
     if (!ok) {
       EventLog.write('[Core] connection_mode_restart_failed mode=$newMode');
       AppNotifier.error(S.current.errTunSwitchFailed);
@@ -430,18 +480,22 @@ class CoreLifecycleManager {
     );
     ref.read(connectionModeProvider.notifier).state = fallbackMode;
     await SettingsService.setConnectionMode(fallbackMode);
-    final restored = await start(config);
+    final restored = await _startUnlocked(config);
     EventLog.write(
       '[Core] connection_mode_rollback_done ok=$restored to=$fallbackMode',
     );
   }
 
-  Future<void> toggle(String configYaml) async {
+  Future<void> toggle(String configYaml) {
+    return _runExclusive('toggle', () => _toggleUnlocked(configYaml));
+  }
+
+  Future<void> _toggleUnlocked(String configYaml) async {
     final status = ref.read(coreStatusProvider);
     if (status == CoreStatus.running || status == CoreStatus.degraded) {
-      await stop();
+      await _stopUnlocked();
     } else if (status == CoreStatus.stopped) {
-      await start(configYaml);
+      await _startUnlocked(configYaml);
     }
   }
 
@@ -449,11 +503,19 @@ class CoreLifecycleManager {
   /// last-resort recovery path when mihomo's internal state goes stale
   /// (delay tests all time out, DNS resolver stuck, connection pool wedged).
   /// Cheaper than rebuilding the VPN profile; doesn't touch subscriptions.
-  Future<bool> restart(String configYaml) async {
-    if (CoreManager.instance.isRunning) {
-      await stop();
+  Future<bool> restart(String configYaml) {
+    return _runExclusive('restart', () => _restartUnlocked(configYaml));
+  }
+
+  Future<bool> _restartUnlocked(String configYaml) async {
+    final status = ref.read(coreStatusProvider);
+    if (CoreManager.instance.isRunning ||
+        status == CoreStatus.running ||
+        status == CoreStatus.degraded ||
+        status == CoreStatus.starting) {
+      await _stopUnlocked();
     }
-    final ok = await start(configYaml);
+    final ok = await _startUnlocked(configYaml);
     if (ok) Telemetry.event(TelemetryEvents.coreRestarted);
     return ok;
   }

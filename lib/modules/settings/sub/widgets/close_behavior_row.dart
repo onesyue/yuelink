@@ -20,25 +20,17 @@ class CloseBehaviorRow extends ConsumerWidget {
     final behavior = ref.watch(closeBehaviorProvider);
     return YLInfoRow(
       label: s.closeWindowBehavior,
-      trailing: SizedBox(
-        width: 260,
-        child: SegmentedButton<String>(
-          showSelectedIcon: false,
-          style: SegmentedButton.styleFrom(
-            visualDensity: VisualDensity.compact,
-            textStyle: const TextStyle(fontSize: 12),
-          ),
-          segments: [
-            ButtonSegment(value: 'tray', label: Text(s.closeBehaviorTray)),
-            ButtonSegment(value: 'exit', label: Text(s.closeBehaviorExit)),
-          ],
-          selected: {behavior},
-          onSelectionChanged: (v) async {
-            final val = v.first;
-            ref.read(closeBehaviorProvider.notifier).state = val;
-            await SettingsService.setCloseBehavior(val);
-          },
-        ),
+      trailing: YLAdaptiveSegmentedControl<String>(
+        semanticLabel: s.closeWindowBehavior,
+        selectedValue: behavior,
+        segments: [
+          YLAdaptiveSegment(value: 'tray', label: s.closeBehaviorTray),
+          YLAdaptiveSegment(value: 'exit', label: s.closeBehaviorExit),
+        ],
+        onChanged: (val) async {
+          ref.read(closeBehaviorProvider.notifier).state = val;
+          await SettingsService.setCloseBehavior(val);
+        },
       ),
     );
   }

@@ -38,38 +38,31 @@ class AppearanceSection extends ConsumerWidget {
             children: [
               YLInfoRow(
                 label: s.themeLabel,
-                trailing: SizedBox(
-                  width: 204,
-                  child: SegmentedButton<ThemeMode>(
-                    showSelectedIcon: false,
-                    style: SegmentedButton.styleFrom(
-                      visualDensity: VisualDensity.compact,
-                      textStyle: const TextStyle(fontSize: 12),
+                trailing: YLAdaptiveSegmentedControl<ThemeMode>(
+                  semanticLabel: s.themeLabel,
+                  selectedValue: theme,
+                  segments: [
+                    YLAdaptiveSegment(
+                      value: ThemeMode.system,
+                      label: s.themeSystem,
                     ),
-                    segments: [
-                      ButtonSegment(
-                        value: ThemeMode.system,
-                        label: Text(s.themeSystem),
-                      ),
-                      ButtonSegment(
-                        value: ThemeMode.light,
-                        label: Text(s.themeLight),
-                      ),
-                      ButtonSegment(
-                        value: ThemeMode.dark,
-                        label: Text(s.themeDark),
-                      ),
-                    ],
-                    selected: {theme},
-                    onSelectionChanged: (v) {
-                      ref.read(themeProvider.notifier).state = v.first;
-                      SettingsService.setThemeMode(v.first);
-                      Telemetry.event(
-                        TelemetryEvents.themeChange,
-                        props: {'mode': v.first.name},
-                      );
-                    },
-                  ),
+                    YLAdaptiveSegment(
+                      value: ThemeMode.light,
+                      label: s.themeLight,
+                    ),
+                    YLAdaptiveSegment(
+                      value: ThemeMode.dark,
+                      label: s.themeDark,
+                    ),
+                  ],
+                  onChanged: (mode) {
+                    ref.read(themeProvider.notifier).state = mode;
+                    SettingsService.setThemeMode(mode);
+                    Telemetry.event(
+                      TelemetryEvents.themeChange,
+                      props: {'mode': mode.name},
+                    );
+                  },
                 ),
               ),
               Divider(height: 1, thickness: 0.5, color: dividerColor),
@@ -84,30 +77,17 @@ class AppearanceSection extends ConsumerWidget {
               Divider(height: 1, thickness: 0.5, color: dividerColor),
               YLInfoRow(
                 label: s.sectionLanguage,
-                trailing: SizedBox(
-                  width: 144,
-                  child: SegmentedButton<String>(
-                    showSelectedIcon: false,
-                    style: SegmentedButton.styleFrom(
-                      visualDensity: VisualDensity.compact,
-                      textStyle: const TextStyle(fontSize: 12),
-                    ),
-                    segments: [
-                      ButtonSegment(
-                        value: 'zh',
-                        label: Text(s.languageChinese),
-                      ),
-                      ButtonSegment(
-                        value: 'en',
-                        label: Text(s.languageEnglish),
-                      ),
-                    ],
-                    selected: {language},
-                    onSelectionChanged: (v) async {
-                      ref.read(languageProvider.notifier).state = v.first;
-                      await SettingsService.setLanguage(v.first);
-                    },
-                  ),
+                trailing: YLAdaptiveSegmentedControl<String>(
+                  semanticLabel: s.sectionLanguage,
+                  selectedValue: language,
+                  segments: [
+                    YLAdaptiveSegment(value: 'zh', label: s.languageChinese),
+                    YLAdaptiveSegment(value: 'en', label: s.languageEnglish),
+                  ],
+                  onChanged: (value) async {
+                    ref.read(languageProvider.notifier).state = value;
+                    await SettingsService.setLanguage(value);
+                  },
                 ),
               ),
             ],
