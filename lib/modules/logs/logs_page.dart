@@ -10,6 +10,7 @@ import '../../shared/log_export_service.dart';
 import '../../shared/telemetry.dart';
 import '../../shared/widgets/empty_state.dart';
 import '../../domain/models/rule.dart';
+import '../../theme.dart';
 import '../../core/providers/core_provider.dart';
 import 'providers/logs_providers.dart';
 import 'providers/rule_provider.dart';
@@ -61,7 +62,9 @@ class _LogPageState extends ConsumerState<LogPage>
             '${ts.hour.toString().padLeft(2, '0')}:'
             '${ts.minute.toString().padLeft(2, '0')}:'
             '${ts.second.toString().padLeft(2, '0')}';
-        buffer.writeln('[$time] [${entry.type.toUpperCase()}] ${entry.payload}');
+        buffer.writeln(
+          '[$time] [${entry.type.toUpperCase()}] ${entry.payload}',
+        );
       }
 
       final now = DateTime.now();
@@ -104,10 +107,13 @@ class _LogPageState extends ConsumerState<LogPage>
         appBar: _isSubPage
             ? AppBar(leading: const BackButton(), title: Text(s.tabLogs))
             : null,
-        body: Center(
-          child: YLEmptyState(
-            icon: Icons.list_alt_rounded,
-            title: s.notConnectedHintLog,
+        body: DecoratedBox(
+          decoration: YLGlass.pageBackground(context),
+          child: Center(
+            child: YLEmptyState(
+              icon: Icons.list_alt_rounded,
+              title: s.notConnectedHintLog,
+            ),
           ),
         ),
       );
@@ -115,37 +121,37 @@ class _LogPageState extends ConsumerState<LogPage>
 
     return Scaffold(
       appBar: _isSubPage
-            ? AppBar(
-                leading: const BackButton(),
-                title: Text(s.tabLogs),
-                actions: [
-                  IconButton(
-                    icon: const Icon(Icons.file_download_rounded, size: 20),
-                    tooltip: s.exportLogs,
-                    onPressed: () => _exportLogs(context, ref),
-                  ),
-                ],
-              )
-            : null,
-      body: Column(
-        children: [
-          TabBar(
-            controller: _tabController,
-            tabs: [
-              Tab(text: s.tabLogs),
-              Tab(text: s.tabRules),
-            ],
-          ),
-          Expanded(
-            child: TabBarView(
+          ? AppBar(
+              leading: const BackButton(),
+              title: Text(s.tabLogs),
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.file_download_rounded, size: 20),
+                  tooltip: s.exportLogs,
+                  onPressed: () => _exportLogs(context, ref),
+                ),
+              ],
+            )
+          : null,
+      body: DecoratedBox(
+        decoration: YLGlass.pageBackground(context),
+        child: Column(
+          children: [
+            TabBar(
               controller: _tabController,
-              children: const [
-                _LogsTab(),
-                _RulesTab(),
+              tabs: [
+                Tab(text: s.tabLogs),
+                Tab(text: s.tabRules),
               ],
             ),
-          ),
-        ],
+            Expanded(
+              child: TabBarView(
+                controller: _tabController,
+                children: const [_LogsTab(), _RulesTab()],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -192,206 +198,208 @@ class _LogsTabState extends ConsumerState<_LogsTab> {
     final statusBarBg = theme.colorScheme.surfaceContainerLow;
 
     return Column(
-        children: [
-          // Controls toolbar
-          Container(
-            color: controlsBg,
-            padding:
-                const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            child: Row(
-              children: [
-                Expanded(
-                  child: SizedBox(
-                    height: 28,
-                    child: TextField(
-                      controller: _searchController,
-                      style: TextStyle(
-                          fontSize: 12,
-                          fontFamily: isDesktop ? 'monospace' : null),
-                      decoration: InputDecoration(
-                        hintText: _regexMode
-                            ? s.searchLogsRegexHint
-                            : s.searchLogsHint,
-                        hintStyle: const TextStyle(fontSize: 12),
-                        prefixIcon: const Icon(Icons.search, size: 16),
-                        suffixIcon: _searchQuery.isNotEmpty
-                            ? GestureDetector(
-                                onTap: () {
-                                  _searchController.clear();
-                                  setState(() {
-                                    _searchQuery = '';
-                                    _regexError = false;
-                                  });
-                                },
-                                child: const Icon(Icons.clear, size: 14),
-                              )
-                            : null,
-                        isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 4),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(4),
-                          borderSide: _regexError
-                              ? const BorderSide(
-                                  color: Colors.red, width: 1)
-                              : BorderSide.none,
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(4),
-                          borderSide: _regexError
-                              ? const BorderSide(
-                                  color: Colors.red, width: 1)
-                              : BorderSide.none,
-                        ),
-                        filled: true,
-                        fillColor: searchFillColor,
-                      ),
-                      onChanged: (v) {
-                        final trimmed = v.trim();
-                        bool hasError = false;
-                        if (_regexMode && trimmed.isNotEmpty) {
-                          try {
-                            RegExp(trimmed);
-                          } catch (_) {
-                            hasError = true;
-                          }
-                        }
-                        RegExp? compiled;
-                        if (_regexMode && trimmed.isNotEmpty && !hasError) {
-                          try {
-                            compiled = RegExp(trimmed, caseSensitive: false);
-                          } catch (_) {}
-                        }
-                        setState(() {
-                          _searchQuery = trimmed;
-                          _regexError = hasError;
-                          _cachedRegex = compiled;
-                        });
-                      },
+      children: [
+        // Controls toolbar
+        Container(
+          color: controlsBg,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          child: Row(
+            children: [
+              Expanded(
+                child: SizedBox(
+                  height: 28,
+                  child: TextField(
+                    controller: _searchController,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontFamily: isDesktop ? 'monospace' : null,
                     ),
-                  ),
-                ),
-                const SizedBox(width: 2),
-                // Regex toggle
-                Tooltip(
-                  message: s.regexSearch,
-                  child: InkWell(
-                    onTap: () => setState(() {
-                      _regexMode = !_regexMode;
-                      _regexError = false;
-                    }),
-                    borderRadius: BorderRadius.circular(4),
-                    child: Container(
-                      width: 28,
-                      height: 28,
-                      decoration: BoxDecoration(
-                        color: _regexMode
-                            ? theme.colorScheme.primaryContainer
-                            : Colors.transparent,
+                    decoration: InputDecoration(
+                      hintText: _regexMode
+                          ? s.searchLogsRegexHint
+                          : s.searchLogsHint,
+                      hintStyle: const TextStyle(fontSize: 12),
+                      prefixIcon: const Icon(Icons.search, size: 16),
+                      suffixIcon: _searchQuery.isNotEmpty
+                          ? GestureDetector(
+                              onTap: () {
+                                _searchController.clear();
+                                setState(() {
+                                  _searchQuery = '';
+                                  _regexError = false;
+                                });
+                              },
+                              child: const Icon(Icons.clear, size: 14),
+                            )
+                          : null,
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(4),
+                        borderSide: _regexError
+                            ? const BorderSide(color: Colors.red, width: 1)
+                            : BorderSide.none,
                       ),
-                      alignment: Alignment.center,
-                      child: Text('.*',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            fontFamily: 'monospace',
-                            color: _regexMode
-                                ? theme.colorScheme.onPrimaryContainer
-                                : theme.colorScheme.onSurfaceVariant,
-                          )),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(4),
+                        borderSide: _regexError
+                            ? const BorderSide(color: Colors.red, width: 1)
+                            : BorderSide.none,
+                      ),
+                      filled: true,
+                      fillColor: searchFillColor,
                     ),
-                  ),
-                ),
-                const SizedBox(width: 2),
-                // Level filter
-                PopupMenuButton<String>(
-                  initialValue: level,
-                  onSelected: (v) =>
-                      ref.read(logLevelProvider.notifier).state = v,
-                  tooltip: s.logLevelSetting,
-                  icon: Icon(Icons.filter_list,
-                      size: 16,
-                      color: level != 'info'
-                          ? theme.colorScheme.primary
-                          : null),
-                  itemBuilder: (_) => const [
-                    PopupMenuItem(
-                        value: 'debug', child: Text('Debug')),
-                    PopupMenuItem(value: 'info', child: Text('Info')),
-                    PopupMenuItem(
-                        value: 'warning', child: Text('Warning')),
-                    PopupMenuItem(
-                        value: 'error', child: Text('Error')),
-                  ],
-                ),
-                IconButton(
-                  onPressed: () =>
-                      ref.read(logEntriesProvider.notifier).clear(),
-                  icon: const Icon(Icons.delete_rounded, size: 16),
-                  tooltip: s.clearLogs,
-                  visualDensity: VisualDensity.compact,
-                ),
-              ],
-            ),
-          ),
-
-          // Log entries
-          Expanded(
-            child: filtered.isEmpty
-                ? Center(
-                    child: Text(s.noLogs,
-                        style: theme.textTheme.bodyMedium))
-                : ListView.builder(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 4),
-                    itemCount: filtered.length,
-                    addAutomaticKeepAlives: false,
-                    addRepaintBoundaries: false,
-                    itemBuilder: (context, index) {
-                      return LogTile(
-                          entry: filtered[index],
-                          isDesktop: isDesktop);
+                    onChanged: (v) {
+                      final trimmed = v.trim();
+                      bool hasError = false;
+                      if (_regexMode && trimmed.isNotEmpty) {
+                        try {
+                          RegExp(trimmed);
+                        } catch (_) {
+                          hasError = true;
+                        }
+                      }
+                      RegExp? compiled;
+                      if (_regexMode && trimmed.isNotEmpty && !hasError) {
+                        try {
+                          compiled = RegExp(trimmed, caseSensitive: false);
+                        } catch (_) {}
+                      }
+                      setState(() {
+                        _searchQuery = trimmed;
+                        _regexError = hasError;
+                        _cachedRegex = compiled;
+                      });
                     },
                   ),
-          ),
-
-          // Status bar
-          Container(
-            padding: const EdgeInsets.symmetric(
-                horizontal: 12, vertical: 3),
-            color: statusBarBg,
-            child: Row(
-              children: [
-                Text(s.logsCount(filtered.length),
-                    style: TextStyle(
-                        fontSize: 11,
-                        color: theme.textTheme.bodySmall?.color)),
-                const Spacer(),
-                if (_regexMode)
-                  Text('REGEX',
+                ),
+              ),
+              const SizedBox(width: 2),
+              // Regex toggle
+              Tooltip(
+                message: s.regexSearch,
+                child: InkWell(
+                  onTap: () => setState(() {
+                    _regexMode = !_regexMode;
+                    _regexError = false;
+                  }),
+                  borderRadius: BorderRadius.circular(4),
+                  child: Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: _regexMode
+                          ? theme.colorScheme.primaryContainer
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      '.*',
                       style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: theme.colorScheme.primary)),
-                if (_regexMode) const SizedBox(width: 8),
-                Text(s.logLevelLabel(level.toUpperCase()),
-                    style: TextStyle(
-                        fontSize: 11,
-                        color: theme.textTheme.bodySmall?.color)),
-              ],
-            ),
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        fontFamily: 'monospace',
+                        color: _regexMode
+                            ? theme.colorScheme.onPrimaryContainer
+                            : theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 2),
+              // Level filter
+              PopupMenuButton<String>(
+                initialValue: level,
+                onSelected: (v) =>
+                    ref.read(logLevelProvider.notifier).state = v,
+                tooltip: s.logLevelSetting,
+                icon: Icon(
+                  Icons.filter_list,
+                  size: 16,
+                  color: level != 'info' ? theme.colorScheme.primary : null,
+                ),
+                itemBuilder: (_) => const [
+                  PopupMenuItem(value: 'debug', child: Text('Debug')),
+                  PopupMenuItem(value: 'info', child: Text('Info')),
+                  PopupMenuItem(value: 'warning', child: Text('Warning')),
+                  PopupMenuItem(value: 'error', child: Text('Error')),
+                ],
+              ),
+              IconButton(
+                onPressed: () => ref.read(logEntriesProvider.notifier).clear(),
+                icon: const Icon(Icons.delete_rounded, size: 16),
+                tooltip: s.clearLogs,
+                visualDensity: VisualDensity.compact,
+              ),
+            ],
           ),
-        ],
+        ),
+
+        // Log entries
+        Expanded(
+          child: filtered.isEmpty
+              ? Center(child: Text(s.noLogs, style: theme.textTheme.bodyMedium))
+              : ListView.builder(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  itemCount: filtered.length,
+                  addAutomaticKeepAlives: false,
+                  addRepaintBoundaries: false,
+                  itemBuilder: (context, index) {
+                    return LogTile(
+                      entry: filtered[index],
+                      isDesktop: isDesktop,
+                    );
+                  },
+                ),
+        ),
+
+        // Status bar
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
+          color: statusBarBg,
+          child: Row(
+            children: [
+              Text(
+                s.logsCount(filtered.length),
+                style: TextStyle(
+                  fontSize: 11,
+                  color: theme.textTheme.bodySmall?.color,
+                ),
+              ),
+              const Spacer(),
+              if (_regexMode)
+                Text(
+                  'REGEX',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: theme.colorScheme.primary,
+                  ),
+                ),
+              if (_regexMode) const SizedBox(width: 8),
+              Text(
+                s.logLevelLabel(level.toUpperCase()),
+                style: TextStyle(
+                  fontSize: 11,
+                  color: theme.textTheme.bodySmall?.color,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
-  static const _levelOrder = {
-    'debug': 0,
-    'info': 1,
-    'warning': 2,
-    'error': 3,
-  };
+  static const _levelOrder = {'debug': 0, 'info': 1, 'warning': 2, 'error': 3};
 
   List<LogEntry> _filterLogs(List<LogEntry> logs) {
     final minLevel = _levelOrder[ref.read(logLevelProvider)] ?? 1;
@@ -418,8 +426,7 @@ class _LogsTabState extends ConsumerState<_LogsTab> {
     // Single-pass predicate so level + search share one allocation rather
     // than two consecutive `.where().toList()` chains.
     return logs.where((l) {
-      if (!noLevelFilter &&
-          (_levelOrder[l.type] ?? 1) < minLevel) {
+      if (!noLevelFilter && (_levelOrder[l.type] ?? 1) < minLevel) {
         return false;
       }
       if (!hasSearch) return true;
@@ -447,8 +454,7 @@ class _RulesTabState extends ConsumerState<_RulesTab> {
   @override
   void initState() {
     super.initState();
-    Future.microtask(
-        () => ref.read(rulesProvider.notifier).refresh());
+    Future.microtask(() => ref.read(rulesProvider.notifier).refresh());
   }
 
   @override
@@ -467,26 +473,29 @@ class _RulesTabState extends ConsumerState<_RulesTab> {
       children: [
         // Summary with type breakdown
         Container(
-          padding: const EdgeInsets.symmetric(
-              horizontal: 16, vertical: 10),
-          color:
-              Theme.of(context).colorScheme.surfaceContainerLow,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          color: Theme.of(context).colorScheme.surfaceContainerLow,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
-                  Icon(Icons.rule_folder_rounded,
-                      size: 18,
-                      color: Theme.of(context).colorScheme.primary),
+                  Icon(
+                    Icons.rule_folder_rounded,
+                    size: 18,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
                   const SizedBox(width: 8),
-                  Text(s.rulesCount(rules.length),
-                      style:
-                          Theme.of(context).textTheme.titleSmall),
+                  Text(
+                    s.rulesCount(rules.length),
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
                   const Spacer(),
                   if (_searchQuery.isNotEmpty)
-                    Text(s.matchedRulesCount(filtered.length),
-                        style: Theme.of(context).textTheme.bodySmall),
+                    Text(
+                      s.matchedRulesCount(filtered.length),
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
                 ],
               ),
               if (rules.isNotEmpty) ...[
@@ -504,8 +513,7 @@ class _RulesTabState extends ConsumerState<_RulesTab> {
 
         // Search
         Padding(
-          padding:
-              const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
           child: Row(
             children: [
               Expanded(
@@ -515,40 +523,38 @@ class _RulesTabState extends ConsumerState<_RulesTab> {
                     controller: _searchController,
                     decoration: InputDecoration(
                       hintText: s.searchRulesHint,
-                      prefixIcon:
-                          const Icon(Icons.search, size: 18),
+                      prefixIcon: const Icon(Icons.search, size: 18),
                       suffixIcon: _searchQuery.isNotEmpty
                           ? GestureDetector(
                               onTap: () {
                                 _searchController.clear();
                                 setState(() => _searchQuery = '');
                               },
-                              child:
-                                  const Icon(Icons.clear, size: 16),
+                              child: const Icon(Icons.clear, size: 16),
                             )
                           : null,
                       isDense: true,
                       contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 6),
+                        horizontal: 8,
+                        vertical: 6,
+                      ),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
                         borderSide: BorderSide.none,
                       ),
                       filled: true,
-                      fillColor: Theme.of(context)
-                          .colorScheme
-                          .surfaceContainerHighest,
+                      fillColor: Theme.of(
+                        context,
+                      ).colorScheme.surfaceContainerHighest,
                     ),
                     style: const TextStyle(fontSize: 13),
-                    onChanged: (v) =>
-                        setState(() => _searchQuery = v.trim()),
+                    onChanged: (v) => setState(() => _searchQuery = v.trim()),
                   ),
                 ),
               ),
               const SizedBox(width: 4),
               IconButton(
-                onPressed: () =>
-                    ref.read(rulesProvider.notifier).refresh(),
+                onPressed: () => ref.read(rulesProvider.notifier).refresh(),
                 icon: const Icon(Icons.refresh, size: 18),
                 tooltip: S.of(context).retry,
                 visualDensity: VisualDensity.compact,
@@ -562,26 +568,25 @@ class _RulesTabState extends ConsumerState<_RulesTab> {
           child: rules.isEmpty
               ? const Center(child: CircularProgressIndicator())
               : filtered.isEmpty
-                  ? Center(
-                      child: Text(s.noMatchingRules,
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodyMedium))
-                  : ListView.builder(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8),
-                      itemCount: filtered.length,
-                      itemBuilder: (context, index) {
-                        return RuleTile(rule: filtered[index]);
-                      },
-                    ),
+              ? Center(
+                  child: Text(
+                    s.noMatchingRules,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  itemCount: filtered.length,
+                  itemBuilder: (context, index) {
+                    return RuleTile(rule: filtered[index]);
+                  },
+                ),
         ),
       ],
     );
   }
 
-  List<Widget> _buildTypeSummary(
-      List<RuleInfo> rules, BuildContext context) {
+  List<Widget> _buildTypeSummary(List<RuleInfo> rules, BuildContext context) {
     final counts = <String, int>{};
     for (final r in rules) {
       counts[r.type] = (counts[r.type] ?? 0) + 1;
@@ -595,12 +600,9 @@ class _RulesTabState extends ConsumerState<_RulesTab> {
           setState(() => _searchQuery = e.key);
         },
         child: Container(
-          padding:
-              const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
           decoration: BoxDecoration(
-            color: Theme.of(context)
-                .colorScheme
-                .surfaceContainerHighest,
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
             borderRadius: BorderRadius.circular(4),
           ),
           child: Text(
@@ -619,11 +621,12 @@ class _RulesTabState extends ConsumerState<_RulesTab> {
     if (_searchQuery.isEmpty) return rules;
     final q = _searchQuery.toLowerCase();
     return rules
-        .where((r) =>
-            r.type.toLowerCase().contains(q) ||
-            r.payload.toLowerCase().contains(q) ||
-            r.proxy.toLowerCase().contains(q))
+        .where(
+          (r) =>
+              r.type.toLowerCase().contains(q) ||
+              r.payload.toLowerCase().contains(q) ||
+              r.proxy.toLowerCase().contains(q),
+        )
         .toList();
   }
 }
-

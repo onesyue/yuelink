@@ -76,90 +76,100 @@ class _NodesPageState extends ConsumerState<NodesPage> {
           : YLColors.zinc100;
       return Scaffold(
         backgroundColor: offlineBg,
-        body: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 720),
-            child: CustomScrollView(
-              physics: const BouncingScrollPhysics(
-                parent: AlwaysScrollableScrollPhysics(),
-              ),
-              slivers: [
-                SliverToBoxAdapter(
-                  child: SizedBox(
-                    height: MediaQuery.paddingOf(context).top + YLSpacing.sm,
-                  ),
+        body: DecoratedBox(
+          decoration: YLGlass.pageBackground(context),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 720),
+              child: CustomScrollView(
+                physics: const BouncingScrollPhysics(
+                  parent: AlwaysScrollableScrollPhysics(),
                 ),
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(
-                      YLSpacing.xl,
-                      YLSpacing.md,
-                      YLSpacing.xl,
-                      YLSpacing.md,
-                    ),
-                    child: Column(
-                      children: [
-                        const Icon(
-                          Icons.router_rounded,
-                          size: 64,
-                          color: YLColors.zinc300,
-                        ),
-                        const SizedBox(height: YLSpacing.xl),
-                        Text(s.notConnectedHintProxy, style: YLText.titleLarge),
-                        const SizedBox(height: YLSpacing.sm),
-                        Text(
-                          s.connectToViewProxiesDesc,
-                          style: YLText.body.copyWith(color: YLColors.zinc500),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: YLSpacing.lg),
-                        FilledButton(
-                          onPressed: () => MainShell.switchToTab(
-                            context,
-                            MainShell.tabDashboard,
-                          ),
-                          child: Text(s.goToHomeToProtect),
-                        ),
-                      ],
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: SizedBox(
+                      height: MediaQuery.paddingOf(context).top + YLSpacing.sm,
                     ),
                   ),
-                ),
-                offlineGroups.when(
-                  data: (gs) {
-                    if (gs.isEmpty) {
-                      return const SliverToBoxAdapter(child: SizedBox.shrink());
-                    }
-                    return SliverList(
-                      delegate: SliverChildListDelegate([
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(
-                            YLSpacing.xl,
-                            0,
-                            YLSpacing.xl,
-                            YLSpacing.md,
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        YLSpacing.xl,
+                        YLSpacing.md,
+                        YLSpacing.xl,
+                        YLSpacing.md,
+                      ),
+                      child: Column(
+                        children: [
+                          const Icon(
+                            Icons.router_rounded,
+                            size: 64,
+                            color: YLColors.zinc300,
                           ),
-                          child: _OfflinePreviewBanner(s.offlinePreview),
-                        ),
-                        ...gs.map(
-                          (g) => Padding(
+                          const SizedBox(height: YLSpacing.xl),
+                          Text(
+                            s.notConnectedHintProxy,
+                            style: YLText.titleLarge,
+                          ),
+                          const SizedBox(height: YLSpacing.sm),
+                          Text(
+                            s.connectToViewProxiesDesc,
+                            style: YLText.body.copyWith(
+                              color: YLColors.zinc500,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: YLSpacing.lg),
+                          FilledButton(
+                            onPressed: () => MainShell.switchToTab(
+                              context,
+                              MainShell.tabDashboard,
+                            ),
+                            child: Text(s.goToHomeToProtect),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  offlineGroups.when(
+                    data: (gs) {
+                      if (gs.isEmpty) {
+                        return const SliverToBoxAdapter(
+                          child: SizedBox.shrink(),
+                        );
+                      }
+                      return SliverList(
+                        delegate: SliverChildListDelegate([
+                          Padding(
                             padding: const EdgeInsets.fromLTRB(
                               YLSpacing.xl,
                               0,
                               YLSpacing.xl,
-                              YLSpacing.lg,
+                              YLSpacing.md,
                             ),
-                            child: _ReadOnlyGroupCard(group: g),
+                            child: _OfflinePreviewBanner(s.offlinePreview),
                           ),
-                        ),
-                      ]),
-                    );
-                  },
-                  loading: () => _buildOfflineSkeleton(context),
-                  error: (error, stack) =>
-                      const SliverToBoxAdapter(child: SizedBox.shrink()),
-                ),
-                const SliverToBoxAdapter(child: SizedBox(height: 100)),
-              ],
+                          ...gs.map(
+                            (g) => Padding(
+                              padding: const EdgeInsets.fromLTRB(
+                                YLSpacing.xl,
+                                0,
+                                YLSpacing.xl,
+                                YLSpacing.lg,
+                              ),
+                              child: _ReadOnlyGroupCard(group: g),
+                            ),
+                          ),
+                        ]),
+                      );
+                    },
+                    loading: () => _buildOfflineSkeleton(context),
+                    error: (error, stack) =>
+                        const SliverToBoxAdapter(child: SizedBox.shrink()),
+                  ),
+                  const SliverToBoxAdapter(child: SizedBox(height: 100)),
+                ],
+              ),
             ),
           ),
         ),
@@ -168,8 +178,11 @@ class _NodesPageState extends ConsumerState<NodesPage> {
 
     // ── Loading ────────────────────────────────────────────────────────────
     if (groups.isEmpty) {
-      return const Scaffold(
-        body: Center(child: CupertinoActivityIndicator(radius: 14)),
+      return Scaffold(
+        body: DecoratedBox(
+          decoration: YLGlass.pageBackground(context),
+          child: const Center(child: CupertinoActivityIndicator(radius: 14)),
+        ),
       );
     }
 
@@ -217,253 +230,264 @@ class _NodesPageState extends ConsumerState<NodesPage> {
 
     return Scaffold(
       backgroundColor: bg,
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 720),
-          child: CustomScrollView(
-            physics: const BouncingScrollPhysics(
-              parent: AlwaysScrollableScrollPhysics(),
-            ),
-            slivers: [
-              // ── Top controls: no tab title; bottom navigation labels tabs. ──
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: EdgeInsets.fromLTRB(
-                    YLSpacing.xl,
-                    MediaQuery.paddingOf(context).top + YLSpacing.md,
-                    YLSpacing.xl,
-                    YLSpacing.sm,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _NodeSearchBar(controller: _searchController),
-                      const SizedBox(height: YLSpacing.sm),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              // Smart select button
-                              IconButton(
-                                icon: const Icon(Icons.auto_awesome_rounded),
-                                iconSize: 20,
-                                tooltip: S.of(context).smartSelect,
-                                onPressed: () => showSmartSelectSheet(context),
-                              ),
-                              // Chain proxy button
-                              _ChainProxyButton(),
-                              const SizedBox(width: 2),
-                              // ── Favorites filter chip ─────────────────
-                              GestureDetector(
-                                onTap: () {
-                                  ref
-                                      .read(showFavoritesOnlyProvider.notifier)
-                                      .toggle();
-                                },
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 5,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: showFavOnly
-                                        ? Colors.amber.withValues(alpha: 0.15)
-                                        : (isDark
-                                              ? YLColors.zinc700
-                                              : Colors.white),
-                                    borderRadius: BorderRadius.circular(
-                                      YLRadius.sm,
+      body: DecoratedBox(
+        decoration: YLGlass.pageBackground(context),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 720),
+            child: CustomScrollView(
+              physics: const BouncingScrollPhysics(
+                parent: AlwaysScrollableScrollPhysics(),
+              ),
+              slivers: [
+                // ── Top controls: no tab title; bottom navigation labels tabs. ──
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(
+                      YLSpacing.xl,
+                      MediaQuery.paddingOf(context).top + YLSpacing.md,
+                      YLSpacing.xl,
+                      YLSpacing.sm,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _NodeSearchBar(controller: _searchController),
+                        const SizedBox(height: YLSpacing.sm),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                // Smart select button
+                                IconButton(
+                                  icon: const Icon(Icons.auto_awesome_rounded),
+                                  iconSize: 20,
+                                  tooltip: S.of(context).smartSelect,
+                                  onPressed: () =>
+                                      showSmartSelectSheet(context),
+                                ),
+                                // Chain proxy button
+                                _ChainProxyButton(),
+                                const SizedBox(width: 2),
+                                // ── Favorites filter chip ─────────────────
+                                GestureDetector(
+                                  onTap: () {
+                                    ref
+                                        .read(
+                                          showFavoritesOnlyProvider.notifier,
+                                        )
+                                        .toggle();
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 5,
                                     ),
-                                  ),
-                                  child: Icon(
-                                    showFavOnly
-                                        ? Icons.star_rounded
-                                        : Icons.star_outline_rounded,
-                                    size: 14,
-                                    color: showFavOnly
-                                        ? Colors.amber
-                                        : YLColors.zinc500,
+                                    decoration: BoxDecoration(
+                                      color: showFavOnly
+                                          ? Colors.amber.withValues(alpha: 0.15)
+                                          : (isDark
+                                                ? YLColors.zinc700
+                                                : Colors.white),
+                                      borderRadius: BorderRadius.circular(
+                                        YLRadius.sm,
+                                      ),
+                                    ),
+                                    child: Icon(
+                                      showFavOnly
+                                          ? Icons.star_rounded
+                                          : Icons.star_outline_rounded,
+                                      size: 14,
+                                      color: showFavOnly
+                                          ? Colors.amber
+                                          : YLColors.zinc500,
+                                    ),
                                   ),
                                 ),
-                              ),
-                              const SizedBox(width: 6),
-                              // Sort chip — shows current mode, taps to cycle
-                              GestureDetector(
-                                onTap: () {
-                                  final smartOn = FeatureFlags.I.boolFlag(
-                                    'smart_node_recommend',
-                                  );
-                                  final modes = <NodeSortMode>[
-                                    NodeSortMode.defaultOrder,
-                                    NodeSortMode.latencyAsc,
-                                    NodeSortMode.latencyDesc,
-                                    NodeSortMode.nameAsc,
-                                    if (smartOn) NodeSortMode.smartRecommend,
-                                  ];
-                                  final idx = modes.indexOf(sortMode);
-                                  final next = modes[(idx + 1) % modes.length];
-                                  ref
-                                          .read(nodeSortModeProvider.notifier)
-                                          .state =
-                                      next;
-                                  if (next == NodeSortMode.smartRecommend) {
-                                    Telemetry.event(
-                                      'sort_mode_change',
-                                      props: {'mode': 'smart'},
+                                const SizedBox(width: 6),
+                                // Sort chip — shows current mode, taps to cycle
+                                GestureDetector(
+                                  onTap: () {
+                                    final smartOn = FeatureFlags.I.boolFlag(
+                                      'smart_node_recommend',
                                     );
-                                  }
-                                },
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 5,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: isDark
-                                        ? YLColors.zinc700
-                                        : Colors.white,
-                                    borderRadius: BorderRadius.circular(
-                                      YLRadius.sm,
+                                    final modes = <NodeSortMode>[
+                                      NodeSortMode.defaultOrder,
+                                      NodeSortMode.latencyAsc,
+                                      NodeSortMode.latencyDesc,
+                                      NodeSortMode.nameAsc,
+                                      if (smartOn) NodeSortMode.smartRecommend,
+                                    ];
+                                    final idx = modes.indexOf(sortMode);
+                                    final next =
+                                        modes[(idx + 1) % modes.length];
+                                    ref
+                                            .read(nodeSortModeProvider.notifier)
+                                            .state =
+                                        next;
+                                    if (next == NodeSortMode.smartRecommend) {
+                                      Telemetry.event(
+                                        'sort_mode_change',
+                                        props: {'mode': 'smart'},
+                                      );
+                                    }
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 5,
                                     ),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const Icon(
-                                        Icons.sort_rounded,
-                                        size: 13,
-                                        color: YLColors.zinc500,
+                                    decoration: BoxDecoration(
+                                      color: isDark
+                                          ? YLColors.zinc700
+                                          : Colors.white,
+                                      borderRadius: BorderRadius.circular(
+                                        YLRadius.sm,
                                       ),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        _sortModeLabel(s, sortMode),
-                                        style: YLText.caption.copyWith(
-                                          fontSize: 11,
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(
+                                          Icons.sort_rounded,
+                                          size: 13,
                                           color: YLColors.zinc500,
                                         ),
-                                      ),
-                                    ],
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          _sortModeLabel(s, sortMode),
+                                          style: YLText.caption.copyWith(
+                                            fontSize: 11,
+                                            color: YLColors.zinc500,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ),
-                              ),
-                              const SizedBox(width: 2),
-                              IconButton(
-                                icon: Icon(
-                                  viewMode == NodeViewMode.card
-                                      ? Icons.view_list_rounded
-                                      : Icons.grid_view_rounded,
+                                const SizedBox(width: 2),
+                                IconButton(
+                                  icon: Icon(
+                                    viewMode == NodeViewMode.card
+                                        ? Icons.view_list_rounded
+                                        : Icons.grid_view_rounded,
+                                  ),
+                                  iconSize: 20,
+                                  tooltip: viewMode == NodeViewMode.card
+                                      ? s.nodeViewList
+                                      : s.nodeViewCard,
+                                  onPressed: () {
+                                    ref
+                                        .read(nodeViewModeProvider.notifier)
+                                        .state = viewMode == NodeViewMode.card
+                                        ? NodeViewMode.list
+                                        : NodeViewMode.card;
+                                  },
                                 ),
-                                iconSize: 20,
-                                tooltip: viewMode == NodeViewMode.card
-                                    ? s.nodeViewList
-                                    : s.nodeViewCard,
-                                onPressed: () {
-                                  ref
-                                      .read(nodeViewModeProvider.notifier)
-                                      .state = viewMode == NodeViewMode.card
-                                      ? NodeViewMode.list
-                                      : NodeViewMode.card;
-                                },
-                              ),
-                              Consumer(
-                                builder: (context, ref, _) {
-                                  final isSyncing = ref.watch(
-                                    syncAndReconnectProvider,
-                                  );
-                                  return IconButton(
-                                    icon: isSyncing
-                                        ? const SizedBox(
-                                            width: 18,
-                                            height: 18,
-                                            child: CircularProgressIndicator(
-                                              strokeWidth: 2,
-                                            ),
-                                          )
-                                        : const Icon(Icons.sync_rounded),
-                                    onPressed: isSyncing
-                                        ? null
-                                        : _syncAndReconnect,
-                                  );
-                                },
-                              ),
-                            ],
+                                Consumer(
+                                  builder: (context, ref, _) {
+                                    final isSyncing = ref.watch(
+                                      syncAndReconnectProvider,
+                                    );
+                                    return IconButton(
+                                      icon: isSyncing
+                                          ? const SizedBox(
+                                              width: 18,
+                                              height: 18,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                              ),
+                                            )
+                                          : const Icon(Icons.sync_rounded),
+                                      onPressed: isSyncing
+                                          ? null
+                                          : _syncAndReconnect,
+                                    );
+                                  },
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
-              ),
 
-              // ── Routing mode pill ──────────────────────────────────────
-              SliverToBoxAdapter(
-                child: Padding(
+                // ── Routing mode pill ──────────────────────────────────────
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      YLSpacing.xl,
+                      YLSpacing.sm,
+                      YLSpacing.xl,
+                      0,
+                    ),
+                    child: _FullWidthRoutingMode(),
+                  ),
+                ),
+
+                // ── Recent nodes row ───────────────────────────────────────
+                const SliverToBoxAdapter(child: _RecentNodesBar()),
+
+                // ── Group list ─────────────────────────────────────────────
+                SliverPadding(
                   padding: const EdgeInsets.fromLTRB(
                     YLSpacing.xl,
                     YLSpacing.sm,
                     YLSpacing.xl,
                     0,
                   ),
-                  child: _FullWidthRoutingMode(),
-                ),
-              ),
-
-              // ── Recent nodes row ───────────────────────────────────────
-              const SliverToBoxAdapter(child: _RecentNodesBar()),
-
-              // ── Group list ─────────────────────────────────────────────
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(
-                  YLSpacing.xl,
-                  YLSpacing.sm,
-                  YLSpacing.xl,
-                  0,
-                ),
-                sliver: SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (context, index) {
-                      if (showBanner && index == 0) {
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: YLSpacing.lg),
-                          child: _ModeBanner(
-                            icon: routingMode == 'global'
-                                ? Icons.public_rounded
-                                : Icons.link_rounded,
-                            text: routingMode == 'global'
-                                ? s.globalModeDesc
-                                : s.directModeDesc,
+                  sliver: SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) {
+                        if (showBanner && index == 0) {
+                          return Padding(
+                            padding: const EdgeInsets.only(
+                              bottom: YLSpacing.lg,
+                            ),
+                            child: _ModeBanner(
+                              icon: routingMode == 'global'
+                                  ? Icons.public_rounded
+                                  : Icons.link_rounded,
+                              text: routingMode == 'global'
+                                  ? s.globalModeDesc
+                                  : s.directModeDesc,
+                            ),
+                          );
+                        }
+                        final groupIndex = showBanner ? index - 1 : index;
+                        final group = displayGroups[groupIndex];
+                        return RepaintBoundary(
+                          child: Padding(
+                            padding: const EdgeInsets.only(
+                              bottom: YLSpacing.lg,
+                            ),
+                            child: viewMode == NodeViewMode.list
+                                ? GroupListSection(
+                                    group: group,
+                                    sortMode: sortMode,
+                                    searchQuery: searchQuery,
+                                  )
+                                : GroupCard(
+                                    group: group,
+                                    sortMode: sortMode,
+                                    searchQuery: searchQuery,
+                                  ),
                           ),
                         );
-                      }
-                      final groupIndex = showBanner ? index - 1 : index;
-                      final group = displayGroups[groupIndex];
-                      return RepaintBoundary(
-                        child: Padding(
-                          padding: const EdgeInsets.only(bottom: YLSpacing.lg),
-                          child: viewMode == NodeViewMode.list
-                              ? GroupListSection(
-                                  group: group,
-                                  sortMode: sortMode,
-                                  searchQuery: searchQuery,
-                                )
-                              : GroupCard(
-                                  group: group,
-                                  sortMode: sortMode,
-                                  searchQuery: searchQuery,
-                                ),
-                        ),
-                      );
-                    },
-                    childCount: listCount,
-                    addAutomaticKeepAlives: false,
+                      },
+                      childCount: listCount,
+                      addAutomaticKeepAlives: false,
+                    ),
                   ),
                 ),
-              ),
-              const SliverToBoxAdapter(child: SizedBox(height: 100)),
-            ],
+                const SliverToBoxAdapter(child: SizedBox(height: 100)),
+              ],
+            ),
           ),
         ),
       ),

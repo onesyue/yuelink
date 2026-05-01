@@ -109,33 +109,36 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
         appBar: _isSubPage
             ? AppBar(leading: const BackButton(), title: Text(s.navConnections))
             : null,
-        body: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              DecoratedBox(
-                decoration: BoxDecoration(
-                  color: isDark ? YLColors.zinc900 : Colors.white,
-                  shape: BoxShape.circle,
-                  boxShadow: YLShadow.sm(context),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Icon(
-                    Icons.cable_rounded,
-                    size: 48,
-                    color: isDark ? YLColors.zinc700 : YLColors.zinc300,
+        body: DecoratedBox(
+          decoration: YLGlass.pageBackground(context),
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: isDark ? YLColors.zinc900 : Colors.white,
+                    shape: BoxShape.circle,
+                    boxShadow: YLShadow.sm(context),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Icon(
+                      Icons.cable_rounded,
+                      size: 48,
+                      color: isDark ? YLColors.zinc700 : YLColors.zinc300,
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 24),
-              Text(
-                s.notConnectedHintConnections,
-                style: YLText.titleMedium.copyWith(
-                  color: isDark ? YLColors.zinc500 : YLColors.zinc400,
+                const SizedBox(height: 24),
+                Text(
+                  s.notConnectedHintConnections,
+                  style: YLText.titleMedium.copyWith(
+                    color: isDark ? YLColors.zinc500 : YLColors.zinc400,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       );
@@ -159,161 +162,164 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
       appBar: _isSubPage
           ? AppBar(leading: const BackButton(), title: Text(s.navConnections))
           : null,
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // The AppBar already carries this secondary page's title.
-          // Keep a small top gutter before the summary bar instead of
-          // rendering a second large in-body title.
-          const SizedBox(height: 12),
+      body: DecoratedBox(
+        decoration: YLGlass.pageBackground(context),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // The AppBar already carries this secondary page's title.
+            // Keep a small top gutter before the summary bar instead of
+            // rendering a second large in-body title.
+            const SizedBox(height: 12),
 
-          // Summary bar — isolated Consumer so the bar rebuilds on totals
-          // change without rebuilding the rest of the page.
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Consumer(
-              builder: (context, ref, _) {
-                final totals = ref.watch(connectionsTotalsProvider);
-                return SummaryBar(
-                  downloadTotal: totals.down,
-                  uploadTotal: totals.up,
-                );
-              },
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          // Proxy stats (collapsible) — already in its own Consumer.
-          if (!isEmpty)
+            // Summary bar — isolated Consumer so the bar rebuilds on totals
+            // change without rebuilding the rest of the page.
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Consumer(
                 builder: (context, ref, _) {
-                  final stats = ref.watch(proxyStatsProvider);
-                  if (stats.isEmpty) return const SizedBox.shrink();
-                  // Provider already caps at the top 5 — no client-side
-                  // trim or copy needed here.
-                  return ProxyStatsBar(stats: stats);
+                  final totals = ref.watch(connectionsTotalsProvider);
+                  return SummaryBar(
+                    downloadTotal: totals.down,
+                    uploadTotal: totals.up,
+                  );
                 },
               ),
             ),
-          const SizedBox(height: 12),
+            const SizedBox(height: 12),
 
-          // Search + actions bar
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              children: [
-                Expanded(
-                  child: ConnectionsSearchField(
-                    controller: _searchCtrl,
-                    hintText: s.searchConnHint,
-                    onClear: () {
-                      _searchDebounce?.cancel();
-                      ref.read(connectionSearchProvider.notifier).state = '';
-                    },
-                  ),
+            // Proxy stats (collapsible) — already in its own Consumer.
+            if (!isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Consumer(
+                  builder: (context, ref, _) {
+                    final stats = ref.watch(proxyStatsProvider);
+                    if (stats.isEmpty) return const SizedBox.shrink();
+                    // Provider already caps at the top 5 — no client-side
+                    // trim or copy needed here.
+                    return ProxyStatsBar(stats: stats);
+                  },
                 ),
-                const SizedBox(width: 12),
-                Container(
-                  decoration: BoxDecoration(
-                    color: isEmpty
-                        ? Colors.transparent
-                        : YLColors.errorLight.withValues(
-                            alpha: isDark ? 0.1 : 0.5,
-                          ),
-                    borderRadius: BorderRadius.circular(YLRadius.lg),
-                  ),
-                  child: IconButton(
-                    icon: Icon(
-                      Icons.delete_sweep_rounded,
-                      color: isEmpty ? YLColors.zinc500 : YLColors.error,
+              ),
+            const SizedBox(height: 12),
+
+            // Search + actions bar
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: ConnectionsSearchField(
+                      controller: _searchCtrl,
+                      hintText: s.searchConnHint,
+                      onClear: () {
+                        _searchDebounce?.cancel();
+                        ref.read(connectionSearchProvider.notifier).state = '';
+                      },
                     ),
-                    tooltip: s.closeAll,
-                    onPressed: isEmpty
-                        ? null
-                        : () => _confirmCloseAll(context, actions),
                   ),
-                ),
-              ],
-            ),
-          ),
-
-          // Count badge — only rebuilds when the filtered-list *length*
-          // flips (cheap int identity), not on every 500 ms tick. The
-          // total count already uses a .select internally.
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-            child: Consumer(
-              builder: (context, ref, _) {
-                final filteredCount = ref.watch(
-                  filteredConnectionsProvider.select((l) => l.length),
-                );
-                final totalCount = ref.watch(connectionCountProvider);
-                return Text(
-                  filteredCount != totalCount
-                      ? s.connectionsCountFiltered(filteredCount)
-                      : s.connectionsCount(filteredCount),
-                  style: YLText.caption.copyWith(
-                    color: YLColors.zinc500,
-                    fontWeight: FontWeight.w600,
+                  const SizedBox(width: 12),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: isEmpty
+                          ? Colors.transparent
+                          : YLColors.errorLight.withValues(
+                              alpha: isDark ? 0.1 : 0.5,
+                            ),
+                      borderRadius: BorderRadius.circular(YLRadius.lg),
+                    ),
+                    child: IconButton(
+                      icon: Icon(
+                        Icons.delete_sweep_rounded,
+                        color: isEmpty ? YLColors.zinc500 : YLColors.error,
+                      ),
+                      tooltip: s.closeAll,
+                      onPressed: isEmpty
+                          ? null
+                          : () => _confirmCloseAll(context, actions),
+                    ),
                   ),
-                );
-              },
+                ],
+              ),
             ),
-          ),
 
-          // Connections list — own Consumer so the 500 ms rebuild is
-          // scoped to this subtree. The parent Scaffold / AppBar /
-          // summary / search row sit outside this rebuild path.
-          Expanded(
-            child: Consumer(
-              builder: (context, ref, _) {
-                final filtered = ref.watch(filteredConnectionsProvider);
-                if (filtered.isEmpty) {
-                  return Center(
-                    child: YLEmptyState(
-                      icon: isEmpty
-                          ? Icons.cable_rounded
-                          : Icons.search_off_rounded,
-                      title: isEmpty
-                          ? s.noActiveConnections
-                          : s.noMatchingConnections,
+            // Count badge — only rebuilds when the filtered-list *length*
+            // flips (cheap int identity), not on every 500 ms tick. The
+            // total count already uses a .select internally.
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+              child: Consumer(
+                builder: (context, ref, _) {
+                  final filteredCount = ref.watch(
+                    filteredConnectionsProvider.select((l) => l.length),
+                  );
+                  final totalCount = ref.watch(connectionCountProvider);
+                  return Text(
+                    filteredCount != totalCount
+                        ? s.connectionsCountFiltered(filteredCount)
+                        : s.connectionsCount(filteredCount),
+                    style: YLText.caption.copyWith(
+                      color: YLColors.zinc500,
+                      fontWeight: FontWeight.w600,
                     ),
                   );
-                }
-                if (Platform.isMacOS ||
-                    Platform.isWindows ||
-                    Platform.isLinux) {
-                  return _ConnectionsDataTable(
-                    connections: _sorted(filtered),
-                    sortColumn: _sortCol,
-                    ascending: _sortAsc,
-                    onSort: (col, asc) => setState(() {
-                      _sortCol = col;
-                      _sortAsc = asc;
-                    }),
-                    onClose: (id) => actions.close(id),
-                  );
-                }
-                return ListView.builder(
-                  padding: const EdgeInsets.only(
-                    left: 16,
-                    right: 16,
-                    bottom: 32,
-                  ),
-                  physics: const BouncingScrollPhysics(),
-                  itemCount: filtered.length,
-                  addAutomaticKeepAlives: false,
-                  itemBuilder: (context, i) => ConnectionTile(
-                    connection: filtered[i],
-                    onClose: () => actions.close(filtered[i].id),
-                  ),
-                );
-              },
+                },
+              ),
             ),
-          ),
-        ],
+
+            // Connections list — own Consumer so the 500 ms rebuild is
+            // scoped to this subtree. The parent Scaffold / AppBar /
+            // summary / search row sit outside this rebuild path.
+            Expanded(
+              child: Consumer(
+                builder: (context, ref, _) {
+                  final filtered = ref.watch(filteredConnectionsProvider);
+                  if (filtered.isEmpty) {
+                    return Center(
+                      child: YLEmptyState(
+                        icon: isEmpty
+                            ? Icons.cable_rounded
+                            : Icons.search_off_rounded,
+                        title: isEmpty
+                            ? s.noActiveConnections
+                            : s.noMatchingConnections,
+                      ),
+                    );
+                  }
+                  if (Platform.isMacOS ||
+                      Platform.isWindows ||
+                      Platform.isLinux) {
+                    return _ConnectionsDataTable(
+                      connections: _sorted(filtered),
+                      sortColumn: _sortCol,
+                      ascending: _sortAsc,
+                      onSort: (col, asc) => setState(() {
+                        _sortCol = col;
+                        _sortAsc = asc;
+                      }),
+                      onClose: (id) => actions.close(id),
+                    );
+                  }
+                  return ListView.builder(
+                    padding: const EdgeInsets.only(
+                      left: 16,
+                      right: 16,
+                      bottom: 32,
+                    ),
+                    physics: const BouncingScrollPhysics(),
+                    itemCount: filtered.length,
+                    addAutomaticKeepAlives: false,
+                    itemBuilder: (context, i) => ConnectionTile(
+                      connection: filtered[i],
+                      onClose: () => actions.close(filtered[i].id),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
