@@ -1,5 +1,28 @@
 # Changelog
 
+## v1.1.3 (2026-05-01)
+
+### 新功能
+- 设计系统统一：12 个二级页面迁移到 inset-grouped + 大标题 scaffold；Material icons 全部 rounded
+- iOS 26 风格底栏：玻璃材质 + 图标切换动画；Android 侧规避了带玻璃模糊的 ANR 路径
+- macOS 任务栏图标随连接状态切色
+- Wintun 打包闭环：Windows 安装包从 wintun.net 下载并 sha256 校验再打包
+
+### 修复 / 增强
+- 桌面 TUN 诊断更严格：controller / TUN 网卡 / 路由 / DNS / 基础连通性五项全过才显示"已连接"
+- 桌面 TUN 缺驱动时 UI 显示"Wintun 驱动缺失"，不再"假已连接"
+
+### 服务端
+- 节点状态机持久化（RUM + 主动探测），人工 gate 才能将节点 quarantined
+- 主动探测服务端骨架（runs / results / dead-letter）+ 单 region 参考 runner
+- Telemetry release-gate CI：synthetic ingest + privacy 断言 + 端点 schema 校验
+- Admin synthetic-cleanup endpoint，避免 release-gate 数据污染生产 stats
+
+### 隐私 / 安全
+- 提交前敏感字段扫描器，覆盖 DSN / 订阅 token / Reality 公钥 / shortId 等
+- 凭据轮换 SOP + git history 扫描报告
+- 既有节点遥测白名单保持不变：服务器地址 / 端口 / UUID / 密码 / SNI / publicKey / shortId 永不离开本机
+
 ## v1.1.2 (2026-05-01)
 
 ### 新功能
