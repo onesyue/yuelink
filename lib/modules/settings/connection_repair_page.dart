@@ -6,26 +6,28 @@ import 'package:path_provider/path_provider.dart';
 
 import '../../core/kernel/core_manager.dart';
 import '../../core/platform/vpn_service.dart';
-import '../../core/profile/profile_service.dart';
 import '../../core/providers/core_provider.dart';
-import '../../core/storage/settings_service.dart';
 import '../../core/tun/desktop_tun_diagnostics.dart';
 import '../../core/tun/desktop_tun_state.dart';
 import '../../core/tun/desktop_tun_telemetry.dart';
 import '../../i18n/app_strings.dart';
 import '../../shared/app_notifier.dart';
 import '../../shared/diagnostic_text.dart';
-import '../../shared/log_export_sources.dart';
 import '../../shared/log_export_service.dart';
 import '../../shared/telemetry.dart';
 import '../../shared/widgets/setting_icon.dart';
 import '../../shared/widgets/yl_list.dart';
 import '../../shared/widgets/yl_scaffold.dart';
 import '../../theme.dart';
-import '../profiles/providers/profiles_providers.dart';
 import '../yue_auth/providers/yue_auth_providers.dart';
-import 'sub/widgets/service_mode_row.dart';
+import 'connection_repair/connection_diagnostics_service.dart';
+import 'connection_repair/connection_repair_actions.dart';
+import 'connection_repair/widgets/desktop_tun_layered_status.dart';
+import 'connection_repair/widgets/ios_tun_layered_status.dart';
+import 'connection_repair/widgets/network_diagnostics.dart';
+import 'connection_repair/widgets/status_tile.dart';
 import 'startup_report_page.dart';
+import 'sub/widgets/service_mode_row.dart';
 
 /// Connection repair tools: rebuild VPN, clear config, re-sync subscription,
 /// view diagnostics.
@@ -45,54 +47,15 @@ class _ConnectionRepairPageState extends ConsumerState<ConnectionRepairPage> {
     setState(() => _busy = true);
     try {
       final appDir = await getApplicationSupportDirectory();
-      // v1.0.22 P3-A: expand `core.log` to include rotated sidecars
-      // (`.2` and `.1` if present) so the export captures recent
-      // history that the Go-side rotation may have shifted out of the
-      // live file mid-session. Other sources pass through unchanged.
-      final sources = expandRotatedLogSources(const [
-        'core.log',
-        'crash.log',
-        'event.log',
-        'startup_report.json',
-      ]);
-      final buffer = StringBuffer();
-      buffer.writeln('YueLink diagnostic bundle');
-      buffer.writeln('Generated: ${DateTime.now().toIso8601String()}');
-      buffer.writeln(
-        'Platform: ${Platform.operatingSystem} '
-        '${Platform.operatingSystemVersion}',
-      );
-      buffer.writeln();
-      var found = 0;
-      for (final name in sources) {
-        final f = File('${appDir.path}/$name');
-        // Sidecars are routinely absent on freshly-installed
-        // instances or sessions that never crossed the rotation
-        // threshold. Skip the "═══ name ═══ <not present>" header
-        // for absent rotated sidecars to keep the bundle readable;
-        // still emit the header for the canonical sources so the
-        // user can see at a glance which expected files were missing.
-        final isRotatedSidecar = name.startsWith('core.log.');
-        if (isRotatedSidecar && !f.existsSync()) continue;
-        buffer.writeln('═══ $name ${'═' * (60 - name.length)}');
-        if (f.existsSync()) {
-          found++;
-          try {
-            buffer.writeln(await readLogTextLossy(f));
-          } catch (e) {
-            buffer.writeln('<read failed: $e>');
-          }
-        } else {
-          buffer.writeln('<not present>');
-        }
-        buffer.writeln();
-      }
+      String? extraSection;
       if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
-        buffer.writeln('═══ desktop_tun_diagnostics ═════════════════════════');
-        buffer.writeln(await _collectDesktopTunDiagnosticsText(ref));
-        buffer.writeln();
+        extraSection = await _collectDesktopTunDiagnosticsText(ref);
       }
-      if (found == 0) {
+      final bundle = await ConnectionDiagnosticsService.buildLogBundle(
+        appDir: appDir,
+        extraSection: extraSection,
+      );
+      if (bundle.filesFound == 0) {
         if (mounted) AppNotifier.warning(S.current.exportLogsEmpty);
         return;
       }
@@ -106,7 +69,7 @@ class _ConnectionRepairPageState extends ConsumerState<ConnectionRepairPage> {
       final fileName = 'yuelink-diagnostics-$stamp.txt';
       final result = await LogExportService.saveText(
         fileName: fileName,
-        content: buffer.toString(),
+        content: bundle.content,
         dialogTitle: S.current.exportLogs,
       );
       if (!mounted) return;
@@ -132,11 +95,14 @@ class _ConnectionRepairPageState extends ConsumerState<ConnectionRepairPage> {
     if (_busy) return;
     setState(() => _busy = true);
     try {
-      final config = await _loadActiveConfigForRepair();
-      if (config == null) {
+      final actions = ref.read(connectionRepairActionsProvider);
+      final res = await actions.loadActiveConfig();
+      if (res is ActiveConfigMissing) {
+        if (mounted) AppNotifier.error(_missingConfigMessage(res.reason));
         return;
       }
-      final ok = await ref.read(coreActionsProvider).restart(config);
+      final yaml = (res as ActiveConfigLoaded).yaml;
+      final ok = await ref.read(coreActionsProvider).restart(yaml);
       if (!mounted) return;
       final label = S.current.repairRestartCore;
       if (ok) {
@@ -155,49 +121,35 @@ class _ConnectionRepairPageState extends ConsumerState<ConnectionRepairPage> {
     }
   }
 
-  Future<String?> _loadActiveConfigForRepair() async {
-    final activeId =
-        ref.read(activeProfileIdProvider) ??
-        await SettingsService.getActiveProfileId();
-    if (activeId == null) {
-      AppNotifier.error(
-        S.current.isEn ? 'No active subscription selected' : '未选择活动订阅',
-      );
-      return null;
+  Future<bool> _oneClickRepairAndReconnect() async {
+    // Do NOT pre-load config here — `syncSubscription` inside the action
+    // can rescue an initially-empty config, and a pre-flight check would
+    // block that recovery path. The action surfaces a typed Result so we
+    // still get the specific MissingConfig reason on genuine failure.
+    final result = await ref
+        .read(connectionRepairActionsProvider)
+        .oneClickRepairAndReconnect();
+    switch (result) {
+      case RepairReconnectSuccess():
+        return true;
+      case RepairReconnectFailed():
+        return false;
+      case RepairReconnectMissingConfig(:final reason):
+        if (mounted) AppNotifier.error(_missingConfigMessage(reason));
+        return false;
     }
-    final config = await ProfileService.loadConfig(activeId);
-    if (config == null || config.trim().isEmpty) {
-      AppNotifier.error(
-        S.current.isEn
-            ? 'Active subscription config is empty. Re-sync first.'
-            : '活动订阅配置为空，请先重新同步订阅',
-      );
-      return null;
-    }
-    return config;
   }
 
-  Future<bool> _oneClickRepairAndReconnect() async {
-    if (Platform.isIOS) {
-      await VpnService.resetVpnProfile();
-      await VpnService.clearAppGroupConfig();
+  String _missingConfigMessage(MissingConfigReason reason) {
+    final isEn = S.current.isEn;
+    switch (reason) {
+      case MissingConfigReason.noActiveProfile:
+        return isEn ? 'No active subscription selected' : '未选择活动订阅';
+      case MissingConfigReason.configEmpty:
+        return isEn
+            ? 'Active subscription config is empty. Re-sync first.'
+            : '活动订阅配置为空，请先重新同步订阅';
     }
-    if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
-      // Clear stale system proxy before reconnecting. In TUN mode this avoids
-      // controller self-loop; in system-proxy mode start() will reapply the
-      // proxy if the user has "set proxy on connect" enabled.
-      await ref.read(coreActionsProvider).clearSystemProxy();
-      if (Platform.isMacOS) await CoreActions.restoreTunDns();
-    }
-
-    final token = ref.read(authProvider).token;
-    if (token != null) {
-      await ref.read(authProvider.notifier).syncSubscription();
-    }
-
-    final config = await _loadActiveConfigForRepair();
-    if (config == null) return false;
-    return ref.read(coreActionsProvider).start(config);
   }
 
   Future<void> _run(String label, Future<bool> Function() action) async {
@@ -241,14 +193,14 @@ class _ConnectionRepairPageState extends ConsumerState<ConnectionRepairPage> {
       slivers: [
         // ── Status ─────────────────────────────────────────────────
         const SliverToBoxAdapter(
-          child: YLSection(header: 'STATUS', children: [_StatusTile()]),
+          child: YLSection(header: 'STATUS', children: [StatusTile()]),
         ),
 
         if (isDesktop)
           SliverToBoxAdapter(
             child: YLSection(
               header: isEn ? 'Desktop TUN' : '桌面 TUN',
-              children: const [ServiceModeRow(), _DesktopTunLayeredStatus()],
+              children: const [ServiceModeRow(), DesktopTunLayeredStatus()],
             ),
           ),
 
@@ -261,7 +213,7 @@ class _ConnectionRepairPageState extends ConsumerState<ConnectionRepairPage> {
           SliverToBoxAdapter(
             child: YLSection(
               header: isEn ? 'iOS TUN' : 'iOS TUN',
-              children: const [_IosTunLayeredStatus()],
+              children: const [IosTunLayeredStatus()],
             ),
           ),
 
@@ -414,17 +366,9 @@ class _ConnectionRepairPageState extends ConsumerState<ConnectionRepairPage> {
                     ? null
                     : () => _run('清除缓存', () async {
                         final appDir = await getApplicationSupportDirectory();
-                        final targets = [
-                          'config.yaml',
-                          'startup_report.json',
-                          'core.log',
-                          'crash.log',
-                          'event.log',
-                        ];
-                        for (final name in targets) {
-                          final f = File('${appDir.path}/$name');
-                          if (f.existsSync()) f.deleteSync();
-                        }
+                        await ref
+                            .read(connectionRepairActionsProvider)
+                            .clearLocalCache(appDir);
                         return true;
                       }),
               ),
@@ -493,10 +437,7 @@ class _ConnectionRepairPageState extends ConsumerState<ConnectionRepairPage> {
 
         // ── Network diagnostics ───────────────────────────────────
         SliverToBoxAdapter(
-          child: _NetworkDiagnostics(
-            header: s.diagnosticsLabel,
-            isDark: isDark,
-          ),
+          child: NetworkDiagnostics(header: s.diagnosticsLabel, isDark: isDark),
         ),
 
         // ── Reports & exports ─────────────────────────────────────
@@ -539,65 +480,26 @@ class _ConnectionRepairPageState extends ConsumerState<ConnectionRepairPage> {
   }
 }
 
+/// Run the platform's diagnostic command list (ipconfig / ifconfig / ip etc.)
+/// and assemble their (redacted) output along with a structured TUN-state
+/// snapshot. Ref-coupled because the snapshot reads `connectionMode`,
+/// `desktopTunStack` and writes back to `desktopTunHealthProvider`; the
+/// pure parts (command list, redaction, output formatting) live in
+/// `ConnectionDiagnosticsService`.
 Future<String> _collectDesktopTunDiagnosticsText(WidgetRef ref) async {
-  final commands = <(String, List<String>)>[];
-  if (Platform.isWindows) {
-    commands.addAll(const [
-      ('ipconfig', ['/all']),
-      ('route', ['print']),
-      ('netsh', ['interface', 'ipv4', 'show', 'interfaces']),
-      ('netsh', ['interface', 'ipv6', 'show', 'interfaces']),
-      ('netsh', ['winhttp', 'show', 'proxy']),
-      (
-        'powershell',
-        [
-          '-NoProfile',
-          '-Command',
-          'Get-NetAdapter | Select-Object Name,Status,InterfaceDescription | Format-Table -AutoSize',
-        ],
-      ),
-      (
-        'powershell',
-        [
-          '-NoProfile',
-          '-Command',
-          'Get-DnsClientServerAddress | Select-Object InterfaceAlias,AddressFamily,ServerAddresses | Format-Table -AutoSize',
-        ],
-      ),
-    ]);
-  } else if (Platform.isMacOS) {
-    commands.addAll(const [
-      ('ifconfig', []),
-      ('netstat', ['-rn']),
-      ('scutil', ['--dns']),
-      ('networksetup', ['-getdnsservers', 'Wi-Fi']),
-      ('route', ['-n', 'get', 'default']),
-      ('lsof', ['-i', ':9090']),
-    ]);
-  } else if (Platform.isLinux) {
-    commands.addAll(const [
-      ('ip', ['addr']),
-      ('ip', ['route']),
-      ('ip', ['-6', 'route']),
-      ('resolvectl', ['status']),
-      ('systemctl', ['status', 'systemd-resolved', '--no-pager']),
-      ('ss', ['-lntup']),
-      ('ls', ['-l', '/dev/net/tun']),
-    ]);
-  }
-
+  final commands = ConnectionDiagnosticsService.desktopDiagnosticCommands();
   final buffer = StringBuffer();
   buffer.writeln(await _collectDesktopTunSnapshotText(ref));
   buffer.writeln();
-  for (final (exe, args) in commands) {
-    buffer.writeln('\$ $exe ${args.join(' ')}');
+  for (final cmd in commands) {
+    buffer.writeln('\$ ${cmd.exe} ${cmd.args.join(' ')}');
     try {
       final r = await runDiagnosticCommand(
-        exe,
-        args,
+        cmd.exe,
+        cmd.args,
       ).timeout(const Duration(seconds: 5));
       final text = '${lossyUtf8(r.stdout)}\n${lossyUtf8(r.stderr)}';
-      buffer.writeln(_redactDiagnosticText(text));
+      buffer.writeln(ConnectionDiagnosticsService.redactDiagnosticText(text));
     } catch (e) {
       buffer.writeln('<failed: $e>');
     }
@@ -624,7 +526,7 @@ Future<String> _collectDesktopTunSnapshotText(WidgetRef ref) async {
       mode: mode,
       tunStack: tunStack,
     );
-    ref.read(desktopTunHealthProvider.notifier).state = snapshot;
+    ref.read(desktopTunHealthProvider.notifier).set(snapshot);
     DesktopTunTelemetry.healthSnapshot(snapshot);
     buffer
       ..writeln('  state: ${snapshot.state.wireName}')
@@ -653,643 +555,4 @@ Future<String> _collectDesktopTunSnapshotText(WidgetRef ref) async {
     buffer.writeln('  inspect_failed: ${e.toString().split('\n').first}');
   }
   return buffer.toString();
-}
-
-String _redactDiagnosticText(String input) {
-  return input
-      .replaceAll(RegExp(r'([A-Fa-f0-9]{2}[:-]){5}[A-Fa-f0-9]{2}'), '<mac>')
-      .replaceAll(RegExp(r'\b\d{1,3}(?:\.\d{1,3}){3}\b'), '<ip>')
-      .replaceAll(RegExp(r'Bearer\s+[A-Za-z0-9._~+-]+'), 'Bearer <redacted>');
-}
-
-// ── Helper widgets ──────────────────────────────────────────────────────────
-
-/// Connection status row — shows whether the core is currently running, or
-/// surfaces the last failure if the most recent startup attempt did not
-/// succeed.
-class _StatusTile extends StatelessWidget {
-  const _StatusTile();
-
-  @override
-  Widget build(BuildContext context) {
-    final running = CoreManager.instance.isRunning;
-    final report = CoreManager.instance.lastReport;
-    final lastResult = report?.overallSuccess;
-
-    final IconData icon;
-    final Color color;
-    final String title;
-    String? subtitle;
-    if (running) {
-      icon = Icons.check_circle_rounded;
-      color = YLColors.connected;
-      title = '连接正常';
-    } else if (lastResult == false) {
-      icon = Icons.error_rounded;
-      color = YLColors.error;
-      title = '上次连接失败';
-      subtitle = report?.failureSummary ?? '未知错误';
-    } else {
-      icon = Icons.radio_button_unchecked_rounded;
-      color = YLColors.zinc400;
-      title = '未连接';
-    }
-
-    return YLListTile(
-      leading: YLSettingIcon(icon: icon, color: color),
-      title: title,
-      subtitle: subtitle,
-    );
-  }
-}
-
-class _DesktopTunLayeredStatus extends ConsumerStatefulWidget {
-  const _DesktopTunLayeredStatus();
-
-  @override
-  ConsumerState<_DesktopTunLayeredStatus> createState() =>
-      _DesktopTunLayeredStatusState();
-}
-
-class _DesktopTunLayeredStatusState
-    extends ConsumerState<_DesktopTunLayeredStatus> {
-  bool _checking = false;
-
-  Future<void> _refresh() async {
-    if (_checking) return;
-    setState(() => _checking = true);
-    try {
-      final snapshot = await DesktopTunDiagnostics.instance.inspect(
-        api: CoreManager.instance.api,
-        mixedPort: CoreManager.instance.mixedPort,
-        mode: ref.read(connectionModeProvider),
-        tunStack: ref.read(desktopTunStackProvider),
-      );
-      ref.read(desktopTunHealthProvider.notifier).state = snapshot;
-      DesktopTunTelemetry.healthSnapshot(snapshot);
-    } finally {
-      if (mounted) setState(() => _checking = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final snapshot = ref.watch(desktopTunHealthProvider);
-    final mode = ref.watch(connectionModeProvider);
-    final isTun = mode == 'tun';
-    final rows = _rows(snapshot, isTun: isTun);
-    return Column(
-      children: [
-        YLListTile(
-          leading: YLSettingIcon(
-            icon: isTun ? Icons.hub_rounded : Icons.http_rounded,
-            color: isTun ? YLColors.tunConnected : YLColors.zinc500,
-          ),
-          title: '当前模式',
-          subtitle: isTun ? 'TUN · 分层诊断已启用' : '系统代理 · TUN 未开启',
-          trailing: _checking
-              ? YLListTrailing.loading()
-              : YLListTrailing.value('重新检测'),
-          onTap: _checking ? null : _refresh,
-        ),
-        for (final row in rows)
-          YLListTile(
-            leading: YLSettingIcon(icon: row.icon, color: row.color),
-            title: row.title,
-            subtitle: row.subtitle,
-            trailing: YLListTrailing.badge(
-              text: row.ok ? 'OK' : row.badge,
-              color: row.ok ? YLColors.connected : row.color,
-            ),
-          ),
-      ],
-    );
-  }
-
-  List<_TunDiagRow> _rows(DesktopTunSnapshot? s, {required bool isTun}) {
-    if (!isTun) {
-      return const [
-        _TunDiagRow(
-          title: 'TUN 层',
-          subtitle: '当前未使用 TUN，节点超时不会归因到 TUN',
-          ok: true,
-          badge: 'OFF',
-          icon: Icons.power_settings_new_rounded,
-          color: YLColors.zinc400,
-        ),
-      ];
-    }
-    if (s == null) {
-      return const [
-        _TunDiagRow(
-          title: 'TUN 状态',
-          subtitle: '尚未检测；点击重新检测',
-          ok: false,
-          badge: '待检测',
-          icon: Icons.help_rounded,
-          color: YLColors.connecting,
-        ),
-      ];
-    }
-    return [
-      _TunDiagRow(
-        title: 'App 层',
-        subtitle: s.systemProxyEnabled
-            ? 'TUN 与系统代理同时开启，可能造成控制面回环'
-            : 'mode=${s.mode} · stack=${s.tunStack}',
-        ok: !s.systemProxyEnabled,
-        badge: '冲突',
-        icon: Icons.desktop_windows_rounded,
-        color: s.systemProxyEnabled ? YLColors.error : YLColors.connected,
-      ),
-      _TunDiagRow(
-        title: 'Core 层',
-        subtitle: s.controllerOk ? 'mihomo 控制接口可访问' : 'mihomo 已启动但控制接口不可用',
-        ok: s.controllerOk,
-        badge: '失败',
-        icon: Icons.memory_rounded,
-        color: s.controllerOk ? YLColors.connected : YLColors.error,
-      ),
-      _TunDiagRow(
-        title: 'TUN 层',
-        subtitle: _tunLayerSubtitle(s),
-        ok: s.driverPresent && s.hasAdmin && s.interfacePresent,
-        badge: '异常',
-        icon: Icons.route_rounded,
-        color: (s.driverPresent && s.hasAdmin && s.interfacePresent)
-            ? YLColors.connected
-            : YLColors.error,
-      ),
-      _TunDiagRow(
-        title: 'Route / DNS',
-        subtitle: s.routeOk
-            ? (s.dnsOk ? '路由和 DNS 已验证' : 'DNS 未接管')
-            : 'TUN 网卡已创建，但路由未接管',
-        ok: s.routeOk && s.dnsOk,
-        badge: '异常',
-        icon: Icons.dns_rounded,
-        color: (s.routeOk && s.dnsOk) ? YLColors.connected : YLColors.error,
-      ),
-      _TunDiagRow(
-        title: '目标站层',
-        subtitle:
-            'Google ${s.googleOk ? "OK" : "失败"} · GitHub ${s.githubOk ? "OK" : "失败"}；Claude 403 会归因 AI 出口受限，不归因 TUN',
-        ok: s.googleOk || s.githubOk,
-        badge: '异常',
-        icon: Icons.public_rounded,
-        color: (s.googleOk || s.githubOk) ? YLColors.connected : YLColors.error,
-      ),
-    ];
-  }
-
-  String _tunLayerSubtitle(DesktopTunSnapshot s) {
-    if (!s.driverPresent) return 'TUN 驱动/设备缺失';
-    if (!s.hasAdmin) return '需要管理员权限或服务模式权限';
-    if (!s.interfacePresent) return 'TUN interface 未创建';
-    return 'TUN interface 已创建';
-  }
-}
-
-/// iOS-specific layered diagnostic. NEPacketTunnelProvider is a system-
-/// managed extension; driver / route / admin / interface layers don't
-/// apply here. We show only what the in-app process can actually probe:
-/// mihomo controller, DNS hijack, exit-site reachability.
-class _IosTunLayeredStatus extends ConsumerStatefulWidget {
-  const _IosTunLayeredStatus();
-
-  @override
-  ConsumerState<_IosTunLayeredStatus> createState() =>
-      _IosTunLayeredStatusState();
-}
-
-class _IosTunLayeredStatusState extends ConsumerState<_IosTunLayeredStatus> {
-  bool _checking = false;
-  ({bool ok, String reason})? _controller;
-  bool? _dnsOk;
-  bool? _googleOk;
-  bool? _githubOk;
-
-  Future<void> _refresh() async {
-    if (_checking) return;
-    setState(() => _checking = true);
-    final api = CoreManager.instance.api;
-    try {
-      final results = await Future.wait<Object>([
-        api.healthSnapshot(),
-        _queryDnsOk(),
-        _httpsReachable('https://www.gstatic.com/generate_204'),
-        _httpsReachable('https://github.com/'),
-      ]);
-      if (!mounted) return;
-      setState(() {
-        _controller = results[0] as ({bool ok, String reason});
-        _dnsOk = results[1] as bool;
-        _googleOk = results[2] as bool;
-        _githubOk = results[3] as bool;
-      });
-    } finally {
-      if (mounted) setState(() => _checking = false);
-    }
-  }
-
-  Future<bool> _queryDnsOk() async {
-    try {
-      final api = CoreManager.instance.api;
-      final dns = await api
-          .queryDns('www.gstatic.com')
-          .timeout(const Duration(seconds: 4));
-      final answers = dns['Answer'];
-      return answers is List && answers.isNotEmpty;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  Future<bool> _httpsReachable(String url) async {
-    final client = HttpClient();
-    client.connectionTimeout = const Duration(seconds: 4);
-    client.findProxy = (_) => 'DIRECT';
-    try {
-      final req = await client.getUrl(Uri.parse(url));
-      final resp = await req.close().timeout(const Duration(seconds: 5));
-      await resp.drain<void>();
-      return resp.statusCode < 500;
-    } catch (_) {
-      return false;
-    } finally {
-      client.close(force: true);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final mode = ref.watch(connectionModeProvider);
-    final isTun = mode == 'tun';
-    final hasData =
-        _controller != null ||
-        _dnsOk != null ||
-        _googleOk != null ||
-        _githubOk != null;
-    return Column(
-      children: [
-        YLListTile(
-          leading: YLSettingIcon(
-            icon: isTun ? Icons.hub_rounded : Icons.http_rounded,
-            color: isTun ? YLColors.tunConnected : YLColors.zinc500,
-          ),
-          title: '当前模式',
-          subtitle: isTun ? 'TUN · 分层诊断已启用' : '系统代理 · TUN 未开启',
-          trailing: _checking
-              ? YLListTrailing.loading()
-              : YLListTrailing.value('重新检测'),
-          onTap: _checking ? null : _refresh,
-        ),
-        if (!isTun)
-          const YLListTile(
-            leading: YLSettingIcon(
-              icon: Icons.power_settings_new_rounded,
-              color: YLColors.zinc400,
-            ),
-            title: 'TUN 层',
-            subtitle: '当前未使用 TUN，节点超时不会归因到 TUN',
-            trailing: null,
-          )
-        else if (!hasData)
-          YLListTile(
-            leading: const YLSettingIcon(
-              icon: Icons.help_rounded,
-              color: YLColors.connecting,
-            ),
-            title: 'TUN 状态',
-            subtitle: '尚未检测；点击重新检测',
-            trailing: YLListTrailing.badge(text: '待检测', color: YLColors.connecting),
-          )
-        else ...[
-          YLListTile(
-            leading: YLSettingIcon(
-              icon: Icons.memory_rounded,
-              color: (_controller?.ok ?? false)
-                  ? YLColors.connected
-                  : YLColors.error,
-            ),
-            title: 'Core 层',
-            subtitle: (_controller?.ok ?? false)
-                ? 'mihomo 控制接口可访问'
-                : 'mihomo 控制接口不可用 (${_controller?.reason ?? "unknown"})',
-            trailing: YLListTrailing.badge(
-              text: (_controller?.ok ?? false) ? 'OK' : '失败',
-              color: (_controller?.ok ?? false)
-                  ? YLColors.connected
-                  : YLColors.error,
-            ),
-          ),
-          YLListTile(
-            leading: YLSettingIcon(
-              icon: Icons.dns_rounded,
-              color: (_dnsOk ?? false) ? YLColors.connected : YLColors.error,
-            ),
-            title: 'DNS 层',
-            subtitle: (_dnsOk ?? false)
-                ? 'DNS 已通过 mihomo 接管'
-                : 'DNS 未接管或解析失败',
-            trailing: YLListTrailing.badge(
-              text: (_dnsOk ?? false) ? 'OK' : '异常',
-              color: (_dnsOk ?? false) ? YLColors.connected : YLColors.error,
-            ),
-          ),
-          YLListTile(
-            leading: YLSettingIcon(
-              icon: Icons.public_rounded,
-              color: ((_googleOk ?? false) || (_githubOk ?? false))
-                  ? YLColors.connected
-                  : YLColors.error,
-            ),
-            title: '目标站层',
-            subtitle:
-                'Google ${(_googleOk ?? false) ? "OK" : "失败"} · '
-                'GitHub ${(_githubOk ?? false) ? "OK" : "失败"}；'
-                'Claude 403 会归因 AI 出口受限，不归因 TUN',
-            trailing: YLListTrailing.badge(
-              text: ((_googleOk ?? false) || (_githubOk ?? false))
-                  ? 'OK'
-                  : '异常',
-              color: ((_googleOk ?? false) || (_githubOk ?? false))
-                  ? YLColors.connected
-                  : YLColors.error,
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-}
-
-class _TunDiagRow {
-  const _TunDiagRow({
-    required this.title,
-    required this.subtitle,
-    required this.ok,
-    required this.badge,
-    required this.icon,
-    required this.color,
-  });
-
-  final String title;
-  final String subtitle;
-  final bool ok;
-  final String badge;
-  final IconData icon;
-  final Color color;
-}
-
-// ── Network diagnostics widget ─────────────────────────────────────────────
-
-class _DiagEndpoint {
-  final String label;
-  final String url;
-  final bool aiTarget;
-  const _DiagEndpoint(this.label, this.url, {this.aiTarget = false});
-}
-
-// User-facing labels abstract away internal endpoint URLs.
-// Each test probes a standard reachability target — no internal server
-// URLs exposed to the user.
-const _kDiagEndpoints = [
-  _DiagEndpoint('Google', 'https://www.gstatic.com/generate_204'),
-  _DiagEndpoint('GitHub', 'https://github.com/'),
-  _DiagEndpoint('Claude', 'https://claude.ai/', aiTarget: true),
-  _DiagEndpoint('ChatGPT', 'https://chatgpt.com/', aiTarget: true),
-];
-
-enum _DiagStatus { idle, testing, success, limited, failed }
-
-class _DiagResult {
-  final _DiagStatus status;
-  final int? latencyMs;
-  final int? statusCode;
-  final String? errorClass;
-  final String? error;
-  const _DiagResult({
-    this.status = _DiagStatus.idle,
-    this.latencyMs,
-    this.statusCode,
-    this.errorClass,
-    this.error,
-  });
-}
-
-class _NetworkDiagnostics extends StatefulWidget {
-  final String header;
-  final bool isDark;
-  const _NetworkDiagnostics({required this.header, required this.isDark});
-
-  @override
-  State<_NetworkDiagnostics> createState() => _NetworkDiagnosticsState();
-}
-
-class _NetworkDiagnosticsState extends State<_NetworkDiagnostics> {
-  List<_DiagResult> _results = List.filled(
-    _kDiagEndpoints.length,
-    const _DiagResult(),
-  );
-  bool _testing = false;
-
-  Future<void> _runDiagnostics() async {
-    if (_testing) return;
-    setState(() {
-      _testing = true;
-      _results = List.generate(
-        _kDiagEndpoints.length,
-        (_) => const _DiagResult(status: _DiagStatus.testing),
-      );
-    });
-
-    final futures = <Future<_DiagResult>>[];
-    for (final endpoint in _kDiagEndpoints) {
-      futures.add(_testEndpoint(endpoint));
-    }
-
-    final results = await Future.wait(futures);
-    if (mounted) {
-      setState(() {
-        _results = results;
-        _testing = false;
-      });
-    }
-  }
-
-  Future<_DiagResult> _testEndpoint(_DiagEndpoint endpoint) async {
-    final client = HttpClient();
-    client.connectionTimeout = const Duration(seconds: 5);
-    try {
-      final sw = Stopwatch()..start();
-      final request = await client.getUrl(Uri.parse(endpoint.url));
-      final response = await request.close().timeout(
-        const Duration(seconds: 5),
-      );
-      sw.stop();
-      // Drain the response body
-      await response.drain<void>();
-      final ms = sw.elapsedMilliseconds;
-      final statusCode = response.statusCode;
-      if (endpoint.aiTarget && (statusCode == 403 || statusCode == 429)) {
-        return _DiagResult(
-          status: _DiagStatus.limited,
-          latencyMs: ms,
-          statusCode: statusCode,
-          errorClass: statusCode == 403 ? 'ai_blocked' : 'http_429',
-          error: statusCode == 403 ? 'AI 出口受限' : 'AI 请求被限速',
-        );
-      }
-      // Accept any non-server-error response as reachable
-      if (statusCode < 500) {
-        return _DiagResult(
-          status: _DiagStatus.success,
-          latencyMs: ms,
-          statusCode: statusCode,
-          errorClass: 'ok',
-        );
-      }
-      return _DiagResult(
-        status: _DiagStatus.failed,
-        latencyMs: ms,
-        statusCode: statusCode,
-        errorClass: 'target_failed',
-        error: '目标站点 HTTP $statusCode',
-      );
-    } catch (e) {
-      final msg = e.toString();
-      if (msg.contains('TimeoutException')) {
-        return const _DiagResult(
-          status: _DiagStatus.failed,
-          errorClass: 'timeout',
-          error: '节点或本地网络超时',
-        );
-      }
-      final lower = msg.toLowerCase();
-      if (lower.contains('failed host lookup') ||
-          lower.contains('nodename nor servname') ||
-          lower.contains('name or service not known')) {
-        return const _DiagResult(
-          status: _DiagStatus.failed,
-          errorClass: 'dns_failed',
-          error: 'DNS 解析失败',
-        );
-      }
-      if (lower.contains('handshake') || lower.contains('certificate')) {
-        return const _DiagResult(
-          status: _DiagStatus.failed,
-          errorClass: 'tls_failed',
-          error: 'TLS 握手失败',
-        );
-      }
-      if (lower.contains('connection reset')) {
-        return const _DiagResult(
-          status: _DiagStatus.failed,
-          errorClass: 'connection_reset',
-          error: '连接被重置',
-        );
-      }
-      return _DiagResult(
-        status: _DiagStatus.failed,
-        errorClass: 'tcp_failed',
-        error: msg.length > 40 ? '${msg.substring(0, 40)}...' : msg,
-      );
-    } finally {
-      client.close();
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return YLSection(
-      header: widget.header,
-      children: [
-        YLListTile(
-          leading: const YLSettingIcon(
-            icon: Icons.network_check_rounded,
-            color: Color(0xFF0EA5E9),
-          ),
-          title: S.current.networkDiagnostics,
-          trailing: _testing
-              ? YLListTrailing.loading()
-              : YLListTrailing.value(_testing ? '检测中...' : '开始检测'),
-          onTap: _testing ? null : _runDiagnostics,
-        ),
-        for (var i = 0; i < _kDiagEndpoints.length; i++)
-          _DiagRow(endpoint: _kDiagEndpoints[i], result: _results[i]),
-      ],
-    );
-  }
-}
-
-class _DiagRow extends StatelessWidget {
-  final _DiagEndpoint endpoint;
-  final _DiagResult result;
-  const _DiagRow({required this.endpoint, required this.result});
-
-  @override
-  Widget build(BuildContext context) {
-    final IconData icon;
-    final Color iconColor;
-    switch (result.status) {
-      case _DiagStatus.idle:
-        icon = Icons.circle_outlined;
-        iconColor = YLColors.zinc400;
-        break;
-      case _DiagStatus.testing:
-        icon = Icons.sync_rounded;
-        iconColor = YLColors.zinc400;
-        break;
-      case _DiagStatus.success:
-        icon = Icons.check_circle_rounded;
-        iconColor = YLColors.connected;
-        break;
-      case _DiagStatus.limited:
-        icon = Icons.shield_rounded;
-        iconColor = YLColors.connecting;
-        break;
-      case _DiagStatus.failed:
-        icon = Icons.cancel_rounded;
-        iconColor = YLColors.error;
-        break;
-    }
-
-    final Widget? trailing;
-    if (result.status == _DiagStatus.testing) {
-      trailing = YLListTrailing.loading();
-    } else if (result.latencyMs != null) {
-      trailing = YLListTrailing.badge(
-        text: '${result.latencyMs}ms',
-        color: result.status == _DiagStatus.success
-            ? YLColors.connected
-            : result.status == _DiagStatus.limited
-            ? YLColors.connecting
-            : YLColors.error,
-      );
-    } else {
-      trailing = null;
-    }
-
-    return YLListTile(
-      leading: YLSettingIcon(icon: icon, color: iconColor),
-      title: endpoint.label,
-      subtitle: _subtitle(result),
-      trailing: trailing,
-    );
-  }
-
-  String _subtitle(_DiagResult result) {
-    if (result.status == _DiagStatus.idle) return '等待检测';
-    if (result.status == _DiagStatus.testing) return '正在检测...';
-    if (result.status == _DiagStatus.success) {
-      return result.statusCode == null
-          ? '连接正常'
-          : '连接正常 · HTTP ${result.statusCode}';
-    }
-    if (result.status == _DiagStatus.limited) {
-      return result.error ?? 'AI 出口受限';
-    }
-    return result.error ?? '未知错误';
-  }
 }
