@@ -7,6 +7,15 @@ class StaticSectionsTransformer {
   /// Force sniffer with override-destination: true for TLS/HTTP/QUIC.
   /// Always overwrite — subscription templates may have override-destination:
   /// false which breaks server-side audit rules.
+  ///
+  /// **Deliberately NO `parse-pure-ip` / `force-dns-mapping`** even
+  /// though both look like 2026-mainstream wins on paper. v1.0.21 P1-4
+  /// (commit ccfae5e) measured a ~30% throughput regression with both
+  /// flags on (32 MB/s → 20 MB/s on the same node) and removed them
+  /// from both the runtime template and the fallback asset. CVR /
+  /// mihomo-party also keep them off in their shipped defaults. Don't
+  /// re-add without re-running the throughput benchmark from that
+  /// commit's user report.
   static String ensureSniffer(String config) {
     config = _removeSection(config, 'sniffer');
     return '$config\nsniffer:\n'

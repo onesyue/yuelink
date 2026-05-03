@@ -19,7 +19,7 @@ void main() {
 
   group('UpdateChecker.downloadMirrors', () {
     test('GitHub release asset gets gh-proxy + ghfast prepended', () {
-      final url =
+      const url =
           'https://github.com/onesyue/yuelink/releases/download/v1.1.16/YueLink-macOS.dmg';
       final mirrors = UpdateChecker.downloadMirrors(url);
       expect(mirrors, hasLength(3));

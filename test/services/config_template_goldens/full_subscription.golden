@@ -72,6 +72,9 @@ dns:
     - "time.*.gov"
     - "localhost.work.weixin.qq.com"
 
+  cache-algorithm: arc
+  use-system-hosts: true
+  fake-ip-filter-mode: blacklist
   nameserver-policy:
     "+.apple.com": ["https://dns.alidns.com/dns-query", "https://doh.pub/dns-query"]
     "+.icloud.com": ["https://dns.alidns.com/dns-query", "https://doh.pub/dns-query"]
