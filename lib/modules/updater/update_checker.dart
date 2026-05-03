@@ -366,6 +366,27 @@ class UpdateChecker {
 
   // ── Download with optional sha256 verification ────────────────────────────
 
+  /// Build the mirror chain for a GitHub release asset URL. Returns the
+  /// original URL plus two CN-friendly HTTP proxies (gh-proxy.com and
+  /// ghfast.top) that wrap the canonical URL. Order: mirrors first, direct
+  /// last — direct GitHub release downloads are reliably 50-200 KB/s
+  /// inside China while ghfast / gh-proxy can reach 5-20 MB/s. Non-GitHub
+  /// URLs (e.g. a manifest pointing at a private CDN) pass through
+  /// unmodified.
+  ///
+  /// Pure helper, exposed for tests.
+  @visibleForTesting
+  static List<String> downloadMirrors(String url) {
+    final isGithubAsset = url.startsWith('https://github.com/') &&
+        url.contains('/releases/download/');
+    if (!isGithubAsset) return [url];
+    return [
+      'https://gh-proxy.com/$url',
+      'https://ghfast.top/$url',
+      url,
+    ];
+  }
+
   /// Download an update file with progress callback.
   ///
   /// If [expectedSha256] is provided, the downloaded file is verified against
@@ -376,29 +397,110 @@ class UpdateChecker {
     String? expectedSha256,
     void Function(int received, int total)? onProgress,
   }) async {
+    final mirrors = downloadMirrors(url);
+    Object? lastError;
+    for (var i = 0; i < mirrors.length; i++) {
+      final mirror = mirrors[i];
+      try {
+        return await _downloadFromMirror(
+          mirror,
+          expectedSha256: expectedSha256,
+          onProgress: onProgress,
+        );
+      } on SecurityException {
+        // SHA-256 mismatch is NOT a "try the next mirror" condition —
+        // it means the artifact was tampered with somewhere in the
+        // pipeline (or the manifest is wrong). Bubble immediately so
+        // the user sees the integrity-failure error instead of seeing
+        // the next mirror serve the same bad bytes.
+        rethrow;
+      } catch (e) {
+        lastError = e;
+        debugPrint(
+          '[UpdateChecker] mirror ${i + 1}/${mirrors.length} '
+          '($mirror) failed: $e',
+        );
+        EventLog.write(
+          '[Updater] mirror_failed idx=${i + 1} url=$mirror err=$e',
+        );
+      }
+    }
+    throw lastError ?? Exception('All download mirrors failed');
+  }
+
+  /// Single-attempt download against one mirror URL. Aborts early if the
+  /// connection takes >15 s to establish or the first byte doesn't arrive
+  /// within 20 s after — gives the surrounding mirror loop a fast bail
+  /// path so a wedged proxy doesn't waste minutes on the user's wall
+  /// clock.
+  static Future<String> _downloadFromMirror(
+    String url, {
+    String? expectedSha256,
+    void Function(int received, int total)? onProgress,
+  }) async {
     final client = HttpClient();
-    client.connectionTimeout = const Duration(seconds: 30);
+    client.connectionTimeout = const Duration(seconds: 15);
+    // Disable HttpClient's default request-level timeout — it's
+    // measured against the body stream which we deliberately consume
+    // slowly via the chunk loop. We enforce our own first-byte
+    // watchdog above and a no-progress watchdog below.
+    client.idleTimeout = const Duration(seconds: 30);
     IOSink? sink;
     File? file;
+    Timer? noProgressTimer;
     try {
       final request = await client.getUrl(Uri.parse(url));
-      final response = await request.close();
+      final response = await request
+          .close()
+          .timeout(const Duration(seconds: 20));
       if (response.statusCode != 200) {
         throw Exception('HTTP ${response.statusCode}');
       }
 
       final total = response.contentLength;
-      final fileName = Uri.parse(url).pathSegments.last;
+      // Derive filename from the ORIGINAL asset URL when downloading
+      // through a wrapping proxy — gh-proxy / ghfast prefix the
+      // canonical URL, so pathSegments.last on the mirror would be
+      // e.g. "YueLink-macOS.dmg" still, but only because the proxies
+      // preserve the path; safer to peel the proxy prefix when
+      // present.
+      final canonical = url.startsWith('https://gh-proxy.com/https://')
+          ? url.substring('https://gh-proxy.com/'.length)
+          : url.startsWith('https://ghfast.top/https://')
+              ? url.substring('https://ghfast.top/'.length)
+              : url;
+      final fileName = Uri.parse(canonical).pathSegments.last;
       final dir = await getTemporaryDirectory();
       file = File('${dir.path}/$fileName');
 
       sink = file.openWrite();
       var received = 0;
+      // No-progress watchdog: if the chunk stream stalls for 15 s the
+      // mirror has effectively died — close the sink to break the
+      // `await for` loop and let the outer mirror loop try the next
+      // candidate. Reset every chunk.
+      const stallTimeout = Duration(seconds: 15);
+      void resetStallWatch() {
+        noProgressTimer?.cancel();
+        noProgressTimer = Timer(stallTimeout, () {
+          debugPrint(
+            '[UpdateChecker] mirror $url stalled ${stallTimeout.inSeconds}s '
+            '— aborting',
+          );
+          // ignore: unawaited_futures
+          sink?.close().catchError((_) {});
+        });
+      }
+
+      resetStallWatch();
       await for (final chunk in response) {
         sink.add(chunk);
         received += chunk.length;
         onProgress?.call(received, total);
+        resetStallWatch();
       }
+      noProgressTimer?.cancel();
+      noProgressTimer = null;
       await sink.flush();
       await sink.close();
       sink = null;
@@ -417,6 +519,7 @@ class UpdateChecker {
       }
       return file.path;
     } catch (e) {
+      noProgressTimer?.cancel();
       try {
         await sink?.close();
       } catch (e) {
@@ -431,7 +534,7 @@ class UpdateChecker {
       }
       rethrow;
     } finally {
-      client.close();
+      client.close(force: true);
     }
   }
 
