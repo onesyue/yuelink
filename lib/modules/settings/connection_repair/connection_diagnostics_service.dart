@@ -17,12 +17,15 @@ class ConnectionDiagnosticsService {
   /// Assemble a diagnostic log bundle from files in [appDir].
   ///
   /// Reads `core.log` (and any rotated `core.log.1` / `core.log.2`
-  /// sidecars present), `crash.log`, `event.log`, `startup_report.json`.
-  /// Per-source headers are emitted even when the file is absent so the
-  /// reader can see at a glance which expected files were missing — except
-  /// for rotated sidecars, which are silently skipped when absent (they
-  /// only exist after rotation, so a fresh install would otherwise show
-  /// noisy `<not present>` lines for them).
+  /// sidecars present), `mihomo-service.log` (TUN mode's privileged-helper
+  /// child mihomo — distinct from the in-process FFI core's `core.log`,
+  /// and the only place to see service-mode bind / DNS / config errors),
+  /// `crash.log`, `event.log`, `startup_report.json`. Per-source headers
+  /// are emitted even when the file is absent so the reader can see at a
+  /// glance which expected files were missing — except for rotated
+  /// sidecars, which are silently skipped when absent (they only exist
+  /// after rotation, so a fresh install would otherwise show noisy
+  /// `<not present>` lines for them).
   ///
   /// [extraSection] is appended verbatim under a `desktop_tun_diagnostics`
   /// header — used by the page to inject Ref-coupled platform diagnostic
@@ -33,6 +36,7 @@ class ConnectionDiagnosticsService {
   }) async {
     final sources = expandRotatedLogSources(const [
       'core.log',
+      'mihomo-service.log',
       'crash.log',
       'event.log',
       'startup_report.json',

@@ -46,6 +46,7 @@ void main() {
       expect(bundle.content, contains('YueLink diagnostic bundle'));
       // Each canonical source has its <not present> marker.
       expect(bundle.content, contains('═══ core.log'));
+      expect(bundle.content, contains('═══ mihomo-service.log'));
       expect(bundle.content, contains('═══ crash.log'));
       expect(bundle.content, contains('═══ event.log'));
       expect(bundle.content, contains('═══ startup_report.json'));
