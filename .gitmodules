@@ -1,4 +1,4 @@
 [submodule "core/mihomo"]
 	path = core/mihomo
 	url = https://github.com/onesyue/mihomo.git
-	branch = yuelink-v1.19.24
+	branch = main

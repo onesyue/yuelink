@@ -220,8 +220,26 @@ Pre-commit (`scripts/pre-commit`): analyze + test + import check. Install: `ln -
 - Release flow: commit to `dev` → move `pre` for test build → merge `dev`→`master` → `git tag -a vX.Y.Z -m "..." && git push origin vX.Y.Z`. Never tag before pushing the commit.
 - Pipeline: analyze+test → Go cores (matrix) → Flutter builds (download artifacts → install → build) → release.
 - Artifacts: `YueLink-Windows-Setup.exe` (Inno), `YueLink-macOS.dmg` (create-dmg, universal), `YueLink-Android.apk` (fat), `YueLink-iOS.ipa` (no-codesign).
-- Submodule: `core/mihomo` → fork `onesyue/mihomo`, branch `yuelink-v1.19.24`. Clone with `--recursive`. Fork carries three native commits on top of upstream `v1.19.24`:
+- Submodule: `core/mihomo` → fork `onesyue/mihomo`, branch `main` (rolling). Clone with `--recursive`. Fork's `main` = upstream `MetaCubeX/mihomo` `Meta` (stable channel) HEAD + three native commits always on top:
   - `non-fatal buildAndroidRules` (PackageManager errors warn instead of aborting TUN setup);
   - `non-fatal MMDB load + iptables` (`log.Fatalln`/`os.Exit` → `Errorln` so a missing GeoIP DB or iptables failure doesn't kill the host Flutter process);
   - `cleanup all listeners on Shutdown` + `dns.ReCreateServer("", nil)` so c-archive embeds release `:7890`/`:1053`/etc. on `StopCore` instead of leaking them into the next start.
-  Bumping mihomo: rebase `yuelink-v1.19.24` → `yuelink-vX.Y.Z` on the new tag, push to fork, `git submodule update --remote core/mihomo`. There is no `core/patches/` step anymore — the fixes live in the fork.
+
+  **Bumping mihomo** (when upstream Meta gets new commits worth picking up):
+  ```
+  cd core/mihomo
+  git fetch upstream                      # upstream = MetaCubeX/mihomo
+  git rebase upstream/Meta main           # our 3 fixes replay onto the new HEAD
+  go build ./...                          # smoke compile
+  cd ../.. && flutter test                # smoke run
+  cd core/mihomo
+  git push origin main --force-with-lease # rebase = force-push
+  cd ../..
+  git add core/mihomo                     # record new SHA in yuelink tree
+  git commit -m "build(core): bump mihomo submodule to upstream Meta YYYY-MM-DD"
+  ```
+  yuelink's submodule pointer is a frozen SHA per commit — `--remote` only matters for `git submodule update --remote`. Bumping is opt-in; never automatic. Each yuelink release pins a known SHA.
+
+  **`yuelink-vX.Y.Z` release branches** are kept as frozen audit snapshots when meaningful (e.g. `yuelink-v1.19.24` was the first cut). Don't push new fixes there — they go on `main`. Don't track them from `.gitmodules`.
+
+  **Stay on Meta, not Alpha.** The `feedback_no_mihomo_alpha` rule applies: Alpha experiments don't enter our main line.
