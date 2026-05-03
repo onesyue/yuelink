@@ -37,6 +37,36 @@ class CoreLifecycleManager {
 
   static Future<void> _operationQueue = Future<void>.value();
 
+  /// Number of lifecycle ops currently mid-flight (anywhere in the
+  /// `_operationQueue` chain — counts both the running op AND ops still
+  /// queued behind it). The flag exists for paths outside the lifecycle
+  /// (notably `AppResumeController._onAppResumed` → `markRunning`) that
+  /// otherwise can't tell whether the queue is between a stop and start
+  /// of a multi-step op like `_restartUnlocked`.
+  ///
+  /// `CoreManager._startInFlight` covers only the inside of
+  /// `manager.start()`. The window in `_restartUnlocked` between
+  /// `_stopUnlocked` completing (which clears `_running`) and
+  /// `_startUnlocked` calling `manager.start()` (which sets
+  /// `_startInFlight`) is unprotected by `_startInFlight` alone — a
+  /// resume firing in that gap would call `markRunning`, set
+  /// `_running=true`, and the subsequent `manager.start()` would
+  /// short-circuit at `if (_running) return true;`. Net effect: no real
+  /// start, but lifecycle thinks it succeeded. Resume readers consult
+  /// this flag to skip the markRunning path while any lifecycle op is
+  /// in the queue.
+  static int _inFlightOpCount = 0;
+  static bool get isLifecycleBusy => _inFlightOpCount > 0;
+
+  /// Connection mode the most recent successful `_startUnlocked` brought up.
+  /// Single source of truth for "what is the running mihomo configured as?"
+  /// — `connectionModeProvider` is updated optimistically by UI before the
+  /// actual switch lands, so reading it from `_stopUnlocked` gives the
+  /// new mode (the user's intent), not the old mode (what's actually
+  /// running and being torn down). Cleared by `_stopUnlocked` after the
+  /// teardown finishes.
+  String? _activeConnectionMode;
+
   /// Queue a low-level core stop that is triggered by failure recovery rather
   /// than by an explicit user disconnect.
   ///
@@ -59,6 +89,7 @@ class CoreLifecycleManager {
   ) {
     final completer = Completer<T>();
     final queuedAt = DateTime.now();
+    _inFlightOpCount++;
     _operationQueue = _operationQueue
         .catchError((_) {
           // Keep the lifecycle queue alive after a failed previous operation.
@@ -78,6 +109,8 @@ class CoreLifecycleManager {
               'error=${e.toString().split('\n').first}',
             );
             if (!completer.isCompleted) completer.completeError(e, st);
+          } finally {
+            _inFlightOpCount--;
           }
         });
     return completer.future;
@@ -86,6 +119,7 @@ class CoreLifecycleManager {
   Future<T> _runExclusive<T>(String operation, Future<T> Function() body) {
     final completer = Completer<T>();
     final queuedAt = DateTime.now();
+    _inFlightOpCount++;
     _operationQueue = _operationQueue
         .catchError((_) {
           // Keep the lifecycle queue alive after a failed previous operation.
@@ -110,6 +144,8 @@ class CoreLifecycleManager {
               'error=${e.toString().split('\n').first}',
             );
             if (!completer.isCompleted) completer.completeError(e, st);
+          } finally {
+            _inFlightOpCount--;
           }
         });
     return completer.future;
@@ -213,6 +249,13 @@ class CoreLifecycleManager {
         AppNotifier.error(detail);
         return false;
       }
+
+      // Capture the mode mihomo is actually running as. _stopUnlocked
+      // reads this back so its TUN-specific cleanup (cleanupSnapshot,
+      // restoreTunDns gating) keys off what's really being torn down,
+      // not whatever the UI optimistically wrote into the provider for
+      // the next mode.
+      _activeConnectionMode = connMode;
 
       // Apply routing mode (non-blocking — errors logged, not thrown)
       await _applyRoutingMode(manager);
@@ -334,18 +377,46 @@ class CoreLifecycleManager {
     return _runExclusive('stop', _stopUnlocked);
   }
 
-  Future<void> _stopUnlocked() async {
-    ref.read(userStoppedProvider.notifier).set(true);
-    // Persist the stop intent BEFORE doing any teardown work — engine
-    // recreate / process kill can happen at any point during a normal
-    // disconnect (Android background-kill is the canonical case), and the
-    // resume path needs to see this flag even if we never got to finally{}.
-    // setImmediate is required: the coalesced flush would lose this write
-    // if the user puts the app away within the flush window.
-    await SettingsService.setManualStopped(true);
+  /// Tear down the running core.
+  ///
+  /// [userInitiated] distinguishes a user-clicked Disconnect from the stop
+  /// half of a hot-switch / restart. The user-initiated path persists
+  /// `manual_stopped=true` so resume / auto-connect / heartbeat respect
+  /// the user's intent. The hot-switch path explicitly does NOT, because
+  /// the user's intent is "switch to a different mode", not "disconnect"
+  /// — leaking `manual_stopped=true` here was a real bug: if the start
+  /// half of the switch later failed before flipping it back to false,
+  /// the next launch would auto-skip connect.
+  Future<void> _stopUnlocked({bool userInitiated = true}) async {
+    if (userInitiated) {
+      ref.read(userStoppedProvider.notifier).set(true);
+      // Persist the stop intent BEFORE doing any teardown work — engine
+      // recreate / process kill can happen at any point during a normal
+      // disconnect (Android background-kill is the canonical case), and
+      // the resume path needs to see this flag even if we never got to
+      // finally{}. setImmediate is required: the coalesced flush would
+      // lose this write if the user puts the app away within the flush
+      // window.
+      await SettingsService.setManualStopped(true);
+    }
     ref.read(coreStatusProvider.notifier).set(CoreStatus.stopping);
+    // Use the captured mode of the actually-running core, not the
+    // UI-provider value (the latter has typically been written
+    // optimistically to the NEW mode by the time hot-switch reaches
+    // here, which would skip TUN cleanup on TUN→systemProxy switches
+    // and run a bogus TUN cleanup on systemProxy→TUN switches).
+    //
+    // Fallback to persisted mode when this lifecycle instance never
+    // saw the start that spawned the running core — happens after a
+    // Flutter engine restart (Android background kill, hot-restart in
+    // dev) where Riverpod rebuilds CoreLifecycleManager but the Go
+    // core / helper service / VPN profile survive. Persisted is the
+    // user's saved preference and matches what mihomo was started
+    // with in any normal session.
+    final activeMode =
+        _activeConnectionMode ?? await SettingsService.getConnectionMode();
     final wasDesktopTun =
-        ref.read(connectionModeProvider) == 'tun' &&
+        activeMode == 'tun' &&
         (Platform.isMacOS || Platform.isWindows || Platform.isLinux);
 
     try {
@@ -384,6 +455,9 @@ class CoreLifecycleManager {
       ref.read(trafficProvider.notifier).set(const Traffic());
       ref.read(trafficHistoryProvider.notifier).set(TrafficHistory());
       ref.read(trafficHistoryVersionProvider.notifier).set(0);
+      // Drop the captured mode marker last — anything reading it after
+      // teardown should see "no core is running".
+      _activeConnectionMode = null;
       // delay-state wipe is handled by _delayResetSub in main.dart (listens
       // for coreStatusProvider → stopped transition).
     }
@@ -555,12 +629,35 @@ class CoreLifecycleManager {
   }
 
   Future<bool> _restartUnlocked(String configYaml) async {
+    // Honour user-stop landing while we were queued behind another op.
+    // restart() is the FIFO entry point for heartbeat auto-recovery,
+    // resume's transport-handoff repair, and the desktop TUN repair
+    // callback. Any of those can have been queued seconds ago and only
+    // now reached the front of the queue; meanwhile the user may have
+    // tapped Disconnect, which set `userStoppedProvider=true` and
+    // persisted `manual_stopped=true`. Without this guard, the queued
+    // restart proceeds: _startUnlocked clears manual_stopped back to
+    // false (line 137), brings the core back up, and the user's Stop
+    // click visibly fails — they see "已自动恢复连接" right after
+    // hitting disconnect. Caller sees `false` and treats it as
+    // "restart skipped", same shape as a benign no-op.
+    final persistedManualStopped = await SettingsService.getManualStopped();
+    if (ref.read(userStoppedProvider) || persistedManualStopped) {
+      EventLog.write('[CoreLifecycle] restart skipped — user stopped');
+      return false;
+    }
+
     final status = ref.read(coreStatusProvider);
     if (CoreManager.instance.isRunning ||
         status == CoreStatus.running ||
         status == CoreStatus.degraded ||
         status == CoreStatus.starting) {
-      await _stopUnlocked();
+      // Restart / hot-switch is not "user disconnected" — don't poison
+      // the manual-stopped flag. _startUnlocked further down clears it
+      // back to false anyway, but if start fails before it gets there
+      // (process kill mid-switch), the persisted true would suppress
+      // the next launch's auto-connect.
+      await _stopUnlocked(userInitiated: false);
     }
     final ok = await _startUnlocked(configYaml);
     if (ok) Telemetry.event(TelemetryEvents.coreRestarted);

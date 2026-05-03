@@ -52,6 +52,22 @@ class TunTransformer {
     config = _ensureFakeIpForTun(config);
     config = _ensureProcessBypassRules(config, bypassProcesses);
 
+    // Override the global `ipv6: false` that ScalarTransformers.ensureIpv6
+    // would otherwise leave in place. That default is the right call for
+    // Android (VpnService.Builder routes IPv4 only) and for desktop
+    // systemProxy mode (apps connect to the IPv4 mixed-port socket
+    // anyway), but in desktop TUN mode we DO want mihomo to process
+    // IPv6: we just assigned a ULA to the TUN below, and without
+    // top-level `ipv6: true` mihomo's DNS handler refuses AAAA queries
+    // and `auto-route` skips the IPv6 route install — meaning the IPv6
+    // hijack we set up via inet6-address is dead on arrival, and the
+    // user's real IPv6 still leaks via the system default IPv6 route.
+    if (hasKey(config, 'ipv6')) {
+      config = replaceScalar(config, 'ipv6', 'true');
+    } else {
+      config += '\nipv6: true\n';
+    }
+
     final buf = StringBuffer()
       ..write('$config\ntun:\n')
       ..write('  enable: true\n')
@@ -63,6 +79,20 @@ class TunTransformer {
       ..write('  auto-route: true\n')
       ..write('  auto-detect-interface: true\n')
       ..write('  strict-route: ${Platform.isWindows ? 'true' : 'false'}\n')
+      // IPv6 plumbing: without `inet6-address` mihomo's auto-route only
+      // installs IPv4 split-default routes (`0.0.0.0/1` + `128.0.0.0/1`),
+      // leaving IPv6 default route on the user's physical interface. An
+      // app issuing a direct IPv6 connection (or hitting an AAAA record
+      // it received pre-TUN from system DNS cache) bypasses the TUN
+      // entirely and leaks the user's real IPv6 address. Assigning a
+      // ULA to the TUN + enabling inet6-route is the same pattern
+      // upstream mihomo and FlClash use for desktop TUN.
+      //
+      // The ULA `fdfe:dcba:9876::1/126` is private (RFC 4193) and
+      // never routable on the public Internet; it's just a transport
+      // address for the TUN endpoint, mirroring `inet4-address` semantics.
+      ..write('  inet6-address:\n')
+      ..write('    - fdfe:dcba:9876::1/126\n')
       ..write('  dns-hijack:\n')
       ..write('    - any:53\n')
       ..write('    - tcp://any:53\n')

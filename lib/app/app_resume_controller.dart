@@ -16,6 +16,7 @@ import '../shared/app_notifier.dart';
 import '../shared/event_log.dart';
 import '../core/kernel/core_manager.dart';
 import '../core/kernel/recovery_manager.dart';
+import '../core/managers/core_lifecycle_manager.dart';
 import '../core/managers/system_proxy_manager.dart';
 import '../core/platform/vpn_service.dart';
 import '../core/profile/profile_service.dart';
@@ -548,6 +549,19 @@ class AppResumeController {
       debugPrint('[Resume] start() in flight — deferring resume handler');
       return;
     }
+    // Cover the gap inside _restartUnlocked between _stopUnlocked
+    // completing (clears `_running`) and `_startUnlocked` calling
+    // `manager.start()` (which sets `_startInFlight`). A resume firing
+    // in that window would otherwise reach `markRunning`, set
+    // `_running=true` from the side, and the subsequent
+    // `manager.start()` would short-circuit at `if (_running) return
+    // true;` — lifecycle thinks the start succeeded but no real start
+    // ran. `isLifecycleBusy` covers the entire queue, including the
+    // multi-step `_restartUnlocked` between its stop and start halves.
+    if (CoreLifecycleManager.isLifecycleBusy) {
+      debugPrint('[Resume] lifecycle op queued — deferring resume handler');
+      return;
+    }
 
     final status = ref.read(coreStatusProvider);
 
@@ -735,6 +749,19 @@ class AppResumeController {
       DesktopTunTelemetry.repairAttempt(snapshot, plan.action);
       await _desktopTunRepair.runThrottled(plan, () async {
         if (!plan.canRunAutomatically) return;
+        // Recheck before doing the actual repair. The runThrottled queue
+        // may have sat behind a user-driven hot-switch / restart that
+        // already brought the core back to healthy — firing a second
+        // round-trip restart on top of that produces a redundant
+        // "重启 mihomo 并重新验证 TUN" toast right after the user already
+        // saw "已切换到 TUN", and worse, can yank a freshly-running
+        // core down for no reason. The pre-snapshot may also be stale by
+        // several seconds for the same queueing reason.
+        if (ref.read(userStoppedProvider)) return;
+        if (ref.read(coreStatusProvider) == CoreStatus.running) {
+          EventLog.write('[Resume] desktop TUN repair skipped — already running');
+          return;
+        }
         if (plan.action == 'clear_system_proxy' ||
             plan.action == 'reapply_dns' ||
             plan.action == 'reapply_route' ||

@@ -229,6 +229,17 @@ func (s *ServiceRuntime) stopCurrentProcessLocked() error {
 		s.watchdogCancel = nil
 	}
 
+	// Explicit stop is not a crash — reset the rolling crash counter so
+	// a future unrelated crash doesn't get attributed to this session's
+	// accumulated count. Without this, a long-lived helper that has
+	// auto-restarted a few times will hit the 10-crashes-per-window
+	// give-up threshold sooner than the operator expects after they
+	// manually cycle the connection.
+	s.mu.Lock()
+	s.crashCount = 0
+	s.crashWindowEnd = time.Time{}
+	s.mu.Unlock()
+
 	cmd, done := s.currentChild()
 	if cmd == nil || cmd.Process == nil {
 		return nil
@@ -307,22 +318,27 @@ func (s *ServiceRuntime) waitForChild(cmd *exec.Cmd, done chan struct{}, logFile
 	default:
 	}
 
-	// Crash window tracking
+	// Crash window tracking — guarded by s.mu because stopCurrentProcessLocked
+	// resets the counter on explicit stop (see #8 fix). Reading the snapshot
+	// once under the lock avoids a torn read between counter and threshold.
+	s.mu.Lock()
 	now := time.Now()
 	if now.After(s.crashWindowEnd) {
 		s.crashCount = 0
 		s.crashWindowEnd = now.Add(watchdogWindow)
 	}
 	s.crashCount++
+	currentCount := s.crashCount
+	s.mu.Unlock()
 
-	if s.crashCount > watchdogMaxCrashes {
-		log.Printf("[watchdog] %d crashes in window — giving up", s.crashCount)
+	if currentCount > watchdogMaxCrashes {
+		log.Printf("[watchdog] %d crashes in window — giving up", currentCount)
 		return
 	}
 
 	// Exponential backoff: 2s, 4s, 8s, 16s, 30s cap
 	delay := watchdogBaseDelay
-	for i := 1; i < s.crashCount; i++ {
+	for i := 1; i < currentCount; i++ {
 		delay *= 2
 		if delay > watchdogMaxDelay {
 			delay = watchdogMaxDelay
@@ -330,7 +346,7 @@ func (s *ServiceRuntime) waitForChild(cmd *exec.Cmd, done chan struct{}, logFile
 		}
 	}
 
-	log.Printf("[watchdog] crash #%d — restarting in %v", s.crashCount, delay)
+	log.Printf("[watchdog] crash #%d — restarting in %v", currentCount, delay)
 	select {
 	case <-time.After(delay):
 	case <-wdCtx.Done():

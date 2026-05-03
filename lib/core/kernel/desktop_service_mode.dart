@@ -253,7 +253,21 @@ extension _DesktopServiceMode on CoreManager {
     } catch (e) {
       final failedName =
           steps.where((s) => !s.success).firstOrNull?.name ?? 'unknown';
-      await _finishReport(steps, false, failedName);
+      // Wrap the report write so an exception inside finishReport (disk
+      // full, JSON serialization edge case, settings IO failure) doesn't
+      // bypass the cleanup path below — without this guard, a thrown
+      // _finishReport would leave `_serviceModeActive=true` and the
+      // helper's mihomo subprocess still running, while Dart's `_running`
+      // is already false: future stop()/start() calls would think they
+      // were in service mode but find no live state to act on.
+      try {
+        await _finishReport(steps, false, failedName);
+      } catch (e2) {
+        debugPrint(
+          '[CoreManager] _finishReport during desktop service-mode '
+          'catch failed: $e2',
+        );
+      }
 
       if (_running || _serviceModeActive) {
         _running = false;

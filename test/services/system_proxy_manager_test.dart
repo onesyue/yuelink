@@ -271,4 +271,66 @@ void main() {
       expect(attempts, 1, reason: 'maxAttempts=1 disables retry');
     });
   });
+
+  group('SystemProxyManager.looksLikeTunDnsResidue — TUN DNS pollution detector', () {
+    test('matches the exact resolver list setTunDns writes', () {
+      // Whitespace and order variations are normalized away — set equality
+      // is what we care about, since macOS networksetup may reorder the
+      // list and pad it with spaces.
+      const output = '114.114.114.114\n223.5.5.5\n8.8.8.8';
+      expect(
+        SystemProxyManager.looksLikeTunDnsResidueForTest(output),
+        isTrue,
+      );
+    });
+
+    test('matches when networksetup reorders or trims the list', () {
+      const reordered = '8.8.8.8\n114.114.114.114\n223.5.5.5\n';
+      expect(
+        SystemProxyManager.looksLikeTunDnsResidueForTest(reordered),
+        isTrue,
+      );
+    });
+
+    test('rejects user-original DNS (rejected so we save the user value)', () {
+      // The whole point: if the user's actual DNS is something normal like
+      // their LAN gateway, we MUST detect it as "not residue" so that
+      // putIfAbsent saves it as the value to restore later.
+      expect(
+        SystemProxyManager.looksLikeTunDnsResidueForTest('192.168.1.1'),
+        isFalse,
+      );
+      expect(
+        SystemProxyManager.looksLikeTunDnsResidueForTest('1.1.1.1\n8.8.8.8'),
+        isFalse,
+        reason: 'partial overlap (only 8.8.8.8) must not count as residue',
+      );
+    });
+
+    test('rejects empty / "any DNS Servers" placeholder', () {
+      // networksetup prints a literal placeholder when no DNS is set.
+      // Treating that as residue would falsely restore Empty later.
+      expect(
+        SystemProxyManager.looksLikeTunDnsResidueForTest(''),
+        isFalse,
+      );
+      expect(
+        SystemProxyManager.looksLikeTunDnsResidueForTest(
+          "There aren't any DNS Servers set on Wi-Fi.",
+        ),
+        isFalse,
+      );
+    });
+
+    test('rejects superset (extra entries beyond our resolvers)', () {
+      // A user who manually appends 1.1.1.1 to our public list shouldn't
+      // be classified as residue — we'd skip saving and lose their custom
+      // entry on restore.
+      const superset = '114.114.114.114\n223.5.5.5\n8.8.8.8\n1.1.1.1';
+      expect(
+        SystemProxyManager.looksLikeTunDnsResidueForTest(superset),
+        isFalse,
+      );
+    });
+  });
 }

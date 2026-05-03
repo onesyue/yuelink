@@ -202,14 +202,24 @@ class CoreManager {
   /// Restore the Dart _running flag and port config after detecting that the
   /// Go core survived a Flutter engine restart. Called from _onAppResumed.
   ///
-  /// If [start] is mid-flight (`_startInFlight == true`), the in-memory
-  /// `_apiPort` / `_mixedPort` are the freshly-remapped authoritative
-  /// values from the current run's `buildConfig` — and the just-completed
-  /// API health check that motivated this call already proved they're
-  /// correct. Skipping the persistence restore in that window prevents
-  /// the macOS race where remapped 9091 got stomped back to persisted
-  /// 9090 mid-startup → verify failed.
+  /// If [start] is mid-flight (`_startInFlight == true`), the entire body
+  /// is a no-op — the active start path is the authoritative state writer
+  /// and `markRunning` would otherwise race it three different ways:
+  ///   1. flipping `_running=true` between `_stopUnlocked` (sets false)
+  ///      and `_startUnlocked` calling `manager.start()` would short-
+  ///      circuit the start at `if (_running) return true;` — Dart
+  ///      thinks core is up but no real start ran (TUN never installed
+  ///      its routes, helper service never spawned mihomo);
+  ///   2. recomputing `_serviceModeActive` from persisted settings would
+  ///      override the in-flight start's just-decided value;
+  ///   3. nulling `_api`/`_stream` mid-startup would force the next
+  ///      ConfigTemplate.processInIsolate to rebuild against possibly
+  ///      stale port discovery. The skip mirrors the existing
+  ///      `_startInFlight` guard around port restore that fixed the
+  ///      remapped-port-stomped-by-persisted-port bug.
   Future<void> markRunning() async {
+    if (_startInFlight) return;
+
     _running = true;
     final savedConnectionMode = await SettingsService.getConnectionMode();
     // Mirror _shouldUseDesktopServiceMode platform list — Linux is now
@@ -219,17 +229,12 @@ class CoreManager {
         (Platform.isMacOS || Platform.isLinux || Platform.isWindows) &&
         savedConnectionMode == 'tun' &&
         await ServiceManager.isInstalled();
-    if (!_startInFlight) {
-      // Restore ports from persisted settings (engine restart loses
-      // Dart state). Skipped when start() is mid-flight — in-memory
-      // is authoritative there.
-      final savedApiPort = await SettingsService.get<int>('lastApiPort');
-      final savedMixedPort = await SettingsService.get<int>('lastMixedPort');
-      if (savedApiPort != null) _apiPort = savedApiPort;
-      if (savedMixedPort != null) _mixedPort = savedMixedPort;
-    }
-    // Recreate API/stream clients with current ports (whether restored
-    // from persistence or kept in-memory from the active start flow).
+    // Restore ports from persisted settings (engine restart loses Dart state).
+    final savedApiPort = await SettingsService.get<int>('lastApiPort');
+    final savedMixedPort = await SettingsService.get<int>('lastMixedPort');
+    if (savedApiPort != null) _apiPort = savedApiPort;
+    if (savedMixedPort != null) _mixedPort = savedMixedPort;
+    // Recreate API/stream clients with the restored ports.
     _api = null;
     _stream = null;
     _clashCore = null;

@@ -715,15 +715,61 @@ class SystemProxyManager {
   // ── macOS TUN DNS management ────────────────────────────────────────────
   // When TUN is enabled, mihomo hijacks DNS via dns-hijack: [any:53] but
   // macOS may still try to resolve via the original DNS servers configured
-  // on the active interface, causing DNS leaks. We set system DNS to public
-  // resolvers on TUN start and restore on TUN stop.
+  // on the active interface, causing DNS leaks. We rewrite system DNS to
+  // public resolvers (which fall under mihomo's split-default routes and
+  // therefore get hijacked at the TUN level) on start and restore on stop.
 
   static final Map<String, String> _savedDnsServers = {};
 
+  /// The DNS list `setTunDns` writes. Order matters for the pollution
+  /// detector — the comparison is set-equality, but keeping a single
+  /// canonical list avoids drift between writers and detectors.
+  static const _kTunDnsResolvers = [
+    '114.114.114.114',
+    '223.5.5.5',
+    '8.8.8.8',
+  ];
+
+  /// Heuristic: is this `getdnsservers` output the exact resolver set
+  /// `setTunDns` writes? If yes, treat it as leftover from a previous
+  /// session that crashed before `restoreTunDns` ran — saving it as the
+  /// "original" DNS to restore later would permanently corrupt the
+  /// user's settings (we'd "restore" the public DNS forever).
+  @visibleForTesting
+  static bool looksLikeTunDnsResidueForTest(String s) =>
+      _looksLikeTunDnsResidue(s);
+
+  static bool _looksLikeTunDnsResidue(String getDnsServersOutput) {
+    final lines = getDnsServersOutput
+        .split('\n')
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .toSet();
+    if (lines.isEmpty) return false;
+    final canonical = _kTunDnsResolvers.toSet();
+    return lines.length == canonical.length && lines.containsAll(canonical);
+  }
+
   /// Set macOS system DNS to public resolvers for TUN mode.
-  static Future<void> setTunDns() async {
-    if (!Platform.isMacOS) return;
+  ///
+  /// Returns the number of services that successfully got the new DNS
+  /// list applied. A return value of `0` means **DNS hijack is not in
+  /// place** — every `networksetup` call failed and any subsequent
+  /// dns-hijack-failed diagnostic is a real failure, not a flaky probe.
+  /// Callers can treat zero as "log loudly and surface to the user".
+  static Future<int> setTunDns() async {
+    if (!Platform.isMacOS) return 0;
+    // Drop the 5-minute service-list cache before the write. The cache is
+    // populated at startup and only invalidated on detected transport
+    // changes (Wi-Fi ↔ Ethernet). A user plugging in a USB-C Ethernet
+    // adapter or USB tethering while staying on Wi-Fi adds a new service
+    // without flipping the transport — cached list misses it, the new
+    // interface's DNS doesn't get rewritten, and traffic that egresses
+    // through it bypasses the TUN hijack. The extra `networksetup -listall`
+    // call costs ~10ms; correctness wins.
+    invalidateNetworkServicesCache();
     final services = await _listNetworkServices();
+    var appliedCount = 0;
     for (final svc in services) {
       try {
         final result = await _runWithTimeout('networksetup', [
@@ -735,14 +781,27 @@ class SystemProxyManager {
         // changes can call setTunDns() again while TUN is already running;
         // overwriting here would make restoreTunDns() restore our public
         // resolver list instead of the user's original DNS.
-        _savedDnsServers.putIfAbsent(svc, () => output);
+        //
+        // BUT — if the current value already IS our public resolver set,
+        // it's residue from a previous session that crashed before
+        // restoreTunDns ran. Treating that as the user's original would
+        // permanently lock them out of their real DNS. Skip the save in
+        // that case; restoreTunDns sweeps unsaved residue back to Empty.
+        if (!_looksLikeTunDnsResidue(output)) {
+          _savedDnsServers.putIfAbsent(svc, () => output);
+        } else {
+          debugPrint(
+            '[TunDns] $svc already has TUN DNS residue from a previous '
+            'crashed session — not saving as original',
+          );
+          EventLog.write('[SysProxy] setTunDns residue_skipped svc=$svc');
+        }
         await _runWithTimeout('networksetup', [
           '-setdnsservers',
           svc,
-          '114.114.114.114',
-          '223.5.5.5',
-          '8.8.8.8',
+          ..._kTunDnsResolvers,
         ]);
+        appliedCount++;
         debugPrint(
           '[TunDns] set DNS for $svc (was: ${output.split('\n').first})',
         );
@@ -751,6 +810,15 @@ class SystemProxyManager {
         EventLog.write('[SysProxy] setTunDns svc=$svc err=$e');
       }
     }
+    if (appliedCount == 0 && services.isNotEmpty) {
+      // Total failure — every service rejected the rewrite. Log it
+      // loudly so the diagnostic bundle has a clear root-cause line
+      // instead of just a downstream "DNS 接管失败" without context.
+      EventLog.write(
+        '[SysProxy] setTunDns ALL_FAILED services=${services.length}',
+      );
+    }
+    return appliedCount;
   }
 
   /// Restore macOS system DNS to original values after TUN stop.
@@ -783,6 +851,33 @@ class SystemProxyManager {
         debugPrint('[TunDns] failed to restore DNS for ${entry.key}: $e');
         EventLog.write('[SysProxy] restoreTunDns svc=${entry.key} err=$e');
       }
+    }
+    // Sweep services that were NOT saved (because setTunDns saw them
+    // already polluted with our resolver set). Without this, a crashed-
+    // and-restarted user's DNS would stay locked at our public list
+    // forever. Empty == DHCP-supplied DNS, the safest fallback when
+    // we don't know the user's pre-TUN value.
+    try {
+      final services = await _listNetworkServices();
+      for (final svc in services) {
+        if (_savedDnsServers.containsKey(svc)) continue;
+        final probe = await _runWithTimeout('networksetup', [
+          '-getdnsservers',
+          svc,
+        ]);
+        final output = (probe.stdout as String).trim();
+        if (_looksLikeTunDnsResidue(output)) {
+          await _runWithTimeout('networksetup', [
+            '-setdnsservers',
+            svc,
+            'Empty',
+          ]);
+          debugPrint('[TunDns] cleared residue DNS for $svc → DHCP');
+          EventLog.write('[SysProxy] restoreTunDns residue_cleared svc=$svc');
+        }
+      }
+    } catch (e) {
+      debugPrint('[TunDns] residue sweep failed: $e');
     }
     _savedDnsServers.clear();
   }

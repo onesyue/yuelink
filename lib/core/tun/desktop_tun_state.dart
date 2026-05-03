@@ -335,20 +335,32 @@ class DesktopTunStateMachine {
         repairAction: 'reapply_route',
       );
     }
-    if (!dnsOk) {
-      return (
-        state: DesktopTunState.degraded,
-        errorClass: 'dns_hijack_failed',
-        userMessage: 'DNS 接管失败',
-        repairAction: 'reapply_dns',
-      );
-    }
     if (systemProxyEnabled) {
       return (
         state: DesktopTunState.degraded,
         errorClass: 'system_proxy_conflict',
         userMessage: '系统代理与 TUN 同时开启，可能造成控制面回环',
         repairAction: 'clear_system_proxy',
+      );
+    }
+    // dns_ok is a single-domain probe that can flap independently of
+    // whether system DNS is actually being hijacked end-to-end. Two
+    // common false negatives: (1) macOS DNS cache returning a real IP
+    // for a domain previously resolved without TUN; (2) the probe
+    // domain matching a `respect-rules: true` DIRECT rule in the
+    // user's config so mihomo bypasses fake-IP for that one name. In
+    // both cases the user's actual traffic still flows through TUN —
+    // googleOk/githubOk (which issue real HTTPS) prove that. Treat
+    // dns_ok in isolation as a soft warning recorded in `detail`, and
+    // only escalate to the dns_hijack_failed state when transport
+    // ALSO fails; that combination is the strongest evidence the TUN
+    // packet path actually broke.
+    if (!dnsOk && !googleOk && !githubOk) {
+      return (
+        state: DesktopTunState.degraded,
+        errorClass: 'dns_hijack_failed',
+        userMessage: 'DNS 接管失败',
+        repairAction: 'reapply_dns',
       );
     }
     if (!transportOk && !googleOk && !githubOk) {

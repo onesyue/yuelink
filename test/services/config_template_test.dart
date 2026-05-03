@@ -57,6 +57,20 @@ find-process-mode: off
         expect(result, contains('strict-route:'));
         expect(result, contains('dns-hijack:'));
         expect(result, contains('- tcp://any:53'));
+        // IPv6 plumbing: without `inet6-address`, mihomo's auto-route only
+        // installs IPv4 split-default — IPv6 traffic bypasses TUN and leaks
+        // the user's real IPv6 address. Asserting both that the field is
+        // present AND uses the documented private-ULA prefix prevents an
+        // accidental regression to a routable address.
+        expect(result, contains('inet6-address:'));
+        expect(result, contains('fdfe:dcba:9876::1/126'));
+        // Top-level `ipv6: true` MUST override the default `ipv6: false`
+        // that ScalarTransformers.ensureIpv6 injects. Without this,
+        // mihomo's DNS handler refuses AAAA queries and `auto-route`
+        // skips IPv6 route install — the inet6-address above becomes
+        // a dead-end and IPv6 leaks just as before.
+        expect(result, contains('ipv6: true'));
+        expect(result, isNot(contains('ipv6: false')));
         // v1.0.22 P1-2: Windows TUN now defaults to strict (was always);
         // macOS keeps always pending similar reports.
         if (Platform.isWindows) {

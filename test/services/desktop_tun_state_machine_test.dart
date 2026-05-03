@@ -43,8 +43,27 @@ void main() {
       expect(s.userMessage, contains('路由未接管'));
     });
 
-    test('DNS failure is degraded with DNS copy', () {
-      final s = _snap(dnsOk: false);
+    test('DNS probe failure alone does not degrade when transport works', () {
+      // Regression: dns_ok is a single-domain probe (system lookup → fake-IP
+      // expectation). It can flap when (a) macOS DNS cache returns a real
+      // IP for a domain resolved before TUN was up, or (b) the probe domain
+      // matches a `respect-rules: true` DIRECT rule. Both cases leave the
+      // actual user traffic flowing through TUN — proven by googleOk /
+      // githubOk which issue real HTTPS. Escalating to `dns_hijack_failed`
+      // on dns_ok alone produced false alarms that misled users into
+      // thinking switch-back-to-TUN was broken when it was working fine.
+      final s = _snap(dnsOk: false, googleOk: true, githubOk: true);
+      expect(s.state, DesktopTunState.running);
+      expect(s.errorClass, 'ok');
+    });
+
+    test('DNS failure plus transport failure escalates to dns_hijack_failed', () {
+      final s = _snap(
+        dnsOk: false,
+        googleOk: false,
+        githubOk: false,
+        transportOk: false,
+      );
       expect(s.state, DesktopTunState.degraded);
       expect(s.runningVerified, isFalse);
       expect(s.errorClass, 'dns_hijack_failed');
