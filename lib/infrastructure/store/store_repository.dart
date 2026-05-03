@@ -53,7 +53,12 @@ class StoreRepository {
         if (result.paymentUrl.isNotEmpty) {
           return AwaitingExternalPayment(result.paymentUrl);
         }
-        return const FreeActivated();
+        // Non-free outcome with no URL is a backend contract violation,
+        // not a free activation. Surface as declined so the UI can prompt
+        // a retry instead of dropping the user into a stuck await state.
+        return const PaymentDeclined(
+          StoreErrorApi('支付链接为空，请稍后重试', statusCode: 0),
+        );
       });
 
   Future<List<PaymentMethod>> fetchPaymentMethods() =>
@@ -67,6 +72,21 @@ class StoreRepository {
 
   Future<OrderListResult> fetchOrders({int page = 1}) =>
       _guard(() => _api.fetchOrders(token: _token, page: page));
+
+  Future<StoreOrder?> fetchPendingOrderForPlan(
+    int planId, {
+    int maxPages = 5,
+  }) async {
+    for (var page = 1; page <= maxPages; page++) {
+      final result = await fetchOrders(page: page);
+      final pending = result.orders
+          .where((o) => o.planId == planId && o.status == OrderStatus.pending)
+          .firstOrNull;
+      if (pending != null) return pending;
+      if (!result.hasMore) break;
+    }
+    return null;
+  }
 }
 
 /// Run [op] and translate any thrown object into a [StoreError] subtype.

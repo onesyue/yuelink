@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,6 +9,7 @@ import 'package:yuelink/domain/store/coupon_result.dart';
 import 'package:yuelink/domain/store/payment_method.dart';
 import 'package:yuelink/domain/store/payment_outcome.dart';
 import 'package:yuelink/domain/store/purchase_state.dart';
+import 'package:yuelink/domain/store/store_error.dart';
 import 'package:yuelink/domain/store/store_order.dart';
 import 'package:yuelink/domain/store/store_plan.dart';
 import 'package:yuelink/infrastructure/store/payment_launcher.dart';
@@ -33,6 +35,16 @@ class FakeStoreRepository implements StoreRepository {
   Exception? checkoutError;
   Exception? orderDetailError;
 
+  /// When set, fetchOrderDetail awaits this completer instead of returning
+  /// [orderDetailResult]. Lets tests deterministically pause inside the
+  /// poll loop and inject reset/cancel before the await resumes.
+  Completer<StoreOrder>? orderDetailGate;
+
+  /// When set, cancelOrder awaits this completer before returning. Lets
+  /// tests pause cancelCurrentOrder mid-flight to verify the post-await
+  /// generation guard.
+  Completer<void>? cancelGate;
+
   @override
   Future<String> createOrder({
     required int planId,
@@ -52,6 +64,9 @@ class FakeStoreRepository implements StoreRepository {
 
   @override
   Future<StoreOrder> fetchOrderDetail(String tradeNo) async {
+    if (orderDetailGate != null) {
+      return orderDetailGate!.future;
+    }
     if (orderDetailError != null) throw orderDetailError!;
     return orderDetailResult ?? _pendingOrder(tradeNo);
   }
@@ -69,6 +84,9 @@ class FakeStoreRepository implements StoreRepository {
   @override
   Future<void> cancelOrder(String tradeNo) async {
     cancelOrderCalled = true;
+    if (cancelGate != null) {
+      await cancelGate!.future;
+    }
   }
 
   @override
@@ -80,6 +98,17 @@ class FakeStoreRepository implements StoreRepository {
   @override
   Future<OrderListResult> fetchOrders({int page = 1}) async {
     return ordersResult ?? const OrderListResult(orders: [], hasMore: false);
+  }
+
+  @override
+  Future<StoreOrder?> fetchPendingOrderForPlan(
+    int planId, {
+    int maxPages = 5,
+  }) async {
+    final result = await fetchOrders();
+    return result.orders
+        .where((o) => o.planId == planId && o.status == OrderStatus.pending)
+        .firstOrNull;
   }
 
   static StoreOrder _pendingOrder(String tradeNo) => StoreOrder(
@@ -605,6 +634,209 @@ void main() {
         _telemetryEventsSince(cursor),
         contains(TelemetryEvents.orderCancel),
       );
+    });
+
+    // ── Bug-fix regression tests (S0 PR1) ──────────────────────────────────
+
+    test(
+      'reset mid-poll: stale fetchOrderDetail success does not clobber Idle',
+      () async {
+        final repo = FakeStoreRepository();
+        repo.orderDetailGate = Completer<StoreOrder>();
+        repo.checkoutOutcome = const AwaitingExternalPayment(
+          'https://pay.example.com/reset_mid',
+        );
+
+        final container = _createContainer(repo);
+        addTearDown(container.dispose);
+
+        final notifier = container.read(purchaseProvider.notifier);
+        await notifier.payExistingOrder(tradeNo: 'RESET_MID', methodId: 1);
+        expect(
+          container.read(purchaseProvider),
+          isA<PurchaseAwaitingPayment>(),
+        );
+
+        // Start poll without awaiting — fetchOrderDetail blocks on the gate.
+        final pollFuture = notifier.pollOrderResult(
+          'RESET_MID',
+          maxAttempts: 1,
+          interval: Duration.zero,
+        );
+        await Future<void>.delayed(Duration.zero);
+
+        // Race: user resets while fetch is in flight.
+        notifier.reset();
+
+        // Release the gate with what looks like success — without the
+        // generation guard this would call _completeSuccess and clobber
+        // the just-reset Idle state.
+        repo.orderDetailGate!.complete(
+          FakeStoreRepository.completedOrder('RESET_MID'),
+        );
+        await pollFuture;
+
+        expect(container.read(purchaseProvider), isA<PurchaseIdle>());
+      },
+    );
+
+    test('cancelCurrentOrder mid-poll: stale fetchOrderDetail success does not '
+        'clobber Idle', () async {
+      final repo = FakeStoreRepository();
+      repo.orderDetailGate = Completer<StoreOrder>();
+      repo.checkoutOutcome = const AwaitingExternalPayment(
+        'https://pay.example.com/cancel_mid',
+      );
+
+      final container = _createContainer(repo);
+      addTearDown(container.dispose);
+
+      final notifier = container.read(purchaseProvider.notifier);
+      await notifier.payExistingOrder(tradeNo: 'CANCEL_MID', methodId: 1);
+
+      final pollFuture = notifier.pollOrderResult(
+        'CANCEL_MID',
+        maxAttempts: 1,
+        interval: Duration.zero,
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      // Race: user cancels current order while fetch is gated. Cancel
+      // bumps generation before our gate-completion lands.
+      await notifier.cancelCurrentOrder();
+
+      repo.orderDetailGate!.complete(
+        FakeStoreRepository.completedOrder('CANCEL_MID'),
+      );
+      await pollFuture;
+
+      expect(container.read(purchaseProvider), isA<PurchaseIdle>());
+      expect(repo.cancelOrderCalled, isTrue);
+    });
+
+    test('purchase with PaymentDeclined transitions to Failed', () async {
+      final repo = FakeStoreRepository();
+      repo.createOrderResult = 'DECLINED_001';
+      repo.checkoutOutcome = const PaymentDeclined(
+        StoreErrorApi('支付链接为空，请稍后重试', statusCode: 0),
+      );
+
+      final container = _createContainer(repo);
+      addTearDown(container.dispose);
+
+      await container
+          .read(purchaseProvider.notifier)
+          .purchase(planId: 1, period: PlanPeriod.monthly, methodId: 1);
+
+      final state = container.read(purchaseProvider);
+      expect(state, isA<PurchaseFailed>());
+      expect((state as PurchaseFailed).message, contains('支付链接为空'));
+    });
+
+    test(
+      'pollOrderResult fails closed when loop exhausts with empty URL',
+      () async {
+        final repo = FakeStoreRepository();
+        // Default fetchOrderDetail returns pending — loop will exhaust.
+
+        final container = _createContainer(repo);
+        addTearDown(container.dispose);
+
+        final notifier = container.read(purchaseProvider.notifier);
+        // State is Idle at entry, so originalPaymentUrl is captured as ''.
+        await notifier.pollOrderResult(
+          'NO_URL_001',
+          maxAttempts: 1,
+          interval: Duration.zero,
+        );
+
+        final state = container.read(purchaseProvider);
+        expect(state, isA<PurchaseFailed>());
+        expect((state as PurchaseFailed).message, contains('支付链接缺失'));
+      },
+    );
+
+    test('cancelCurrentOrder completion does not clobber newer op', () async {
+      final repo = FakeStoreRepository();
+      repo.checkoutOutcome = const AwaitingExternalPayment(
+        'https://pay.example.com/old',
+      );
+
+      final container = _createContainer(repo);
+      addTearDown(container.dispose);
+
+      final notifier = container.read(purchaseProvider.notifier);
+      await notifier.payExistingOrder(tradeNo: 'OLD_001', methodId: 1);
+      expect(container.read(purchaseProvider), isA<PurchaseAwaitingPayment>());
+
+      // Gate the cancel: cancelCurrentOrder will block inside cancelOrder.
+      repo.cancelGate = Completer<void>();
+      final cancelFuture = notifier.cancelCurrentOrder();
+      await Future<void>.delayed(Duration.zero);
+
+      // While cancel is gated, user resets and starts a new purchase.
+      notifier.reset();
+
+      repo.checkoutOutcome = const AwaitingExternalPayment(
+        'https://pay.example.com/new',
+      );
+      await notifier.payExistingOrder(tradeNo: 'NEW_001', methodId: 1);
+
+      final mid = container.read(purchaseProvider);
+      expect(mid, isA<PurchaseAwaitingPayment>());
+      expect((mid as PurchaseAwaitingPayment).tradeNo, 'NEW_001');
+
+      // Release the cancel response. Without the post-await gen guard,
+      // this would write PurchaseIdle and clobber the new awaiting state.
+      repo.cancelGate!.complete();
+      await cancelFuture;
+
+      final after = container.read(purchaseProvider);
+      expect(after, isA<PurchaseAwaitingPayment>());
+      expect((after as PurchaseAwaitingPayment).tradeNo, 'NEW_001');
+    });
+
+    test('cancelCurrentOrder invalidates orderHistoryProvider', () async {
+      final repo = FakeStoreRepository();
+      repo.checkoutOutcome = const AwaitingExternalPayment(
+        'https://pay.example.com/inv',
+      );
+      repo.ordersResult = OrderListResult(
+        orders: [FakeStoreRepository.completedOrder('BEFORE')],
+        hasMore: false,
+      );
+
+      final container = _createContainer(repo);
+      addTearDown(container.dispose);
+
+      final sub = container.listen<List<StoreOrder>?>(
+        orderHistoryProvider.select((value) => value.value),
+        (_, _) {},
+        fireImmediately: true,
+      );
+      addTearDown(sub.close);
+
+      // Prime cache with [BEFORE]
+      final before = await container.read(orderHistoryProvider.future);
+      expect(before.first.tradeNo, 'BEFORE');
+
+      // Set up an awaiting-payment state so cancelCurrentOrder has work to do.
+      final notifier = container.read(purchaseProvider.notifier);
+      await notifier.payExistingOrder(tradeNo: 'INVAL_001', methodId: 1);
+      expect(container.read(purchaseProvider), isA<PurchaseAwaitingPayment>());
+
+      // Server-side state changes to [AFTER]; cache is stale.
+      repo.ordersResult = OrderListResult(
+        orders: [FakeStoreRepository.completedOrder('AFTER')],
+        hasMore: false,
+      );
+
+      await notifier.cancelCurrentOrder();
+
+      // After invalidation the next read must refetch.
+      final after = await container.read(orderHistoryProvider.future);
+      expect(after.first.tradeNo, 'AFTER');
+      expect(repo.cancelOrderCalled, isTrue);
     });
   });
 
