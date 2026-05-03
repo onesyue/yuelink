@@ -129,19 +129,36 @@ Future<BuildConfigResult> buildStartConfig({
 /// PAC files, etc.). The +20 slack is enough to dodge a single rival
 /// proxy client (v2rayN / Clash Verge) without wandering into
 /// unrelated ranges.
+///
+/// Probes BOTH `127.0.0.1` and `0.0.0.0` because a port is busy if
+/// either address space claims it, and macOS lets a specific-address
+/// `bind(127.0.0.1:7890)` succeed alongside an existing wildcard
+/// `*:7890` (BSD allows the specific bind to shadow the wildcard for
+/// that address). With `allow-lan: true` mihomo binds `*:port` and a
+/// loopback-only probe false-passes — handing the same port to a
+/// service-mode mihomo restart, which then crashes with
+/// `bind: address already in use`. A loopback-only listener (e.g. a
+/// stale FFI core's external-controller on 127.0.0.1:9090) conversely
+/// fails the loopback probe but passes the wildcard probe; we need
+/// both to fail-clean either way.
 Future<int> findAvailablePort(int preferred) async {
   for (var port = preferred; port < preferred + 20; port++) {
-    try {
-      final server = await ServerSocket.bind(
-        InternetAddress.loopbackIPv4,
-        port,
-        shared: false,
-      );
-      await server.close();
-      return port;
-    } on SocketException {
-      continue;
-    }
+    if (await _portIsFree(port)) return port;
   }
   return preferred;
+}
+
+Future<bool> _portIsFree(int port) async {
+  for (final addr in [
+    InternetAddress.loopbackIPv4,
+    InternetAddress.anyIPv4,
+  ]) {
+    try {
+      final server = await ServerSocket.bind(addr, port, shared: false);
+      await server.close();
+    } on SocketException {
+      return false;
+    }
+  }
+  return true;
 }
