@@ -109,18 +109,6 @@ jobs:
             libasound2-dev libmpv-dev \
             pkg-config cmake clang
 
-      # ── Apply mihomo patches before any Go build ──────────────────────────
-      - name: Apply mihomo patches
-        shell: bash
-        run: |
-          if [ -d core/patches ] && ls core/patches/*.patch 1>/dev/null 2>&1; then
-            cd core/mihomo
-            for p in ../patches/*.patch; do
-              echo "Applying $p"
-              git apply "$p"
-            done
-          fi
-
       # ── Geodata: declared as Flutter assets, .gitignored — fetch at CI ────
       # Each upstream .dat/.mmdb ships alongside a <file>.sha256sum sidecar
       # from MetaCubeX/meta-rules-dat (GNU sha256sum format). We verify the

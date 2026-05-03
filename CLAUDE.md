@@ -220,5 +220,24 @@ Pre-commit (`scripts/pre-commit`): analyze + test + import check. Install: `ln -
 - Release flow: commit to `dev` → move `pre` for test build → merge `dev`→`master` → `git tag -a vX.Y.Z -m "..." && git push origin vX.Y.Z`. Never tag before pushing the commit.
 - Pipeline: analyze+test → Go cores (matrix) → Flutter builds (download artifacts → install → build) → release.
 - Artifacts: `YueLink-Windows-Setup.exe` (Inno), `YueLink-macOS.dmg` (create-dmg, universal), `YueLink-Android.apk` (fat), `YueLink-iOS.ipa` (no-codesign).
-- Submodule: `core/mihomo`. Clone with `--recursive`.
-- **mihomo patches** (`core/patches/`, applied in CI): `0001-non-fatal-buildAndroidRules` (PackageManager errors non-fatal), `0002-non-fatal-mmdb-and-iptables` (MMDB/ASN `log.Fatalln` → `Errorln`, removes `os.Exit(2)` in iptables). Prevents Go from killing the whole Flutter process on non-critical failures.
+- Submodule: `core/mihomo` → fork `onesyue/mihomo`, branch `main` (rolling). Clone with `--recursive`. Fork's `main` = upstream `MetaCubeX/mihomo` `Meta` (stable channel) HEAD + three native commits always on top:
+  - `non-fatal buildAndroidRules` (PackageManager errors warn instead of aborting TUN setup);
+  - `non-fatal MMDB load + iptables` (`log.Fatalln`/`os.Exit` → `Errorln` so a missing GeoIP DB or iptables failure doesn't kill the host Flutter process);
+  - `cleanup all listeners on Shutdown` + `dns.ReCreateServer("", nil)` so c-archive embeds release `:7890`/`:1053`/etc. on `StopCore` instead of leaking them into the next start.
+
+  **Bumping mihomo** (when upstream Meta gets new commits worth picking up):
+  ```
+  cd core/mihomo
+  git fetch upstream                      # upstream = MetaCubeX/mihomo
+  git rebase upstream/Meta main           # our 3 fixes replay onto the new HEAD
+  go build ./...                          # smoke compile
+  cd ../.. && flutter test                # smoke run
+  cd core/mihomo
+  git push origin main --force-with-lease # rebase = force-push
+  cd ../..
+  git add core/mihomo                     # record new SHA in yuelink tree
+  git commit -m "build(core): bump mihomo submodule to upstream Meta YYYY-MM-DD"
+  ```
+  yuelink's submodule pointer is a frozen SHA per commit — `--remote` only matters for `git submodule update --remote`. Bumping is opt-in; never automatic. Each yuelink release pins a known SHA, so per-release fork branches are unnecessary (you can always check out a yuelink commit and `git submodule update` to land on the exact mihomo SHA that shipped).
+
+  **Stay on Meta, not Alpha.** The `feedback_no_mihomo_alpha` rule applies: Alpha experiments don't enter our main line.

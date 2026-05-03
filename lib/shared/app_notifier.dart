@@ -29,8 +29,8 @@ class AppNotifier {
 
   static OverlayEntry? _currentTopEntry;
 
-  static void _show(String message, _SnackType type) {
-    _showTopCapsule(message, type);
+  static void _show(String message, _SnackType type, {VoidCallback? onTap}) {
+    _showTopCapsule(message, type, onTap: onTap);
   }
 
   static (IconData, Color) _styleFor(_SnackType type) {
@@ -81,11 +81,18 @@ class AppNotifier {
     );
   }
 
-  static void _showTopCapsule(String message, _SnackType type) {
+  static void _showTopCapsule(
+    String message,
+    _SnackType type, {
+    VoidCallback? onTap,
+  }) {
     final messengerCtx = scaffoldMessengerKey.currentContext;
     final overlay = messengerCtx == null ? null : Overlay.maybeOf(messengerCtx);
     if (overlay == null) {
       // Fallback to SnackBar if overlay isn't available yet.
+      // SnackBar fallback drops the onTap action — overlay-less paths
+      // are early-startup edge cases (no MaterialApp yet) where there's
+      // nothing routable to navigate to anyway.
       _showSnackBar(message, type);
       return;
     }
@@ -101,6 +108,7 @@ class AppNotifier {
         message: message,
         icon: icon,
         accent: color,
+        onTap: onTap,
         onDismissed: () {
           if (identical(_currentTopEntry, entry)) {
             _currentTopEntry = null;
@@ -137,7 +145,13 @@ class AppNotifier {
     _show(message, _SnackType.warning);
   }
 
-  static void info(String message) => _show(message, _SnackType.info);
+  /// [onTap] — optional action fired when the user taps the capsule.
+  /// Runs BEFORE the dismiss animation so the navigation target opens
+  /// immediately. Used by the launch-time "new version available" toast
+  /// (issue #4) to jump straight into the update dialog instead of
+  /// forcing the user to navigate to Settings → Check Updates.
+  static void info(String message, {VoidCallback? onTap}) =>
+      _show(message, _SnackType.info, onTap: onTap);
 }
 
 class _TopCapsule extends StatefulWidget {
@@ -146,12 +160,14 @@ class _TopCapsule extends StatefulWidget {
     required this.icon,
     required this.accent,
     required this.onDismissed,
+    this.onTap,
   });
 
   final String message;
   final IconData icon;
   final Color accent;
   final VoidCallback onDismissed;
+  final VoidCallback? onTap;
 
   @override
   State<_TopCapsule> createState() => _TopCapsuleState();
@@ -230,7 +246,14 @@ class _TopCapsuleState extends State<_TopCapsule>
               opacity: _fade,
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
-                onTap: _dismiss,
+                onTap: () {
+                  // Fire the action first so the navigation target
+                  // (e.g. update dialog) opens before the capsule
+                  // animates out — keeps perceived latency to one
+                  // frame.
+                  widget.onTap?.call();
+                  _dismiss();
+                },
                 onVerticalDragEnd: (d) {
                   if ((d.primaryVelocity ?? 0) < 0) _dismiss();
                 },

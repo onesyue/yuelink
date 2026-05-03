@@ -17,8 +17,21 @@ class DnsTransformer {
           '$config\ndns:\n'
           '  enable: true\n'
           '  prefer-h3: true\n'
+          // ARC cache (mihomo 1.18+) outperforms LRU on
+          // proxy-client workloads where the same hot domains repeat
+          // every few seconds amid a long tail of one-shot lookups —
+          // 20-40% better hit rate in mihomo-party benchmarks. CVR /
+          // FlClash / Party all default to arc.
+          '  cache-algorithm: arc\n'
+          // Honour /etc/hosts entries — desktop users who pin a host
+          // locally expect it to take effect, regardless of fake-IP.
+          '  use-system-hosts: true\n'
           '  enhanced-mode: fake-ip\n'
           '  fake-ip-range: 198.18.0.1/16\n'
+          // Explicit blacklist mode: mihomo's default has been
+          // blacklist for years but having it written down means a
+          // future upstream flip can't silently change our routing.
+          '  fake-ip-filter-mode: blacklist\n'
           '  fake-ip-filter:\n'
           // ── LAN / mDNS / IETF reserved ─────────────────────────
           '    - "+.lan"\n'
@@ -216,6 +229,31 @@ class DnsTransformer {
             dnsSection +
             config.substring(dnsEnd);
         dnsEnd = range.start + dnsSection.length;
+      }
+
+      // 2026 main-line additions: ARC cache + use-system-hosts +
+      // explicit fake-ip-filter-mode. Inject only when missing so a
+      // subscription that ships its own (e.g. lru / blacklist) wins.
+      if (!dnsSection.contains('cache-algorithm:')) {
+        final injection = '${indent}cache-algorithm: arc\n';
+        config =
+            config.substring(0, dnsEnd) + injection + config.substring(dnsEnd);
+        dnsEnd += injection.length;
+        dnsSection = config.substring(range.start, dnsEnd);
+      }
+      if (!dnsSection.contains('use-system-hosts:')) {
+        final injection = '${indent}use-system-hosts: true\n';
+        config =
+            config.substring(0, dnsEnd) + injection + config.substring(dnsEnd);
+        dnsEnd += injection.length;
+        dnsSection = config.substring(range.start, dnsEnd);
+      }
+      if (!dnsSection.contains('fake-ip-filter-mode:')) {
+        final injection = '${indent}fake-ip-filter-mode: blacklist\n';
+        config =
+            config.substring(0, dnsEnd) + injection + config.substring(dnsEnd);
+        dnsEnd += injection.length;
+        dnsSection = config.substring(range.start, dnsEnd);
       }
 
       if (!dnsSection.contains('nameserver-policy:')) {

@@ -1,3 +1,4 @@
 [submodule "core/mihomo"]
 	path = core/mihomo
-	url = https://github.com/MetaCubeX/mihomo.git
+	url = https://github.com/onesyue/mihomo.git
+	branch = main

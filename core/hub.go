@@ -22,6 +22,7 @@ import (
 	mihomoConst "github.com/metacubex/mihomo/constant"
 	"github.com/metacubex/mihomo/hub"
 	"github.com/metacubex/mihomo/hub/executor"
+	"github.com/metacubex/mihomo/hub/route"
 	"github.com/metacubex/mihomo/listener"
 	"github.com/metacubex/mihomo/log"
 	"github.com/user/yuelink/core/mitm"
@@ -239,6 +240,15 @@ func StopCore() {
 
 	log.Infoln("[StopCore] shutting down...")
 	executor.Shutdown()
+	// Tear down the external-controller so its TCP listener (e.g. :9090)
+	// is released. mihomo's executor.Shutdown only closes proxy + DNS
+	// listeners; the controller is owned by the route package, started
+	// from hub.Parse, and survives executor.Shutdown. In the c-archive
+	// embedding the Go runtime stays alive across StopCore/StartCore
+	// cycles, so a leaked controller socket would clash with the next
+	// StartCore (or with a service-mode mihomo trying to bind the same
+	// port). Empty Config closes existing servers without recreating.
+	route.ReCreateServer(&route.Config{})
 	state.isRunning = false
 	log.Infoln("YueLink core stopped")
 }

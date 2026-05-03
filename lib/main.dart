@@ -47,6 +47,7 @@ import 'shared/feature_flags.dart';
 import 'core/profile/profile_service.dart';
 import 'core/profile/subscription_sync_service.dart';
 import 'modules/updater/update_checker.dart';
+import 'modules/updater/update_dialog.dart';
 import 'core/storage/settings_service.dart';
 import 'app/android_tile_controller.dart';
 import 'app/app_quit_controller.dart';
@@ -758,10 +759,18 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
     if (!EnvConfig.isStandalone) return;
     UpdateChecker.instance.check(auto: true).then((info) {
       if (info != null && mounted) {
+        // Issue #4: capsule is now actionable — tapping it jumps
+        // straight into the update dialog (release notes + Download
+        // button) instead of forcing the user to navigate to
+        // Settings → Check Updates and re-trigger the check.
         AppNotifier.info(
           S.current.isEn
               ? 'New version v${info.latestVersion} available'
               : '发现新版本 v${info.latestVersion}',
+          onTap: () {
+            final ctx = navigatorKey.currentContext;
+            if (ctx != null) showUpdateDialog(ctx, info);
+          },
         );
       }
     });
