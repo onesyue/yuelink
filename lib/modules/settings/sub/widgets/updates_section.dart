@@ -86,8 +86,10 @@ class _UpdatesSectionState extends ConsumerState<UpdatesSection> {
             children: [
               YLInfoRow(
                 label: isEn ? 'Last checked' : '上次检查',
-                value: _formatLastChecked(_lastUpdateCheck, isEn: isEn),
-                trailing: const SizedBox.shrink(),
+                trailing: YLSettingsValueButton(
+                  label: _formatLastChecked(_lastUpdateCheck, isEn: isEn),
+                  showChevron: false,
+                ),
               ),
               Divider(height: 1, thickness: 0.5, color: dividerColor),
               YLSettingsRow(
@@ -104,13 +106,10 @@ class _UpdatesSectionState extends ConsumerState<UpdatesSection> {
               Divider(height: 1, thickness: 0.5, color: dividerColor),
               YLInfoRow(
                 label: isEn ? 'Update channel' : '更新通道',
-                value: _updateChannel == 'pre'
-                    ? (isEn ? 'Pre-release' : '预发布')
-                    : (isEn ? 'Stable' : '稳定版'),
-                trailing: const Icon(
-                  Icons.chevron_right,
-                  size: 18,
-                  color: YLColors.zinc400,
+                trailing: YLSettingsValueButton(
+                  label: _updateChannel == 'pre'
+                      ? (isEn ? 'Pre-release' : '预发布')
+                      : (isEn ? 'Stable' : '稳定版'),
                 ),
                 onTap: _pickChannel,
               ),
@@ -124,95 +123,30 @@ class _UpdatesSectionState extends ConsumerState<UpdatesSection> {
 
   Future<void> _pickChannel() async {
     final isEn = Localizations.localeOf(context).languageCode == 'en';
-    final picked = await showModalBottomSheet<String>(
+    final picked = await showYLSettingsOptionPicker<String>(
       context: context,
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _UpdateChannelRow(
-              title: isEn ? 'Stable (stable)' : '稳定版 (stable)',
-              subtitle: isEn
-                  ? 'Only receive formal v* releases'
-                  : '只接收正式 v* 版本，更稳定',
-              selected: _updateChannel == 'stable',
-              onTap: () => Navigator.pop(ctx, 'stable'),
-            ),
-            _UpdateChannelRow(
-              title: isEn ? 'Pre-release (pre-release)' : '预发布 (pre-release)',
-              subtitle: isEn
-                  ? 'Get new builds early, may be unstable'
-                  : '抢先体验新功能，可能有问题',
-              selected: _updateChannel == 'pre',
-              onTap: () => Navigator.pop(ctx, 'pre'),
-            ),
-          ],
+      title: isEn ? 'Update channel' : '更新通道',
+      selectedValue: _updateChannel,
+      options: [
+        YLSettingsOption(
+          value: 'stable',
+          title: isEn ? 'Stable (stable)' : '稳定版 (stable)',
+          subtitle: isEn
+              ? 'Only receive formal v* releases'
+              : '只接收正式 v* 版本，更稳定',
         ),
-      ),
+        YLSettingsOption(
+          value: 'pre',
+          title: isEn ? 'Pre-release (pre-release)' : '预发布 (pre-release)',
+          subtitle: isEn
+              ? 'Get new builds early, may be unstable'
+              : '抢先体验新功能，可能有问题',
+        ),
+      ],
     );
     if (picked != null && picked != _updateChannel) {
       await UpdateChecker.setChannel(picked);
       if (mounted) setState(() => _updateChannel = picked);
     }
-  }
-}
-
-class _UpdateChannelRow extends StatelessWidget {
-  const _UpdateChannelRow({
-    required this.title,
-    required this.subtitle,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String title;
-  final String subtitle;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: YLSpacing.lg,
-            vertical: YLSpacing.sm,
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: YLText.rowTitle.copyWith(
-                        fontWeight: FontWeight.w500,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      style: YLText.rowSubtitle.copyWith(
-                        color: YLColors.zinc500,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
-              if (selected)
-                const Icon(Icons.check, color: YLColors.primary, size: 18),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 }

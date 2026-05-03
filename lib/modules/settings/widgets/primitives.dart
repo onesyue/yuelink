@@ -238,6 +238,311 @@ class YLAdaptiveSegment<T> {
   const YLAdaptiveSegment({required this.value, required this.label});
 }
 
+class YLSettingsValueButton extends StatelessWidget {
+  final String label;
+  final VoidCallback? onTap;
+  final bool showChevron;
+
+  const YLSettingsValueButton({
+    super.key,
+    required this.label,
+    this.onTap,
+    this.showChevron = true,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final fg = isDark ? YLColors.zinc200 : YLColors.zinc700;
+    final borderColor = isDark
+        ? Colors.white.withValues(alpha: 0.08)
+        : Colors.black.withValues(alpha: 0.06);
+    final bg = isDark
+        ? Colors.white.withValues(alpha: 0.07)
+        : Colors.black.withValues(alpha: 0.045);
+
+    final child = DecoratedBox(
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(YLRadius.pill),
+        border: Border.all(color: borderColor, width: 0.5),
+      ),
+      child: Padding(
+        padding: EdgeInsets.only(
+          left: YLSpacing.md,
+          right: showChevron ? YLSpacing.xs : YLSpacing.md,
+          top: 6,
+          bottom: 6,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                softWrap: false,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.end,
+                style: YLText.caption.copyWith(
+                  fontSize: 12,
+                  height: 1.1,
+                  fontWeight: FontWeight.w500,
+                  color: fg,
+                ),
+              ),
+            ),
+            if (showChevron) ...[
+              const SizedBox(width: 2),
+              Icon(
+                Icons.keyboard_arrow_down_rounded,
+                size: 17,
+                color: isDark ? YLColors.zinc400 : YLColors.zinc500,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+
+    if (onTap == null) {
+      return ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 30, maxWidth: 220),
+        child: child,
+      );
+    }
+
+    return Semantics(
+      button: true,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(YLRadius.pill),
+          onTap: onTap,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 30, maxWidth: 220),
+            child: child,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class YLSettingsOption<T> {
+  final T value;
+  final String title;
+  final String? subtitle;
+
+  const YLSettingsOption({
+    required this.value,
+    required this.title,
+    this.subtitle,
+  });
+}
+
+Future<T?> showYLSettingsOptionPicker<T>({
+  required BuildContext context,
+  required String title,
+  required List<YLSettingsOption<T>> options,
+  required T selectedValue,
+}) {
+  final useDialog = MediaQuery.sizeOf(context).width >= 700;
+  final panel = _YLSettingsOptionPanel<T>(
+    title: title,
+    options: options,
+    selectedValue: selectedValue,
+    roundedAllCorners: useDialog,
+  );
+
+  if (useDialog) {
+    return showDialog<T>(
+      context: context,
+      builder: (ctx) => Dialog(
+        insetPadding: const EdgeInsets.symmetric(
+          horizontal: YLSpacing.xl,
+          vertical: YLSpacing.xl,
+        ),
+        clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(YLRadius.lg),
+        ),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 460),
+          child: panel,
+        ),
+      ),
+    );
+  }
+
+  return showModalBottomSheet<T>(
+    context: context,
+    backgroundColor: Colors.transparent,
+    builder: (ctx) => SafeArea(top: false, child: panel),
+  );
+}
+
+class _YLSettingsOptionPanel<T> extends StatelessWidget {
+  final String title;
+  final List<YLSettingsOption<T>> options;
+  final T selectedValue;
+  final bool roundedAllCorners;
+
+  const _YLSettingsOptionPanel({
+    required this.title,
+    required this.options,
+    required this.selectedValue,
+    required this.roundedAllCorners,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bg = isDark ? YLColors.zinc900 : Colors.white;
+    final dividerColor = isDark
+        ? Colors.white.withValues(alpha: 0.06)
+        : Colors.black.withValues(alpha: 0.06);
+    final radius = roundedAllCorners
+        ? BorderRadius.circular(YLRadius.lg)
+        : const BorderRadius.vertical(top: Radius.circular(YLRadius.lg));
+
+    return ClipRRect(
+      borderRadius: radius,
+      child: Material(
+        color: bg,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (!roundedAllCorners) ...[
+              const SizedBox(height: YLSpacing.sm),
+              Container(
+                width: 38,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: isDark ? YLColors.zinc700 : YLColors.zinc300,
+                  borderRadius: BorderRadius.circular(YLRadius.pill),
+                ),
+              ),
+            ],
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                YLSpacing.lg,
+                YLSpacing.md,
+                YLSpacing.lg,
+                YLSpacing.sm,
+              ),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  title,
+                  style: YLText.titleMedium.copyWith(
+                    color: isDark ? Colors.white : YLColors.zinc900,
+                  ),
+                ),
+              ),
+            ),
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.sizeOf(context).height * 0.72,
+              ),
+              child: ListView.separated(
+                shrinkWrap: true,
+                padding: const EdgeInsets.only(bottom: YLSpacing.sm),
+                itemCount: options.length,
+                separatorBuilder: (context, index) =>
+                    Divider(height: 1, thickness: 0.5, color: dividerColor),
+                itemBuilder: (context, index) {
+                  final option = options[index];
+                  return _YLSettingsOptionRow<T>(
+                    option: option,
+                    selected: option.value == selectedValue,
+                    onTap: () => Navigator.pop(context, option.value),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _YLSettingsOptionRow<T> extends StatelessWidget {
+  final YLSettingsOption<T> option;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _YLSettingsOptionRow({
+    required this.option,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final titleColor = isDark ? Colors.white : YLColors.zinc900;
+    final subtitleColor = isDark ? YLColors.zinc400 : YLColors.zinc500;
+
+    return Semantics(
+      selected: selected,
+      button: true,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: YLSpacing.lg,
+            vertical: YLSpacing.md,
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      option.title,
+                      style: YLText.rowTitle.copyWith(
+                        fontWeight: FontWeight.w500,
+                        color: titleColor,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (option.subtitle != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        option.subtitle!,
+                        style: YLText.rowSubtitle.copyWith(
+                          color: subtitleColor,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(width: YLSpacing.md),
+              AnimatedOpacity(
+                duration: const Duration(milliseconds: 120),
+                opacity: selected ? 1 : 0,
+                child: Icon(
+                  Icons.check_rounded,
+                  color: YLColors.currentAccent,
+                  size: 19,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// Compact segmented control for settings rows.
 ///
 /// Material's `SegmentedButton` distributes fixed row width across every
@@ -367,12 +672,14 @@ class YLSettingsRow extends StatelessWidget {
   final String title;
   final String? description;
   final Widget trailing;
+  final VoidCallback? onTap;
 
   const YLSettingsRow({
     super.key,
     required this.title,
     this.description,
     required this.trailing,
+    this.onTap,
   });
 
   @override
@@ -381,7 +688,7 @@ class YLSettingsRow extends StatelessWidget {
     final titleColor = isDark ? Colors.white : YLColors.zinc900;
     final descColor = isDark ? YLColors.zinc500 : YLColors.zinc500;
 
-    return Padding(
+    final content = Padding(
       padding: const EdgeInsets.symmetric(
         horizontal: YLSpacing.lg,
         vertical: YLSpacing.md,
@@ -466,6 +773,14 @@ class YLSettingsRow extends StatelessWidget {
         },
       ),
     );
+
+    if (onTap != null) {
+      return Material(
+        color: Colors.transparent,
+        child: InkWell(onTap: onTap, child: content),
+      );
+    }
+    return content;
   }
 }
 
@@ -477,6 +792,7 @@ const _settingsTrailingMaxWidth = 320.0;
 bool _isComplexSettingsTrailing(Widget? widget) {
   return widget is YLAdaptiveSegmentedControl ||
       widget is DropdownButton ||
+      widget is YLSettingsValueButton ||
       widget is Wrap;
 }
 
@@ -492,6 +808,14 @@ Widget _settingsTrailingPane(Widget child, BoxConstraints rowConstraints) {
         ? availableWidth
         : math.min(_settingsDropdownWidth, availableWidth);
     return SizedBox(width: width, child: child);
+  }
+
+  if (child is YLSettingsValueButton) {
+    final availableWidth = math.max(0.0, maxWidth);
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxWidth: math.min(220, availableWidth)),
+      child: child,
+    );
   }
 
   if (child is Wrap) {

@@ -63,8 +63,7 @@ class _PrivacySectionState extends ConsumerState<PrivacySection> {
               Divider(height: 1, thickness: 0.5, color: dividerColor),
               YLInfoRow(
                 label: s.telemetryViewEvents,
-                trailing: const Icon(Icons.chevron_right,
-                    size: 18, color: YLColors.zinc400),
+                trailing: YLSettingsValueButton(label: s.isEn ? 'Open' : '打开'),
                 onTap: () {
                   Navigator.of(context).push(
                     MaterialPageRoute(

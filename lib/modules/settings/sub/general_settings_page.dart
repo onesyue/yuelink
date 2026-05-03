@@ -65,6 +65,167 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
     }
   }
 
+  String _quicPolicyTitle(Translations strings, String policy) {
+    switch (policy) {
+      case SettingsService.quicPolicyOff:
+        return strings.quicPolicyCompatibility;
+      case SettingsService.quicPolicyAll:
+        return strings.quicPolicyForceFallback;
+      case SettingsService.quicPolicyGooglevideo:
+      default:
+        return strings.quicPolicyStandard;
+    }
+  }
+
+  String _connectionModeTitle(S s, String mode) {
+    return mode == 'tun' ? s.modeTun : s.modeSystemProxy;
+  }
+
+  String _tunStackTitle(S s, String stack) {
+    switch (stack) {
+      case 'system':
+        return s.tunStackSystem;
+      case 'gvisor':
+        return s.tunStackGvisor;
+      case 'mixed':
+      default:
+        return s.tunStackMixed;
+    }
+  }
+
+  String _subSyncIntervalTitle({required bool isEn, required int hours}) {
+    switch (hours) {
+      case 0:
+        return isEn ? 'Manual' : '手动';
+      case 1:
+        return isEn ? 'Every hour' : '每小时';
+      case 6:
+        return isEn ? 'Every 6 hours' : '每 6 小时';
+      case 12:
+        return isEn ? 'Every 12 hours' : '每 12 小时';
+      case 24:
+        return isEn ? 'Every day' : '每天';
+      case 48:
+        return isEn ? 'Every 2 days' : '每 2 天';
+      default:
+        return isEn ? 'Every $hours hours' : '每 $hours 小时';
+    }
+  }
+
+  Future<void> _pickQuicPolicy(
+    BuildContext context,
+    String currentPolicy,
+  ) async {
+    final strings = Translations.of(context);
+    final picked = await showYLSettingsOptionPicker<String>(
+      context: context,
+      title: strings.quicPolicyLabel,
+      selectedValue: currentPolicy,
+      options: [
+        YLSettingsOption(
+          value: SettingsService.quicPolicyGooglevideo,
+          title: strings.quicPolicyStandard,
+          subtitle: strings.quicPolicyStandardDesc,
+        ),
+        YLSettingsOption(
+          value: SettingsService.quicPolicyOff,
+          title: strings.quicPolicyCompatibility,
+          subtitle: strings.quicPolicyCompatibilityDesc,
+        ),
+        YLSettingsOption(
+          value: SettingsService.quicPolicyAll,
+          title: strings.quicPolicyForceFallback,
+          subtitle: strings.quicPolicyForceFallbackDesc,
+        ),
+      ],
+    );
+    if (picked == null || picked == currentPolicy) return;
+    ref.read(quicPolicyProvider.notifier).set(picked);
+    await SettingsService.setQuicPolicy(picked);
+  }
+
+  Future<void> _pickConnectionMode(
+    BuildContext context,
+    String currentMode,
+  ) async {
+    final s = S.of(context);
+    final picked = await showYLSettingsOptionPicker<String>(
+      context: context,
+      title: s.connectionMode,
+      selectedValue: currentMode,
+      options: [
+        YLSettingsOption(value: 'tun', title: s.modeTun),
+        YLSettingsOption(value: 'systemProxy', title: s.modeSystemProxy),
+      ],
+    );
+    if (picked == null || picked == currentMode) return;
+    await _applyConnectionMode(picked, previous: currentMode);
+  }
+
+  Future<void> _applyConnectionMode(
+    String mode, {
+    required String previous,
+  }) async {
+    ref.read(connectionModeProvider.notifier).set(mode);
+    await SettingsService.setConnectionMode(mode);
+    Telemetry.event(
+      TelemetryEvents.connectionModeChange,
+      props: {'mode': mode},
+    );
+
+    final status = ref.read(coreStatusProvider);
+    if (status == CoreStatus.running) {
+      final actions = ref.read(coreActionsProvider);
+      final ok = await actions.hotSwitchConnectionMode(
+        mode,
+        fallbackMode: previous,
+      );
+      if (!ok) {
+        ref.read(connectionModeProvider.notifier).set(previous);
+        await SettingsService.setConnectionMode(previous);
+      }
+    }
+  }
+
+  Future<void> _pickTunStack(BuildContext context, String currentStack) async {
+    final s = S.of(context);
+    final picked = await showYLSettingsOptionPicker<String>(
+      context: context,
+      title: s.tunStackLabel,
+      selectedValue: currentStack,
+      options: [
+        YLSettingsOption(value: 'mixed', title: s.tunStackMixed),
+        YLSettingsOption(value: 'system', title: s.tunStackSystem),
+        YLSettingsOption(value: 'gvisor', title: s.tunStackGvisor),
+      ],
+    );
+    if (picked == null || picked == currentStack) return;
+    ref.read(desktopTunStackProvider.notifier).set(picked);
+    await SettingsService.setDesktopTunStack(picked);
+  }
+
+  Future<void> _pickSubSyncInterval(
+    BuildContext context,
+    int currentHours,
+  ) async {
+    final isEn = Localizations.localeOf(context).languageCode == 'en';
+    final picked = await showYLSettingsOptionPicker<int>(
+      context: context,
+      title: isEn ? 'Subscription update' : '订阅更新频率',
+      selectedValue: currentHours,
+      options: [
+        for (final hours in const [0, 1, 6, 12, 24, 48])
+          YLSettingsOption(
+            value: hours,
+            title: _subSyncIntervalTitle(isEn: isEn, hours: hours),
+          ),
+      ],
+    );
+    if (picked == null || picked == currentHours) return;
+    ref.read(subSyncIntervalProvider.notifier).set(picked);
+    await SettingsService.setSubSyncInterval(picked);
+  }
+
   Future<void> _showTunBypassEditor(BuildContext context) async {
     final s = S.of(context);
     final addrs = await SettingsService.getTunBypassAddresses();
@@ -245,34 +406,10 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
                     YLSettingsRow(
                       title: strings.quicPolicyLabel,
                       description: _quicPolicyDescription(strings, quicPolicy),
-                      trailing: DropdownButton<String>(
-                        value: quicPolicy,
-                        isExpanded: true,
-                        underline: const SizedBox.shrink(),
-                        style: YLText.body.copyWith(
-                          color: isDark ? YLColors.zinc200 : YLColors.zinc700,
-                        ),
-                        dropdownColor: isDark ? YLColors.zinc800 : Colors.white,
-                        items: [
-                          DropdownMenuItem(
-                            value: SettingsService.quicPolicyGooglevideo,
-                            child: Text(strings.quicPolicyStandard),
-                          ),
-                          DropdownMenuItem(
-                            value: SettingsService.quicPolicyOff,
-                            child: Text(strings.quicPolicyCompatibility),
-                          ),
-                          DropdownMenuItem(
-                            value: SettingsService.quicPolicyAll,
-                            child: Text(strings.quicPolicyForceFallback),
-                          ),
-                        ],
-                        onChanged: (v) async {
-                          if (v == null || v == quicPolicy) return;
-                          ref.read(quicPolicyProvider.notifier).set(v);
-                          await SettingsService.setQuicPolicy(v);
-                        },
+                      trailing: YLSettingsValueButton(
+                        label: _quicPolicyTitle(strings, quicPolicy),
                       ),
+                      onTap: () => _pickQuicPolicy(context, quicPolicy),
                     ),
                     if (Platform.isAndroid) ...[
                       Divider(height: 1, thickness: 0.5, color: dividerColor),
@@ -306,56 +443,11 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
                     children: [
                       YLInfoRow(
                         label: s.connectionMode,
-                        trailing: DropdownButton<String>(
-                          value: connectionMode,
-                          isExpanded: true,
-                          underline: const SizedBox.shrink(),
-                          style: YLText.body.copyWith(
-                            color: isDark ? YLColors.zinc200 : YLColors.zinc700,
-                          ),
-                          dropdownColor: isDark
-                              ? YLColors.zinc800
-                              : Colors.white,
-                          items: [
-                            DropdownMenuItem(
-                              value: 'tun',
-                              child: Text(s.modeTun),
-                            ),
-                            DropdownMenuItem(
-                              value: 'systemProxy',
-                              child: Text(s.modeSystemProxy),
-                            ),
-                          ],
-                          onChanged: (v) async {
-                            if (v == null || v == connectionMode) return;
-                            final previous = connectionMode;
-                            ref.read(connectionModeProvider.notifier).set(v);
-                            await SettingsService.setConnectionMode(v);
-                            Telemetry.event(
-                              TelemetryEvents.connectionModeChange,
-                              props: {'mode': v},
-                            );
-
-                            // Hot-switch: if core is running, apply mode
-                            // change without stop+start
-                            final status = ref.read(coreStatusProvider);
-                            if (status == CoreStatus.running) {
-                              final actions = ref.read(coreActionsProvider);
-                              final ok = await actions.hotSwitchConnectionMode(
-                                v,
-                                fallbackMode: previous,
-                              );
-                              if (!ok) {
-                                ref
-                                    .read(connectionModeProvider.notifier)
-                                    .set(previous);
-                                await SettingsService.setConnectionMode(
-                                  previous,
-                                );
-                              }
-                            }
-                          },
+                        trailing: YLSettingsValueButton(
+                          label: _connectionModeTitle(s, connectionMode),
                         ),
+                        onTap: () =>
+                            _pickConnectionMode(context, connectionMode),
                       ),
                       Divider(height: 1, thickness: 0.5, color: dividerColor),
                       const ServiceModeRow(),
@@ -363,53 +455,19 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
                         Divider(height: 1, thickness: 0.5, color: dividerColor),
                         YLInfoRow(
                           label: s.tunStackLabel,
-                          trailing: DropdownButton<String>(
-                            value: desktopTunStack,
-                            isExpanded: true,
-                            underline: const SizedBox.shrink(),
-                            style: YLText.body.copyWith(
-                              color: isDark
-                                  ? YLColors.zinc200
-                                  : YLColors.zinc700,
-                            ),
-                            dropdownColor: isDark
-                                ? YLColors.zinc800
-                                : Colors.white,
-                            items: [
-                              DropdownMenuItem(
-                                value: 'mixed',
-                                child: Text(s.tunStackMixed),
-                              ),
-                              DropdownMenuItem(
-                                value: 'system',
-                                child: Text(s.tunStackSystem),
-                              ),
-                              DropdownMenuItem(
-                                value: 'gvisor',
-                                child: Text(s.tunStackGvisor),
-                              ),
-                            ],
-                            onChanged: (v) async {
-                              if (v == null) return;
-                              ref.read(desktopTunStackProvider.notifier).set(v);
-                              await SettingsService.setDesktopTunStack(v);
-                            },
+                          trailing: YLSettingsValueButton(
+                            label: _tunStackTitle(s, desktopTunStack),
                           ),
+                          onTap: () => _pickTunStack(context, desktopTunStack),
                         ),
                         Divider(height: 1, thickness: 0.5, color: dividerColor),
-                        GestureDetector(
-                          onTap: () => _showTunBypassEditor(context),
-                          behavior: HitTestBehavior.opaque,
-                          child: YLSettingsRow(
-                            title: s.tunBypassLabel,
-                            description: s.tunBypassSub,
-                            trailing: Icon(
-                              Icons.chevron_right,
-                              color: isDark
-                                  ? YLColors.zinc400
-                                  : YLColors.zinc500,
-                            ),
+                        YLSettingsRow(
+                          title: s.tunBypassLabel,
+                          description: s.tunBypassSub,
+                          trailing: YLSettingsValueButton(
+                            label: isEn ? 'Edit' : '编辑',
                           ),
+                          onTap: () => _showTunBypassEditor(context),
                         ),
                       ],
                       Divider(height: 1, thickness: 0.5, color: dividerColor),
@@ -475,46 +533,14 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
                   children: [
                     YLInfoRow(
                       label: isEn ? 'Subscription update' : '订阅更新频率',
-                      trailing: DropdownButton<int>(
-                        value: subSyncInterval,
-                        isExpanded: true,
-                        underline: const SizedBox.shrink(),
-                        style: YLText.body.copyWith(
-                          color: isDark ? YLColors.zinc200 : YLColors.zinc700,
+                      trailing: YLSettingsValueButton(
+                        label: _subSyncIntervalTitle(
+                          isEn: isEn,
+                          hours: subSyncInterval,
                         ),
-                        dropdownColor: isDark ? YLColors.zinc800 : Colors.white,
-                        items: [
-                          DropdownMenuItem(
-                            value: 0,
-                            child: Text(isEn ? 'Manual' : '手动'),
-                          ),
-                          DropdownMenuItem(
-                            value: 1,
-                            child: Text(isEn ? 'Every hour' : '每小时'),
-                          ),
-                          DropdownMenuItem(
-                            value: 6,
-                            child: Text(isEn ? 'Every 6 hours' : '每6小时'),
-                          ),
-                          DropdownMenuItem(
-                            value: 12,
-                            child: Text(isEn ? 'Every 12 hours' : '每12小时'),
-                          ),
-                          DropdownMenuItem(
-                            value: 24,
-                            child: Text(isEn ? 'Every day' : '每天'),
-                          ),
-                          DropdownMenuItem(
-                            value: 48,
-                            child: Text(isEn ? 'Every 2 days' : '每2天'),
-                          ),
-                        ],
-                        onChanged: (v) async {
-                          if (v == null) return;
-                          ref.read(subSyncIntervalProvider.notifier).set(v);
-                          await SettingsService.setSubSyncInterval(v);
-                        },
                       ),
+                      onTap: () =>
+                          _pickSubSyncInterval(context, subSyncInterval),
                     ),
                   ],
                 ),

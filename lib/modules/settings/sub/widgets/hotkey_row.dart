@@ -7,6 +7,7 @@ import '../../../../i18n/app_strings.dart';
 import '../../../../theme.dart';
 import '../../hotkey_codec.dart';
 import '../../providers/settings_providers.dart';
+import '../../widgets/primitives.dart';
 
 /// Desktop-only: inline hotkey display + "Edit" button that opens a
 /// modal KeyboardListener to capture a new combo.
@@ -27,39 +28,16 @@ class _HotkeyRowState extends ConsumerState<HotkeyRow> {
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final stored = ref.watch(toggleHotkeyProvider);
     final display = displayHotkey(stored);
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(s.toggleConnectionHotkey,
-                    style: YLText.body.copyWith(
-                        color: isDark ? YLColors.zinc200 : YLColors.zinc700)),
-              ),
-              Text(
-                display,
-                style: YLText.body.copyWith(
-                  fontFamily: 'monospace',
-                  color: isDark ? YLColors.zinc300 : YLColors.zinc600,
-                ),
-              ),
-              const SizedBox(width: 8),
-              TextButton(
-                onPressed: _registering ? null : () => _startRecording(s),
-                child: Text(_registering ? s.hotkeyListening : s.hotkeyEdit),
-              ),
-            ],
-          ),
-        ],
+    return YLInfoRow(
+      label: s.toggleConnectionHotkey,
+      trailing: YLSettingsValueButton(
+        label: _registering ? s.hotkeyListening : display,
       ),
+      enabled: !_registering,
+      onTap: _registering ? null : () => _startRecording(s),
     );
   }
 

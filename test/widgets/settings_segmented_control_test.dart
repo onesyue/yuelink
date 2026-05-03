@@ -14,7 +14,10 @@ void main() {
       debugShowCheckedModeBanner: false,
       theme: buildTheme(brightness),
       home: MediaQuery(
-        data: MediaQueryData(textScaler: TextScaler.linear(textScale)),
+        data: MediaQueryData(
+          size: Size(width, 600),
+          textScaler: TextScaler.linear(textScale),
+        ),
         child: Scaffold(
           body: Center(
             child: SizedBox(width: width, child: child),
@@ -128,6 +131,92 @@ void main() {
         .getSize(find.byType(DropdownButton<int>))
         .width;
     expect(dropdownWidth, inInclusiveRange(144, 208));
+  });
+
+  testWidgets('settings value button keeps current value in compact lane', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      harness(
+        width: 680,
+        child: const YLSettingsRow(
+          title: 'QUIC 策略',
+          description: '仅对 YouTube 视频流量禁用 QUIC，其它服务继续使用 HTTP/3。',
+          trailing: YLSettingsValueButton(label: '标准（推荐）'),
+        ),
+      ),
+    );
+
+    expect(tester.takeException(), isNull);
+    expect(tester.getSize(find.text('标准（推荐）')).width, lessThanOrEqualTo(180));
+  });
+
+  testWidgets('targeted settings value labels render as compact pills', (
+    tester,
+  ) async {
+    const labels = ['标准（推荐）', '每 6 小时', '刚刚', '稳定版', '全部应用', 'ctrl+alt+c'];
+
+    await tester.pumpWidget(
+      harness(
+        width: 320,
+        textScale: 1.3,
+        child: Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final label in labels) YLSettingsValueButton(label: label),
+          ],
+        ),
+      ),
+    );
+
+    expect(tester.takeException(), isNull);
+    for (final label in labels) {
+      final text = tester.widget<Text>(find.text(label));
+      expect(text.maxLines, 1, reason: label);
+      expect(text.softWrap, isFalse, reason: label);
+      expect(text.overflow, TextOverflow.ellipsis, reason: label);
+    }
+  });
+
+  testWidgets('settings option picker uses centered dialog on wide layouts', (
+    tester,
+  ) async {
+    String? picked;
+
+    await tester.pumpWidget(
+      harness(
+        width: 760,
+        child: Builder(
+          builder: (context) => TextButton(
+            onPressed: () async {
+              picked = await showYLSettingsOptionPicker<String>(
+                context: context,
+                title: '分流模式',
+                selectedValue: 'all',
+                options: const [
+                  YLSettingsOption(value: 'all', title: '全部应用'),
+                  YLSettingsOption(value: 'white', title: '仅选中应用'),
+                ],
+              );
+            },
+            child: const Text('open'),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(Dialog), findsOneWidget);
+    expect(find.text('全部应用'), findsOneWidget);
+    expect(find.text('仅选中应用'), findsOneWidget);
+
+    await tester.tap(find.text('仅选中应用'));
+    await tester.pumpAndSettle();
+
+    expect(picked, 'white');
   });
 
   testWidgets('adaptive segmented control handles English without overflow', (
