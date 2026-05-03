@@ -90,7 +90,7 @@ class _HotkeyRowState extends ConsumerState<HotkeyRow> {
 
             if (parts.length >= 2) {
               final combo = parts.join('+');
-              ref.read(toggleHotkeyProvider.notifier).state = combo;
+              ref.read(toggleHotkeyProvider.notifier).set(combo);
               SettingsService.setToggleHotkey(combo);
               Navigator.pop(ctx);
             }

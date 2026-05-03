@@ -100,7 +100,7 @@ Future<void> _syncStaleProfiles(Ref ref) async {
     // re-runs its own load(); this service does not hold a reference to
     // the modules provider.
     if (updated > 0) {
-      ref.read(profileSyncGenerationProvider.notifier).state++;
+      ref.read(profileSyncGenerationProvider.notifier).bump();
     }
   } finally {
     _syncing = false;

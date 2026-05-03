@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/legacy.dart';
 
 import '../i18n/app_strings.dart';
 import '../modules/dashboard/providers/dashboard_providers.dart'
@@ -38,7 +37,18 @@ class IosEntitlementSuspectEvent {
 
 /// Latest entitlement-suspect event. `null` until first occurrence.
 final iosEntitlementSuspectProvider =
-    StateProvider<IosEntitlementSuspectEvent?>((_) => null);
+    NotifierProvider<
+      IosEntitlementSuspectNotifier,
+      IosEntitlementSuspectEvent?
+    >(IosEntitlementSuspectNotifier.new);
+
+class IosEntitlementSuspectNotifier
+    extends Notifier<IosEntitlementSuspectEvent?> {
+  @override
+  IosEntitlementSuspectEvent? build() => null;
+
+  void set(IosEntitlementSuspectEvent? value) => state = value;
+}
 
 /// Coordinates "user came back to the app" semantics:
 ///
@@ -132,10 +142,10 @@ class AppResumeController {
       // next frame to show the iOS install guide dialog.
       ref
           .read(iosEntitlementSuspectProvider.notifier)
-          .state = IosEntitlementSuspectEvent(
-        elapsedMs: reason.elapsedMs ?? 0,
-        at: DateTime.now(),
-      );
+          .set(IosEntitlementSuspectEvent(
+            elapsedMs: reason.elapsedMs ?? 0,
+            at: DateTime.now(),
+          ));
     } else {
       AppNotifier.warning(S.current.disconnectedUnexpected);
     }
@@ -151,7 +161,7 @@ class AppResumeController {
     // foreground; 60 / 120 s background). Cheap state write — no
     // effect when value is unchanged.
     if (now == 'wifi' || now == 'cellular' || now == 'none') {
-      ref.read(lastTransportProvider.notifier).state = now;
+      ref.read(lastTransportProvider.notifier).set(now);
     }
 
     // Wi-Fi → cellular / cellular → Wi-Fi: stale TCP pool + polluted
@@ -583,7 +593,7 @@ class AppResumeController {
       if (persistedManualStopped && !ref.read(userStoppedProvider)) {
         // Hydrate the in-memory provider from persistence so subsequent
         // listeners (heartbeat, VPN revocation callback) also respect it.
-        ref.read(userStoppedProvider.notifier).state = true;
+        ref.read(userStoppedProvider.notifier).set(true);
       }
       if (ref.read(userStoppedProvider) || persistedManualStopped) {
         debugPrint(
@@ -593,7 +603,7 @@ class AppResumeController {
         );
         return;
       }
-      ref.read(recoveryInProgressProvider.notifier).state = true;
+      ref.read(recoveryInProgressProvider.notifier).set(true);
       try {
         final health = await RecoveryManager.checkCoreHealth();
         // v1.0.22 P0-1: TOCTOU re-check. Between the await above and the
@@ -615,7 +625,7 @@ class AppResumeController {
             'aborting recovery (provider=$userStoppedNow, '
             'persisted=$persistedNow)',
           );
-          ref.read(recoveryInProgressProvider.notifier).state = false;
+          ref.read(recoveryInProgressProvider.notifier).set(false);
           return;
         }
         if (health.alive && health.apiOk) {
@@ -632,11 +642,11 @@ class AppResumeController {
           ref.invalidate(connectionsStreamProvider);
           ref.invalidate(exitIpInfoProvider);
           // Now set state — this triggers the status listener and heartbeat
-          ref.read(coreStatusProvider.notifier).state = CoreStatus.running;
+          ref.read(coreStatusProvider.notifier).set(CoreStatus.running);
           // Clear any stale startup error from previous session
-          ref.read(coreStartupErrorProvider.notifier).state = null;
+          ref.read(coreStartupErrorProvider.notifier).set(null);
           // Also reset the user-stopped flag so the UI shows connected state
-          ref.read(userStoppedProvider.notifier).state = false;
+          ref.read(userStoppedProvider.notifier).set(false);
           ref.read(proxyGroupsProvider.notifier).refresh();
         }
         // Note: on Android the recovery guard stays up so the post-frame
@@ -649,10 +659,10 @@ class AppResumeController {
         // suppress every subsequent heartbeat tick.
       } catch (e) {
         debugPrint('[Resume] recovery check failed: $e');
-        ref.read(recoveryInProgressProvider.notifier).state = false;
+        ref.read(recoveryInProgressProvider.notifier).set(false);
       } finally {
         if (!Platform.isAndroid) {
-          ref.read(recoveryInProgressProvider.notifier).state = false;
+          ref.read(recoveryInProgressProvider.notifier).set(false);
         }
       }
       return;
@@ -709,18 +719,18 @@ class AppResumeController {
         mode: 'tun',
         tunStack: ref.read(desktopTunStackProvider),
       );
-      ref.read(desktopTunHealthProvider.notifier).state = snapshot;
+      ref.read(desktopTunHealthProvider.notifier).set(snapshot);
       DesktopTunTelemetry.healthSnapshot(snapshot);
       if (snapshot.runningVerified) {
         if (ref.read(coreStatusProvider) == CoreStatus.degraded) {
-          ref.read(coreStatusProvider.notifier).state = CoreStatus.running;
-          ref.read(coreStartupErrorProvider.notifier).state = null;
+          ref.read(coreStatusProvider.notifier).set(CoreStatus.running);
+          ref.read(coreStartupErrorProvider.notifier).set(null);
         }
         return;
       }
 
-      ref.read(coreStatusProvider.notifier).state = CoreStatus.degraded;
-      ref.read(coreStartupErrorProvider.notifier).state = snapshot.userMessage;
+      ref.read(coreStatusProvider.notifier).set(CoreStatus.degraded);
+      ref.read(coreStartupErrorProvider.notifier).set(snapshot.userMessage);
       final plan = _desktopTunRepair.plan(snapshot);
       DesktopTunTelemetry.repairAttempt(snapshot, plan.action);
       await _desktopTunRepair.runThrottled(plan, () async {
@@ -752,11 +762,11 @@ class AppResumeController {
         mode: 'tun',
         tunStack: ref.read(desktopTunStackProvider),
       );
-      ref.read(desktopTunHealthProvider.notifier).state = after;
+      ref.read(desktopTunHealthProvider.notifier).set(after);
       DesktopTunTelemetry.repairResult(after, plan.action);
       if (after.runningVerified) {
-        ref.read(coreStatusProvider.notifier).state = CoreStatus.running;
-        ref.read(coreStartupErrorProvider.notifier).state = null;
+        ref.read(coreStatusProvider.notifier).set(CoreStatus.running);
+        ref.read(coreStartupErrorProvider.notifier).set(null);
       }
     } catch (e) {
       debugPrint('[Resume] desktop TUN health/repair failed: $e');

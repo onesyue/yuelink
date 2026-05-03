@@ -105,7 +105,7 @@ void main() {
       );
 
       // coreStatus = running + foreground (default) to take the listener path
-      container.read(coreStatusProvider.notifier).state = CoreStatus.running;
+      container.read(coreStatusProvider.notifier).set(CoreStatus.running);
 
       // Activate provider → sub.listen attached
       container.read(connectionsStreamProvider);
@@ -155,7 +155,7 @@ void main() {
         ],
       );
 
-      container.read(coreStatusProvider.notifier).state = CoreStatus.running;
+      container.read(coreStatusProvider.notifier).set(CoreStatus.running);
 
       // Activate provider — wires traffic listener + memory listener
       container.read(trafficStreamProvider);

@@ -1,8 +1,5 @@
 import 'dart:io';
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/legacy.dart';
-
 import '../../domain/models/traffic.dart';
 import '../../domain/models/traffic_history.dart';
 import '../providers/core_provider.dart';
@@ -62,19 +59,20 @@ class RecoveryManager {
   /// - `_onAppResumed()` (core dead after background)
   /// - `_setupVpnRevocationListener()` (Android VPN revoked)
   ///
-  /// Both [Ref] and [WidgetRef] produce the same [StateController] from
-  /// `.read(provider.notifier)`, so callers just pass the 4 notifiers.
+  /// Both [Ref] and [WidgetRef] produce the same Notifier instance from
+  /// `.read(provider.notifier)`, so callers just pass the 4 notifiers via
+  /// the [resetCoreToStopped] convenience helper below.
   static void resetToStopped({
-    required StateController<CoreStatus> status,
-    required StateController<Traffic> traffic,
-    required StateController<TrafficHistory> history,
-    required StateController<int> historyVersion,
+    required CoreStatusNotifier status,
+    required TrafficNotifier traffic,
+    required TrafficHistoryNotifier history,
+    required TrafficHistoryVersionNotifier historyVersion,
     bool clearDesktopProxy = true,
   }) {
-    status.state = CoreStatus.stopped;
-    traffic.state = const Traffic();
-    history.state = TrafficHistory();
-    historyVersion.state = 0;
+    status.set(CoreStatus.stopped);
+    traffic.set(const Traffic());
+    history.set(TrafficHistory());
+    historyVersion.set(0);
     if (clearDesktopProxy && (Platform.isMacOS || Platform.isWindows)) {
       CoreActions.clearSystemProxyStatic().catchError((_) {});
     }
@@ -120,18 +118,21 @@ class RecoveryManager {
 
 // ── Convenience helper for call sites ─────────────────────────────────────
 
-/// Shorthand: reads all 4 notifiers from [ref] and calls [RecoveryManager.resetToStopped].
+/// Shorthand: reads all 4 notifiers from [ref] and calls
+/// [RecoveryManager.resetToStopped].
 ///
-/// Works from both `Ref` (Provider context) and `WidgetRef` (Widget context)
-/// since both expose `.read(provider.notifier)`.
+/// Accepts `dynamic` so the same helper works from `Ref` (Provider) and
+/// `WidgetRef` (Widget) call sites — both expose `.read(provider.notifier)`
+/// and both yield the same typed Notifier instance per provider.
 void resetCoreToStopped(dynamic ref, {bool clearDesktopProxy = true}) {
   RecoveryManager.resetToStopped(
-    status: (ref as dynamic).read(coreStatusProvider.notifier),
-    traffic: (ref as dynamic).read(trafficProvider.notifier),
-    history: (ref as dynamic).read(trafficHistoryProvider.notifier),
-    historyVersion: (ref as dynamic).read(
-      trafficHistoryVersionProvider.notifier,
-    ),
+    status: (ref as dynamic).read(coreStatusProvider.notifier)
+        as CoreStatusNotifier,
+    traffic: (ref as dynamic).read(trafficProvider.notifier) as TrafficNotifier,
+    history: (ref as dynamic).read(trafficHistoryProvider.notifier)
+        as TrafficHistoryNotifier,
+    historyVersion: (ref as dynamic).read(trafficHistoryVersionProvider.notifier)
+        as TrafficHistoryVersionNotifier,
     clearDesktopProxy: clearDesktopProxy,
   );
 }

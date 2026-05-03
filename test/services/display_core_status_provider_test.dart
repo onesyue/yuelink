@@ -8,8 +8,8 @@ void main() {
       final container = ProviderContainer();
       addTearDown(container.dispose);
 
-      container.read(coreStatusProvider.notifier).state = CoreStatus.running;
-      container.read(userStoppedProvider.notifier).state = false;
+      container.read(coreStatusProvider.notifier).set(CoreStatus.running);
+      container.read(userStoppedProvider.notifier).set(false);
 
       expect(container.read(displayCoreStatusProvider), CoreStatus.running);
     });
@@ -20,8 +20,8 @@ void main() {
 
       // Simulates the resume race: core actually still answering "running"
       // (mihomo helper in flight) while the user has already tapped Stop.
-      container.read(coreStatusProvider.notifier).state = CoreStatus.running;
-      container.read(userStoppedProvider.notifier).state = true;
+      container.read(coreStatusProvider.notifier).set(CoreStatus.running);
+      container.read(userStoppedProvider.notifier).set(true);
 
       expect(container.read(displayCoreStatusProvider), CoreStatus.stopped);
     });
@@ -30,12 +30,12 @@ void main() {
       final container = ProviderContainer();
       addTearDown(container.dispose);
 
-      container.read(userStoppedProvider.notifier).state = true;
+      container.read(userStoppedProvider.notifier).set(true);
 
-      container.read(coreStatusProvider.notifier).state = CoreStatus.starting;
+      container.read(coreStatusProvider.notifier).set(CoreStatus.starting);
       expect(container.read(displayCoreStatusProvider), CoreStatus.stopped);
 
-      container.read(coreStatusProvider.notifier).state = CoreStatus.stopping;
+      container.read(coreStatusProvider.notifier).set(CoreStatus.stopping);
       expect(container.read(displayCoreStatusProvider), CoreStatus.stopped);
     });
 
@@ -43,13 +43,13 @@ void main() {
       final container = ProviderContainer();
       addTearDown(container.dispose);
 
-      container.read(coreStatusProvider.notifier).state = CoreStatus.running;
-      container.read(userStoppedProvider.notifier).state = true;
+      container.read(coreStatusProvider.notifier).set(CoreStatus.running);
+      container.read(userStoppedProvider.notifier).set(true);
       expect(container.read(displayCoreStatusProvider), CoreStatus.stopped);
 
       // Fresh user-initiated start clears userStoppedProvider — UI should
       // immediately reflect the underlying running status.
-      container.read(userStoppedProvider.notifier).state = false;
+      container.read(userStoppedProvider.notifier).set(false);
       expect(container.read(displayCoreStatusProvider), CoreStatus.running);
     });
   });

@@ -1,4 +1,4 @@
-import 'package:flutter_riverpod/legacy.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// Subscription auto-sync interval, in hours.
 ///
@@ -16,7 +16,19 @@ import 'package:flutter_riverpod/legacy.dart';
 /// bootstrap override) reach it through a re-export in
 /// `modules/settings/providers/settings_providers.dart`, so their import
 /// paths are unchanged.
-final subSyncIntervalProvider = StateProvider<int>((ref) => 6);
+final subSyncIntervalProvider = NotifierProvider<SubSyncIntervalNotifier, int>(
+  SubSyncIntervalNotifier.new,
+);
+
+class SubSyncIntervalNotifier extends Notifier<int> {
+  SubSyncIntervalNotifier([this._initial = 6]);
+  final int _initial;
+
+  @override
+  int build() => _initial;
+
+  void set(int value) => state = value;
+}
 
 /// One-way notification bump that `subscription_sync_service` increments
 /// after it finishes a batch update of stale profiles. The
@@ -28,4 +40,15 @@ final subSyncIntervalProvider = StateProvider<int>((ref) => 6);
 /// counter). Core never references `profilesProvider` directly anymore.
 /// Bumping this counter is a pure side-effect signal — do NOT read the
 /// counter value; only listen for transitions.
-final profileSyncGenerationProvider = StateProvider<int>((ref) => 0);
+final profileSyncGenerationProvider =
+    NotifierProvider<ProfileSyncGenerationNotifier, int>(
+      ProfileSyncGenerationNotifier.new,
+    );
+
+class ProfileSyncGenerationNotifier extends Notifier<int> {
+  @override
+  int build() => 0;
+
+  /// Increments the generation counter through an explicit notifier method.
+  void bump() => state++;
+}

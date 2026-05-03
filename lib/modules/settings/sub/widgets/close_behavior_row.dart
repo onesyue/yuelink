@@ -28,7 +28,7 @@ class CloseBehaviorRow extends ConsumerWidget {
           YLAdaptiveSegment(value: 'exit', label: s.closeBehaviorExit),
         ],
         onChanged: (val) async {
-          ref.read(closeBehaviorProvider.notifier).state = val;
+          ref.read(closeBehaviorProvider.notifier).set(val);
           await SettingsService.setCloseBehavior(val);
         },
       ),

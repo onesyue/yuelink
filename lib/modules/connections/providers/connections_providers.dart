@@ -24,10 +24,10 @@ import '../../../core/providers/core_provider.dart';
 class ConnectionsSnapshotNotifier extends Notifier<ConnectionsSnapshot> {
   @override
   ConnectionsSnapshot build() => const ConnectionsSnapshot(
-        connections: [],
-        downloadTotal: 0,
-        uploadTotal: 0,
-      );
+    connections: [],
+    downloadTotal: 0,
+    uploadTotal: 0,
+  );
 
   /// Replace the current snapshot. Used by the polling/stream code paths.
   void set(ConnectionsSnapshot snapshot) => state = snapshot;
@@ -35,8 +35,8 @@ class ConnectionsSnapshotNotifier extends Notifier<ConnectionsSnapshot> {
 
 final connectionsSnapshotProvider =
     NotifierProvider<ConnectionsSnapshotNotifier, ConnectionsSnapshot>(
-  ConnectionsSnapshotNotifier.new,
-);
+      ConnectionsSnapshotNotifier.new,
+    );
 
 final connectionsStreamProvider = Provider<void>((ref) {
   final status = ref.watch(coreStatusProvider);
@@ -57,7 +57,9 @@ final connectionsStreamProvider = Provider<void>((ref) {
     // forbids modifying other providers synchronously during initialization.
     Future.microtask(() {
       if (disposed) return;
-      ref.read(connectionsSnapshotProvider.notifier).set(
+      ref
+          .read(connectionsSnapshotProvider.notifier)
+          .set(
             const ConnectionsSnapshot(
               connections: [],
               downloadTotal: 0,
@@ -133,8 +135,7 @@ final connectionsTotalsProvider = Provider<({int down, int up})>((ref) {
 /// filter list on every keystroke.
 ///
 /// Riverpod 3.0: migrated from `StateProvider<String>`. Public
-/// [ConnectionSearchNotifier.setQuery] preserves the existing
-/// `ref.read(provider.notifier).state = '...'` callsite shape.
+/// [ConnectionSearchNotifier.setQuery] keeps writes explicit and grep-able.
 class ConnectionSearchNotifier extends Notifier<String> {
   @override
   String build() => '';
@@ -145,11 +146,10 @@ class ConnectionSearchNotifier extends Notifier<String> {
 
 final connectionSearchProvider =
     NotifierProvider<ConnectionSearchNotifier, String>(
-  ConnectionSearchNotifier.new,
-);
+      ConnectionSearchNotifier.new,
+    );
 
-final filteredConnectionsProvider =
-    Provider<List<ActiveConnection>>((ref) {
+final filteredConnectionsProvider = Provider<List<ActiveConnection>>((ref) {
   // Watch only the connections list, not the whole snapshot — we don't
   // care about totals here, and the Provider subscribers shouldn't
   // re-enter this body when only the totals tick.
@@ -200,8 +200,7 @@ final proxyStatsProvider = Provider<List<ProxyStats>>((ref) {
 
   for (final conn in connections) {
     // The last element in chains is the exit proxy
-    final proxyName =
-        conn.chains.isNotEmpty ? conn.chains.last : 'DIRECT';
+    final proxyName = conn.chains.isNotEmpty ? conn.chains.last : 'DIRECT';
     final stats = statsMap.putIfAbsent(
       proxyName,
       () => ProxyStats(proxyName: proxyName),
@@ -223,24 +222,27 @@ const _proxyStatsLimit = 5;
 // Connection actions
 // ------------------------------------------------------------------
 
-final connectionActionsProvider =
-    Provider<ConnectionActions>((ref) => ConnectionActions(ref));
+final connectionActionsProvider = Provider<ConnectionActions>(
+  (ref) => ConnectionActions(ref),
+);
 
 class ConnectionActions {
   final Ref ref;
   ConnectionActions(this.ref);
 
   Future<bool> close(String id) async {
-    final ok =
-        await ref.read(connectionRepositoryProvider).closeConnection(id);
+    final ok = await ref.read(connectionRepositoryProvider).closeConnection(id);
     return ok;
   }
 
   Future<bool> closeAll() async {
-    final ok =
-        await ref.read(connectionRepositoryProvider).closeAllConnections();
+    final ok = await ref
+        .read(connectionRepositoryProvider)
+        .closeAllConnections();
     if (ok) {
-      ref.read(connectionsSnapshotProvider.notifier).set(
+      ref
+          .read(connectionsSnapshotProvider.notifier)
+          .set(
             const ConnectionsSnapshot(
               connections: [],
               downloadTotal: 0,

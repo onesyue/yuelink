@@ -1,6 +1,5 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/legacy.dart';
 
 import '../../../domain/surge_modules/module_entity.dart';
 import '../../../infrastructure/surge_modules/module_downloader.dart';
@@ -34,12 +33,19 @@ class ModuleState {
 
 // ── Notifier ──────────────────────────────────────────────────────────────────
 
-class ModuleNotifier extends StateNotifier<ModuleState> {
-  ModuleNotifier() : super(const ModuleState()) {
-    loadAll();
-  }
-
+class ModuleNotifier extends Notifier<ModuleState> {
   final _repo = const ModuleRepository();
+
+  @override
+  ModuleState build() {
+    // Defer the async load to a microtask so the constructor-equivalent
+    // path stays non-blocking, matching the previous StateNotifier where
+    // `loadAll()` was fired from the constructor body. Initial isLoading
+    // is true so the first observable state matches the old shape (the
+    // old loadAll's sync prefix flipped isLoading=true synchronously).
+    Future.microtask(loadAll);
+    return const ModuleState(isLoading: true);
+  }
 
   /// Load all modules from storage.
   Future<void> loadAll() async {
@@ -154,9 +160,7 @@ class ModuleNotifier extends StateNotifier<ModuleState> {
 // ── Providers ─────────────────────────────────────────────────────────────────
 
 final moduleProvider =
-    StateNotifierProvider<ModuleNotifier, ModuleState>(
-  (ref) => ModuleNotifier(),
-);
+    NotifierProvider<ModuleNotifier, ModuleState>(ModuleNotifier.new);
 
 /// Flat list of rule strings from all enabled modules.
 /// Used by config injection only — no UI dependency.

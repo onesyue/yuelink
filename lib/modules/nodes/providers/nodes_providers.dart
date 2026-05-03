@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/legacy.dart';
 import 'package:yaml/yaml.dart';
 
 import '../../../core/providers/core_provider.dart';
@@ -31,15 +30,52 @@ enum NodeSortMode {
 }
 
 final nodeSortModeProvider =
-    StateProvider<NodeSortMode>((ref) => NodeSortMode.defaultOrder);
+    NotifierProvider<NodeSortModeNotifier, NodeSortMode>(
+      NodeSortModeNotifier.new,
+    );
+
+class NodeSortModeNotifier extends Notifier<NodeSortMode> {
+  NodeSortModeNotifier([this._initial = NodeSortMode.defaultOrder]);
+  final NodeSortMode _initial;
+
+  @override
+  NodeSortMode build() => _initial;
+
+  void set(NodeSortMode value) => state = value;
+}
 
 enum NodeViewMode { card, list }
 
 final nodeViewModeProvider =
-    StateProvider<NodeViewMode>((ref) => NodeViewMode.card);
+    NotifierProvider<NodeViewModeNotifier, NodeViewMode>(
+      NodeViewModeNotifier.new,
+    );
+
+class NodeViewModeNotifier extends Notifier<NodeViewMode> {
+  NodeViewModeNotifier([this._initial = NodeViewMode.card]);
+  final NodeViewMode _initial;
+
+  @override
+  NodeViewMode build() => _initial;
+
+  void set(NodeViewMode value) => state = value;
+}
 
 /// Real-time node search query — empty string means no filter.
-final nodeSearchQueryProvider = StateProvider<String>((ref) => '');
+final nodeSearchQueryProvider =
+    NotifierProvider<NodeSearchQueryNotifier, String>(
+      NodeSearchQueryNotifier.new,
+    );
+
+class NodeSearchQueryNotifier extends Notifier<String> {
+  NodeSearchQueryNotifier([this._initial = '']);
+  final String _initial;
+
+  @override
+  String build() => _initial;
+
+  void set(String value) => state = value;
+}
 
 /// Derived: the "main" proxy group (PROXIES/GLOBAL/节点选择/Proxy) + its
 /// currently selected node. HeroCard watches this instead of the full
@@ -66,7 +102,20 @@ final activeProxyInfoProvider =
 
 /// Maps proxy node names to their protocol type (ss, vmess, trojan, etc.).
 /// Populated from the /proxies API response during ProxyGroupsNotifier.refresh().
-final nodeTypeMapProvider = StateProvider<Map<String, String>>((ref) => {});
+final nodeTypeMapProvider =
+    NotifierProvider<NodeTypeMapNotifier, Map<String, String>>(
+      NodeTypeMapNotifier.new,
+    );
+
+class NodeTypeMapNotifier extends Notifier<Map<String, String>> {
+  NodeTypeMapNotifier([this._initial = const {}]);
+  final Map<String, String> _initial;
+
+  @override
+  Map<String, String> build() => _initial;
+
+  void set(Map<String, String> value) => state = value;
+}
 
 // ------------------------------------------------------------------
 // Offline proxy groups (parsed from active profile YAML)
@@ -121,7 +170,20 @@ final proxyGroupsProvider =
 
 /// The mihomo GLOBAL proxy group (used in global routing mode).
 /// null until the first refresh completes.
-final globalGroupProvider = StateProvider<ProxyGroup?>((ref) => null);
+final globalGroupProvider =
+    NotifierProvider<GlobalGroupNotifier, ProxyGroup?>(
+      GlobalGroupNotifier.new,
+    );
+
+class GlobalGroupNotifier extends Notifier<ProxyGroup?> {
+  GlobalGroupNotifier([this._initial]);
+  final ProxyGroup? _initial;
+
+  @override
+  ProxyGroup? build() => _initial;
+
+  void set(ProxyGroup? value) => state = value;
+}
 
 @visibleForTesting
 bool shouldFetchLiveProxyGroups({
@@ -250,7 +312,7 @@ class ProxyGroupsNotifier extends Notifier<List<ProxyGroup>> {
         nodeTypes[entry.key] = type;
       }
     }
-    ref.read(nodeTypeMapProvider.notifier).state = nodeTypes;
+    ref.read(nodeTypeMapProvider.notifier).set(nodeTypes);
 
     // Extract and store the GLOBAL group (for global routing mode display).
     final globalInfo = proxiesMap['GLOBAL'] as Map<String, dynamic>?;
@@ -265,7 +327,7 @@ class ProxyGroupsNotifier extends Notifier<List<ProxyGroup>> {
         all: filteredAll.isNotEmpty ? filteredAll : allNames,
         now: globalInfo['now'] as String? ?? '',
       );
-      ref.read(globalGroupProvider.notifier).state = globalGroup;
+      ref.read(globalGroupProvider.notifier).set(globalGroup);
     }
 
     // Use GLOBAL group's order to sort; exclude GLOBAL itself
@@ -496,4 +558,17 @@ class ProxyGroupsNotifier extends Notifier<List<ProxyGroup>> {
 /// proxyGroupsProvider rather than the latency-testing surface because
 /// it has nothing to do with delay tests — `_GroupCardState` reads it
 /// to restore expansion across rebuilds.
-final expandedGroupNamesProvider = StateProvider<Set<String>>((ref) => {});
+final expandedGroupNamesProvider =
+    NotifierProvider<ExpandedGroupNamesNotifier, Set<String>>(
+      ExpandedGroupNamesNotifier.new,
+    );
+
+class ExpandedGroupNamesNotifier extends Notifier<Set<String>> {
+  ExpandedGroupNamesNotifier([this._initial = const {}]);
+  final Set<String> _initial;
+
+  @override
+  Set<String> build() => _initial;
+
+  void set(Set<String> value) => state = value;
+}

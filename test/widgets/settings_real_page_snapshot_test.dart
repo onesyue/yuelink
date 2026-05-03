@@ -143,17 +143,23 @@ class _SettingsHarness extends StatelessWidget {
     final language = locale == AppLocale.en ? 'en' : 'zh';
     return ProviderScope(
       overrides: [
-        themeProvider.overrideWith((ref) => ThemeMode.system),
-        languageProvider.overrideWith((ref) => language),
-        routingModeProvider.overrideWith((ref) => 'rule'),
-        connectionModeProvider.overrideWith((ref) => 'tun'),
-        desktopTunStackProvider.overrideWith((ref) => 'mixed'),
-        closeBehaviorProvider.overrideWith((ref) => 'tray'),
-        systemProxyOnConnectProvider.overrideWith((ref) => true),
-        autoConnectProvider.overrideWith((ref) => false),
-        subSyncIntervalProvider.overrideWith((ref) => 24),
+        themeProvider.overrideWith(() => ThemeNotifier(ThemeMode.system)),
+        languageProvider.overrideWith(() => LanguageNotifier(language)),
+        routingModeProvider.overrideWith(() => RoutingModeNotifier('rule')),
+        connectionModeProvider.overrideWith(() => ConnectionModeNotifier('tun')),
+        desktopTunStackProvider.overrideWith(
+          () => DesktopTunStackNotifier('mixed'),
+        ),
+        closeBehaviorProvider.overrideWith(() => CloseBehaviorNotifier('tray')),
+        systemProxyOnConnectProvider.overrideWith(
+          () => SystemProxyOnConnectNotifier(true),
+        ),
+        autoConnectProvider.overrideWith(() => AutoConnectNotifier(false)),
+        subSyncIntervalProvider.overrideWith(
+          () => SubSyncIntervalNotifier(24),
+        ),
         quicPolicyProvider.overrideWith(
-          (ref) => SettingsService.quicPolicyGooglevideo,
+          () => QuicPolicyNotifier(SettingsService.quicPolicyGooglevideo),
         ),
         desktopServiceInfoProvider.overrideWith(
           (ref) async => const DesktopServiceInfo(

@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/legacy.dart';
 
 import '../core/providers/core_runtime_providers.dart';
 import '../core/storage/settings_service.dart';
@@ -29,7 +28,15 @@ final initialBuiltTabsProvider = Provider<List<int>>((ref) => [0]);
 /// One-shot navigation request from outside the widget tree (e.g. the
 /// Android Quick Settings tile long-press). MainShell listens and swaps
 /// to the requested tab, then resets to null.
-final tileNavRequestProvider = StateProvider<int?>((ref) => null);
+final tileNavRequestProvider =
+    NotifierProvider<TileNavRequestNotifier, int?>(TileNavRequestNotifier.new);
+
+class TileNavRequestNotifier extends Notifier<int?> {
+  @override
+  int? build() => null;
+
+  void set(int? value) => state = value;
+}
 
 class MainShell extends ConsumerStatefulWidget {
   const MainShell({super.key = const ValueKey('mainShell')});
@@ -114,7 +121,7 @@ class _MainShellState extends ConsumerState<MainShell> {
       if (next >= 0 && next < _pages.length) switchTab(next);
       // Use microtask so the notifier isn't mutated during the notification.
       Future.microtask(
-        () => ref.read(tileNavRequestProvider.notifier).state = null,
+        () => ref.read(tileNavRequestProvider.notifier).set(null),
       );
     });
   }

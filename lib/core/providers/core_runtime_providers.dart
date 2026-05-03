@@ -1,5 +1,4 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/legacy.dart';
 
 import '../../domain/models/traffic.dart';
 import '../../domain/models/traffic_history.dart';
@@ -10,6 +9,17 @@ import '../managers/core_lifecycle_manager.dart';
 import '../managers/system_proxy_manager.dart';
 import '../tun/desktop_tun_state.dart';
 
+// All 11 mutable providers in this file follow the same shape introduced in
+// S3 batch3/4a: `NotifierProvider<XNotifier, T>` with a Notifier whose
+// constructor takes the initial value (used by `provider.overrideWith(() =>
+// XNotifier(saved))` from main.dart's bootstrap), `build()` returns it, and
+// `set(value)` is the public write surface. Multi-writer providers
+// (`coreStatusProvider`, `desktopTunHealthProvider`,
+// `recoveryInProgressProvider`, `trafficHistory*`) keep this single
+// `set` entry point — every lifecycle / recovery / heartbeat caller routes
+// through it, so any future ordering invariant added here is enforced
+// uniformly.
+
 // ──────────────────────────────────────────────────────────────────────────
 // App background state (battery optimization)
 // ──────────────────────────────────────────────────────────────────────────
@@ -17,7 +27,20 @@ import '../tun/desktop_tun_state.dart';
 /// True when the app is in the background (paused/hidden/inactive).
 /// Stream providers watch this to pause WebSocket connections and reduce
 /// heartbeat frequency, significantly reducing battery drain on Android.
-final appInBackgroundProvider = StateProvider<bool>((ref) => false);
+final appInBackgroundProvider =
+    NotifierProvider<AppInBackgroundNotifier, bool>(
+      AppInBackgroundNotifier.new,
+    );
+
+class AppInBackgroundNotifier extends Notifier<bool> {
+  AppInBackgroundNotifier([this._initial = false]);
+  final bool _initial;
+
+  @override
+  bool build() => _initial;
+
+  void set(bool value) => state = value;
+}
 
 // ──────────────────────────────────────────────────────────────────────────
 // Core state
@@ -25,20 +48,53 @@ final appInBackgroundProvider = StateProvider<bool>((ref) => false);
 
 enum CoreStatus { stopped, starting, running, degraded, stopping }
 
-final coreStatusProvider = StateProvider<CoreStatus>(
-  (ref) => CoreStatus.stopped,
-);
+final coreStatusProvider =
+    NotifierProvider<CoreStatusNotifier, CoreStatus>(CoreStatusNotifier.new);
+
+class CoreStatusNotifier extends Notifier<CoreStatus> {
+  CoreStatusNotifier([this._initial = CoreStatus.stopped]);
+  final CoreStatus _initial;
+
+  @override
+  CoreStatus build() => _initial;
+
+  void set(CoreStatus value) => state = value;
+}
 
 /// Last startup error message — shown on dashboard when core fails to start.
-final coreStartupErrorProvider = StateProvider<String?>((ref) => null);
+final coreStartupErrorProvider =
+    NotifierProvider<CoreStartupErrorNotifier, String?>(
+      CoreStartupErrorNotifier.new,
+    );
+
+class CoreStartupErrorNotifier extends Notifier<String?> {
+  CoreStartupErrorNotifier([this._initial]);
+  final String? _initial;
+
+  @override
+  String? build() => _initial;
+
+  void set(String? value) => state = value;
+}
 
 /// Last desktop TUN health snapshot. Null outside desktop TUN mode or before
 /// the first verification pass. This is deliberately separate from
 /// [coreStatusProvider]: the core may still be alive while TUN route/DNS is
 /// degraded, and the UI must not collapse that state into a fake "running".
-final desktopTunHealthProvider = StateProvider<DesktopTunSnapshot?>(
-  (ref) => null,
-);
+final desktopTunHealthProvider =
+    NotifierProvider<DesktopTunHealthNotifier, DesktopTunSnapshot?>(
+      DesktopTunHealthNotifier.new,
+    );
+
+class DesktopTunHealthNotifier extends Notifier<DesktopTunSnapshot?> {
+  DesktopTunHealthNotifier([this._initial]);
+  final DesktopTunSnapshot? _initial;
+
+  @override
+  DesktopTunSnapshot? build() => _initial;
+
+  void set(DesktopTunSnapshot? value) => state = value;
+}
 
 /// Whether the core is running in mock mode (no native library).
 final isMockModeProvider = Provider<bool>((ref) {
@@ -53,7 +109,18 @@ final mihomoApiProvider = Provider<MihomoApi>((ref) {
 /// Set to true when the user explicitly stops the VPN.
 /// Prevents auto-connect from re-enabling on app resume.
 /// Reset on next explicit start.
-final userStoppedProvider = StateProvider<bool>((ref) => false);
+final userStoppedProvider =
+    NotifierProvider<UserStoppedNotifier, bool>(UserStoppedNotifier.new);
+
+class UserStoppedNotifier extends Notifier<bool> {
+  UserStoppedNotifier([this._initial = false]);
+  final bool _initial;
+
+  @override
+  bool build() => _initial;
+
+  void set(bool value) => state = value;
+}
 
 /// UI-facing status: collapses to [CoreStatus.stopped] whenever the user
 /// has explicitly stopped, regardless of what [coreStatusProvider] says.
@@ -79,28 +146,88 @@ final displayCoreStatusProvider = Provider<CoreStatus>((ref) {
 /// True while Android background→foreground recovery is in progress.
 /// Heartbeat and status listeners must check this before resetting state,
 /// otherwise they race with the recovery logic in _onAppResumed().
-final recoveryInProgressProvider = StateProvider<bool>((ref) => false);
+final recoveryInProgressProvider =
+    NotifierProvider<RecoveryInProgressNotifier, bool>(
+      RecoveryInProgressNotifier.new,
+    );
+
+class RecoveryInProgressNotifier extends Notifier<bool> {
+  RecoveryInProgressNotifier([this._initial = false]);
+  final bool _initial;
+
+  @override
+  bool build() => _initial;
+
+  void set(bool value) => state = value;
+}
 
 // ──────────────────────────────────────────────────────────────────────────
 // Traffic state (written by both heartbeat and stream activators)
 // ──────────────────────────────────────────────────────────────────────────
 
-final trafficProvider = StateProvider<Traffic>((ref) => const Traffic());
+final trafficProvider =
+    NotifierProvider<TrafficNotifier, Traffic>(TrafficNotifier.new);
 
-final trafficHistoryProvider = StateProvider<TrafficHistory>(
-  (ref) => TrafficHistory(),
-);
+class TrafficNotifier extends Notifier<Traffic> {
+  TrafficNotifier([this._initial = const Traffic()]);
+  final Traffic _initial;
+
+  @override
+  Traffic build() => _initial;
+
+  void set(Traffic value) => state = value;
+}
+
+final trafficHistoryProvider =
+    NotifierProvider<TrafficHistoryNotifier, TrafficHistory>(
+      TrafficHistoryNotifier.new,
+    );
+
+class TrafficHistoryNotifier extends Notifier<TrafficHistory> {
+  TrafficHistoryNotifier([TrafficHistory? initial])
+    : _initial = initial ?? TrafficHistory();
+  final TrafficHistory _initial;
+
+  @override
+  TrafficHistory build() => _initial;
+
+  void set(TrafficHistory value) => state = value;
+}
 
 /// Monotonically increasing version counter for [trafficHistoryProvider].
 /// Bumped on every sample add — ChartCard watches this instead of a full
 /// TrafficHistory copy, saving ~3600 double copies per second.
-final trafficHistoryVersionProvider = StateProvider<int>((ref) => 0);
+final trafficHistoryVersionProvider =
+    NotifierProvider<TrafficHistoryVersionNotifier, int>(
+      TrafficHistoryVersionNotifier.new,
+    );
+
+class TrafficHistoryVersionNotifier extends Notifier<int> {
+  TrafficHistoryVersionNotifier([this._initial = 0]);
+  final int _initial;
+
+  @override
+  int build() => _initial;
+
+  void set(int value) => state = value;
+}
 
 // ──────────────────────────────────────────────────────────────────────────
 // Memory usage state
 // ──────────────────────────────────────────────────────────────────────────
 
-final memoryUsageProvider = StateProvider<int>((ref) => 0);
+final memoryUsageProvider =
+    NotifierProvider<MemoryUsageNotifier, int>(MemoryUsageNotifier.new);
+
+class MemoryUsageNotifier extends Notifier<int> {
+  MemoryUsageNotifier([this._initial = 0]);
+  final int _initial;
+
+  @override
+  int build() => _initial;
+
+  void set(int value) => state = value;
+}
 
 // ──────────────────────────────────────────────────────────────────────────
 // Core actions (thin facade over CoreLifecycleManager + SystemProxyManager)
@@ -156,7 +283,18 @@ class CoreActions {
 // `'wifi'` is the radio-cheap profile, so platforms that never emit a
 // transport signal stay on the shorter heartbeat interval rather than
 // silently degrading to the cellular cadence.
-final lastTransportProvider = StateProvider<String>((ref) => 'wifi');
+final lastTransportProvider =
+    NotifierProvider<LastTransportNotifier, String>(LastTransportNotifier.new);
+
+class LastTransportNotifier extends Notifier<String> {
+  LastTransportNotifier([this._initial = 'wifi']);
+  final String _initial;
+
+  @override
+  String build() => _initial;
+
+  void set(String value) => state = value;
+}
 
 // ──────────────────────────────────────────────────────────────────────────
 // Core heartbeat — provider wrapper around CoreHeartbeatManager

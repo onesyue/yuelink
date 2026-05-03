@@ -2,7 +2,6 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/legacy.dart';
 
 import '../../../core/ffi/core_controller.dart';
 import '../../../domain/surge_modules/module_entity.dart';
@@ -100,13 +99,30 @@ class MitmState {
 
 // ── Notifier ──────────────────────────────────────────────────────────────────
 
-class MitmNotifier extends StateNotifier<MitmState> {
-  MitmNotifier(this._ref) : super(const MitmState()) {
-    refresh();
-  }
-
-  final Ref _ref;
+class MitmNotifier extends Notifier<MitmState> {
   final _core = CoreController.instance;
+
+  @override
+  MitmState build() {
+    // Auto-push Phase-2 config whenever the module list changes while running.
+    // (Previously declared in the StateNotifierProvider closure; moved into
+    // build() because Notifier owns its ref directly in Riverpod 3.x.)
+    ref.listen(moduleProvider, (_, next) {
+      pushConfig(next.modules);
+    });
+    // Initial sync refresh — assembled into the returned state directly
+    // because Notifier.build must return the value (the `state` setter
+    // isn't usable until build completes).
+    try {
+      return MitmState(
+        engine: _parseEngine(_core.getMitmEngineStatusJson()),
+        ca: _parseCa(_core.getRootCaStatusJson()),
+      );
+    } catch (e) {
+      debugPrint('[MitmProvider] initial refresh error: $e');
+      return const MitmState();
+    }
+  }
 
   /// Refresh engine + CA status from the Go core.
   void refresh() {
@@ -142,7 +158,7 @@ class MitmNotifier extends StateNotifier<MitmState> {
     state = state.copyWith(isLoading: false);
     // Push Phase-2 config now that the engine is running.
     try {
-      final modules = _ref.read(moduleProvider).modules;
+      final modules = ref.read(moduleProvider).modules;
       pushConfig(modules);
     } catch (e) {
       debugPrint('[MitmProvider] pushConfig after start error: $e');
@@ -265,16 +281,7 @@ class MitmNotifier extends StateNotifier<MitmState> {
 // ── Providers ─────────────────────────────────────────────────────────────────
 
 final mitmProvider =
-    StateNotifierProvider<MitmNotifier, MitmState>((ref) {
-  final notifier = MitmNotifier(ref);
-
-  // Auto-push Phase-2 config whenever the module list changes while running.
-  ref.listen(moduleProvider, (_, next) {
-    notifier.pushConfig(next.modules);
-  });
-
-  return notifier;
-});
+    NotifierProvider<MitmNotifier, MitmState>(MitmNotifier.new);
 
 /// Derived: current MITM engine port (0 = not running).
 final mitmEnginePortProvider = Provider<int>((ref) {

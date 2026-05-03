@@ -116,8 +116,9 @@ class _PlanDetailSheetState extends ConsumerState<PlanDetailSheet> {
                     selected: _period,
                     onChanged: (p) {
                       setState(() => _period = p);
-                      ref.read(selectedPeriodProvider(plan.id).notifier).state =
-                          p;
+                      ref
+                          .read(selectedPeriodProvider(plan.id).notifier)
+                          .set(p);
                     },
                   ),
 

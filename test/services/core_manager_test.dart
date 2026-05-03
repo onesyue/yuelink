@@ -481,8 +481,12 @@ rules:
     }) {
       final container = ProviderContainer(
         overrides: [
-          userStoppedProvider.overrideWith((ref) => savedManualStopped),
-          autoConnectProvider.overrideWith((ref) => savedAutoConnect),
+          userStoppedProvider.overrideWith(
+            () => UserStoppedNotifier(savedManualStopped),
+          ),
+          autoConnectProvider.overrideWith(
+            () => AutoConnectNotifier(savedAutoConnect),
+          ),
         ],
       );
       addTearDown(container.dispose);

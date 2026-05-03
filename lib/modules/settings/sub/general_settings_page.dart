@@ -197,7 +197,7 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
                         value: autoConnect,
                         activeTrackColor: YLColors.connected,
                         onChanged: (v) async {
-                          ref.read(autoConnectProvider.notifier).state = v;
+                          ref.read(autoConnectProvider.notifier).set(v);
                           await SettingsService.setAutoConnect(v);
                         },
                       ),
@@ -224,7 +224,7 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
                         ],
                         onChanged: (mode) async {
                           if (mode == routingMode) return;
-                          ref.read(routingModeProvider.notifier).state = mode;
+                          ref.read(routingModeProvider.notifier).set(mode);
                           await SettingsService.setRoutingMode(mode);
                           Telemetry.event(
                             TelemetryEvents.routingModeChange,
@@ -268,7 +268,7 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
                         ],
                         onChanged: (v) async {
                           if (v == null || v == quicPolicy) return;
-                          ref.read(quicPolicyProvider.notifier).state = v;
+                          ref.read(quicPolicyProvider.notifier).set(v);
                           await SettingsService.setQuicPolicy(v);
                         },
                       ),
@@ -286,8 +286,9 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
                           value: ref.watch(tileShowNodeInfoProvider),
                           activeTrackColor: YLColors.connected,
                           onChanged: (v) async {
-                            ref.read(tileShowNodeInfoProvider.notifier).state =
-                                v;
+                            ref
+                                .read(tileShowNodeInfoProvider.notifier)
+                                .set(v);
                             await SettingsService.setTileShowNodeInfo(v);
                           },
                         ),
@@ -329,7 +330,7 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
                           onChanged: (v) async {
                             if (v == null || v == connectionMode) return;
                             final previous = connectionMode;
-                            ref.read(connectionModeProvider.notifier).state = v;
+                            ref.read(connectionModeProvider.notifier).set(v);
                             await SettingsService.setConnectionMode(v);
                             Telemetry.event(
                               TelemetryEvents.connectionModeChange,
@@ -347,9 +348,8 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
                               );
                               if (!ok) {
                                 ref
-                                        .read(connectionModeProvider.notifier)
-                                        .state =
-                                    previous;
+                                    .read(connectionModeProvider.notifier)
+                                    .set(previous);
                                 await SettingsService.setConnectionMode(
                                   previous,
                                 );
@@ -392,8 +392,9 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
                             ],
                             onChanged: (v) async {
                               if (v == null) return;
-                              ref.read(desktopTunStackProvider.notifier).state =
-                                  v;
+                              ref
+                                  .read(desktopTunStackProvider.notifier)
+                                  .set(v);
                               await SettingsService.setDesktopTunStack(v);
                             },
                           ),
@@ -423,9 +424,8 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
                           activeTrackColor: YLColors.connected,
                           onChanged: (v) async {
                             ref
-                                    .read(systemProxyOnConnectProvider.notifier)
-                                    .state =
-                                v;
+                                .read(systemProxyOnConnectProvider.notifier)
+                                .set(v);
                             await SettingsService.setSystemProxyOnConnect(v);
                           },
                         ),
@@ -514,7 +514,7 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
                         ],
                         onChanged: (v) async {
                           if (v == null) return;
-                          ref.read(subSyncIntervalProvider.notifier).state = v;
+                          ref.read(subSyncIntervalProvider.notifier).set(v);
                           await SettingsService.setSubSyncInterval(v);
                         },
                       ),

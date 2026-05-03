@@ -133,9 +133,9 @@ final trafficStreamProvider = Provider<void>((ref) {
       final t = await manager.core.getTraffic();
       if (disposed) return;
       final traffic = Traffic(up: t.up, down: t.down);
-      ref.read(trafficProvider.notifier).state = traffic;
+      ref.read(trafficProvider.notifier).set(traffic);
       history.add(t.up, t.down);
-      ref.read(trafficHistoryVersionProvider.notifier).state = history.version;
+      ref.read(trafficHistoryVersionProvider.notifier).set(history.version);
       ref.read(dailyTrafficProvider.notifier).add(t.up, t.down);
     });
     ref.onDispose(() => timer.cancel());
@@ -147,10 +147,10 @@ final trafficStreamProvider = Provider<void>((ref) {
     // trafficHistoryProvider empty and the chart blank.
     final trafficSub = repo.trafficStream().listen((t) {
       if (disposed) return;
-      ref.read(trafficProvider.notifier).state = t;
+      ref.read(trafficProvider.notifier).set(t);
       ref.read(dailyTrafficProvider.notifier).add(t.up, t.down);
       history.add(t.up, t.down);
-      ref.read(trafficHistoryVersionProvider.notifier).state = history.version;
+      ref.read(trafficHistoryVersionProvider.notifier).set(history.version);
     });
     ref.onDispose(() => trafficSub.cancel());
   }
@@ -178,7 +178,7 @@ final memoryStreamProvider = Provider<void>((ref) {
   final repo = ref.watch(trafficRepositoryProvider);
   final sub = repo.memoryStream().listen((bytes) {
     if (disposed) return;
-    ref.read(memoryUsageProvider.notifier).state = bytes;
+    ref.read(memoryUsageProvider.notifier).set(bytes);
   });
   ref.onDispose(() => sub.cancel());
 });

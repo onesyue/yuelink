@@ -56,7 +56,7 @@ class AppearanceSection extends ConsumerWidget {
                     ),
                   ],
                   onChanged: (mode) {
-                    ref.read(themeProvider.notifier).state = mode;
+                    ref.read(themeProvider.notifier).set(mode);
                     SettingsService.setThemeMode(mode);
                     Telemetry.event(
                       TelemetryEvents.themeChange,
@@ -69,7 +69,7 @@ class AppearanceSection extends ConsumerWidget {
               AccentColorRow(
                 currentHex: accentHex,
                 onChanged: (hex) {
-                  ref.read(accentColorProvider.notifier).state = hex;
+                  ref.read(accentColorProvider.notifier).set(hex);
                   SettingsService.setAccentColor(hex);
                 },
                 isEn: isEn,
@@ -85,7 +85,7 @@ class AppearanceSection extends ConsumerWidget {
                     YLAdaptiveSegment(value: 'en', label: s.languageEnglish),
                   ],
                   onChanged: (value) async {
-                    ref.read(languageProvider.notifier).state = value;
+                    ref.read(languageProvider.notifier).set(value);
                     await SettingsService.setLanguage(value);
                   },
                 ),

@@ -316,7 +316,7 @@ class _LogsTabState extends ConsumerState<_LogsTab> {
               PopupMenuButton<String>(
                 initialValue: level,
                 onSelected: (v) =>
-                    ref.read(logLevelProvider.notifier).state = v,
+                    ref.read(logLevelProvider.notifier).set(v),
                 tooltip: s.logLevelSetting,
                 icon: Icon(
                   Icons.filter_list,

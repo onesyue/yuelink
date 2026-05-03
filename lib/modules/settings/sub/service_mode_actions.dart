@@ -71,9 +71,9 @@ class ServiceModeActions {
   /// user intent to use TUN now. Do not let an earlier manual disconnect
   /// (`userStopped=true`) from P0-1 block the post-install auto-start.
   Future<void> _markTunInstallIntent() async {
-    _ref.read(connectionModeProvider.notifier).state = 'tun';
+    _ref.read(connectionModeProvider.notifier).set('tun');
     await SettingsService.setConnectionMode('tun');
-    _ref.read(userStoppedProvider.notifier).state = false;
+    _ref.read(userStoppedProvider.notifier).set(false);
     await SettingsService.setManualStopped(false, immediate: true);
   }
 

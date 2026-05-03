@@ -125,7 +125,7 @@ class CoreLifecycleManager {
       '[CoreLifecycle] start() called, config length: ${configYaml.length}',
     );
     Telemetry.event(TelemetryEvents.connectStart);
-    ref.read(userStoppedProvider.notifier).state = false;
+    ref.read(userStoppedProvider.notifier).set(false);
     // Clear the persisted stop flag IMMEDIATELY. The previous debounced
     // write opened a resume-race: if the user backgrounded mid-start
     // (window lost focus, system sheet, etc.), `_onAppResumed` would
@@ -135,8 +135,8 @@ class CoreLifecycleManager {
     // actually running. Reported on macOS 2026-04-28. The disk write
     // costs a few ms; the race costs user trust.
     await SettingsService.setManualStopped(false);
-    ref.read(coreStatusProvider.notifier).state = CoreStatus.starting;
-    ref.read(coreStartupErrorProvider.notifier).state = null;
+    ref.read(coreStatusProvider.notifier).set(CoreStatus.starting);
+    ref.read(coreStartupErrorProvider.notifier).set(null);
 
     final manager = CoreManager.instance;
 
@@ -165,12 +165,12 @@ class CoreLifecycleManager {
         (Platform.isMacOS || Platform.isWindows || Platform.isLinux)) {
       final installed = await ServiceManager.isInstalled();
       if (!installed) {
-        ref.read(coreStatusProvider.notifier).state = CoreStatus.stopped;
-        ref.read(desktopTunHealthProvider.notifier).state = null;
+        ref.read(coreStatusProvider.notifier).set(CoreStatus.stopped);
+        ref.read(desktopTunHealthProvider.notifier).set(null);
         const detail =
             'TUN 模式需要安装"服务模式"辅助程序。\n'
             '请前往设置 → 连接修复 → 桌面 TUN → 安装服务，然后再连接。';
-        ref.read(coreStartupErrorProvider.notifier).state = detail;
+        ref.read(coreStartupErrorProvider.notifier).set(detail);
         AppNotifier.error(detail);
         EventLog.write('[Core] connect_fail reason=service_not_installed');
         Telemetry.event(
@@ -198,10 +198,10 @@ class CoreLifecycleManager {
         quicRejectPolicy: ref.read(quicPolicyProvider),
       );
       if (!ok) {
-        ref.read(coreStatusProvider.notifier).state = CoreStatus.stopped;
+        ref.read(coreStatusProvider.notifier).set(CoreStatus.stopped);
         final report = manager.lastReport;
         final detail = report?.failureSummary ?? S.current.errCoreStartFailed;
-        ref.read(coreStartupErrorProvider.notifier).state = detail;
+        ref.read(coreStartupErrorProvider.notifier).set(detail);
         EventLog.write(
           '[Core] connect_fail detail=${detail.split('\n').first}',
         );
@@ -253,13 +253,14 @@ class CoreLifecycleManager {
         final finalSnapshot = snapshot.copyWith(
           elapsedMs: startWatch.elapsedMilliseconds,
         );
-        ref.read(desktopTunHealthProvider.notifier).state = finalSnapshot;
+        ref.read(desktopTunHealthProvider.notifier).set(finalSnapshot);
         DesktopTunTelemetry.startResult(finalSnapshot);
         DesktopTunTelemetry.healthSnapshot(finalSnapshot);
         if (!finalSnapshot.runningVerified) {
-          ref.read(coreStatusProvider.notifier).state = CoreStatus.degraded;
-          ref.read(coreStartupErrorProvider.notifier).state =
-              finalSnapshot.userMessage;
+          ref.read(coreStatusProvider.notifier).set(CoreStatus.degraded);
+          ref
+              .read(coreStartupErrorProvider.notifier)
+              .set(finalSnapshot.userMessage);
           EventLog.write(
             '[Core] desktop_tun_degraded '
             'error=${finalSnapshot.errorClass} state=${finalSnapshot.state.wireName}',
@@ -268,10 +269,10 @@ class CoreLifecycleManager {
           return true;
         }
       } else {
-        ref.read(desktopTunHealthProvider.notifier).state = null;
+        ref.read(desktopTunHealthProvider.notifier).set(null);
       }
 
-      ref.read(coreStatusProvider.notifier).state = CoreStatus.running;
+      ref.read(coreStatusProvider.notifier).set(CoreStatus.running);
       EventLog.write('[Core] connect_ok');
       Telemetry.event(TelemetryEvents.connectOk);
       // First-ever successful connect becomes the NPS anchor (24h later).
@@ -289,10 +290,10 @@ class CoreLifecycleManager {
       return true;
     } catch (e, st) {
       debugPrint('[CoreLifecycle] start() error: $e\n$st');
-      ref.read(coreStatusProvider.notifier).state = CoreStatus.stopped;
+      ref.read(coreStatusProvider.notifier).set(CoreStatus.stopped);
       final report = manager.lastReport;
       final detail = report?.failureSummary ?? e.toString().split('\n').first;
-      ref.read(coreStartupErrorProvider.notifier).state = detail;
+      ref.read(coreStartupErrorProvider.notifier).set(detail);
       AppNotifier.error(detail);
       return false;
     }
@@ -322,7 +323,7 @@ class CoreLifecycleManager {
         '[CoreLifecycle] routingMode: saved=$savedMode, actual=$actual',
       );
       if (actual != savedMode) {
-        ref.read(routingModeProvider.notifier).state = actual;
+        ref.read(routingModeProvider.notifier).set(actual);
       }
     } catch (e) {
       debugPrint('[CoreLifecycle] setRoutingMode error: $e');
@@ -334,7 +335,7 @@ class CoreLifecycleManager {
   }
 
   Future<void> _stopUnlocked() async {
-    ref.read(userStoppedProvider.notifier).state = true;
+    ref.read(userStoppedProvider.notifier).set(true);
     // Persist the stop intent BEFORE doing any teardown work — engine
     // recreate / process kill can happen at any point during a normal
     // disconnect (Android background-kill is the canonical case), and the
@@ -342,7 +343,7 @@ class CoreLifecycleManager {
     // setImmediate is required: the coalesced flush would lose this write
     // if the user puts the app away within the flush window.
     await SettingsService.setManualStopped(true);
-    ref.read(coreStatusProvider.notifier).state = CoreStatus.stopping;
+    ref.read(coreStatusProvider.notifier).set(CoreStatus.stopping);
     final wasDesktopTun =
         ref.read(connectionModeProvider) == 'tun' &&
         (Platform.isMacOS || Platform.isWindows || Platform.isLinux);
@@ -365,11 +366,11 @@ class CoreLifecycleManager {
           mode: 'tun',
           tunStack: ref.read(desktopTunStackProvider),
         );
-        ref.read(desktopTunHealthProvider.notifier).state = cleanup;
+        ref.read(desktopTunHealthProvider.notifier).set(cleanup);
         DesktopTunTelemetry.stopResult(cleanup);
         DesktopTunTelemetry.cleanupResult(cleanup);
       } else {
-        ref.read(desktopTunHealthProvider.notifier).state = null;
+        ref.read(desktopTunHealthProvider.notifier).set(null);
       }
 
       AppNotifier.info(S.current.msgDisconnected);
@@ -379,10 +380,10 @@ class CoreLifecycleManager {
     } finally {
       // Always reset state — even if stop() throws, the core is no longer
       // in a usable running state and the UI must reflect that.
-      ref.read(coreStatusProvider.notifier).state = CoreStatus.stopped;
-      ref.read(trafficProvider.notifier).state = const Traffic();
-      ref.read(trafficHistoryProvider.notifier).state = TrafficHistory();
-      ref.read(trafficHistoryVersionProvider.notifier).state = 0;
+      ref.read(coreStatusProvider.notifier).set(CoreStatus.stopped);
+      ref.read(trafficProvider.notifier).set(const Traffic());
+      ref.read(trafficHistoryProvider.notifier).set(TrafficHistory());
+      ref.read(trafficHistoryVersionProvider.notifier).set(0);
       // delay-state wipe is handled by _delayResetSub in main.dart (listens
       // for coreStatusProvider → stopped transition).
     }
@@ -524,7 +525,7 @@ class CoreLifecycleManager {
     EventLog.write(
       '[Core] connection_mode_rollback from=$newMode to=$fallbackMode',
     );
-    ref.read(connectionModeProvider.notifier).state = fallbackMode;
+    ref.read(connectionModeProvider.notifier).set(fallbackMode);
     await SettingsService.setConnectionMode(fallbackMode);
     final restored = await _startUnlocked(config);
     EventLog.write(

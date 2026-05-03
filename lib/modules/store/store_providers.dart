@@ -1,5 +1,4 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/legacy.dart';
 
 import '../../domain/store/payment_method.dart';
 import '../../domain/store/store_order.dart';
@@ -60,9 +59,30 @@ final paymentMethodsProvider = FutureProvider<List<PaymentMethod>>((ref) async {
 // Selected period per plan
 // ------------------------------------------------------------------
 
-final selectedPeriodProvider = StateProvider.family<PlanPeriod?, int>(
-  (ref, planId) => null,
-);
+final selectedPeriodProvider =
+    NotifierProvider.family<SelectedPeriodNotifier, PlanPeriod?, int>(
+      SelectedPeriodNotifier.new,
+    );
+
+/// Riverpod 3.x family pattern: the family arg is **constructor-injected**
+/// (the legacy `FamilyNotifier.build(arg)` shape no longer exists). `planId`
+/// isn't read by current callers — the previous `StateProvider.family`
+/// initialiser also ignored it — but it's stored on the instance so future
+/// per-plan state initialisation has somewhere to plug in without another
+/// signature migration.
+class SelectedPeriodNotifier extends Notifier<PlanPeriod?> {
+  SelectedPeriodNotifier(this.planId);
+  final int planId;
+
+  @override
+  PlanPeriod? build() => null;
+
+  /// Replaces the previous `notifier.state = value` write site. Explicit
+  /// method so the write surface stays explicit and grep-able.
+  void set(PlanPeriod? value) {
+    state = value;
+  }
+}
 
 // ------------------------------------------------------------------
 // Order history

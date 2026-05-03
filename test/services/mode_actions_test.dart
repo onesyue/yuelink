@@ -53,8 +53,12 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          coreStatusProvider.overrideWith((ref) => CoreStatus.running),
-          connectionModeProvider.overrideWith((ref) => 'systemProxy'),
+          coreStatusProvider.overrideWith(
+            () => CoreStatusNotifier(CoreStatus.running),
+          ),
+          connectionModeProvider.overrideWith(
+            () => ConnectionModeNotifier('systemProxy'),
+          ),
           coreActionsProvider.overrideWithValue(fakeActions),
         ],
         child: Consumer(
@@ -87,8 +91,12 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          coreStatusProvider.overrideWith((ref) => CoreStatus.running),
-          connectionModeProvider.overrideWith((ref) => 'systemProxy'),
+          coreStatusProvider.overrideWith(
+            () => CoreStatusNotifier(CoreStatus.running),
+          ),
+          connectionModeProvider.overrideWith(
+            () => ConnectionModeNotifier('systemProxy'),
+          ),
           coreActionsProvider.overrideWithValue(fakeActions),
         ],
         child: Consumer(

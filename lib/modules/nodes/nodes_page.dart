@@ -325,9 +325,8 @@ class _NodesPageState extends ConsumerState<NodesPage> {
                                     final next =
                                         modes[(idx + 1) % modes.length];
                                     ref
-                                            .read(nodeSortModeProvider.notifier)
-                                            .state =
-                                        next;
+                                        .read(nodeSortModeProvider.notifier)
+                                        .set(next);
                                     if (next == NodeSortMode.smartRecommend) {
                                       Telemetry.event(
                                         'sort_mode_change',
@@ -382,9 +381,11 @@ class _NodesPageState extends ConsumerState<NodesPage> {
                                   onPressed: () {
                                     ref
                                         .read(nodeViewModeProvider.notifier)
-                                        .state = viewMode == NodeViewMode.card
-                                        ? NodeViewMode.list
-                                        : NodeViewMode.card;
+                                        .set(
+                                          viewMode == NodeViewMode.card
+                                              ? NodeViewMode.list
+                                              : NodeViewMode.card,
+                                        );
                                   },
                                 ),
                                 Consumer(
@@ -527,7 +528,8 @@ class _NodeSearchBar extends ConsumerWidget {
       height: 36,
       child: TextField(
         controller: controller,
-        onChanged: (v) => ref.read(nodeSearchQueryProvider.notifier).state = v,
+        onChanged: (v) =>
+            ref.read(nodeSearchQueryProvider.notifier).set(v),
         decoration: InputDecoration(
           hintText: s.searchNodesHint,
           hintStyle: YLText.body.copyWith(
@@ -547,7 +549,7 @@ class _NodeSearchBar extends ConsumerWidget {
               ? GestureDetector(
                   onTap: () {
                     controller.clear();
-                    ref.read(nodeSearchQueryProvider.notifier).state = '';
+                    ref.read(nodeSearchQueryProvider.notifier).set('');
                   },
                   child: const Icon(
                     Icons.close_rounded,
@@ -657,7 +659,7 @@ class _FullWidthRoutingMode extends ConsumerWidget {
               child: GestureDetector(
                 onTap: () async {
                   final mode = modes[i];
-                  ref.read(routingModeProvider.notifier).state = mode;
+                  ref.read(routingModeProvider.notifier).set(mode);
                   await SettingsService.setRoutingMode(mode);
                   if (status == CoreStatus.running) {
                     try {
@@ -697,14 +699,16 @@ class _FullWidthRoutingMode extends ConsumerWidget {
                         }
                       } else {
                         AppNotifier.error(s.switchModeFailed);
-                        ref.read(routingModeProvider.notifier).state =
-                            routingMode;
+                        ref
+                            .read(routingModeProvider.notifier)
+                            .set(routingMode);
                       }
                     } catch (e) {
                       debugPrint('[RoutingMode] error: $e');
                       AppNotifier.error('${s.switchModeFailed}: $e');
-                      ref.read(routingModeProvider.notifier).state =
-                          routingMode;
+                      ref
+                          .read(routingModeProvider.notifier)
+                          .set(routingMode);
                     }
                   }
                 },

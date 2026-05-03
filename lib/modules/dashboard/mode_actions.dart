@@ -43,7 +43,7 @@ class ModeActions {
     if (current == next) return;
     final s = S.current;
 
-    ref.read(routingModeProvider.notifier).state = next;
+    ref.read(routingModeProvider.notifier).set(next);
     await SettingsService.setRoutingMode(next);
 
     final status = ref.read(coreStatusProvider);
@@ -57,7 +57,7 @@ class ModeActions {
       final ok = await CoreManager.instance.api.setRoutingMode(next);
       if (!ok) {
         AppNotifier.error(s.switchModeFailed);
-        ref.read(routingModeProvider.notifier).state = current;
+        ref.read(routingModeProvider.notifier).set(current);
         return;
       }
       if (next == 'direct') {
@@ -87,7 +87,7 @@ class ModeActions {
     } catch (e) {
       debugPrint('[ModeActions] setRoutingMode error: $e');
       AppNotifier.error('${s.switchModeFailed}: $e');
-      ref.read(routingModeProvider.notifier).state = current;
+      ref.read(routingModeProvider.notifier).set(current);
     }
   }
 
@@ -106,20 +106,20 @@ class ModeActions {
     final current = ref.read(connectionModeProvider);
     if (current == next) return;
 
-    ref.read(connectionModeProvider.notifier).state = next;
+    ref.read(connectionModeProvider.notifier).set(next);
     await SettingsService.setConnectionMode(next);
     try {
       final ok = await ref
           .read(coreActionsProvider)
           .hotSwitchConnectionMode(next, fallbackMode: current);
       if (!ok) {
-        ref.read(connectionModeProvider.notifier).state = current;
+        ref.read(connectionModeProvider.notifier).set(current);
         await SettingsService.setConnectionMode(current);
       }
     } catch (e) {
       debugPrint('[ModeActions] hotSwitchConnectionMode error: $e');
       // Revert optimistic state so the UI doesn't lie about the runtime.
-      ref.read(connectionModeProvider.notifier).state = current;
+      ref.read(connectionModeProvider.notifier).set(current);
       await SettingsService.setConnectionMode(current);
     }
   }

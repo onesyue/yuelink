@@ -86,7 +86,7 @@ class _GroupCardState extends ConsumerState<GroupCard>
     } else {
       current.remove(widget.group.name);
     }
-    ref.read(expandedGroupNamesProvider.notifier).state = current;
+    ref.read(expandedGroupNamesProvider.notifier).set(current);
     SettingsService.setExpandedGroups(current.toList());
   }
 

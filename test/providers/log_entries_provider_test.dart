@@ -24,7 +24,7 @@ void main() {
     final container = ProviderContainer();
     addTearDown(container.dispose);
 
-    container.read(coreStatusProvider.notifier).state = CoreStatus.running;
+    container.read(coreStatusProvider.notifier).set(CoreStatus.running);
     expect(container.read(logEntriesProvider), isEmpty);
 
     await Future<void>.delayed(const Duration(milliseconds: 2300));
