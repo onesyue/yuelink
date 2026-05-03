@@ -178,6 +178,43 @@ dns:
       expect(result, isNot(contains('prefer-h3: true')));
       expect(result, contains('proxy-server-nameserver:'));
     });
+
+    test(
+      'inline rules: [] is not treated as injectable block (S4 regression)',
+      () {
+        // Pre-S4 the rules-injecting passes (_ensureProcessBypassRules,
+        // _ensureConnectivityRules, _ensureGooglevideoQuicReject,
+        // _ensureGlobalQuicReject) keyed off `^rules:\s*\n`, which only
+        // matched block-style headers. The first cut of the
+        // YamlIndentDetector migration relaxed that to `^rules:` and
+        // would have happily injected children below `rules: []`,
+        // producing invalid YAML like:
+        //   rules: []
+        //     - "DOMAIN,connectivitycheck..."
+        // The fix routes those callers through `requireBlockHeader: true`.
+        // This test pins the contract.
+        const config = '''
+mixed-port: 7890
+proxies: []
+rules: []
+''';
+        final result = ConfigTemplate.process(config);
+        // The original `rules: []` line stays exactly as written, with no
+        // injected child indented under it.
+        expect(
+          result,
+          contains('rules: []\n'),
+          reason: 'inline rules: [] line must survive intact',
+        );
+        expect(
+          result,
+          isNot(matches(RegExp(r'rules: \[\]\n\s+-'))),
+          reason:
+              'no `- ...` line may be injected directly under `rules: []` — '
+              'that would be invalid YAML',
+        );
+      },
+    );
   });
 
   group('ConfigTemplate extraction', () {

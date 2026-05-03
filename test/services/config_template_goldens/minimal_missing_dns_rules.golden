@@ -1,0 +1,181 @@
+mixed-port: 7890
+find-process-mode: off
+
+proxies:
+  - {name: n1, type: ss, server: 1.2.3.4, port: 443, cipher: aes-256-gcm, password: pwd}
+
+proxy-groups:
+  - name: PROXY
+    type: select
+    proxies: [n1]
+
+rules:
+  - "AND,((DOMAIN-SUFFIX,googlevideo.com),(NETWORK,UDP)),REJECT-DROP"
+  - "DOMAIN,connectivitycheck.android.com,DIRECT"
+  - "DOMAIN,connectivitycheck.platform.hicloud.com,DIRECT"
+  - "DOMAIN,connectivitycheck.samsung.com,DIRECT"
+  - "DOMAIN,connect.rom.miui.com,DIRECT"
+  - "DOMAIN,connectivitycheck.platform.xiaomi.com,DIRECT"
+  - "DOMAIN,conn1.coloros.com,DIRECT"
+  - "DOMAIN,conn2.coloros.com,DIRECT"
+  - "DOMAIN,connectivitycheck.platform.hihonorcloud.com,DIRECT"
+  - "DOMAIN,connectivitycheck.meizu.com,DIRECT"
+  - "DOMAIN,wifi.vivo.com.cn,DIRECT"
+  - "DOMAIN,captive.apple.com,DIRECT"
+  - MATCH,PROXY
+
+external-controller: 127.0.0.1:9090
+
+dns:
+  enable: true
+  prefer-h3: true
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  fake-ip-filter:
+    - "+.lan"
+    - "+.local"
+    - "+.direct"
+    - "+.home"
+    - "+.home.arpa"
+    - "+.localdomain"
+    - "+.invalid"
+    - "+.localhost"
+    - "+.test"
+    - "+.in-addr.arpa"
+    - "+.ip6.arpa"
+    - "+.msftconnecttest.com"
+    - "+.msftncsi.com"
+    - "localhost.ptlogin2.qq.com"
+    - "localhost.work.weixin.qq.com"
+    - "+.srv.nintendo.net"
+    - "+.stun.playstation.net"
+    - "+.xboxlive.com"
+    - "stun.*.*"
+    - "stun.*.*.*"
+    - "xbox.*.microsoft.com"
+    - "+.ntp.org"
+    - "+.pool.ntp.org"
+    - "+.time.edu.cn"
+    - "time.*.com"
+    - "time.*.gov"
+    - "+.apple.com"
+    - "+.icloud.com"
+    - "+.cdn-apple.com"
+    - "+.mzstatic.com"
+    - "+.push.apple.com"
+    - "tplogin.cn"
+    - "tplinklogin.net"
+    - "+.router.asus.com"
+    - "router.asus.com"
+    - "+.miwifi.com"
+    - "miwifi.com"
+    - "router.miwifi.com"
+    - "melogin.cn"
+    - "falogin.cn"
+    - "tendawifi.com"
+    - "routerlogin.net"
+    - "linksyssmartwifi.com"
+    - "dlinkrouter.local"
+    - "+.synology.me"
+    - "+.quickconnect.to"
+    - "+.qnap.com"
+    - "+.myqnapcloud.com"
+    - "connectivitycheck.gstatic.com"
+    - "www.gstatic.com"
+    - "+.connectivitycheck.android.com"
+    - "clients1.google.com"
+    - "clients3.google.com"
+    - "play.googleapis.com"
+    - "captive.apple.com"
+    - "gsp-ssl.ls.apple.com"
+    - "gsp-ssl.ls-apple.com.akadns.net"
+    - "connectivitycheck.platform.hicloud.com"
+    - "+.wifi.huawei.com"
+    - "connectivitycheck.samsung.com"
+    - "connect.rom.miui.com"
+    - "connectivitycheck.platform.xiaomi.com"
+    - "conn1.coloros.com"
+    - "conn2.coloros.com"
+    - "connectivitycheck.platform.hihonorcloud.com"
+    - "connectivitycheck.meizu.com"
+    - "wifi.vivo.com.cn"
+    - "noisyfox.cn"
+  default-nameserver:
+    - 223.5.5.5
+    - 119.29.29.29
+    - 1.12.12.12
+  nameserver:
+    - https://dns.alidns.com/dns-query
+    - https://doh.pub/dns-query
+  direct-nameserver:
+    - https://dns.alidns.com/dns-query
+    - https://doh.pub/dns-query
+  proxy-server-nameserver:
+    - 223.5.5.5
+    - 119.29.29.29
+    - 1.12.12.12
+    - https://dns.alidns.com/dns-query
+    - https://doh.pub/dns-query
+  nameserver-policy:
+    "+.apple.com": ["https://dns.alidns.com/dns-query", "https://doh.pub/dns-query"]
+    "+.icloud.com": ["https://dns.alidns.com/dns-query", "https://doh.pub/dns-query"]
+  fallback:
+    - "https://1.1.1.1/dns-query"
+    - "https://dns.google/dns-query"
+  fallback-filter:
+    geoip: true
+    geoip-code: CN
+    geosite:
+      - gfw
+    ipcidr:
+      - 240.0.0.0/4
+      - 0.0.0.0/32
+    domain:
+      - "+.google.com"
+      - "+.facebook.com"
+      - "+.youtube.com"
+      - "+.github.com"
+      - "+.googleapis.com"
+
+sniffer:
+  enable: true
+  override-destination: true
+  sniff:
+    HTTP:
+      ports: [80, 8080-8880]
+      override-destination: true
+    TLS:
+      ports: [443, 8443]
+      override-destination: true
+    QUIC:
+      ports: [443, 8443]
+      override-destination: true
+  force-domain:
+    - "+.v2ex.com"
+  skip-domain:
+    - "Mijia Cloud"
+    - "+.push.apple.com"
+
+geodata-mode: true
+geodata-loader: memconservative
+geo-auto-update: true
+geo-update-interval: 24
+geox-url:
+  geoip: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.dat"
+  geosite: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geosite.dat"
+  mmdb: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/country.mmdb"
+
+profile:
+  store-selected: true
+  store-fake-ip: false
+
+tcp-concurrent: true
+unified-delay: true
+keep-alive-interval: 30
+
+allow-lan: true
+bind-address: "*"
+
+ipv6: false
+
+mode: rule
