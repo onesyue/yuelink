@@ -22,6 +22,7 @@ class CertGuidePage extends ConsumerWidget {
 
     return YLLargeTitleScaffold(
       title: s.mitmCertGuideTitle,
+      maxContentWidth: kYLSecondaryContentWidth,
       actions: [
         IconButton(
           icon: const Icon(Icons.refresh_rounded),
@@ -391,9 +392,14 @@ class _InfoRow extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          '$label: ',
-          style: YLText.caption.copyWith(color: YLColors.zinc500),
+        SizedBox(
+          width: 88,
+          child: Text(
+            '$label:',
+            style: YLText.caption.copyWith(color: YLColors.zinc500),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
         Expanded(
           child: Text(

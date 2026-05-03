@@ -114,6 +114,7 @@ class _CheckinCalendarPageState extends ConsumerState<CheckinCalendarPage> {
 
     return YLLargeTitleScaffold(
       title: s.calendarTitle,
+      maxContentWidth: kYLSecondaryContentWidth,
       onRefresh: _load,
       slivers: [
         SliverPadding(

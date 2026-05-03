@@ -28,8 +28,7 @@ import 'xboard_api_providers.dart';
 // Re-exported here so the two files keep their existing import path
 // stable for the rest of the codebase.
 export 'auth_state.dart';
-export 'xboard_api_providers.dart'
-    show xboardApiProvider, apiHostProvider;
+export 'xboard_api_providers.dart' show xboardApiProvider, apiHostProvider;
 
 /// Runtime business APIs may use the local proxy after login, but only
 /// when the core is genuinely up. Bootstrap/auth flows continue to use
@@ -75,6 +74,7 @@ final authProvider = NotifierProvider<AuthNotifier, AuthState>(
 class AuthNotifier extends Notifier<AuthState> {
   late final AuthTokenService _authService;
   bool _disposed = false;
+  int _sessionGeneration = 0;
 
   /// Per-storage-call timeout for [_init]. Default 5 s — tuned to be
   /// noticeably longer than a healthy macOS Keychain unlock (~65 ms cold)
@@ -85,6 +85,8 @@ class AuthNotifier extends Notifier<AuthState> {
   @visibleForTesting
   static Duration initStorageTimeout = const Duration(seconds: 5);
 
+  static const Duration _bootstrapHedgeDelay = Duration(milliseconds: 1200);
+
   static bool _isBootstrapNetworkError(Object e) {
     if (e is TimeoutException) return true;
     if (e is SocketException) return true;
@@ -94,6 +96,14 @@ class AuthNotifier extends Notifier<AuthState> {
       return e.statusCode == 502 || e.statusCode == 503 || e.statusCode == 504;
     }
     return false;
+  }
+
+  static bool _isAuthoritativeBootstrapError(Object e) {
+    if (e is! XBoardApiException) return false;
+    return switch (e.statusCode) {
+      400 || 401 || 403 || 422 => true,
+      _ => false,
+    };
   }
 
   Iterable<String> _bootstrapHosts(String preferredHost) sync* {
@@ -110,28 +120,114 @@ class AuthNotifier extends Notifier<AuthState> {
     }
   }
 
+  bool _isCurrentSession(String token) {
+    return !_disposed &&
+        state.status == AuthStatus.loggedIn &&
+        state.token == token;
+  }
+
+  int _nextSessionGeneration() => ++_sessionGeneration;
+
+  bool _isCurrentGeneration(int gen) {
+    return !_disposed && _sessionGeneration == gen;
+  }
+
   Future<({String host, T value})> _runBootstrapRequest<T>(
     Future<T> Function(XBoardApi api) request, {
     required String preferredHost,
   }) async {
-    Object? lastError;
-    for (final host in _bootstrapHosts(preferredHost)) {
-      try {
-        final api = XBoardApi(
-          baseUrl: host,
-          fallbackUrls: const <String>[],
-          timeout: kBootstrapTimeout,
-          maxRetries: kBootstrapRetries,
-        );
-        final value = await request(api);
-        return (host: host, value: value);
-      } catch (e) {
-        lastError = e;
-        if (!_isBootstrapNetworkError(e)) rethrow;
-        debugPrint('[Auth] bootstrap host failed: $host error=$e');
+    final hosts = _bootstrapHosts(preferredHost).toList(growable: false);
+    if (hosts.isEmpty) throw Exception('Bootstrap hosts exhausted');
+
+    final completer = Completer<({String host, T value})>();
+    final timers = <Timer>[];
+    var failed = 0;
+
+    void fail(Object e, StackTrace st) {
+      failed += 1;
+      if (completer.isCompleted) return;
+      if (_isAuthoritativeBootstrapError(e) || failed >= hosts.length) {
+        completer.completeError(e, st);
       }
     }
-    throw lastError ?? Exception('Bootstrap hosts exhausted');
+
+    void start(String host) {
+      if (completer.isCompleted) return;
+      unawaited(() async {
+        try {
+          final api = XBoardApi(
+            baseUrl: host,
+            fallbackUrls: const <String>[],
+            timeout: kBootstrapTimeout,
+            maxRetries: kBootstrapRetries,
+          );
+          final value = await request(api);
+          if (!completer.isCompleted) {
+            completer.complete((host: host, value: value));
+          }
+        } catch (e, st) {
+          if (_isBootstrapNetworkError(e)) {
+            debugPrint('[Auth] bootstrap host failed: $host error=$e');
+          }
+          fail(e, st);
+        }
+      }());
+    }
+
+    for (var i = 0; i < hosts.length; i++) {
+      final host = hosts[i];
+      if (i == 0) {
+        start(host);
+      } else {
+        timers.add(Timer(_bootstrapHedgeDelay * i, () => start(host)));
+      }
+    }
+
+    try {
+      return await completer.future;
+    } finally {
+      for (final timer in timers) {
+        timer.cancel();
+      }
+    }
+  }
+
+  Future<SubscribeData> _fetchSubscribeData(
+    String token, {
+    required String preferredHost,
+  }) async {
+    final subResult = await _runBootstrapRequest(
+      (api) => api.getSubscribeData(token),
+      preferredHost: preferredHost,
+    );
+    final sub = subResult.value;
+    final resolvedHost = subResult.host;
+    if (!_isCurrentSession(token)) return sub;
+    await _authService.cacheProfile(sub.profile);
+    if (!_isCurrentSession(token)) return sub;
+    await _authService.saveSubscribeUrl(sub.subscribeUrl);
+    if (!_isCurrentSession(token)) return sub;
+    if (resolvedHost != preferredHost) {
+      await _authService.saveApiHost(resolvedHost);
+      if (!_isCurrentSession(token)) return sub;
+      ref.read(apiHostProvider.notifier).setHost(resolvedHost);
+    }
+    return sub;
+  }
+
+  Future<void> _finishLoginBootstrap(String token, String host) async {
+    try {
+      final sub = await _fetchSubscribeData(token, preferredHost: host);
+      if (!_isCurrentSession(token)) return;
+      state = state.copyWith(userProfile: sub.profile);
+      await _syncSubscription(sub.subscribeUrl, token: token);
+    } catch (e) {
+      debugPrint('[Auth] Failed to fetch subscribe data after login: $e');
+      if (e is XBoardApiException &&
+          (e.statusCode == 401 || e.statusCode == 403)) {
+        await handleUnauthenticated(token: token);
+      }
+    }
   }
 
   @override
@@ -172,23 +268,26 @@ class AuthNotifier extends Notifier<AuthState> {
   /// `build()` to `_init()` here for a fresh attempt — whatever the
   /// outcome, state must end at loggedIn or loggedOut, never unknown.
   Future<void> _init() async {
+    final gen = _sessionGeneration;
     final timeout = initStorageTimeout;
     try {
       final token = await _authService.getToken().timeout(timeout);
-      if (_disposed) return;
+      if (!_isCurrentGeneration(gen)) return;
       if (token != null && token.isNotEmpty) {
         // Restore saved API host so all providers use the correct endpoint
-        final savedHost = await _authService
-            .getApiHost()
-            .timeout(timeout, onTimeout: () => null);
-        if (_disposed) return;
+        final savedHost = await _authService.getApiHost().timeout(
+          timeout,
+          onTimeout: () => null,
+        );
+        if (!_isCurrentGeneration(gen)) return;
         if (savedHost != null && savedHost.isNotEmpty) {
           ref.read(apiHostProvider.notifier).setHost(savedHost);
         }
-        final cachedProfile = await _authService
-            .getCachedProfile()
-            .timeout(timeout, onTimeout: () => null);
-        if (_disposed) return;
+        final cachedProfile = await _authService.getCachedProfile().timeout(
+          timeout,
+          onTimeout: () => null,
+        );
+        if (!_isCurrentGeneration(gen)) return;
         state = AuthState(
           status: AuthStatus.loggedIn,
           token: token,
@@ -202,8 +301,9 @@ class AuthNotifier extends Notifier<AuthState> {
     } catch (e) {
       debugPrint('[Auth] _init error: $e');
       EventLog.write(
-          '[Auth] auth_init_timeout err=${e.toString().split("\n").first}');
-      if (!_disposed) {
+        '[Auth] auth_init_timeout err=${e.toString().split("\n").first}',
+      );
+      if (_isCurrentGeneration(gen)) {
         state = const AuthState(status: AuthStatus.loggedOut);
       }
     }
@@ -211,6 +311,7 @@ class AuthNotifier extends Notifier<AuthState> {
 
   /// Login with email and password.
   Future<bool> login(String email, String password, {String? apiHost}) async {
+    final gen = _nextSessionGeneration();
     state = state.copyWith(isLoading: true, error: null);
 
     try {
@@ -222,49 +323,27 @@ class AuthNotifier extends Notifier<AuthState> {
         (api) => api.login(email, password),
         preferredHost: preferredHost,
       );
+      if (!_isCurrentGeneration(gen)) return false;
       final host = loginResult.host;
       final loginResp = loginResult.value;
       final token = loginResp.token;
 
       // 2. Save token and host, update provider so all consumers get correct host
       await _authService.saveToken(token);
+      if (!_isCurrentGeneration(gen)) return false;
       await _authService.saveApiHost(host);
+      if (!_isCurrentGeneration(gen)) return false;
       ref.read(apiHostProvider.notifier).setHost(host);
       EventLog.write('[Auth] login_ok');
 
-      // 3. Get subscribe data (profile + URL) in one request.
-      //    /api/v1/user/getSubscribe returns plan name, u/d traffic, expiry, subscribe_url.
-      //    /api/v1/user/info does NOT return u/d or nested plan object — do not use it.
-      UserProfile? profile;
-      try {
-        final subResult = await _runBootstrapRequest(
-          (api) => api.getSubscribeData(token),
-          preferredHost: host,
-        );
-        final sub = subResult.value;
-        profile = sub.profile;
-        await _authService.cacheProfile(profile);
-        await _authService.saveSubscribeUrl(sub.subscribeUrl);
-        _syncSubscription(sub.subscribeUrl).catchError((e) {
-          debugPrint('[Auth] Background sync failed: $e');
-        });
-      } catch (e) {
-        debugPrint('[Auth] Failed to fetch subscribe data: $e');
-      }
-
-      if (_disposed) return false;
-      state = AuthState(
-        status: AuthStatus.loggedIn,
-        token: token,
-        userProfile: profile,
-      );
+      if (!_isCurrentGeneration(gen)) return false;
+      state = AuthState(status: AuthStatus.loggedIn, token: token);
       Telemetry.event(TelemetryEvents.loginSuccess);
 
-      // If profile fetch failed during login, retry in background so the
-      // dashboard doesn't stay stuck on "暂无订阅".
-      if (profile == null) {
-        _refreshUserInfo(token);
-      }
+      // Subscription/profile sync is intentionally backgrounded. A valid
+      // login token is enough to leave the login wall; waiting here made
+      // slow `/getSubscribe` or DNS/CDN stalls feel like "login timeout".
+      unawaited(_finishLoginBootstrap(token, host));
 
       return true;
     } on XBoardApiException catch (e) {
@@ -274,11 +353,8 @@ class AuthNotifier extends Notifier<AuthState> {
         priority: true,
         props: {'status': e.statusCode},
       );
-      if (_disposed) return false;
-      state = state.copyWith(
-        isLoading: false,
-        error: _friendlyLoginError(e),
-      );
+      if (!_isCurrentGeneration(gen)) return false;
+      state = state.copyWith(isLoading: false, error: _friendlyLoginError(e));
       return false;
     } catch (e) {
       EventLog.write('[Auth] login_fail error=${e.runtimeType}');
@@ -287,11 +363,8 @@ class AuthNotifier extends Notifier<AuthState> {
         priority: true,
         props: {'error': e.runtimeType.toString()},
       );
-      if (_disposed) return false;
-      state = state.copyWith(
-        isLoading: false,
-        error: _friendlyNetworkError(e),
-      );
+      if (!_isCurrentGeneration(gen)) return false;
+      state = state.copyWith(isLoading: false, error: _friendlyNetworkError(e));
       return false;
     }
   }
@@ -324,11 +397,13 @@ class AuthNotifier extends Notifier<AuthState> {
 
   /// Enter guest mode (skip login). User can import profiles manually.
   void skipLogin() {
+    _nextSessionGeneration();
     state = const AuthState(status: AuthStatus.guest);
   }
 
   /// Logout and clear all auth data, profiles, and stop VPN.
   Future<void> logout() async {
+    final gen = _nextSessionGeneration();
     Telemetry.event(TelemetryEvents.logout);
     // Stop running VPN/core and reset all Riverpod state before clearing data.
     // Must use resetCoreToStopped (not CoreManager.stop() directly) so that
@@ -358,19 +433,21 @@ class AuthNotifier extends Notifier<AuthState> {
         }
       }
       debugPrint(
-          '[Auth] logout: deleted $deleted account profile(s), preserved $preserved manual profile(s)');
+        '[Auth] logout: deleted $deleted account profile(s), preserved $preserved manual profile(s)',
+      );
     } catch (e) {
       debugPrint('[Auth] clear profiles on logout failed: $e');
     }
 
     await _authService.clearAll();
-    if (_disposed) return;
+    if (!_isCurrentGeneration(gen)) return;
     state = const AuthState(status: AuthStatus.loggedOut);
   }
 
   /// Called when any API returns 401/403. Shows a toast and logs out.
   /// Call this from any provider that detects token expiry.
-  Future<void> handleUnauthenticated() async {
+  Future<void> handleUnauthenticated({String? token}) async {
+    if (token != null && !_isCurrentSession(token)) return;
     if (state.status != AuthStatus.loggedIn) return; // already logged out
     EventLog.write('[Auth] session_expired auto_logout');
     AppNotifier.warning(S.current.authSessionExpired);
@@ -387,27 +464,15 @@ class AuthNotifier extends Notifier<AuthState> {
   Future<void> _refreshUserInfo(String token) async {
     try {
       final host = await _authService.getApiHost() ?? kDefaultApiHost;
-      final subResult = await _runBootstrapRequest(
-        (api) => api.getSubscribeData(token),
-        preferredHost: host,
-      );
-      final sub = subResult.value;
-      final resolvedHost = subResult.host;
-      await _authService.cacheProfile(sub.profile);
-      // Also update subscribe URL in case it changed
-      await _authService.saveSubscribeUrl(sub.subscribeUrl);
-      if (resolvedHost != host) {
-        await _authService.saveApiHost(resolvedHost);
-        ref.read(apiHostProvider.notifier).setHost(resolvedHost);
-      }
-      if (!_disposed) {
+      final sub = await _fetchSubscribeData(token, preferredHost: host);
+      if (_isCurrentSession(token)) {
         state = state.copyWith(userProfile: sub.profile);
       }
     } catch (e) {
       debugPrint('[Auth] Failed to refresh user info: $e');
       if (e is XBoardApiException &&
           (e.statusCode == 401 || e.statusCode == 403)) {
-        await handleUnauthenticated();
+        await handleUnauthenticated(token: token);
       }
     }
   }
@@ -418,27 +483,17 @@ class AuthNotifier extends Notifier<AuthState> {
     if (token == null) return;
     try {
       final host = await _authService.getApiHost() ?? kDefaultApiHost;
-      // Always fetch fresh from server — also updates profile data
-      final subResult = await _runBootstrapRequest(
-        (api) => api.getSubscribeData(token),
-        preferredHost: host,
-      );
-      final sub = subResult.value;
-      final resolvedHost = subResult.host;
-      await _authService.cacheProfile(sub.profile);
-      if (resolvedHost != host) {
-        await _authService.saveApiHost(resolvedHost);
-        ref.read(apiHostProvider.notifier).setHost(resolvedHost);
-      }
-      await _authService.saveSubscribeUrl(sub.subscribeUrl);
-      if (!_disposed) state = state.copyWith(userProfile: sub.profile);
-      await _syncSubscription(sub.subscribeUrl);
+      // Always fetch fresh from server — also updates profile data.
+      final sub = await _fetchSubscribeData(token, preferredHost: host);
+      if (!_isCurrentSession(token)) return;
+      state = state.copyWith(userProfile: sub.profile);
+      await _syncSubscription(sub.subscribeUrl, token: token);
       Telemetry.event(TelemetryEvents.subscriptionSync);
     } catch (e) {
       debugPrint('[Auth] Failed to sync subscription: $e');
       if (e is XBoardApiException &&
           (e.statusCode == 401 || e.statusCode == 403)) {
-        await handleUnauthenticated();
+        await handleUnauthenticated(token: token);
         return; // after logout, don't rethrow
       }
       rethrow;
@@ -452,10 +507,15 @@ class AuthNotifier extends Notifier<AuthState> {
   /// Host-rewrite fallback would corrupt the config, not recover it — so
   /// there is no retry loop here. If the primary URL fails, surface the
   /// real error.
-  Future<void> _syncSubscription(String subscribeUrl) async {
+  Future<void> _syncSubscription(
+    String subscribeUrl, {
+    required String token,
+  }) async {
+    if (!_isCurrentSession(token)) return;
     assert(() {
       debugPrint(
-          '[Auth] Syncing subscription from: ${subscribeUrl.substring(0, subscribeUrl.length.clamp(0, 50))}...');
+        '[Auth] Syncing subscription from: ${subscribeUrl.substring(0, subscribeUrl.length.clamp(0, 50))}...',
+      );
       return true;
     }());
 
@@ -463,11 +523,13 @@ class AuthNotifier extends Notifier<AuthState> {
     // Check if we already have a "悦通" profile — update it instead of adding.
     final repo = ref.read(profileRepositoryProvider);
     final profiles = await repo.loadProfiles();
+    if (!_isCurrentSession(token)) return;
     final existing = profiles.where((p) => p.name == '悦通').toList();
     final isFirstTime = existing.isEmpty;
 
-    final proxyPort =
-        CoreManager.instance.isRunning ? CoreManager.instance.mixedPort : null;
+    final proxyPort = CoreManager.instance.isRunning
+        ? CoreManager.instance.mixedPort
+        : null;
 
     if (existing.isNotEmpty) {
       // Update existing profile and tag it as account-managed so logout
@@ -476,6 +538,7 @@ class AuthNotifier extends Notifier<AuthState> {
       profile.url = subscribeUrl;
       profile.source = ProfileSource.account;
       await repo.updateProfile(profile, proxyPort: proxyPort);
+      if (!_isCurrentSession(token)) return;
       debugPrint('[Auth] Updated existing 悦通 profile: ${profile.id}');
     } else {
       // Create new profile, marked as account-managed.
@@ -485,6 +548,7 @@ class AuthNotifier extends Notifier<AuthState> {
         proxyPort: proxyPort,
         source: ProfileSource.account,
       );
+      if (!_isCurrentSession(token)) return;
       debugPrint('[Auth] Created new 悦通 profile: ${profile.id}');
       // Auto-select the new profile
       ref.read(activeProfileIdProvider.notifier).select(profile.id);

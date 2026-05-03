@@ -48,6 +48,7 @@ class _OrderHistoryPageState extends ConsumerState<OrderHistoryPage>
 
     return YLLargeTitleScaffold(
       title: isEn ? 'Order History' : '订单记录',
+      maxContentWidth: kYLSecondaryContentWidth,
       onRefresh: () => ref.read(orderHistoryProvider.notifier).refresh(),
       actions: [
         IconButton(

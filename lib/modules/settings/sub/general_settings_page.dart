@@ -179,6 +179,7 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
 
     return YLLargeTitleScaffold(
       title: s.preferencesLabel,
+      maxContentWidth: kYLSecondaryContentWidth,
       slivers: [
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(0, 0, 0, YLSpacing.xxl),
@@ -286,9 +287,7 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
                           value: ref.watch(tileShowNodeInfoProvider),
                           activeTrackColor: YLColors.connected,
                           onChanged: (v) async {
-                            ref
-                                .read(tileShowNodeInfoProvider.notifier)
-                                .set(v);
+                            ref.read(tileShowNodeInfoProvider.notifier).set(v);
                             await SettingsService.setTileShowNodeInfo(v);
                           },
                         ),
@@ -392,9 +391,7 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
                             ],
                             onChanged: (v) async {
                               if (v == null) return;
-                              ref
-                                  .read(desktopTunStackProvider.notifier)
-                                  .set(v);
+                              ref.read(desktopTunStackProvider.notifier).set(v);
                               await SettingsService.setDesktopTunStack(v);
                             },
                           ),

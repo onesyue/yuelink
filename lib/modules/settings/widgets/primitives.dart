@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../../theme.dart';
@@ -165,21 +167,24 @@ class YLInfoRow extends StatelessWidget {
           // text-overpaint. Simple trailing widgets (switches, chevrons) stay
           // inline so ordinary settings rows keep their familiar shape.
           final shouldStackTrailing =
-              (trailing is YLAdaptiveSegmentedControl ||
-                  trailing is DropdownButton) &&
-              constraints.maxWidth < 360;
+              _isComplexSettingsTrailing(trailing) &&
+              constraints.maxWidth < _settingsComplexStackBreakpoint;
           if (trailing != null && value == null && shouldStackTrailing) {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 labelWidget,
                 const SizedBox(height: YLSpacing.sm),
-                Align(alignment: Alignment.centerRight, child: trailing!),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: _settingsTrailingPane(trailing!, constraints),
+                ),
               ],
             );
           }
 
           return Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Expanded(child: labelWidget),
               if (value != null)
@@ -200,11 +205,14 @@ class YLInfoRow extends StatelessWidget {
                   ),
                 ),
               if (trailing != null)
-                Flexible(
-                  fit: FlexFit.loose,
+                Padding(
+                  padding: EdgeInsets.only(
+                    left: value == null ? YLSpacing.md : 0,
+                  ),
                   child: Align(
                     alignment: Alignment.centerRight,
-                    child: trailing!,
+                    widthFactor: 1,
+                    child: _settingsTrailingPane(trailing!, constraints),
                   ),
                 ),
             ],
@@ -412,18 +420,46 @@ class YLSettingsRow extends StatelessWidget {
               children: [
                 textBlock,
                 const SizedBox(height: YLSpacing.sm),
-                Align(alignment: Alignment.centerRight, child: trailing),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: _settingsTrailingPane(trailing, constraints),
+                ),
+              ],
+            );
+          }
+
+          final shouldStackTrailing =
+              (_isComplexSettingsTrailing(trailing) &&
+                  constraints.maxWidth < _settingsComplexStackBreakpoint) ||
+              (description != null &&
+                  constraints.maxWidth < _settingsDescriptionStackBreakpoint);
+
+          if (shouldStackTrailing) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                textBlock,
+                const SizedBox(height: YLSpacing.sm),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: _settingsTrailingPane(trailing, constraints),
+                ),
               ],
             );
           }
 
           return Row(
+            crossAxisAlignment: description == null
+                ? CrossAxisAlignment.center
+                : CrossAxisAlignment.start,
             children: [
               Expanded(child: textBlock),
               const SizedBox(width: YLSpacing.md),
-              Flexible(
-                fit: FlexFit.loose,
-                child: Align(alignment: Alignment.centerRight, child: trailing),
+              Align(
+                alignment: Alignment.centerRight,
+                widthFactor: 1,
+                child: _settingsTrailingPane(trailing, constraints),
               ),
             ],
           );
@@ -431,4 +467,42 @@ class YLSettingsRow extends StatelessWidget {
       ),
     );
   }
+}
+
+const _settingsComplexStackBreakpoint = 520.0;
+const _settingsDescriptionStackBreakpoint = 420.0;
+const _settingsDropdownWidth = 208.0;
+const _settingsTrailingMaxWidth = 320.0;
+
+bool _isComplexSettingsTrailing(Widget? widget) {
+  return widget is YLAdaptiveSegmentedControl ||
+      widget is DropdownButton ||
+      widget is Wrap;
+}
+
+Widget _settingsTrailingPane(Widget child, BoxConstraints rowConstraints) {
+  final maxWidth = math.min(
+    _settingsTrailingMaxWidth,
+    math.max(0.0, rowConstraints.maxWidth - 96),
+  );
+
+  if (child is DropdownButton) {
+    final availableWidth = math.max(0.0, maxWidth);
+    final width = availableWidth < 144
+        ? availableWidth
+        : math.min(_settingsDropdownWidth, availableWidth);
+    return SizedBox(width: width, child: child);
+  }
+
+  if (child is Wrap) {
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxWidth: maxWidth),
+      child: child,
+    );
+  }
+
+  return ConstrainedBox(
+    constraints: BoxConstraints(maxWidth: maxWidth),
+    child: child,
+  );
 }

@@ -79,6 +79,57 @@ void main() {
     }
   });
 
+  testWidgets('settings row keeps simple trailing controls content-sized', (
+    tester,
+  ) async {
+    const title =
+        'VeryLongPreferenceTitleWithoutSpacesThatShouldUseTheAvailableWidth';
+
+    await tester.pumpWidget(
+      harness(
+        width: 680,
+        child: const YLSettingsRow(
+          title: title,
+          description: '这行应该把大部分宽度留给左侧说明，而不是让右侧开关占半屏。',
+          trailing: SizedBox(width: 44, height: 28),
+        ),
+      ),
+    );
+
+    expect(tester.takeException(), isNull);
+    expect(tester.getSize(find.text(title)).width, greaterThan(520));
+  });
+
+  testWidgets('info row keeps expanded dropdown in a compact trailing lane', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      harness(
+        width: 680,
+        child: YLInfoRow(
+          label: '订阅更新频率',
+          trailing: DropdownButton<int>(
+            value: 24,
+            isExpanded: true,
+            underline: const SizedBox.shrink(),
+            items: const [
+              DropdownMenuItem(value: 1, child: Text('每小时')),
+              DropdownMenuItem(value: 24, child: Text('每天')),
+              DropdownMenuItem(value: 48, child: Text('每2天')),
+            ],
+            onChanged: (_) {},
+          ),
+        ),
+      ),
+    );
+
+    expect(tester.takeException(), isNull);
+    final dropdownWidth = tester
+        .getSize(find.byType(DropdownButton<int>))
+        .width;
+    expect(dropdownWidth, inInclusiveRange(144, 208));
+  });
+
   testWidgets('adaptive segmented control handles English without overflow', (
     tester,
   ) async {

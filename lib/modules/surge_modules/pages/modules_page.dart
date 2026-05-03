@@ -105,6 +105,7 @@ class ModulesPage extends ConsumerWidget {
         onFabPressed: () => _showAddSheet(context, ref),
         child: YLLargeTitleScaffold(
           title: s.modulesLabel,
+          maxContentWidth: kYLSecondaryContentWidth,
           actions: [
             if (state.modules.isNotEmpty)
               IconButton(

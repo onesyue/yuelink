@@ -75,6 +75,7 @@ class _FeedbackPageState extends State<FeedbackPage> {
 
     return YLLargeTitleScaffold(
       title: s.feedbackTitle,
+      maxContentWidth: kYLSecondaryContentWidth,
       slivers: [
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(

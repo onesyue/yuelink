@@ -27,6 +27,7 @@ class _AnnouncementsPageState extends ConsumerState<AnnouncementsPage> {
 
     return YLLargeTitleScaffold(
       title: s.dashAnnouncementsLabel,
+      maxContentWidth: kYLSecondaryContentWidth,
       onRefresh: () async {
         _markedRead = false;
         ref.invalidate(announcementsProvider);

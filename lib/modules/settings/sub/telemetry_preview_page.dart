@@ -27,6 +27,7 @@ class TelemetryPreviewPage extends StatelessWidget {
 
     return YLLargeTitleScaffold(
       title: s.telemetryViewEvents,
+      maxContentWidth: kYLSecondaryContentWidth,
       slivers: [
         SliverToBoxAdapter(
           child: Padding(

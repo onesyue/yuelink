@@ -59,6 +59,7 @@ class _DnsQueryPageState extends State<DnsQueryPage> {
 
     return YLLargeTitleScaffold(
       title: s.dnsQuery,
+      maxContentWidth: kYLSecondaryContentWidth,
       slivers: [
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(
@@ -69,86 +70,110 @@ class _DnsQueryPageState extends State<DnsQueryPage> {
           ),
           sliver: SliverList(
             delegate: SliverChildListDelegate([
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _controller,
-                      style: YLText.body.copyWith(fontSize: 14),
-                      decoration: InputDecoration(
-                        hintText: s.domainHint,
-                        hintStyle: YLText.body.copyWith(
-                          color: YLColors.zinc500,
-                          fontSize: 14,
-                        ),
-                        filled: true,
-                        fillColor: fieldColor,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(YLRadius.md),
-                          borderSide: BorderSide(color: fieldBorder, width: 0.5),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(YLRadius.md),
-                          borderSide: BorderSide(color: fieldBorder, width: 0.5),
-                        ),
-                        isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: YLSpacing.md,
-                          vertical: YLSpacing.md,
-                        ),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final field = TextField(
+                    controller: _controller,
+                    style: YLText.body.copyWith(fontSize: 14),
+                    decoration: InputDecoration(
+                      hintText: s.domainHint,
+                      hintStyle: YLText.body.copyWith(
+                        color: YLColors.zinc500,
+                        fontSize: 14,
                       ),
-                      onSubmitted: (_) => _query(),
-                    ),
-                  ),
-                  const SizedBox(width: YLSpacing.sm),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    decoration: BoxDecoration(
-                      color: fieldColor,
-                      borderRadius: BorderRadius.circular(YLRadius.md),
-                      border: Border.all(color: fieldBorder, width: 0.5),
-                    ),
-                    child: DropdownButton<String>(
-                      value: _queryType,
-                      underline: const SizedBox.shrink(),
-                      isDense: true,
-                      borderRadius: BorderRadius.circular(YLRadius.md),
-                      items: _queryTypes
-                          .map(
-                            (t) => DropdownMenuItem(
-                              value: t,
-                              child: Text(
-                                t,
-                                style: YLText.body.copyWith(fontSize: 13),
-                              ),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (v) {
-                        if (v != null) setState(() => _queryType = v);
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: YLSpacing.sm),
-                  FilledButton(
-                    onPressed: _loading ? null : _query,
-                    style: FilledButton.styleFrom(
-                      shape: RoundedRectangleBorder(
+                      filled: true,
+                      fillColor: fieldColor,
+                      border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(YLRadius.md),
+                        borderSide: BorderSide(color: fieldBorder, width: 0.5),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(YLRadius.md),
+                        borderSide: BorderSide(color: fieldBorder, width: 0.5),
+                      ),
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: YLSpacing.md,
+                        vertical: YLSpacing.md,
                       ),
                     ),
-                    child: _loading
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : Text(s.query),
-                  ),
-                ],
+                    onSubmitted: (_) => _query(),
+                  );
+                  final controls = Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        decoration: BoxDecoration(
+                          color: fieldColor,
+                          borderRadius: BorderRadius.circular(YLRadius.md),
+                          border: Border.all(color: fieldBorder, width: 0.5),
+                        ),
+                        child: DropdownButton<String>(
+                          value: _queryType,
+                          underline: const SizedBox.shrink(),
+                          isDense: true,
+                          borderRadius: BorderRadius.circular(YLRadius.md),
+                          items: _queryTypes
+                              .map(
+                                (t) => DropdownMenuItem(
+                                  value: t,
+                                  child: Text(
+                                    t,
+                                    style: YLText.body.copyWith(fontSize: 13),
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (v) {
+                            if (v != null) setState(() => _queryType = v);
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: YLSpacing.sm),
+                      FilledButton(
+                        onPressed: _loading ? null : _query,
+                        style: FilledButton.styleFrom(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(YLRadius.md),
+                          ),
+                        ),
+                        child: _loading
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : Text(s.query),
+                      ),
+                    ],
+                  );
+
+                  if (constraints.maxWidth < 420) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        field,
+                        const SizedBox(height: YLSpacing.sm),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: controls,
+                        ),
+                      ],
+                    );
+                  }
+
+                  return Row(
+                    children: [
+                      Expanded(child: field),
+                      const SizedBox(width: YLSpacing.sm),
+                      controls,
+                    ],
+                  );
+                },
               ),
               if (_error != null) ...[
                 const SizedBox(height: YLSpacing.lg),
@@ -315,4 +340,3 @@ class _AnswerRow extends StatelessWidget {
     );
   }
 }
-

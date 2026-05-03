@@ -491,6 +491,7 @@ class _OverwritePageState extends State<OverwritePage> {
       },
       child: YLLargeTitleScaffold(
         title: s.overwriteTitle,
+        maxContentWidth: kYLSecondaryContentWidth,
         actions: [
           if (_saving)
             const Padding(

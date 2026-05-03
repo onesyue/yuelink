@@ -34,6 +34,7 @@ class IOSInstallGuidePage extends StatelessWidget {
 
     return YLLargeTitleScaffold(
       title: s.iosGuideTitle,
+      maxContentWidth: kYLSecondaryContentWidth,
       slivers: [
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(

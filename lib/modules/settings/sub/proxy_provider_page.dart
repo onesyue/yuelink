@@ -13,8 +13,7 @@ class ProxyProviderPage extends ConsumerStatefulWidget {
   const ProxyProviderPage({super.key});
 
   @override
-  ConsumerState<ProxyProviderPage> createState() =>
-      _ProxyProviderPageState();
+  ConsumerState<ProxyProviderPage> createState() => _ProxyProviderPageState();
 }
 
 class _ProxyProviderPageState extends ConsumerState<ProxyProviderPage> {
@@ -23,8 +22,7 @@ class _ProxyProviderPageState extends ConsumerState<ProxyProviderPage> {
   @override
   void initState() {
     super.initState();
-    Future.microtask(
-        () => ref.read(proxyProvidersProvider.notifier).refresh());
+    Future.microtask(() => ref.read(proxyProvidersProvider.notifier).refresh());
   }
 
   @override
@@ -35,6 +33,7 @@ class _ProxyProviderPageState extends ConsumerState<ProxyProviderPage> {
 
     return YLLargeTitleScaffold(
       title: s.proxyProviderTitle,
+      maxContentWidth: kYLSecondaryContentWidth,
       actions: [
         IconButton(
           icon: const Icon(Icons.rule_folder_rounded),
@@ -44,8 +43,7 @@ class _ProxyProviderPageState extends ConsumerState<ProxyProviderPage> {
         IconButton(
           icon: const Icon(Icons.refresh),
           tooltip: s.retry,
-          onPressed: () =>
-              ref.read(proxyProvidersProvider.notifier).refresh(),
+          onPressed: () => ref.read(proxyProvidersProvider.notifier).refresh(),
         ),
       ],
       onRefresh: () async {
@@ -76,21 +74,18 @@ class _ProxyProviderPageState extends ConsumerState<ProxyProviderPage> {
               YLSpacing.lg,
             ),
             sliver: SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  final p = providers[index];
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: YLSpacing.sm),
-                    child: _ProviderCard(
-                      provider: p,
-                      isUpdating: _updatingSet.contains(p.name),
-                      onUpdate: () => _updateProvider(p.name),
-                      onHealthCheck: () => _healthCheck(p.name),
-                    ),
-                  );
-                },
-                childCount: providers.length,
-              ),
+              delegate: SliverChildBuilderDelegate((context, index) {
+                final p = providers[index];
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: YLSpacing.sm),
+                  child: _ProviderCard(
+                    provider: p,
+                    isUpdating: _updatingSet.contains(p.name),
+                    onUpdate: () => _updateProvider(p.name),
+                    onHealthCheck: () => _healthCheck(p.name),
+                  ),
+                );
+              }, childCount: providers.length),
             ),
           ),
       ],
@@ -101,9 +96,7 @@ class _ProxyProviderPageState extends ConsumerState<ProxyProviderPage> {
     final s = S.of(context);
     setState(() => _updatingSet.add(name));
     try {
-      final ok = await ref
-          .read(proxyProvidersProvider.notifier)
-          .update(name);
+      final ok = await ref.read(proxyProvidersProvider.notifier).update(name);
       if (ok) {
         AppNotifier.success(s.providerUpdateSuccess);
         await ref.read(proxyProvidersProvider.notifier).refresh();
@@ -132,9 +125,7 @@ class _ProxyProviderPageState extends ConsumerState<ProxyProviderPage> {
       } else if (result.failed == 0) {
         AppNotifier.success('已刷新 ${result.ok} 个规则集');
       } else {
-        AppNotifier.warning(
-          '刷新完成：成功 ${result.ok}，失败 ${result.failed}',
-        );
+        AppNotifier.warning('刷新完成：成功 ${result.ok}，失败 ${result.failed}');
       }
     } catch (e) {
       AppNotifier.error('刷新规则集失败：$e');
@@ -145,9 +136,7 @@ class _ProxyProviderPageState extends ConsumerState<ProxyProviderPage> {
     final s = S.of(context);
     setState(() => _updatingSet.add(name));
     try {
-      await ref
-          .read(proxyProvidersProvider.notifier)
-          .healthCheck(name);
+      await ref.read(proxyProvidersProvider.notifier).healthCheck(name);
       AppNotifier.success(s.providerHealthCheckDone);
       await ref.read(proxyProvidersProvider.notifier).refresh();
     } finally {
@@ -272,14 +261,15 @@ class _ProviderCard extends StatelessWidget {
                 YLSpacing.md,
                 YLSpacing.md,
               ),
-              child: Row(
+              child: Wrap(
+                spacing: YLSpacing.sm,
+                runSpacing: YLSpacing.xs,
                 children: [
                   OutlinedButton.icon(
                     onPressed: isUpdating ? null : onUpdate,
                     icon: const Icon(Icons.sync, size: 16),
                     label: Text(s.providerUpdate),
                   ),
-                  const SizedBox(width: YLSpacing.sm),
                   OutlinedButton.icon(
                     onPressed: isUpdating ? null : onHealthCheck,
                     icon: const Icon(Icons.favorite_border, size: 16),
@@ -309,16 +299,13 @@ class _ProviderCard extends StatelessWidget {
                         color: isDark
                             ? Colors.white.withValues(alpha: 0.06)
                             : Colors.black.withValues(alpha: 0.04),
-                        borderRadius:
-                            BorderRadius.circular(YLRadius.sm),
+                        borderRadius: BorderRadius.circular(YLRadius.sm),
                       ),
                       child: Text(
                         name,
                         style: YLText.caption.copyWith(
                           fontSize: 11,
-                          color: isDark
-                              ? YLColors.zinc300
-                              : YLColors.zinc700,
+                          color: isDark ? YLColors.zinc300 : YLColors.zinc700,
                         ),
                       ),
                     );
@@ -347,8 +334,9 @@ class _VehicleChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color =
-        type == 'HTTP' ? const Color(0xFF3B82F6) : const Color(0xFF14B8A6);
+    final color = type == 'HTTP'
+        ? const Color(0xFF3B82F6)
+        : const Color(0xFF14B8A6);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
       decoration: BoxDecoration(

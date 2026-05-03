@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -79,6 +81,7 @@ class _ModuleDetailPageState extends ConsumerState<ModuleDetailPage> {
     if (module == null) {
       return YLLargeTitleScaffold(
         title: s.modulesLabel,
+        maxContentWidth: kYLSecondaryContentWidth,
         slivers: const [
           SliverFillRemaining(
             hasScrollBody: false,
@@ -90,6 +93,7 @@ class _ModuleDetailPageState extends ConsumerState<ModuleDetailPage> {
 
     return YLLargeTitleScaffold(
       title: module.name,
+      maxContentWidth: kYLSecondaryContentWidth,
       actions: [
         IconButton(
           icon: _refreshing
@@ -466,29 +470,38 @@ class _StatRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: YLSpacing.sm),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              label,
-              style: YLText.body.copyWith(
-                fontSize: 14,
-                color: isDark ? YLColors.zinc300 : YLColors.zinc700,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final valueMaxWidth = math.min(220.0, constraints.maxWidth * 0.45);
+          return Row(
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  style: YLText.body.copyWith(
+                    fontSize: 14,
+                    color: isDark ? YLColors.zinc300 : YLColors.zinc700,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          Text(
-            value,
-            style: YLText.rowSubtitle.copyWith(
-              color: isDark ? YLColors.zinc400 : YLColors.zinc500,
-              fontWeight: FontWeight.w500,
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
+              ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: valueMaxWidth),
+                child: Text(
+                  value,
+                  style: YLText.rowSubtitle.copyWith(
+                    color: isDark ? YLColors.zinc400 : YLColors.zinc500,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.end,
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -558,27 +571,36 @@ class _ActiveRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Icon(icon, size: 14, color: YLColors.connected),
-        const SizedBox(width: YLSpacing.sm),
-        Expanded(
-          child: Text(
-            label,
-            style: YLText.rowTitle.copyWith(
-              color: isDark ? YLColors.zinc300 : YLColors.zinc700,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final detailMaxWidth = math.min(220.0, constraints.maxWidth * 0.42);
+        return Row(
+          children: [
+            Icon(icon, size: 14, color: YLColors.connected),
+            const SizedBox(width: YLSpacing.sm),
+            Expanded(
+              child: Text(
+                label,
+                style: YLText.rowTitle.copyWith(
+                  color: isDark ? YLColors.zinc300 : YLColors.zinc700,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-        Text(
-          detail,
-          style: YLText.caption.copyWith(color: YLColors.zinc400),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-      ],
+            ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: detailMaxWidth),
+              child: Text(
+                detail,
+                style: YLText.caption.copyWith(color: YLColors.zinc400),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.end,
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }

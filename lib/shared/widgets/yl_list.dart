@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
@@ -196,46 +198,61 @@ class YLListTile extends StatelessWidget {
             horizontal: YLSpacing.lg,
             vertical: dense ? YLSpacing.sm : YLSpacing.md,
           ),
-          child: Row(
-            children: [
-              if (leading != null) ...[
-                Opacity(opacity: disabled ? 0.4 : 1.0, child: leading!),
-                const SizedBox(width: YLSpacing.md),
-              ],
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Opacity(
-                      opacity: disabled ? 0.4 : 1.0,
-                      child: Text(
-                        title,
-                        style: titleStyle,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final trailingMaxWidth = math.min(
+                260.0,
+                constraints.maxWidth * 0.42,
+              );
+              return Row(
+                children: [
+                  if (leading != null) ...[
+                    Opacity(opacity: disabled ? 0.4 : 1.0, child: leading!),
+                    const SizedBox(width: YLSpacing.md),
+                  ],
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Opacity(
+                          opacity: disabled ? 0.4 : 1.0,
+                          child: Text(
+                            title,
+                            style: titleStyle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (subtitle != null) ...[
+                          const SizedBox(height: 2),
+                          Opacity(
+                            opacity: disabled ? 0.4 : 1.0,
+                            child: Text(
+                              subtitle!,
+                              style: subtitleStyle,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  if (trailing != null) ...[
+                    const SizedBox(width: YLSpacing.md),
+                    ConstrainedBox(
+                      constraints: BoxConstraints(maxWidth: trailingMaxWidth),
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        widthFactor: 1,
+                        child: trailing!,
                       ),
                     ),
-                    if (subtitle != null) ...[
-                      const SizedBox(height: 2),
-                      Opacity(
-                        opacity: disabled ? 0.4 : 1.0,
-                        child: Text(
-                          subtitle!,
-                          style: subtitleStyle,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
                   ],
-                ),
-              ),
-              if (trailing != null) ...[
-                const SizedBox(width: YLSpacing.md),
-                trailing!,
-              ],
-            ],
+                ],
+              );
+            },
           ),
         ),
       ),

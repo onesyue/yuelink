@@ -237,6 +237,7 @@ class _ConnectionRepairPageState extends ConsumerState<ConnectionRepairPage> {
 
     return YLLargeTitleScaffold(
       title: s.repairTitle,
+      maxContentWidth: kYLSecondaryContentWidth,
       slivers: [
         // ── Status ─────────────────────────────────────────────────
         const SliverToBoxAdapter(

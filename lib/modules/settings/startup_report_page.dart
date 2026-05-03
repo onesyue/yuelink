@@ -56,15 +56,14 @@ class _StartupReportPageState extends State<StartupReportPage> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return YLLargeTitleScaffold(
       title: s.diagnostics,
+      maxContentWidth: kYLSecondaryContentWidth,
       actions: [
         if (_report != null)
           IconButton(
             icon: const Icon(Icons.copy_rounded),
             tooltip: s.copiedToClipboard,
             onPressed: () {
-              Clipboard.setData(
-                ClipboardData(text: _report!.toDebugString()),
-              );
+              Clipboard.setData(ClipboardData(text: _report!.toDebugString()));
               AppNotifier.success(s.copiedToClipboard);
             },
           ),
@@ -152,7 +151,8 @@ class _StartupReportPageState extends State<StartupReportPage> {
         child: YLSection(
           header: 'STARTUP STEPS',
           children: [
-            for (final step in report.steps) _StepRow(step: step, isDark: isDark),
+            for (final step in report.steps)
+              _StepRow(step: step, isDark: isDark),
           ],
         ),
       ),

@@ -73,7 +73,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
       // Dashboard uses when(loading: () => SizedBox.shrink()), causing it to
       // flash empty on every background→foreground cycle. Notices are
       // refreshed via dashboard pull-to-refresh instead.
-      ref.invalidate(accountOverviewProvider);
+      ref.read(accountOverviewProvider.notifier).refresh();
     }
   }
 

@@ -2,6 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../../theme.dart';
 
+/// Standard max width for pushed secondary pages that are primarily
+/// settings, forms, diagnostics, or detail lists. Wider tab/root pages can
+/// still opt into their own width.
+const kYLSecondaryContentWidth = 640.0;
+
 enum YLTitleMode { compact, large }
 
 /// YueLink route scaffold with compact-by-default titles.
