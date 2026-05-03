@@ -56,6 +56,11 @@ class TelemetryEvents {
   static const purchaseFail = 'purchase_fail';
   static const orderCancel = 'order_cancel';
   static const pendingOrderReuse = 'pending_order_reuse';
+  static const renewalBannerShow = 'renewal_banner_show';
+  static const renewalClick = 'renewal_click';
+  static const renewalPaySuccess = 'renewal_pay_success';
+  static const connectionRepairAttempt = 'connection_repair_attempt';
+  static const connectionRepairResult = 'connection_repair_result';
 
   // Onboarding (persona split — feature-flagged via `onboarding_split`)
   static const onboardingStart = 'onboarding_start';

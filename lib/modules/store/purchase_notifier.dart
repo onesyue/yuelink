@@ -402,11 +402,13 @@ class PurchaseNotifier extends Notifier<PurchaseState> {
     int? planId,
     PlanPeriod? period,
   }) {
-    state = PurchaseFailed(message, tradeNo: tradeNo);
+    final kind = _failureKind(error, context);
+    state = PurchaseFailed(message, tradeNo: tradeNo, kind: kind);
     Telemetry.event(
       TelemetryEvents.purchaseFail,
       props: {
         'ctx': context,
+        'failure_kind': kind.name,
         ...?_optionalProp('plan_id', planId),
         ...?_optionalProp('period', period?.name),
         ..._errorProps(error),
@@ -457,6 +459,39 @@ class PurchaseNotifier extends Notifier<PurchaseState> {
         return {'error_type': 'state'};
       default:
         return {'error_type': error.runtimeType.toString()};
+    }
+  }
+
+  PurchaseFailureKind _failureKind(Object? error, String context) {
+    if (context.contains('no_repo')) return PurchaseFailureKind.loginRequired;
+    if (context.contains('empty_url')) {
+      return PurchaseFailureKind.paymentUrlMissing;
+    }
+    if (context.contains('open_url_failed')) {
+      return PurchaseFailureKind.paymentPageOpenFailed;
+    }
+    if (context.contains('cancelled')) {
+      return PurchaseFailureKind.orderCancelled;
+    }
+    if (context.contains('declined')) {
+      return PurchaseFailureKind.paymentDeclined;
+    }
+
+    switch (error) {
+      case StoreErrorNetwork():
+        return PurchaseFailureKind.network;
+      case StoreErrorUnauthorized():
+        return PurchaseFailureKind.unauthorized;
+      case StoreErrorApi(:final statusCode):
+        return statusCode == 0
+            ? PurchaseFailureKind.paymentDeclined
+            : PurchaseFailureKind.api;
+      case StoreErrorUnknown():
+        return PurchaseFailureKind.unknown;
+      case null:
+        return PurchaseFailureKind.state;
+      default:
+        return PurchaseFailureKind.unknown;
     }
   }
 

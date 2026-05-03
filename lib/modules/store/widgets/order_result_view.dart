@@ -375,6 +375,7 @@ class _FailedView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final detail = _failureDetail(state.kind, isEn);
     return Column(
       children: [
         const Icon(
@@ -384,7 +385,7 @@ class _FailedView extends StatelessWidget {
         ),
         const SizedBox(height: YLSpacing.md),
         Text(
-          isEn ? 'Order Failed' : '订单失败',
+          detail.title,
           style: YLText.titleMedium.copyWith(fontWeight: FontWeight.w700),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
@@ -397,6 +398,34 @@ class _FailedView extends StatelessWidget {
           maxLines: 4,
           overflow: TextOverflow.ellipsis,
         ),
+        const SizedBox(height: 8),
+        Text(
+          detail.hint,
+          style: YLText.caption.copyWith(
+            color: isDark ? YLColors.zinc400 : YLColors.zinc500,
+            height: 1.35,
+          ),
+          textAlign: TextAlign.center,
+          maxLines: 3,
+          overflow: TextOverflow.ellipsis,
+        ),
+        if (state.tradeNo != null) ...[
+          const SizedBox(height: YLSpacing.md),
+          GestureDetector(
+            onTap: () {
+              Clipboard.setData(ClipboardData(text: state.tradeNo!));
+            },
+            child: Text(
+              'No. ${state.tradeNo}',
+              style: YLText.caption.copyWith(
+                color: YLColors.zinc400,
+                decoration: TextDecoration.underline,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
         const SizedBox(height: YLSpacing.lg),
         SizedBox(
           width: double.infinity,
@@ -411,12 +440,97 @@ class _FailedView extends StatelessWidget {
               ),
             ),
             child: Text(
-              isEn ? 'Back to Store' : '返回套餐中心',
+              detail.actionLabel,
               style: YLText.label.copyWith(fontWeight: FontWeight.w600),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ),
       ],
     );
+  }
+}
+
+class _FailureDetail {
+  const _FailureDetail({
+    required this.title,
+    required this.hint,
+    required this.actionLabel,
+  });
+
+  final String title;
+  final String hint;
+  final String actionLabel;
+}
+
+_FailureDetail _failureDetail(PurchaseFailureKind kind, bool isEn) {
+  switch (kind) {
+    case PurchaseFailureKind.loginRequired:
+      return _FailureDetail(
+        title: isEn ? 'Login Required' : '需要登录',
+        hint: isEn
+            ? 'Sign in again, then return to the store to continue checkout.'
+            : '请重新登录后回到套餐中心继续购买。',
+        actionLabel: isEn ? 'Back to Store' : '返回套餐中心',
+      );
+    case PurchaseFailureKind.paymentUrlMissing:
+      return _FailureDetail(
+        title: isEn ? 'Payment Link Missing' : '支付链接缺失',
+        hint: isEn
+            ? 'The server accepted the order but did not return a payable URL. Start a fresh order.'
+            : '服务端创建了订单但未返回可支付链接，请重新发起订单。',
+        actionLabel: isEn ? 'Create New Order' : '重新发起订单',
+      );
+    case PurchaseFailureKind.paymentPageOpenFailed:
+      return _FailureDetail(
+        title: isEn ? 'Cannot Open Payment' : '无法打开支付页',
+        hint: isEn
+            ? 'Check your browser permission or copy the order number for support.'
+            : '请检查浏览器权限；如仍失败，可复制订单号联系支持。',
+        actionLabel: isEn ? 'Try Again' : '重试',
+      );
+    case PurchaseFailureKind.orderCancelled:
+      return _FailureDetail(
+        title: isEn ? 'Order Cancelled' : '订单已取消',
+        hint: isEn
+            ? 'This order is closed. Pick a plan again if you still want to subscribe.'
+            : '该订单已关闭，如需订阅请重新选择套餐。',
+        actionLabel: isEn ? 'Back to Store' : '返回套餐中心',
+      );
+    case PurchaseFailureKind.network:
+      return _FailureDetail(
+        title: isEn ? 'Network Error' : '网络异常',
+        hint: isEn
+            ? 'The payment server could not be reached. Retry after your network is stable.'
+            : '当前无法连接支付服务，请在网络稳定后重试。',
+        actionLabel: isEn ? 'Back to Store' : '返回套餐中心',
+      );
+    case PurchaseFailureKind.unauthorized:
+      return _FailureDetail(
+        title: isEn ? 'Session Expired' : '登录已过期',
+        hint: isEn
+            ? 'Your account session expired. Sign in again before checkout.'
+            : '账号登录状态已过期，请重新登录后再购买。',
+        actionLabel: isEn ? 'Back to Store' : '返回套餐中心',
+      );
+    case PurchaseFailureKind.paymentDeclined:
+    case PurchaseFailureKind.api:
+      return _FailureDetail(
+        title: isEn ? 'Payment Rejected' : '支付被拒绝',
+        hint: isEn
+            ? 'The payment provider rejected this checkout. A new order usually clears it.'
+            : '支付通道拒绝了本次请求，通常重新发起订单即可恢复。',
+        actionLabel: isEn ? 'Create New Order' : '重新发起订单',
+      );
+    case PurchaseFailureKind.state:
+    case PurchaseFailureKind.unknown:
+      return _FailureDetail(
+        title: isEn ? 'Order Failed' : '订单失败',
+        hint: isEn
+            ? 'The checkout state is inconsistent. Return to the store and try again.'
+            : '当前支付状态不完整，请返回套餐中心后重试。',
+        actionLabel: isEn ? 'Back to Store' : '返回套餐中心',
+      );
   }
 }

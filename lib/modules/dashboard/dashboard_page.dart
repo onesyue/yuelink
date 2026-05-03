@@ -27,6 +27,7 @@ import 'widgets/hero_card.dart';
 import 'widgets/quick_actions.dart';
 import '../mine/widgets/notices_card.dart';
 import 'widgets/emby_preview_row.dart';
+import 'widgets/renewal_reminder_banner.dart';
 import 'widgets/stale_subscription_banner.dart';
 import '../../domain/emby/emby_info_entity.dart';
 import '../../app/main_shell.dart';
@@ -247,6 +248,14 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
               // ── 1.5 订阅过期提示 ─────────────────────────
               const _StaggeredIn(
                 index: 1,
+                child: RepaintBoundary(child: RenewalReminderBanner()),
+              ),
+
+              const SizedBox(height: 12),
+
+              // ── 1.6 订阅配置陈旧提示 ─────────────────────
+              const _StaggeredIn(
+                index: 2,
                 child: RepaintBoundary(child: StaleSubscriptionBanner()),
               ),
 
@@ -254,7 +263,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
 
               // ── 2. 快捷操作 ───────────────────────────────
               const _StaggeredIn(
-                index: 2,
+                index: 3,
                 child: RepaintBoundary(child: QuickActions()),
               ),
 
@@ -262,7 +271,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
 
               // ── 3. 公告（服务通知优先）──────────────────
               const _StaggeredIn(
-                index: 3,
+                index: 4,
                 child: RepaintBoundary(child: NoticesCard()),
               ),
 
@@ -270,7 +279,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
 
               // ── 4. 悦视频推荐条 ───────────────────────────
               const _StaggeredIn(
-                index: 4,
+                index: 5,
                 child: RepaintBoundary(child: EmbyPreviewRow()),
               ),
 
@@ -278,7 +287,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
 
               // ── 5. 签到 ─────────────────────────────────
               const _StaggeredIn(
-                index: 5,
+                index: 6,
                 child: RepaintBoundary(child: CheckinCard()),
               ),
 
@@ -286,7 +295,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
 
               // ── 5.5 签到日历入口（与签到/Emby 平级） ──────
               const _StaggeredIn(
-                index: 6,
+                index: 7,
                 child: RepaintBoundary(child: CheckinCalendarEntryCard()),
               ),
 
@@ -294,7 +303,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
 
               // ── 6. 数据监控（折叠）───────────────────────
               const _StaggeredIn(
-                index: 7,
+                index: 8,
                 child: RepaintBoundary(child: _TrafficSection()),
               ),
 
@@ -708,11 +717,7 @@ class _IosVpnRationaleSheet extends StatelessWidget {
                     color: (isDark ? YLColors.zinc700 : YLColors.zinc100),
                     borderRadius: BorderRadius.circular(YLRadius.md),
                   ),
-                  child: Icon(
-                    Icons.shield_rounded,
-                    size: 22,
-                    color: textColor,
-                  ),
+                  child: Icon(Icons.shield_rounded, size: 22, color: textColor),
                 ),
                 const SizedBox(width: 12),
                 Expanded(

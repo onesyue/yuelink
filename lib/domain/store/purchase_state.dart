@@ -33,8 +33,27 @@ class PurchaseSuccess extends PurchaseState {
   const PurchaseSuccess(this.order);
 }
 
+enum PurchaseFailureKind {
+  loginRequired,
+  paymentUrlMissing,
+  paymentPageOpenFailed,
+  orderCancelled,
+  paymentDeclined,
+  network,
+  unauthorized,
+  api,
+  state,
+  unknown,
+}
+
 class PurchaseFailed extends PurchaseState {
   final String message;
   final String? tradeNo; // set when order was created but checkout failed
-  const PurchaseFailed(this.message, {this.tradeNo});
+  final PurchaseFailureKind kind;
+
+  const PurchaseFailed(
+    this.message, {
+    this.tradeNo,
+    this.kind = PurchaseFailureKind.unknown,
+  });
 }

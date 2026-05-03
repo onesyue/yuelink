@@ -42,7 +42,7 @@ class ConnectionRepairPage extends ConsumerStatefulWidget {
 class _ConnectionRepairPageState extends ConsumerState<ConnectionRepairPage> {
   bool _busy = false;
 
-  Future<void> _exportDiagnosticLogs() async {
+  Future<void> _exportDiagnosticLogs({String entry = 'reports'}) async {
     if (_busy) return;
     setState(() => _busy = true);
     try {
@@ -75,7 +75,10 @@ class _ConnectionRepairPageState extends ConsumerState<ConnectionRepairPage> {
       if (!mounted) return;
       if (result.cancelled) return;
       if (result.saved) {
-        Telemetry.event(TelemetryEvents.diagnosticExport);
+        Telemetry.event(
+          TelemetryEvents.diagnosticExport,
+          props: {'entry': entry},
+        );
         AppNotifier.success(
           '${S.current.exportLogsSuccess}: ${result.path ?? fileName}',
         );
@@ -94,15 +97,31 @@ class _ConnectionRepairPageState extends ConsumerState<ConnectionRepairPage> {
   Future<void> _restartCore() async {
     if (_busy) return;
     setState(() => _busy = true);
+    Telemetry.event(
+      TelemetryEvents.connectionRepairAttempt,
+      props: {'action': 'restart_core'},
+    );
     try {
       final actions = ref.read(connectionRepairActionsProvider);
       final res = await actions.loadActiveConfig();
       if (res is ActiveConfigMissing) {
+        Telemetry.event(
+          TelemetryEvents.connectionRepairResult,
+          props: {
+            'action': 'restart_core',
+            'ok': false,
+            'reason': res.reason.name,
+          },
+        );
         if (mounted) AppNotifier.error(_missingConfigMessage(res.reason));
         return;
       }
       final yaml = (res as ActiveConfigLoaded).yaml;
       final ok = await ref.read(coreActionsProvider).restart(yaml);
+      Telemetry.event(
+        TelemetryEvents.connectionRepairResult,
+        props: {'action': 'restart_core', 'ok': ok},
+      );
       if (!mounted) return;
       final label = S.current.repairRestartCore;
       if (ok) {
@@ -111,6 +130,14 @@ class _ConnectionRepairPageState extends ConsumerState<ConnectionRepairPage> {
         AppNotifier.error('$label ${S.current.repairActionFailed}');
       }
     } catch (e) {
+      Telemetry.event(
+        TelemetryEvents.connectionRepairResult,
+        props: {
+          'action': 'restart_core',
+          'ok': false,
+          'error_type': e.runtimeType.toString(),
+        },
+      );
       if (mounted) {
         AppNotifier.error(
           '${S.current.repairRestartCore} ${S.current.repairActionFailed}: $e',
@@ -152,9 +179,17 @@ class _ConnectionRepairPageState extends ConsumerState<ConnectionRepairPage> {
     }
   }
 
-  Future<void> _run(String label, Future<bool> Function() action) async {
+  Future<void> _run(
+    String label,
+    Future<bool> Function() action, {
+    required String actionId,
+  }) async {
     if (_busy) return;
     setState(() => _busy = true);
+    Telemetry.event(
+      TelemetryEvents.connectionRepairAttempt,
+      props: {'action': actionId},
+    );
     try {
       // Stop through the lifecycle manager, not CoreManager directly. The
       // lifecycle path is the only one that clears system proxy, restores
@@ -164,6 +199,10 @@ class _ConnectionRepairPageState extends ConsumerState<ConnectionRepairPage> {
         await ref.read(coreActionsProvider).stop();
       }
       final ok = await action();
+      Telemetry.event(
+        TelemetryEvents.connectionRepairResult,
+        props: {'action': actionId, 'ok': ok},
+      );
       if (mounted) {
         if (ok) {
           AppNotifier.success('$label ${S.current.repairActionDone}');
@@ -172,6 +211,14 @@ class _ConnectionRepairPageState extends ConsumerState<ConnectionRepairPage> {
         }
       }
     } catch (e) {
+      Telemetry.event(
+        TelemetryEvents.connectionRepairResult,
+        props: {
+          'action': actionId,
+          'ok': false,
+          'error_type': e.runtimeType.toString(),
+        },
+      );
       if (mounted) {
         AppNotifier.error('$label ${S.current.repairActionFailed}: $e');
       }
@@ -231,7 +278,11 @@ class _ConnectionRepairPageState extends ConsumerState<ConnectionRepairPage> {
               child: FilledButton.icon(
                 onPressed: _busy
                     ? null
-                    : () => _run(s.repairOneClick, _oneClickRepairAndReconnect),
+                    : () => _run(
+                        s.repairOneClick,
+                        _oneClickRepairAndReconnect,
+                        actionId: 'one_click',
+                      ),
                 icon: _busy
                     ? const SizedBox(
                         width: 16,
@@ -247,6 +298,32 @@ class _ConnectionRepairPageState extends ConsumerState<ConnectionRepairPage> {
                   backgroundColor: isDark ? YLColors.zinc700 : YLColors.zinc800,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(YLRadius.lg),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(
+            YLSpacing.lg,
+            YLSpacing.sm,
+            YLSpacing.lg,
+            0,
+          ),
+          sliver: SliverToBoxAdapter(
+            child: SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _busy
+                    ? null
+                    : () => _exportDiagnosticLogs(entry: 'top_cta'),
+                icon: const Icon(Icons.file_download_rounded, size: 18),
+                label: Text(isEn ? 'Export diagnostic bundle' : '导出诊断包'),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 13),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(YLRadius.lg),
                   ),
@@ -308,7 +385,7 @@ class _ConnectionRepairPageState extends ConsumerState<ConnectionRepairPage> {
                       : () => _run(s.repairRebuildVpn, () async {
                           final ok = await VpnService.resetVpnProfile();
                           return ok;
-                        }),
+                        }, actionId: 'rebuild_vpn'),
                 ),
                 YLListTile(
                   leading: const YLSettingIcon(
@@ -325,7 +402,7 @@ class _ConnectionRepairPageState extends ConsumerState<ConnectionRepairPage> {
                       : () => _run('清除配置', () async {
                           final ok = await VpnService.clearAppGroupConfig();
                           return ok;
-                        }),
+                        }, actionId: 'clear_tunnel_config'),
                 ),
               ],
               YLListTile(
@@ -350,7 +427,7 @@ class _ConnectionRepairPageState extends ConsumerState<ConnectionRepairPage> {
                             .read(authProvider.notifier)
                             .syncSubscription();
                         return true;
-                      }),
+                      }, actionId: 'resync_subscription'),
               ),
               YLListTile(
                 leading: const YLSettingIcon(
@@ -370,7 +447,7 @@ class _ConnectionRepairPageState extends ConsumerState<ConnectionRepairPage> {
                             .read(connectionRepairActionsProvider)
                             .clearLocalCache(appDir);
                         return true;
-                      }),
+                      }, actionId: 'clear_local_cache'),
               ),
               if (Platform.isAndroid)
                 YLListTile(
@@ -429,7 +506,7 @@ class _ConnectionRepairPageState extends ConsumerState<ConnectionRepairPage> {
                           );
                           if (proceed != true) return false;
                           return VpnService.requestIgnoreBatteryOptimization();
-                        }),
+                        }, actionId: 'battery_whitelist'),
                 ),
             ],
           ),
@@ -470,7 +547,7 @@ class _ConnectionRepairPageState extends ConsumerState<ConnectionRepairPage> {
                 trailing: _busy
                     ? YLListTrailing.loading()
                     : YLListTrailing.chevron(),
-                onTap: _busy ? null : _exportDiagnosticLogs,
+                onTap: _busy ? null : () => _exportDiagnosticLogs(),
               ),
             ],
           ),

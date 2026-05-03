@@ -29,6 +29,7 @@ ENDPOINTS=(
   "$PREFIX/stats/versions?days=1"
   "$PREFIX/stats/nodes?days=1"
   "$PREFIX/stats/node_health?days=1"
+  "$PREFIX/stats/connection_health?days=1"
 )
 
 ERRORS=0

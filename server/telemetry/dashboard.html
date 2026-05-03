@@ -222,6 +222,25 @@
       </div>
 
       <div class="card">
+        <h2>Connection MTTI inputs</h2>
+        <div class="big" id="connectFailed">—</div>
+        <div class="big-sub" id="connectIdentified">connect_failed events</div>
+        <div style="margin-top:12px;color:var(--muted);font-size:11px" id="diagnosticExports">—</div>
+        <table style="margin-top:12px">
+          <thead><tr><th>Top reason</th><th class="num">Count</th></tr></thead>
+          <tbody id="connectionReasons"></tbody>
+        </table>
+      </div>
+
+      <div class="card">
+        <h2>Repair actions</h2>
+        <table>
+          <thead><tr><th>Action</th><th>OK</th><th class="num">Count</th></tr></thead>
+          <tbody id="repairActions"></tbody>
+        </table>
+      </div>
+
+      <div class="card">
         <h2>Top events</h2>
         <table>
           <thead><tr><th>Event</th><th class="num">Count</th></tr></thead>
@@ -477,13 +496,14 @@ function scoreClass(score, insufficient) {
 }
 
 async function refreshOverview() {
-  const [summary, dau, funnel, errors, versions, crash] = await Promise.all([
+  const [summary, dau, funnel, errors, versions, crash, connection] = await Promise.all([
     jget(`${API}/stats/summary?days=${currentDays}`),
     jget(`${API}/stats/dau?days=30`),
     jget(`${API}/stats/startup_funnel?days=${currentDays}`),
     jget(`${API}/stats/errors?days=${currentDays}`),
     jget(`${API}/stats/versions?days=${currentDays}`),
     jget(`${API}/stats/crash_free?days=${currentDays}`),
+    jget(`${API}/stats/connection_health?days=${currentDays}`),
   ]);
 
   document.getElementById('totalEvents').textContent = summary.total_events.toLocaleString();
@@ -509,6 +529,28 @@ async function refreshOverview() {
     `<td><code>${f.code || '?'}</code></td>` +
     `<td class="num">${f.n}</td></tr>`
   ).join('') || '<tr><td colspan="3" style="color:var(--muted)">no failures</td></tr>';
+
+  // Connection MTTI inputs
+  const identified = connection.identified_rate;
+  document.getElementById('connectFailed').textContent = connection.connect_failed.toLocaleString();
+  document.getElementById('connectFailed').className = 'big ' +
+    (connection.connect_failed === 0 ? 'ok' : identified > 0.9 ? 'warn' : 'err');
+  document.getElementById('connectIdentified').textContent =
+    identified === null
+      ? 'no connect_failed events'
+      : `${(identified * 100).toFixed(1)}% have step/reason · ${connection.identified_connect_failed}/${connection.connect_failed}`;
+  document.getElementById('diagnosticExports').textContent =
+    `${connection.diagnostic_exports.toLocaleString()} diagnostic exports in this window`;
+  document.getElementById('connectionReasons').innerHTML = connection.top_reasons.map(r =>
+    `<tr><td><code>${escapeHtml(r.reason || 'unknown')}</code></td>` +
+    `<td class="num">${r.n}</td></tr>`
+  ).join('') || '<tr><td colspan="2" style="color:var(--muted)">no connection failures</td></tr>';
+
+  document.getElementById('repairActions').innerHTML = connection.repair_actions.map(r =>
+    `<tr><td><code>${escapeHtml(r.action || 'unknown')}</code></td>` +
+    `<td><span class="${r.ok === 'true' ? 'ok' : 'err'}">${r.ok || '?'}</span></td>` +
+    `<td class="num">${r.n}</td></tr>`
+  ).join('') || '<tr><td colspan="3" style="color:var(--muted)">no repair actions yet</td></tr>';
 
   const maxN = Math.max(...summary.top_events.map(e => e.n), 1);
   document.getElementById('topEvents').innerHTML = summary.top_events.map(e =>

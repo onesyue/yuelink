@@ -731,7 +731,36 @@ void main() {
       final state = container.read(purchaseProvider);
       expect(state, isA<PurchaseFailed>());
       expect((state as PurchaseFailed).message, contains('支付链接为空'));
+      expect(state.kind, PurchaseFailureKind.paymentDeclined);
     });
+
+    test(
+      'payment launcher failure is classified as open-url failure',
+      () async {
+        final repo = FakeStoreRepository();
+        repo.createOrderResult = 'OPEN_FAIL_001';
+        repo.checkoutOutcome = const AwaitingExternalPayment(
+          'https://pay.example.com/open_fail',
+        );
+
+        final container = _createContainer(
+          repo,
+          launcher: FakePaymentLauncher(shouldSucceed: false),
+        );
+        addTearDown(container.dispose);
+
+        await container
+            .read(purchaseProvider.notifier)
+            .purchase(planId: 1, period: PlanPeriod.monthly, methodId: 1);
+
+        final state = container.read(purchaseProvider);
+        expect(state, isA<PurchaseFailed>());
+        expect(
+          (state as PurchaseFailed).kind,
+          PurchaseFailureKind.paymentPageOpenFailed,
+        );
+      },
+    );
 
     test(
       'pollOrderResult fails closed when loop exhausts with empty URL',
@@ -753,6 +782,7 @@ void main() {
         final state = container.read(purchaseProvider);
         expect(state, isA<PurchaseFailed>());
         expect((state as PurchaseFailed).message, contains('支付链接缺失'));
+        expect(state.kind, PurchaseFailureKind.paymentUrlMissing);
       },
     );
 

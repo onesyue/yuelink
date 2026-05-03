@@ -27,6 +27,7 @@ Routes (all under /api/client/telemetry):
     GET  /stats/dau                daily active clients              (BasicAuth)
     GET  /stats/crash_free         crash-free session rate           (BasicAuth)
     GET  /stats/startup_funnel     8-step funnel ok vs fail          (BasicAuth)
+    GET  /stats/connection_health  connect/repair failure signals    (BasicAuth)
     GET  /stats/errors             top error types                   (BasicAuth)
     GET  /stats/versions           platform × version                (BasicAuth)
     GET  /stats/nodes              node fingerprint health scores    (BasicAuth)
@@ -818,6 +819,111 @@ def stats_startup_funnel(days: int = 7, _user: str = Depends(require_dashboard_a
         "ok": ok,
         "failures": fails,
         "ok_rate": (ok / total) if total else None,
+    }
+
+
+@router_dashboard.get("/stats/connection_health")
+def stats_connection_health(days: int = 1, _user: str = Depends(require_dashboard_auth)):
+    """MTTI inputs: failure volume, top failing step, and repair outcomes."""
+    start, end = _day_window(days)
+    with db() as c, _dict_cursor(c) as cur:
+        cur.execute(
+            f"""SELECT
+                  COUNT(*)::int AS total,
+                  COUNT(*) FILTER (
+                    WHERE COALESCE(
+                      props->>'step',
+                      props->>'code',
+                      props->>'error_class',
+                      props->>'reason'
+                    ) IS NOT NULL
+                  )::int AS identified
+                FROM {SCHEMA}.events
+                WHERE event='connect_failed' AND day BETWEEN %s AND %s""",
+            (start, end),
+        )
+        connect = cur.fetchone()
+
+        cur.execute(
+            f"""SELECT platform, COUNT(*)::int AS n
+                FROM {SCHEMA}.events
+                WHERE event='connect_failed' AND day BETWEEN %s AND %s
+                GROUP BY platform ORDER BY n DESC LIMIT 12""",
+            (start, end),
+        )
+        by_platform = cur.fetchall()
+
+        cur.execute(
+            f"""SELECT COALESCE(
+                       props->>'step',
+                       props->>'code',
+                       props->>'error_class',
+                       props->>'reason',
+                       'unknown'
+                     ) AS reason,
+                     COUNT(*)::int AS n
+                FROM {SCHEMA}.events
+                WHERE event IN ('connect_failed', 'startup_fail')
+                  AND day BETWEEN %s AND %s
+                GROUP BY reason ORDER BY n DESC LIMIT 20""",
+            (start, end),
+        )
+        top_reasons = cur.fetchall()
+
+        cur.execute(
+            f"""SELECT COUNT(*)::int AS n
+                FROM {SCHEMA}.events
+                WHERE event='diagnostic_export' AND day BETWEEN %s AND %s""",
+            (start, end),
+        )
+        diagnostic_exports = cur.fetchone()["n"]
+
+        cur.execute(
+            f"""SELECT props->>'action' AS action,
+                       props->>'ok' AS ok,
+                       COUNT(*)::int AS n
+                FROM {SCHEMA}.events
+                WHERE event='connection_repair_result'
+                  AND day BETWEEN %s AND %s
+                GROUP BY action, ok ORDER BY action, ok""",
+            (start, end),
+        )
+        repair_actions = cur.fetchall()
+
+        cur.execute(
+            f"""SELECT server_ts, event, platform, version,
+                       props->>'step' AS step,
+                       props->>'code' AS code,
+                       props->>'error_class' AS error_class,
+                       props->>'reason' AS reason,
+                       props->>'action' AS action,
+                       props->>'ok' AS ok
+                FROM {SCHEMA}.events
+                WHERE day BETWEEN %s AND %s
+                  AND (
+                    event IN ('connect_failed', 'startup_fail')
+                    OR (
+                      event='connection_repair_result'
+                      AND props->>'ok'='false'
+                    )
+                  )
+                ORDER BY server_ts DESC LIMIT 50""",
+            (start, end),
+        )
+        recent = cur.fetchall()
+
+    total = connect["total"] or 0
+    identified = connect["identified"] or 0
+    return {
+        "window_days": days,
+        "connect_failed": total,
+        "identified_connect_failed": identified,
+        "identified_rate": (identified / total) if total else None,
+        "diagnostic_exports": diagnostic_exports,
+        "by_platform": by_platform,
+        "top_reasons": top_reasons,
+        "repair_actions": repair_actions,
+        "recent_failures": recent,
     }
 
 
