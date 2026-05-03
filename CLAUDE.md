@@ -238,8 +238,6 @@ Pre-commit (`scripts/pre-commit`): analyze + test + import check. Install: `ln -
   git add core/mihomo                     # record new SHA in yuelink tree
   git commit -m "build(core): bump mihomo submodule to upstream Meta YYYY-MM-DD"
   ```
-  yuelink's submodule pointer is a frozen SHA per commit — `--remote` only matters for `git submodule update --remote`. Bumping is opt-in; never automatic. Each yuelink release pins a known SHA.
-
-  **`yuelink-vX.Y.Z` release branches** are kept as frozen audit snapshots when meaningful (e.g. `yuelink-v1.19.24` was the first cut). Don't push new fixes there — they go on `main`. Don't track them from `.gitmodules`.
+  yuelink's submodule pointer is a frozen SHA per commit — `--remote` only matters for `git submodule update --remote`. Bumping is opt-in; never automatic. Each yuelink release pins a known SHA, so per-release fork branches are unnecessary (you can always check out a yuelink commit and `git submodule update` to land on the exact mihomo SHA that shipped).
 
   **Stay on Meta, not Alpha.** The `feedback_no_mihomo_alpha` rule applies: Alpha experiments don't enter our main line.
