@@ -1300,15 +1300,12 @@ class ConfigTemplate {
 
   /// Ensure performance tuning defaults.
   static String _ensurePerformance(String config) {
-    config = _normalizeGlobalClientFingerprint(config);
+    config = _removeDeprecatedGlobalClientFingerprint(config);
     if (!_hasKey(config, 'tcp-concurrent')) {
       config += '\ntcp-concurrent: true\n';
     }
     if (!_hasKey(config, 'unified-delay')) {
       config += 'unified-delay: true\n';
-    }
-    if (!_hasKey(config, 'global-client-fingerprint')) {
-      config += 'global-client-fingerprint: chrome\n';
     }
     // Keep-alive interval: mihomo upstream default is 30s — matches the
     // mobile carrier NAT floor (~30s) while halving CPU wake-ups / battery
@@ -1320,13 +1317,13 @@ class ConfigTemplate {
     return config;
   }
 
-  static String _normalizeGlobalClientFingerprint(String config) {
-    return config.replaceFirstMapped(
+  static String _removeDeprecatedGlobalClientFingerprint(String config) {
+    return config.replaceAllMapped(
       RegExp(
-        r'''^(\s*global-client-fingerprint\s*:\s*)(?:"random"|'random'|random)(\s*(?:#.*)?)$''',
+        r'''^\s*global-client-fingerprint\s*:\s*(?:"[^"]*"|'[^']*'|[^\n#]+)?\s*(?:#.*)?\n?''',
         multiLine: true,
       ),
-      (m) => '${m[1]}chrome${m[2] ?? ''}',
+      (_) => '',
     );
   }
 

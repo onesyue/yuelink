@@ -345,7 +345,7 @@ proxy-groups:
     });
 
     test(
-      'normalizes top-level global-client-fingerprint: random to chrome',
+      'removes deprecated top-level global-client-fingerprint',
       () {
         const config = '''
 mixed-port: 7890
@@ -358,25 +358,23 @@ rules:
   - MATCH,Proxy
 ''';
         final result = ConfigTemplate.process(config);
-        expect(result, contains('global-client-fingerprint: chrome'));
-        expect(result, isNot(contains('global-client-fingerprint: random')));
+        expect(result, isNot(contains('global-client-fingerprint')));
       },
     );
 
-    test('preserves explicit non-random global-client-fingerprint', () {
+    test('preserves proxy-level client-fingerprint', () {
       const config = '''
 mixed-port: 7890
-global-client-fingerprint: safari
 proxies:
-  - {name: node1, type: ss, server: 1.2.3.4, port: 443}
+  - {name: node1, type: trojan, server: 1.2.3.4, port: 443, client-fingerprint: safari}
 proxy-groups:
   - {name: Proxy, type: select, proxies: [node1]}
 rules:
   - MATCH,Proxy
 ''';
       final result = ConfigTemplate.process(config);
-      expect(result, contains('global-client-fingerprint: safari'));
-      expect(result, isNot(contains('global-client-fingerprint: chrome')));
+      expect(result, contains('client-fingerprint: safari'));
+      expect(result, isNot(contains('global-client-fingerprint')));
     });
 
     test('3-node chain sets correct dialer-proxy links on nodes', () {
