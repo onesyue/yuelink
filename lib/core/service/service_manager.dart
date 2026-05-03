@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:path_provider/path_provider.dart';
 
@@ -9,14 +10,49 @@ import '../../constants.dart';
 import '../../shared/error_logger.dart';
 import '../../shared/event_log.dart';
 import '../storage/settings_service.dart';
-import 'service_client.dart';
+import 'service_manager_env.dart';
 import 'service_models.dart';
 
 class ServiceManager {
   ServiceManager._();
 
+  // ── Test seams ─────────────────────────────────────────────────────────
+  // Defaults call the real OS / IPC. Tests swap via [setProbesForTesting]
+  // to drive the four read-only methods (isInstalled / isReady / getInfo /
+  // waitUntilReachable) through deterministic fakes. install / update /
+  // uninstall do NOT route through these probes — they keep their direct
+  // Process.run / File / osascript / pkexec calls.
+
+  static ServiceFileSystem _fs = const RealServiceFileSystem();
+  static ServiceProcessRunner _proc = const RealServiceProcessRunner();
+  static ServiceClientProbe _client = const RealServiceClientProbe(
+    ServiceManager.expectedVersion,
+  );
+  static ServicePlatformProbe _platform = const RealServicePlatformProbe();
+
+  @visibleForTesting
+  static void setProbesForTesting({
+    ServiceFileSystem? fileSystem,
+    ServiceProcessRunner? processRunner,
+    ServiceClientProbe? clientProbe,
+    ServicePlatformProbe? platformProbe,
+  }) {
+    if (fileSystem != null) _fs = fileSystem;
+    if (processRunner != null) _proc = processRunner;
+    if (clientProbe != null) _client = clientProbe;
+    if (platformProbe != null) _platform = platformProbe;
+  }
+
+  @visibleForTesting
+  static void resetProbesForTesting() {
+    _fs = const RealServiceFileSystem();
+    _proc = const RealServiceProcessRunner();
+    _client = const RealServiceClientProbe(ServiceManager.expectedVersion);
+    _platform = const RealServicePlatformProbe();
+  }
+
   static bool get isSupported =>
-      Platform.isMacOS || Platform.isWindows || Platform.isLinux;
+      _platform.isMacOS || _platform.isWindows || _platform.isLinux;
 
   /// Expected service protocol version — loaded from the same file the Go
   /// helper embeds (`service/protocol_version.txt`). This is the IPC
@@ -44,10 +80,10 @@ class ServiceManager {
     }
 
     try {
-      final status = await ServiceClient.status();
-      // Version check: detect stale service binary after app update
-      final remoteVersion = await ServiceClient.version();
-      final expected = await expectedVersion();
+      final status = await _client.status();
+      // Version check: detect stale service binary after app update.
+      final remoteVersion = await _client.remoteVersion();
+      final expected = await _client.expectedVersion();
       final versionMismatch =
           remoteVersion != null && remoteVersion != expected;
       return status.copyWith(
@@ -82,20 +118,20 @@ class ServiceManager {
     // to surface downstream as `ServiceClient` throwing "socket path is
     // missing" instead of a clean "not installed" state the UI can guide
     // the user out of.
-    if (Platform.isMacOS) {
-      if (!File(_macPlistPath).existsSync() ||
-          !File(_macInstalledHelperPath).existsSync() ||
-          !File(_macInstalledMihomoPath).existsSync()) {
+    if (_platform.isMacOS) {
+      if (!_fs.exists(_macPlistPath) ||
+          !_fs.exists(_macInstalledHelperPath) ||
+          !_fs.exists(_macInstalledMihomoPath)) {
         return false;
       }
       final socket = await SettingsService.getServiceSocketPath();
       return socket != null && socket.isNotEmpty;
     }
 
-    if (Platform.isLinux) {
-      if (!File(_linuxUnitPath).existsSync() ||
-          !File(_linuxInstalledHelperPath).existsSync() ||
-          !File(_linuxInstalledMihomoPath).existsSync()) {
+    if (_platform.isLinux) {
+      if (!_fs.exists(_linuxUnitPath) ||
+          !_fs.exists(_linuxInstalledHelperPath) ||
+          !_fs.exists(_linuxInstalledMihomoPath)) {
         return false;
       }
       final socket = await SettingsService.getServiceSocketPath();
@@ -108,7 +144,7 @@ class ServiceManager {
     // null) used to surface as startService throwing "auth token is
     // missing" 4ms into the startup pipeline. Treating that state as "not
     // installed" lets the UI offer a fresh install that recreates both.
-    final result = await Process.run('sc', [
+    final result = await _proc.run('sc', [
       'query',
       AppConstants.desktopServiceName,
     ]);
@@ -145,7 +181,7 @@ class ServiceManager {
     if (!await isInstalled()) return false;
     final end = DateTime.now().add(deadline);
     while (DateTime.now().isBefore(end)) {
-      if (await ServiceClient.ping()) return true;
+      if (await _client.ping()) return true;
       await Future.delayed(const Duration(milliseconds: 200));
     }
     return false;
@@ -274,7 +310,7 @@ class ServiceManager {
         await _runWindowsElevated(script.path);
       }
 
-      await _waitUntilReachable();
+      await waitUntilReachable();
     } finally {
       try {
         await tempDir.delete(recursive: true);
@@ -404,7 +440,7 @@ Start-Service -Name $serviceName
       }
     }
 
-    await _waitUntilReachable();
+    await waitUntilReachable();
   }
 
   static Future<void> uninstall() async {
@@ -552,22 +588,28 @@ Start-Service -Name $serviceName
     );
   }
 
-  static Future<void> _waitUntilReachable({
+  /// Burst-poll the helper IPC ping until [deadline] elapses; throw with
+  /// captured diagnostics on timeout. Public + `@visibleForTesting` so
+  /// state-combo tests can drive it through fake probes; the only internal
+  /// callers are `install` and `update`.
+  @visibleForTesting
+  static Future<void> waitUntilReachable({
     Duration deadline = const Duration(seconds: 30),
+    Duration pollInterval = const Duration(milliseconds: 500),
   }) async {
     // Helper binaries typically ping within ~1s. First install can be much
     // slower on Windows/macOS because service registration, AV scanning and
     // TUN driver warmup happen in parallel with the listener binding.
     final end = DateTime.now().add(deadline);
     while (DateTime.now().isBefore(end)) {
-      if (await ServiceClient.ping()) return;
-      await Future.delayed(const Duration(milliseconds: 500));
+      if (await _client.ping()) return;
+      await Future.delayed(pollInterval);
     }
     // Ping never succeeded. Gather whatever we can so the user (and future
     // us) can tell "service failed to start" apart from "service started
     // but IPC auth / socket path wrong".
     final diag = await _collectUnreachableDiagnostics();
-    EventLog.write('[Service] _waitUntilReachable timed out: $diag');
+    EventLog.write('[Service] waitUntilReachable timed out: $diag');
     throw ProcessException(
       'service',
       const [],
@@ -577,18 +619,19 @@ Start-Service -Name $serviceName
   }
 
   /// Best-effort inspection of why the service isn't answering — runs after
-  /// 10s of ping failures, just before we throw. Each probe has its own
-  /// timeout so a stuck helper can't block the error path.
+  /// the ping deadline elapses, just before we throw. Each probe has its
+  /// own timeout so a stuck helper can't block the error path.
   static Future<String> _collectUnreachableDiagnostics() async {
     final parts = <String>[];
 
     // Is the service/daemon even registered?
+    const probeTimeout = Duration(seconds: 2);
     if (Platform.isWindows) {
       try {
-        final r = await Process.run('sc', [
+        final r = await _proc.run('sc', [
           'query',
           AppConstants.desktopServiceName,
-        ]).timeout(const Duration(seconds: 2));
+        ], timeout: probeTimeout);
         final line = r.stdout
             .toString()
             .split('\n')
@@ -602,10 +645,10 @@ Start-Service -Name $serviceName
       }
     } else if (Platform.isMacOS) {
       try {
-        final r = await Process.run('launchctl', [
+        final r = await _proc.run('launchctl', [
           'print',
           'system/${AppConstants.desktopServiceLabel}',
-        ]).timeout(const Duration(seconds: 2));
+        ], timeout: probeTimeout);
         final state = r.stdout
             .toString()
             .split('\n')
@@ -619,10 +662,10 @@ Start-Service -Name $serviceName
       }
     } else if (Platform.isLinux) {
       try {
-        final r = await Process.run('systemctl', [
+        final r = await _proc.run('systemctl', [
           'is-active',
           AppConstants.desktopServiceName,
-        ]).timeout(const Duration(seconds: 2));
+        ], timeout: probeTimeout);
         parts.add('systemctl=${r.stdout.toString().trim()}');
       } catch (e) {
         parts.add('systemctl_probe_err=$e');
@@ -636,19 +679,14 @@ Start-Service -Name $serviceName
         : Platform.isMacOS
         ? _macInstalledHelperLogPath
         : _linuxInstalledHelperLogPath;
-    try {
-      final logFile = File(logPath);
-      if (logFile.existsSync()) {
-        final content = await logFile.readAsString();
-        final tail = content.length > 300
-            ? content.substring(content.length - 300)
-            : content;
-        parts.add('helper_log_tail=${_truncateForLog(tail)}');
-      } else {
-        parts.add('helper_log=<missing>');
-      }
-    } catch (e) {
-      parts.add('helper_log_err=$e');
+    final content = await _fs.readString(logPath);
+    if (content == null) {
+      parts.add('helper_log=<missing>');
+    } else {
+      final tail = content.length > 300
+          ? content.substring(content.length - 300)
+          : content;
+      parts.add('helper_log_tail=${_truncateForLog(tail)}');
     }
 
     return parts.join(' | ');
