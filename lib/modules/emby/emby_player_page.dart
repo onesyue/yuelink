@@ -9,6 +9,7 @@ import 'package:media_kit_video/media_kit_video.dart';
 import '../../i18n/app_strings.dart';
 import '../../theme.dart';
 import 'emby_client.dart';
+import 'playback_rate_state.dart';
 import 'widgets/player_settings_panel.dart';
 
 const _pipChannel = MethodChannel('com.yueto.yuelink/pip');
@@ -63,7 +64,7 @@ class _EmbyPlayerPageState extends State<EmbyPlayerPage>
 
   bool _loading = true;
   String? _error;
-  double _playbackRate = 1.0;
+  final EmbyPlaybackRateState _playbackRate = EmbyPlaybackRateState();
   double _subtitleFontSize = _savedFontSize;
 
   // Fit mode: default fill（铺满不丢内容）, cycle fill → contain → cover
@@ -366,12 +367,9 @@ class _EmbyPlayerPageState extends State<EmbyPlayerPage>
         serverUrl: widget.serverUrl,
         itemId: widget.itemId,
         accessToken: widget.accessToken,
-        currentRate: _playbackRate,
+        currentRate: _playbackRate.selectedRate,
         subtitleFontSize: _subtitleFontSize,
-        onRateChanged: (r) {
-          _player.setRate(r);
-          setState(() => _playbackRate = r);
-        },
+        onRateChanged: _setSelectedPlaybackRate,
         onSubtitleSizeChanged: (size) {
           setState(() {
             _subtitleFontSize = size;
@@ -409,24 +407,23 @@ class _EmbyPlayerPageState extends State<EmbyPlayerPage>
   }
 
   // 长按 2x 加速
-  bool _longPressSpeed = false;
-  double _savedRate = 1.0;
+  void _setSelectedPlaybackRate(double rate) {
+    final activeRate = _playbackRate.select(rate);
+    _player.setRate(activeRate);
+    setState(() {});
+  }
 
   void _onLongPressStart() {
-    _savedRate = _playbackRate;
-    _player.setRate(2.0);
-    setState(() {
-      _longPressSpeed = true;
-      _playbackRate = 2.0;
-    });
+    final activeRate = _playbackRate.beginTemporaryBoost(2.0);
+    _player.setRate(activeRate);
+    setState(() {});
   }
 
   void _onLongPressEnd() {
-    _player.setRate(_savedRate);
-    setState(() {
-      _longPressSpeed = false;
-      _playbackRate = _savedRate;
-    });
+    if (!_playbackRate.isTemporaryBoostActive) return;
+    final activeRate = _playbackRate.endTemporaryBoost();
+    _player.setRate(activeRate);
+    setState(() {});
   }
 
   // 快速切字幕（CC 按钮 → 直接打开字幕 Tab）
@@ -442,13 +439,10 @@ class _EmbyPlayerPageState extends State<EmbyPlayerPage>
         serverUrl: widget.serverUrl,
         itemId: widget.itemId,
         accessToken: widget.accessToken,
-        currentRate: _playbackRate,
+        currentRate: _playbackRate.selectedRate,
         subtitleFontSize: _subtitleFontSize,
         initialTab: 1, // 字幕 Tab
-        onRateChanged: (r) {
-          _player.setRate(r);
-          setState(() => _playbackRate = r);
-        },
+        onRateChanged: _setSelectedPlaybackRate,
         onSubtitleSizeChanged: (size) {
           setState(() {
             _subtitleFontSize = size;
@@ -559,7 +553,7 @@ class _EmbyPlayerPageState extends State<EmbyPlayerPage>
                 ),
               ),
               // 倍速标签（非 1x 或长按加速时显示）
-              if (_playbackRate != 1.0)
+              if (!embyPlaybackRateEquals(_playbackRate.activeRate, 1.0))
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 6,
@@ -571,7 +565,9 @@ class _EmbyPlayerPageState extends State<EmbyPlayerPage>
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
-                    _longPressSpeed ? '▶▶ 2x' : '${_playbackRate}x',
+                    _playbackRate.isTemporaryBoostActive
+                        ? '▶▶ 2x'
+                        : formatEmbyPlaybackRate(_playbackRate.activeRate),
                     style: const TextStyle(color: Colors.white, fontSize: 11),
                   ),
                 ),
@@ -715,7 +711,7 @@ class _EmbyPlayerPageState extends State<EmbyPlayerPage>
                   ),
                 ),
               // 长按 2x 加速提示
-              if (_longPressSpeed)
+              if (_playbackRate.isTemporaryBoostActive)
                 IgnorePointer(
                   child: Align(
                     alignment: Alignment.topCenter,

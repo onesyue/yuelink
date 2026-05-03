@@ -7,6 +7,7 @@ import 'package:media_kit/media_kit.dart';
 import '../../../i18n/app_strings.dart';
 import '../../../theme.dart';
 import '../emby_client.dart';
+import '../playback_rate_state.dart';
 
 /// Netflix-style unified settings panel for the Emby player.
 ///
@@ -356,8 +357,8 @@ class _EmbyPlayerSettingsPanelState extends State<EmbyPlayerSettingsPanel>
       children: speeds
           .map(
             (r) => _PlayerOptionTile(
-              label: r == 1.0 ? '正常' : '${r}x',
-              selected: widget.currentRate == r,
+              label: r == 1.0 ? '正常' : formatEmbyPlaybackRate(r),
+              selected: embyPlaybackRateEquals(widget.currentRate, r),
               onTap: () {
                 widget.onRateChanged(r);
                 Navigator.pop(context);

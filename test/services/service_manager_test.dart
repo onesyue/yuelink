@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
@@ -479,6 +480,20 @@ void main() {
         pollInterval: const Duration(milliseconds: 10),
       );
       expect(clientProbe.pingCalls, 3);
+    });
+  });
+
+  group('ServiceManager Windows PowerShell script encoding', () {
+    test('writes UTF-8 BOM so zh-CN temp paths survive PowerShell 5.1', () {
+      const script =
+          r"Copy-Item -Force 'C:\Users\王杰\AppData\Local\Temp\a.json' 'C:\ProgramData\YueLink\a.json'";
+
+      final bytes = ServiceManager.windowsPowerShellScriptBytesForTesting(
+        script,
+      );
+
+      expect(bytes.take(3), [0xEF, 0xBB, 0xBF]);
+      expect(utf8.decode(bytes.skip(3).toList()), script);
     });
   });
 }

@@ -299,7 +299,8 @@ class ServiceManager {
         await _runLinuxElevated(script.path);
       } else if (Platform.isWindows) {
         final script = File('${tempDir.path}/install_service.ps1');
-        await script.writeAsString(
+        await _writeWindowsPowerShellScript(
+          script,
           _windowsInstallScript(
             helperSource: binaries.helperPath,
             mihomoSource: binaries.mihomoPath,
@@ -429,7 +430,7 @@ Start-Service -Name $serviceName
       final tempDir = await Directory.systemTemp.createTemp('yuelink_update_');
       try {
         final scriptFile = File('${tempDir.path}/update_service.ps1');
-        await scriptFile.writeAsString(script);
+        await _writeWindowsPowerShellScript(scriptFile, script);
         await _runWindowsElevated(scriptFile.path);
       } finally {
         try {
@@ -460,7 +461,7 @@ Start-Service -Name $serviceName
         await _runLinuxElevated(script.path);
       } else if (Platform.isWindows) {
         final script = File('${tempDir.path}/uninstall_service.ps1');
-        await script.writeAsString(_windowsUninstallScript());
+        await _writeWindowsPowerShellScript(script, _windowsUninstallScript());
         await _runWindowsElevated(script.path);
       }
     } finally {
@@ -755,6 +756,7 @@ exit `$code
 "@
 
 try {
+  $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($inner))
   # -WindowStyle Hidden: keep the elevated PowerShell invisible. Without it,
   # on Windows 11 22H2+ the new console window gets captured by Windows
   # Terminal, which then tries to load its own settings.json — and a user
@@ -765,7 +767,7 @@ try {
   $process = Start-Process PowerShell -Verb RunAs -Wait -PassThru -WindowStyle Hidden -ArgumentList @(
     '-NoProfile',
     '-ExecutionPolicy', 'Bypass',
-    '-Command', $inner
+    '-EncodedCommand', $encoded
   )
   exit $process.ExitCode
 } catch {
@@ -811,6 +813,23 @@ try {
         result.exitCode,
       );
     }
+  }
+
+  static Future<void> _writeWindowsPowerShellScript(File file, String content) {
+    return file.writeAsBytes(_windowsPowerShellScriptBytes(content));
+  }
+
+  static List<int> _windowsPowerShellScriptBytes(String content) {
+    // Windows PowerShell 5.1 treats UTF-8 without BOM as the active ANSI
+    // codepage. A Chinese Windows username puts the temp config/script path
+    // under C:\Users\<name>\..., so writing PS1 files without a BOM corrupts
+    // Copy-Item paths inside the elevated install session.
+    return <int>[0xEF, 0xBB, 0xBF, ...utf8.encode(content)];
+  }
+
+  @visibleForTesting
+  static List<int> windowsPowerShellScriptBytesForTesting(String content) {
+    return _windowsPowerShellScriptBytes(content);
   }
 
   static String _macInstallScript({
