@@ -1,165 +1,1127 @@
-# YueLink complete fallback config.
-# Only used when subscription does not provide a complete config.
-# In normal usage, the subscription provides everything
-# (proxy-groups, rules, rule-providers, DNS, sniffer, etc.)
-# ConfigTemplate.process() also ensures these keys are present
-# even when using subscription configs.
-
-mixed-port: 7890
-allow-lan: true
-bind-address: "*"
-log-level: info
-ipv6: false
-
 geodata-mode: true
-# memconservative: mihomo wiki recommendation; lazy-loads GeoIP on first hit.
-# Critical on iOS PacketTunnel (15 MB memory cap).
 geodata-loader: memconservative
+geox-url:
+  geoip: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.dat
+  geosite: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geosite.dat
+  mmdb: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/country.mmdb
+  asn: https://fastly.jsdelivr.net/gh/xishang0128/geoip@release/GeoLite2-ASN.mmdb
 geo-auto-update: true
 geo-update-interval: 24
-geox-url:
-  geoip: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.dat"
-  geosite: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geosite.dat"
-  mmdb: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/country.mmdb"
-
+allow-lan: true
+bind-address: '*'
+ipv6: false
+log-level: warning
 tcp-concurrent: true
 unified-delay: true
-global-client-fingerprint: chrome
-find-process-mode: always
 keep-alive-interval: 30
-
 profile:
-  # store-fake-ip: false — subscriptions refresh daily and persisted fake-IP
-  # mappings survive rule changes (mihomo discussions #1334 / #1629 / #1816).
   store-selected: true
   store-fake-ip: false
-
-external-controller: 127.0.0.1:9090
-
 sniffer:
   enable: true
   override-destination: true
   sniff:
     HTTP:
-      ports: [80, 8080-8880]
+      ports:
+      - 80
+      - 8080-8880
       override-destination: true
     TLS:
-      ports: [443, 8443]
+      ports:
+      - 443
+      - 8443
+      override-destination: true
     QUIC:
-      ports: [443, 8443]
-  force-domain:
-    - "+.v2ex.com"
+      ports:
+      - 443
+      - 8443
+      override-destination: true
   skip-domain:
-    - "Mijia Cloud"
-    - "+.push.apple.com"
-
+  - '*.lan'
+  - '*.local'
+  - '*.arpa'
+  - localhost
+  - localhost.localdomain
+  - router.asus.com
+  - routerlogin.net
+  - captive.apple.com
+  - +.push.apple.com
+  - +.icloud.com
+  - +.apple.com
+  - msftconnecttest.com
+  - www.msftconnecttest.com
+  - +.msftncsi.com
+  - connectivitycheck.gstatic.com
+  - connectivitycheck.android.com
+  - clients3.google.com
+  - clients4.google.com
+  - android.clients.google.com
+  - time.*
+  - ntp.*
+  - +.market.xiaomi.com
+  - localhost.ptlogin2.qq.com
+  - Mijia Cloud
+  - +._dns-sd._udp.*
+  - +._services._dns-sd._udp.*
+  force-domain:
+  - +.v2ex.com
 dns:
   enable: true
-  prefer-h3: true
+  listen: :1053
   enhanced-mode: fake-ip
   fake-ip-range: 198.18.0.1/16
+  fake-ip-filter-mode: blacklist
+  prefer-h3: false
+  respect-rules: true
+  use-hosts: true
+  use-system-hosts: true
+  ipv6: false
   fake-ip-filter:
-    # LAN / mDNS / IETF reserved
-    - "+.lan"
-    - "+.local"
-    - "+.direct"
-    - "+.home"
-    - "+.home.arpa"
-    - "+.localdomain"
-    - "+.invalid"
-    - "+.localhost"
-    - "+.test"
-    - "+.in-addr.arpa"
-    - "+.ip6.arpa"
-    # Windows / NTP / STUN / games
-    - "+.msftconnecttest.com"
-    - "+.msftncsi.com"
-    - "localhost.ptlogin2.qq.com"
-    - "localhost.work.weixin.qq.com"
-    - "+.srv.nintendo.net"
-    - "+.stun.playstation.net"
-    - "+.xboxlive.com"
-    - "stun.*.*"
-    - "stun.*.*.*"
-    - "xbox.*.microsoft.com"
-    - "+.ntp.org"
-    - "+.pool.ntp.org"
-    - "+.time.edu.cn"
-    - "time.*.com"
-    - "time.*.gov"
-    # Apple ecosystem
-    - "+.push.apple.com"
-    # Home router admin panels (CN-dominant brands)
-    - "tplogin.cn"
-    - "tplinklogin.net"
-    - "+.router.asus.com"
-    - "router.asus.com"
-    - "+.miwifi.com"
-    - "miwifi.com"
-    - "router.miwifi.com"
-    - "melogin.cn"
-    - "falogin.cn"
-    - "tendawifi.com"
-    - "routerlogin.net"
-    - "linksyssmartwifi.com"
-    - "dlinkrouter.local"
-    # NAS
-    - "+.synology.me"
-    - "+.quickconnect.to"
-    - "+.qnap.com"
-    - "+.myqnapcloud.com"
+  - '*.lan'
+  - '*.local'
+  - '*.arpa'
+  - localhost
+  - localhost.localdomain
+  - router.asus.com
+  - routerlogin.net
+  - captive.apple.com
+  - +.push.apple.com
+  - +.icloud.com
+  - +.apple.com
+  - msftconnecttest.com
+  - www.msftconnecttest.com
+  - +.msftncsi.com
+  - connectivitycheck.gstatic.com
+  - connectivitycheck.android.com
+  - clients3.google.com
+  - clients4.google.com
+  - android.clients.google.com
+  - time.*
+  - ntp.*
+  - +.market.xiaomi.com
+  - localhost.ptlogin2.qq.com
+  - Mijia Cloud
+  - +._dns-sd._udp.*
+  - +._services._dns-sd._udp.*
+  - time.apple.com
+  - time.windows.com
+  - +.pool.ntp.org
+  - +.stun.*.*
+  - +.stun.*.*.*
+  - +.srv.nintendo.net
+  - +.stun.playstation.net
+  - +.xboxlive.com
+  - +.battlenet.com
+  - +.battle.net
   default-nameserver:
-    - 223.5.5.5
-    - 119.29.29.29
-    - 1.12.12.12
-  # nameserver order: AliDNS first — it negotiates HTTP/3 properly
-  # against prefer-h3: true (doh.pub is H2-only in 2025 and falls back
-  # silently, so ordering it second means only a graceful degradation).
+  - 223.5.5.5
+  - 119.29.29.29
   nameserver:
-    - https://dns.alidns.com/dns-query
-    - https://doh.pub/dns-query
+  - 223.5.5.5
+  - 119.29.29.29
+  - https://doh.pub/dns-query
+  - https://dns.alidns.com/dns-query
   direct-nameserver:
-    - https://dns.alidns.com/dns-query
-    - https://doh.pub/dns-query
-  # Bootstrap DNS for proxy server hostname resolution. MUST lead with plain
-  # UDP IPs — DoH URLs here create a chicken-and-egg: resolving doh.pub itself
-  # needs proxy-server-nameserver, which needs doh.pub... Plain UDP bypasses
-  # the loop and gets the proxy up before fancy DoH connections are built.
+  - 223.5.5.5
+  - 223.6.6.6
+  - 119.29.29.29
   proxy-server-nameserver:
+  - 223.5.5.5
+  - 119.29.29.29
+  - 1.12.12.12
+  - https://dns.alidns.com/dns-query
+  - https://doh.pub/dns-query
+  nameserver-policy:
+    geosite:private:
     - 223.5.5.5
     - 119.29.29.29
-    - 1.12.12.12
-    - https://dns.alidns.com/dns-query
-    - https://doh.pub/dns-query
-  # fallback: DoH-only (port 443). tls://...:853 is reliably blocked by the
-  # GFW (gfw.report USENIX'23 documents TCP RST on 853). DoH on 443 blends
-  # with normal HTTPS traffic and survives.
+    geosite:cn:
+    - 223.5.5.5
+    - 119.29.29.29
+    +.openai.com:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.cdn.openai.com:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.perplexity.ai:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.poe.com:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.sora.com:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.grok.com:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.x.ai:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.meta.ai:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.huggingface.co:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.replicate.com:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.midjourney.com:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.stability.ai:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.runway.com:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.runwayml.com:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.mistral.ai:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.cohere.com:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.together.ai:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.groq.com:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.fireworks.ai:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.chatgpt.com:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.chat.openai.com:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.operator.chatgpt.com:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.oaistatic.com:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.oaiusercontent.com:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.openrouter.ai:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.cursor.com:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.cursor.sh:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.codeium.com:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.windsurf.com:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.bolt.new:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.v0.dev:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.replit.com:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.replit.dev:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.vercel.ai:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.anthropic.com:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.claude.ai:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.claude.site:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.claudeusercontent.com:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.gemini.google.com:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.bard.google.com:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.notebooklm.google:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.ai.google.dev:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.aistudio.google.com:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.generativelanguage.googleapis.com:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.copilot.microsoft.com:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.sydney.bing.com:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.deepmind.google:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.suno.ai:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.suno.com:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.udio.com:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.devin.ai:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.cognition.ai:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.lovable.dev:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.labs.google:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.lmsys.org:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.dify.ai:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.coze.com:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.character.ai:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.jasper.ai:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.elevenlabs.io:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.heygen.com:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    +.synthesia.io:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
   fallback:
-    - "https://1.1.1.1/dns-query"
-    - "https://dns.google/dns-query"
+  - https://cloudflare-dns.com/dns-query
+  - https://dns.google/dns-query
+  - https://dns.quad9.net/dns-query
   fallback-filter:
     geoip: true
     geoip-code: CN
-    geosite:
-      - gfw
-    # ipcidr: drop DNS-poisoning answers that return reserved ranges.
     ipcidr:
-      - 240.0.0.0/4
-      - 0.0.0.0/32
+    - 240.0.0.0/4
+    - 0.0.0.0/32
+    - 10.0.0.0/8
+    - 172.16.0.0/12
+    - 192.168.0.0/16
+    - 127.0.0.0/8
     domain:
-      - "+.google.com"
-      - "+.facebook.com"
-      - "+.youtube.com"
-      - "+.github.com"
-      - "+.googleapis.com"
-
-proxies:
-
+    - +.google.com
+    - +.gstatic.com
+    - +.googleapis.com
+    - +.ggpht.com
+    - +.youtube.com
+    - +.ytimg.com
+    - +.facebook.com
+    - +.fbcdn.net
+    - +.instagram.com
+    - +.cdninstagram.com
+    - +.twitter.com
+    - +.x.com
+    - +.t.co
+    - +.github.com
+    - +.githubusercontent.com
+    - +.telegram.org
+    - +.telegram.me
+    - +.t.me
+    - +.discord.com
+    - +.discord.gg
+    - +.discordapp.com
+    - +.cloudflare.com
+    - +.wikipedia.org
+    - +.reddit.com
+    - +.openai.com
+    - +.chatgpt.com
+    - +.cdn.openai.com
+    - +.anthropic.com
+    - +.claude.ai
+    - +.linkedin.com
+    - +.licdn.com
+proxies: null
 proxy-groups:
-  - name: "$app_name"
-    type: select
-    proxies:
-      - DIRECT
-
+- name: $app_name
+  type: select
+  proxies:
+  - 悦 · 自动选择
+  - 悦 · 故障转移
+  - 悦 · 🇭🇰 香港聚合
+  - 悦 · 🇹🇼 台湾聚合
+  - 悦 · 🇯🇵 日本聚合
+  - 悦 · 🇰🇷 韩国聚合
+  - 悦 · 🇸🇬 新加坡聚合
+  - 悦 · 🇺🇸 美国聚合
+  - 悦 · 🇬🇧 英国聚合
+  - 悦 · 🇩🇪 德国聚合
+  - 悦 · 🇦🇺 澳大利亚聚合
+  - 悦 · 🇨🇦 加拿大聚合
+  - 悦 · 🌏 更多地区
+  - DIRECT
+- name: YouTube
+  type: select
+  proxies:
+  - $app_name
+  - 悦 · 🇭🇰 香港聚合
+  - 悦 · 🇹🇼 台湾聚合
+  - 悦 · 🇯🇵 日本聚合
+  - 悦 · 🇰🇷 韩国聚合
+  - 悦 · 🇸🇬 新加坡聚合
+  - 悦 · 🇺🇸 美国聚合
+  - 悦 · 🇬🇧 英国聚合
+  - 悦 · 🇩🇪 德国聚合
+- name: 流媒体
+  type: select
+  proxies:
+  - $app_name
+  - 悦 · 🇭🇰 香港聚合
+  - 悦 · 🇹🇼 台湾聚合
+  - 悦 · 🇯🇵 日本聚合
+  - 悦 · 🇰🇷 韩国聚合
+  - 悦 · 🇸🇬 新加坡聚合
+  - 悦 · 🇺🇸 美国聚合
+  - 悦 · 🇬🇧 英国聚合
+  - 悦 · 🇩🇪 德国聚合
+  - 悦 · 🇦🇺 澳大利亚聚合
+  - 悦 · 🇨🇦 加拿大聚合
+- name: TikTok
+  type: select
+  proxies:
+  - 悦 · 🇯🇵 日本聚合
+  - 悦 · 🇺🇸 美国聚合
+  - 悦 · 🇰🇷 韩国聚合
+  - 悦 · 🇹🇼 台湾聚合
+  - 悦 · 🇸🇬 新加坡聚合
+  - 悦 · 🌏 更多地区
+  - $app_name
+- name: AI
+  type: select
+  proxies:
+  - 悦 · 🇹🇼 台湾聚合
+  - 悦 · 🇯🇵 日本聚合
+  - 悦 · 🇺🇸 美国聚合
+  - 悦 · 🇸🇬 新加坡聚合
+  - 悦 · 🇬🇧 英国聚合
+  - 悦 · 🇩🇪 德国聚合
+  - 悦 · 🇰🇷 韩国聚合
+  - 悦 · 🇨🇦 加拿大聚合
+  - 悦 · 🇦🇺 澳大利亚聚合
+  - $app_name
+- name: Google
+  type: select
+  proxies:
+  - $app_name
+  - 悦 · 🇭🇰 香港聚合
+  - 悦 · 🇹🇼 台湾聚合
+  - 悦 · 🇯🇵 日本聚合
+  - 悦 · 🇰🇷 韩国聚合
+  - 悦 · 🇸🇬 新加坡聚合
+  - 悦 · 🇺🇸 美国聚合
+- name: Telegram
+  type: select
+  proxies:
+  - $app_name
+  - 悦 · 🇭🇰 香港聚合
+  - 悦 · 🇸🇬 新加坡聚合
+  - 悦 · 🇺🇸 美国聚合
+  - 悦 · 🇯🇵 日本聚合
+  - 悦 · 🇩🇪 德国聚合
+- name: 社交媒体
+  type: select
+  proxies:
+  - $app_name
+  - 悦 · 🇭🇰 香港聚合
+  - 悦 · 🇹🇼 台湾聚合
+  - 悦 · 🇯🇵 日本聚合
+  - 悦 · 🇰🇷 韩国聚合
+  - 悦 · 🇸🇬 新加坡聚合
+  - 悦 · 🇺🇸 美国聚合
+  - 悦 · 🇬🇧 英国聚合
+- name: GitHub
+  type: select
+  proxies:
+  - $app_name
+  - 悦 · 🇭🇰 香港聚合
+  - 悦 · 🇯🇵 日本聚合
+  - 悦 · 🇸🇬 新加坡聚合
+  - 悦 · 🇺🇸 美国聚合
+  - DIRECT
+- name: 游戏平台
+  type: select
+  proxies:
+  - DIRECT
+  - $app_name
+  - 悦 · 🇭🇰 香港聚合
+  - 悦 · 🇹🇼 台湾聚合
+  - 悦 · 🇯🇵 日本聚合
+  - 悦 · 🇰🇷 韩国聚合
+  - 悦 · 🇸🇬 新加坡聚合
+  - 悦 · 🇺🇸 美国聚合
+- name: 兜底分流
+  type: select
+  proxies:
+  - $app_name
+  - 悦 · 🇭🇰 香港聚合
+  - 悦 · 🇺🇸 美国聚合
+  - 悦 · 🇯🇵 日本聚合
+  - 悦 · 🇸🇬 新加坡聚合
+  - 悦 · 🌏 更多地区
+  - DIRECT
+- name: 悦 · 自动选择
+  type: url-test
+  tolerance: 50
+  include-all: true
+  filter: .
+  url: https://cp.cloudflare.com/generate_204
+  interval: 300
+  lazy: true
+  exclude-filter: (?i)(剩余|到期|官网|流量|套餐|重置|过期|Expire|Traffic|官网|客服|订阅|网址)
+- name: 悦 · 故障转移
+  type: fallback
+  proxies:
+  - 悦 · 🇭🇰 香港聚合
+  - 悦 · 🇹🇼 台湾聚合
+  - 悦 · 🇯🇵 日本聚合
+  - 悦 · 🇸🇬 新加坡聚合
+  - 悦 · 🇺🇸 美国聚合
+  - 悦 · 🇰🇷 韩国聚合
+  url: https://cp.cloudflare.com/generate_204
+  interval: 300
+- name: 悦 · 🇭🇰 香港聚合
+  type: url-test
+  tolerance: 50
+  include-all: true
+  filter: (?i)(港|HK|Hong|Hong.?Kong|🇭🇰)
+  url: https://cp.cloudflare.com/generate_204
+  interval: 300
+  lazy: true
+  exclude-filter: (?i)(剩余|到期|官网|流量|套餐|重置|过期|Expire|Traffic|官网|客服|订阅|网址)
+- name: 悦 · 🇹🇼 台湾聚合
+  type: url-test
+  tolerance: 50
+  include-all: true
+  filter: (?i)(台|TW|Tai|Taiwan|Taipei|🇹🇼)
+  url: https://cp.cloudflare.com/generate_204
+  interval: 300
+  lazy: true
+  exclude-filter: (?i)(剩余|到期|官网|流量|套餐|重置|过期|Expire|Traffic|官网|客服|订阅|网址)
+- name: 悦 · 🇯🇵 日本聚合
+  type: url-test
+  tolerance: 50
+  include-all: true
+  filter: (?i)(日本|JP|Japan|Tokyo|Osaka|东京|大阪|🇯🇵)
+  url: https://cp.cloudflare.com/generate_204
+  interval: 300
+  lazy: true
+  exclude-filter: (?i)(剩余|到期|官网|流量|套餐|重置|过期|Expire|Traffic|官网|客服|订阅|网址)
+- name: 悦 · 🇰🇷 韩国聚合
+  type: url-test
+  tolerance: 50
+  include-all: true
+  filter: (?i)(韩|KR|Korea|Seoul|首尔|🇰🇷)
+  url: https://cp.cloudflare.com/generate_204
+  interval: 300
+  lazy: true
+  exclude-filter: (?i)(剩余|到期|官网|流量|套餐|重置|过期|Expire|Traffic|官网|客服|订阅|网址)
+- name: 悦 · 🇸🇬 新加坡聚合
+  type: url-test
+  tolerance: 50
+  include-all: true
+  filter: (?i)(新加坡|狮城|SG|Singapore|🇸🇬)
+  url: https://cp.cloudflare.com/generate_204
+  interval: 300
+  lazy: true
+  exclude-filter: (?i)(剩余|到期|官网|流量|套餐|重置|过期|Expire|Traffic|官网|客服|订阅|网址)
+- name: 悦 · 🇺🇸 美国聚合
+  type: url-test
+  tolerance: 50
+  include-all: true
+  filter: (?i)(美|US|USA|United.?States|America|Los.?Angeles|San.?Jose|Seattle|Chicago|Dallas|🇺🇸)
+  url: https://cp.cloudflare.com/generate_204
+  interval: 300
+  lazy: true
+  exclude-filter: (?i)(剩余|到期|官网|流量|套餐|重置|过期|Expire|Traffic|官网|客服|订阅|网址)
+- name: 悦 · 🇬🇧 英国聚合
+  type: url-test
+  tolerance: 50
+  include-all: true
+  filter: (?i)(英|UK|GB|Britain|London|伦敦|🇬🇧)
+  url: https://cp.cloudflare.com/generate_204
+  interval: 300
+  lazy: true
+  exclude-filter: (?i)(剩余|到期|官网|流量|套餐|重置|过期|Expire|Traffic|官网|客服|订阅|网址)
+- name: 悦 · 🇩🇪 德国聚合
+  type: url-test
+  tolerance: 50
+  include-all: true
+  filter: (?i)(德|DE|Germany|Frankfurt|法兰克福|柏林|🇩🇪)
+  url: https://cp.cloudflare.com/generate_204
+  interval: 300
+  lazy: true
+  exclude-filter: (?i)(剩余|到期|官网|流量|套餐|重置|过期|Expire|Traffic|官网|客服|订阅|网址)
+- name: 悦 · 🇦🇺 澳大利亚聚合
+  type: url-test
+  tolerance: 50
+  include-all: true
+  filter: (?i)(澳大利亚|澳洲|AU|Australia|Sydney|Melbourne|悉尼|墨尔本|🇦🇺)
+  url: https://cp.cloudflare.com/generate_204
+  interval: 300
+  lazy: true
+  exclude-filter: (?i)(剩余|到期|官网|流量|套餐|重置|过期|Expire|Traffic|官网|客服|订阅|网址)
+- name: 悦 · 🇨🇦 加拿大聚合
+  type: url-test
+  tolerance: 50
+  include-all: true
+  filter: (?i)(加拿大|CA|Canada|Toronto|Vancouver|Montreal|多伦多|温哥华|蒙特利尔|🇨🇦)
+  url: https://cp.cloudflare.com/generate_204
+  interval: 300
+  lazy: true
+  exclude-filter: (?i)(剩余|到期|官网|流量|套餐|重置|过期|Expire|Traffic|官网|客服|订阅|网址)
+- name: 悦 · 🌏 更多地区
+  type: select
+  include-all: true
+  filter: .
+  exclude-filter: (?i)(剩余|到期|官网|流量|套餐|重置|过期|Expire|Traffic|官网|客服|订阅|网址)
+rule-providers:
+  ads:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/category-ads-all.mrs
+    path: ./ruleset/ads.mrs
+    interval: 86400
+  ai:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/category-ai-!cn.mrs
+    path: ./ruleset/ai.mrs
+    interval: 86400
+  openai:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/openai.mrs
+    path: ./ruleset/openai.mrs
+    interval: 86400
+  anthropic:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/anthropic.mrs
+    path: ./ruleset/anthropic.mrs
+    interval: 86400
+  perplexity:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/perplexity.mrs
+    path: ./ruleset/perplexity.mrs
+    interval: 86400
+  deepseek:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/deepseek.mrs
+    path: ./ruleset/deepseek.mrs
+    interval: 86400
+  apple:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/apple.mrs
+    path: ./ruleset/apple.mrs
+    interval: 86400
+  microsoft:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/microsoft.mrs
+    path: ./ruleset/microsoft.mrs
+    interval: 86400
+  bing:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/bing.mrs
+    path: ./ruleset/bing.mrs
+    interval: 86400
+  amazon:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/amazon.mrs
+    path: ./ruleset/amazon.mrs
+    interval: 86400
+  youtube:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/youtube.mrs
+    path: ./ruleset/youtube.mrs
+    interval: 86400
+  netflix:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/netflix.mrs
+    path: ./ruleset/netflix.mrs
+    interval: 86400
+  disney:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/disney.mrs
+    path: ./ruleset/disney.mrs
+    interval: 86400
+  spotify:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/spotify.mrs
+    path: ./ruleset/spotify.mrs
+    interval: 86400
+  tiktok:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/tiktok.mrs
+    path: ./ruleset/tiktok.mrs
+    interval: 86400
+  twitch:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/twitch.mrs
+    path: ./ruleset/twitch.mrs
+    interval: 86400
+  bahamut:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/bahamut.mrs
+    path: ./ruleset/bahamut.mrs
+    interval: 86400
+  primevideo:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/primevideo.mrs
+    path: ./ruleset/primevideo.mrs
+    interval: 86400
+  hbo:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/hbo.mrs
+    path: ./ruleset/hbo.mrs
+    interval: 86400
+  bilibili:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/bilibili.mrs
+    path: ./ruleset/bilibili.mrs
+    interval: 86400
+  globalmedia:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/category-media.mrs
+    path: ./ruleset/globalmedia.mrs
+    interval: 86400
+  chinamedia:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/category-media-cn.mrs
+    path: ./ruleset/chinamedia.mrs
+    interval: 86400
+  telegram:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/telegram.mrs
+    path: ./ruleset/telegram.mrs
+    interval: 86400
+  twitter:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/twitter.mrs
+    path: ./ruleset/twitter.mrs
+    interval: 86400
+  facebook:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/facebook.mrs
+    path: ./ruleset/facebook.mrs
+    interval: 86400
+  instagram:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/instagram.mrs
+    path: ./ruleset/instagram.mrs
+    interval: 86400
+  discord:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/discord.mrs
+    path: ./ruleset/discord.mrs
+    interval: 86400
+  whatsapp:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/whatsapp.mrs
+    path: ./ruleset/whatsapp.mrs
+    interval: 86400
+  line:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/line.mrs
+    path: ./ruleset/line.mrs
+    interval: 86400
+  reddit:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/reddit.mrs
+    path: ./ruleset/reddit.mrs
+    interval: 86400
+  linkedin:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/linkedin.mrs
+    path: ./ruleset/linkedin.mrs
+    interval: 86400
+  google:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/google.mrs
+    path: ./ruleset/google.mrs
+    interval: 86400
+  github:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/github.mrs
+    path: ./ruleset/github.mrs
+    interval: 86400
+  steam:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/steam.mrs
+    path: ./ruleset/steam.mrs
+    interval: 86400
+  epic:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/epicgames.mrs
+    path: ./ruleset/epic.mrs
+    interval: 86400
+  playstation:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/playstation.mrs
+    path: ./ruleset/playstation.mrs
+    interval: 86400
+  xbox:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/xbox.mrs
+    path: ./ruleset/xbox.mrs
+    interval: 86400
+  nintendo:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/nintendo.mrs
+    path: ./ruleset/nintendo.mrs
+    interval: 86400
+  game:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/category-games.mrs
+    path: ./ruleset/game.mrs
+    interval: 86400
+  proxy:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/geolocation-!cn.mrs
+    path: ./ruleset/proxy.mrs
+    interval: 86400
+  china:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/cn.mrs
+    path: ./ruleset/china.mrs
+    interval: 86400
+  private:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/private.mrs
+    path: ./ruleset/private.mrs
+    interval: 86400
+  privateip:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geoip/private.mrs
+    path: ./ruleset/privateip.mrs
+    interval: 86400
+  chinaips:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geoip/cn.mrs
+    path: ./ruleset/chinaips.mrs
+    interval: 86400
+  googleip:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geoip/google.mrs
+    path: ./ruleset/googleip.mrs
+    interval: 86400
+  telegramip:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geoip/telegram.mrs
+    path: ./ruleset/telegramip.mrs
+    interval: 86400
+  netflixip:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geoip/netflix.mrs
+    path: ./ruleset/netflixip.mrs
+    interval: 86400
+  twitterip:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geoip/twitter.mrs
+    path: ./ruleset/twitterip.mrs
+    interval: 86400
+  facebookip:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geoip/facebook.mrs
+    path: ./ruleset/facebookip.mrs
+    interval: 86400
+  claude:
+    type: http
+    behavior: classical
+    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Claude/Claude.yaml
+    path: ./ruleset/claude.yaml
+    interval: 86400
+  gemini:
+    type: http
+    behavior: classical
+    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Gemini/Gemini.yaml
+    path: ./ruleset/gemini.yaml
+    interval: 86400
+  copilot:
+    type: http
+    behavior: classical
+    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Copilot/Copilot.yaml
+    path: ./ruleset/copilot.yaml
+    interval: 86400
+  lan:
+    type: http
+    behavior: classical
+    url: https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Lan/Lan.yaml
+    path: ./ruleset/lan.yaml
+    interval: 86400
 rules:
-  - MATCH,DIRECT
+- RULE-SET,private,DIRECT
+- RULE-SET,privateip,DIRECT,no-resolve
+- RULE-SET,lan,DIRECT
+- RULE-SET,ads,REJECT
+- RULE-SET,deepseek,DIRECT
+- DOMAIN-SUFFIX,deepseek.com,DIRECT
+- RULE-SET,ai,AI
+- RULE-SET,openai,AI
+- RULE-SET,anthropic,AI
+- RULE-SET,perplexity,AI
+- RULE-SET,claude,AI
+- RULE-SET,gemini,AI
+- RULE-SET,copilot,AI
+- DOMAIN-SUFFIX,openai.com,AI
+- DOMAIN-SUFFIX,cdn.openai.com,AI
+- DOMAIN-SUFFIX,perplexity.ai,AI
+- DOMAIN-SUFFIX,poe.com,AI
+- DOMAIN-SUFFIX,sora.com,AI
+- DOMAIN-SUFFIX,grok.com,AI
+- DOMAIN-SUFFIX,x.ai,AI
+- DOMAIN-SUFFIX,meta.ai,AI
+- DOMAIN-SUFFIX,huggingface.co,AI
+- DOMAIN-SUFFIX,replicate.com,AI
+- DOMAIN-SUFFIX,midjourney.com,AI
+- DOMAIN-SUFFIX,stability.ai,AI
+- DOMAIN-SUFFIX,runway.com,AI
+- DOMAIN-SUFFIX,runwayml.com,AI
+- DOMAIN-SUFFIX,mistral.ai,AI
+- DOMAIN-SUFFIX,cohere.com,AI
+- DOMAIN-SUFFIX,together.ai,AI
+- DOMAIN-SUFFIX,groq.com,AI
+- DOMAIN-SUFFIX,fireworks.ai,AI
+- DOMAIN-SUFFIX,chatgpt.com,AI
+- DOMAIN-SUFFIX,chat.openai.com,AI
+- DOMAIN-SUFFIX,operator.chatgpt.com,AI
+- DOMAIN-SUFFIX,oaistatic.com,AI
+- DOMAIN-SUFFIX,oaiusercontent.com,AI
+- DOMAIN-SUFFIX,openrouter.ai,AI
+- DOMAIN-SUFFIX,cursor.com,AI
+- DOMAIN-SUFFIX,cursor.sh,AI
+- DOMAIN-SUFFIX,codeium.com,AI
+- DOMAIN-SUFFIX,windsurf.com,AI
+- DOMAIN-SUFFIX,bolt.new,AI
+- DOMAIN-SUFFIX,v0.dev,AI
+- DOMAIN-SUFFIX,replit.com,AI
+- DOMAIN-SUFFIX,replit.dev,AI
+- DOMAIN-SUFFIX,vercel.ai,AI
+- DOMAIN-SUFFIX,anthropic.com,AI
+- DOMAIN-SUFFIX,claude.ai,AI
+- DOMAIN-SUFFIX,claude.site,AI
+- DOMAIN-SUFFIX,claudeusercontent.com,AI
+- DOMAIN-SUFFIX,gemini.google.com,AI
+- DOMAIN-SUFFIX,bard.google.com,AI
+- DOMAIN-SUFFIX,notebooklm.google,AI
+- DOMAIN-SUFFIX,ai.google.dev,AI
+- DOMAIN-SUFFIX,aistudio.google.com,AI
+- DOMAIN-SUFFIX,generativelanguage.googleapis.com,AI
+- DOMAIN-SUFFIX,copilot.microsoft.com,AI
+- DOMAIN-SUFFIX,sydney.bing.com,AI
+- DOMAIN-SUFFIX,deepmind.google,AI
+- DOMAIN-SUFFIX,suno.ai,AI
+- DOMAIN-SUFFIX,suno.com,AI
+- DOMAIN-SUFFIX,udio.com,AI
+- DOMAIN-SUFFIX,devin.ai,AI
+- DOMAIN-SUFFIX,cognition.ai,AI
+- DOMAIN-SUFFIX,lovable.dev,AI
+- DOMAIN-SUFFIX,labs.google,AI
+- DOMAIN-SUFFIX,lmsys.org,AI
+- DOMAIN-SUFFIX,dify.ai,AI
+- DOMAIN-SUFFIX,coze.com,AI
+- DOMAIN-SUFFIX,character.ai,AI
+- DOMAIN-SUFFIX,jasper.ai,AI
+- DOMAIN-SUFFIX,elevenlabs.io,AI
+- DOMAIN-SUFFIX,heygen.com,AI
+- DOMAIN-SUFFIX,synthesia.io,AI
+- RULE-SET,bing,Google
+- RULE-SET,apple,DIRECT
+- RULE-SET,microsoft,$app_name
+- RULE-SET,youtube,YouTube
+- RULE-SET,netflix,流媒体
+- RULE-SET,disney,流媒体
+- RULE-SET,spotify,流媒体
+- RULE-SET,twitch,流媒体
+- RULE-SET,bahamut,流媒体
+- RULE-SET,primevideo,流媒体
+- RULE-SET,hbo,流媒体
+- DOMAIN-KEYWORD,emby,流媒体
+- DOMAIN-KEYWORD,jellyfin,流媒体
+- RULE-SET,bilibili,DIRECT
+- RULE-SET,chinamedia,DIRECT
+- RULE-SET,globalmedia,流媒体
+- RULE-SET,tiktok,TikTok
+- RULE-SET,google,Google
+- RULE-SET,telegram,Telegram
+- RULE-SET,twitter,社交媒体
+- RULE-SET,facebook,社交媒体
+- RULE-SET,instagram,社交媒体
+- RULE-SET,discord,社交媒体
+- RULE-SET,whatsapp,社交媒体
+- RULE-SET,line,社交媒体
+- RULE-SET,reddit,社交媒体
+- RULE-SET,linkedin,社交媒体
+- DOMAIN-SUFFIX,threads.net,社交媒体
+- DOMAIN-SUFFIX,bsky.app,社交媒体
+- DOMAIN-SUFFIX,bsky.social,社交媒体
+- DOMAIN-KEYWORD,mastodon,社交媒体
+- DOMAIN-SUFFIX,misskey.io,社交媒体
+- RULE-SET,github,GitHub
+- RULE-SET,steam,游戏平台
+- RULE-SET,epic,游戏平台
+- RULE-SET,playstation,游戏平台
+- RULE-SET,xbox,游戏平台
+- RULE-SET,nintendo,游戏平台
+- RULE-SET,game,游戏平台
+- DOMAIN-SUFFIX,zoom.us,$app_name
+- DOMAIN-SUFFIX,zoom.com,$app_name
+- DOMAIN-SUFFIX,zoomgov.com,$app_name
+- DOMAIN-SUFFIX,slack.com,$app_name
+- DOMAIN-SUFFIX,slack-edge.com,$app_name
+- DOMAIN-SUFFIX,notion.so,$app_name
+- DOMAIN-SUFFIX,notion-static.com,$app_name
+- DOMAIN-SUFFIX,figma.com,$app_name
+- DOMAIN-SUFFIX,atlassian.com,$app_name
+- DOMAIN-SUFFIX,atlassian.net,$app_name
+- DOMAIN-SUFFIX,jira.com,$app_name
+- DOMAIN-SUFFIX,trello.com,$app_name
+- DOMAIN-SUFFIX,salesforce.com,$app_name
+- DOMAIN-SUFFIX,force.com,$app_name
+- RULE-SET,amazon,兜底分流
+- DOMAIN-SUFFIX,shopify.com,兜底分流
+- DOMAIN-SUFFIX,myshopify.com,兜底分流
+- DOMAIN-SUFFIX,paypal.com,兜底分流
+- DOMAIN-SUFFIX,stripe.com,兜底分流
+- RULE-SET,telegramip,Telegram,no-resolve
+- RULE-SET,googleip,Google,no-resolve
+- RULE-SET,netflixip,流媒体,no-resolve
+- RULE-SET,twitterip,社交媒体,no-resolve
+- RULE-SET,facebookip,社交媒体,no-resolve
+- RULE-SET,proxy,兜底分流
+- RULE-SET,china,DIRECT
+- RULE-SET,chinaips,DIRECT,no-resolve
+- GEOIP,CN,DIRECT,no-resolve
+- MATCH,兜底分流
