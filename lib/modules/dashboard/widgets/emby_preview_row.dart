@@ -1,19 +1,22 @@
+import 'dart:async';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../i18n/app_strings.dart';
+import '../../../core/providers/core_provider.dart';
+import '../../../core/storage/settings_service.dart';
 import '../../../domain/emby/emby_info_entity.dart';
+import '../../../i18n/app_strings.dart';
 import '../../../modules/emby/emby_client.dart';
 import '../../../modules/emby/emby_detail_page.dart';
 import '../../../modules/emby/emby_media_page.dart';
 import '../../../modules/emby/emby_providers.dart';
 import '../../../modules/emby/emby_web_page.dart';
-import '../../../core/providers/core_provider.dart';
 import '../../../shared/app_notifier.dart';
 import '../../../shared/telemetry.dart';
-import '../../../theme.dart';
 import '../../../shared/widgets/empty_state.dart';
+import '../../../theme.dart';
 import '../providers/emby_preview_provider.dart';
 
 /// 悦视频推荐条 — 接入 Emby 真实数据。
@@ -116,6 +119,13 @@ class EmbyPreviewRow extends ConsumerWidget {
       }
     }
     if (!context.mounted) return;
+    // Flip the dashboard preview gate on first explicit Emby open. Subsequent
+    // home-screen mounts will then load posters as the user expects, but a
+    // user who never taps Emby never triggers the 2–5 concurrent fetches.
+    // Fire-and-forget: invalidate immediately so the next dashboard frame
+    // renders posters; the disk write doesn't gate navigation.
+    unawaited(SettingsService.set('emby_preview_unlocked', true));
+    ref.invalidate(embyPreviewUnlockedProvider);
     Telemetry.event(
       TelemetryEvents.embyOpen,
       props: {'mode': emby.hasNativeAccess ? 'native' : 'web'},
@@ -298,6 +308,15 @@ class _PosterRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Until the user has explicitly opened Emby once on this device, show
+    // tappable placeholder tiles instead of fetching from their server. The
+    // gate flips on inside `_openLibrary` so a single tap unlocks all future
+    // home-screen previews. See `embyPreviewUnlockedProvider` for rationale.
+    final unlocked = ref.watch(embyPreviewUnlockedProvider).value ?? false;
+    if (!unlocked) {
+      return _buildPlaceholderTiles(context, isDark, onTapLibrary);
+    }
+
     final previewAsync = ref.watch(embyPreviewProvider(source));
 
     return previewAsync.when(
