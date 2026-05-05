@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/storage/auth_token_service.dart';
@@ -50,25 +49,14 @@ final embyProvider = FutureProvider<EmbyInfo?>((ref) async {
     }
   }
 
-  // Cache hit → return immediately, refresh in the background. The
-  // refresh result lands via `ref.invalidateSelf` so the UI re-paints
-  // with fresh data even when the cached value is still valid.
+  // Cache hit (and not stale) → return cached value, do NOT silently refresh.
+  // The previous fire-and-forget refresh fired *every* dashboard mount and
+  // contended with foreground traffic (YouTube buffering observed during the
+  // refresh window). We trust the 24h TTL: stale entries fall through to
+  // `fetchAndCache()` below, and login/logout already invalidate the cache.
   final cached = await auth.getCachedEmbyInfo();
   final stale = await auth.isEmbyInfoStale();
   if (cached != null && !stale) {
-    // Fire-and-forget background refresh. Errors are swallowed — the
-    // cached value is good enough for display; the next foreground
-    // call (or logout/login) gets another shot.
-    () async {
-      try {
-        final fresh = await fetchAndCache();
-        if (fresh != null && fresh.toJson().toString() != cached.toJson().toString()) {
-          ref.invalidateSelf();
-        }
-      } catch (e) {
-        debugPrint('[embyProvider] background refresh failed: $e');
-      }
-    }();
     return cached;
   }
 

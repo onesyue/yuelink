@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/storage/settings_service.dart';
 import '../../emby/emby_client.dart';
 import '../../emby/emby_providers.dart';
 import '../home_content_provider.dart';
@@ -79,9 +80,20 @@ class EmbyPreviewItem {
 ///   1. `Filters=IsFavorite` + typed + `SortBy=CommunityRating,Descending`
 ///   2. `Filters=IsFavorite` + untyped (STRM servers)
 ///   3–4. If still empty → fall through to the [recent] two-step chain
+///
+/// **Activation gate**: returns `[]` until the user has opened the Emby
+/// library at least once (tracked by [embyPreviewUnlockedProvider]). Without
+/// this gate the dashboard issues 2–5 concurrent HTTPS requests to the user's
+/// Emby server *every time* the home screen mounts — even for users who
+/// don't watch on this device — and those requests share the proxy node with
+/// foreground traffic (e.g. YouTube streaming buffers visibly mid-load). The
+/// gate flips on inside `_openLibrary` in `emby_preview_row.dart`.
 final embyPreviewProvider =
     FutureProvider.family<List<EmbyPreviewItem>, EmbyPreviewSource>(
         (ref, source) async {
+  final unlocked = await ref.watch(embyPreviewUnlockedProvider.future);
+  if (!unlocked) return const [];
+
   final emby = await ref.watch(embyProvider.future);
 
   // No credentials → nothing to show; widget handles this via embyProvider
@@ -198,3 +210,20 @@ List<EmbyPreviewItem> _parseItems(Map<String, dynamic> data) {
       .map((e) => EmbyPreviewItem.fromJson(e as Map<String, dynamic>))
       .toList();
 }
+
+// ---------------------------------------------------------------------------
+// Activation gate — flipped on by `_openLibrary` in `emby_preview_row.dart`.
+// ---------------------------------------------------------------------------
+
+/// Whether the dashboard Emby preview row is allowed to fetch from the user's
+/// Emby server. Stays `false` until the user explicitly opens the Emby library
+/// (full page or a poster). Persisted via SettingsService so the gate survives
+/// across launches — once a user has shown intent to watch on this device,
+/// previews load on every subsequent home-screen open as before.
+///
+/// Flipped on inside `_openLibrary` in `emby_preview_row.dart` via
+/// `SettingsService.set('emby_preview_unlocked', true)` followed by
+/// `ref.invalidate(embyPreviewUnlockedProvider)`.
+final embyPreviewUnlockedProvider = FutureProvider<bool>((ref) async {
+  return await SettingsService.get<bool>('emby_preview_unlocked') ?? false;
+});

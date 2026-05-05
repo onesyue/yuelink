@@ -142,6 +142,14 @@ class Telemetry {
   static final List<Map<String, dynamic>> _recentRing = [];
   static Timer? _flushTimer;
 
+  /// Wallclock of the last failed flush. Opportunistic flushes triggered by
+  /// `event()` exceeding [_softMaxBuffer] are suppressed for a cooldown
+  /// window after a failure so we don't burn the proxy with back-to-back
+  /// 5–10 s timeouts when telemetry endpoint is unreachable. The 60 s
+  /// periodic timer still fires regardless — that's the recovery path.
+  static DateTime? _lastFlushFailedAt;
+  static const _opportunisticCooldown = Duration(seconds: 90);
+
   static bool _enabled = false;
   static String _platform = '';
   static String _osVersion = '';
@@ -225,9 +233,16 @@ class Telemetry {
       _droppedCount++;
     }
 
-    // Opportunistic early flush once we cross the soft cap.
+    // Opportunistic early flush once we cross the soft cap. Suppressed
+    // briefly after a failure so a flapping endpoint doesn't push the buffer
+    // past 50 → fail → past 50 → fail in a tight loop, each iteration
+    // burning a 5–10 s HTTPS attempt that travels through the user's proxy.
     if (_buffer.length + _priorityBuffer.length >= _softMaxBuffer) {
-      unawaited(flush());
+      final lastFail = _lastFlushFailedAt;
+      if (lastFail == null ||
+          DateTime.now().difference(lastFail) > _opportunisticCooldown) {
+        unawaited(flush());
+      }
     }
   }
 
@@ -282,8 +297,10 @@ class Telemetry {
       req.headers.set('Content-Type', 'application/json');
       req.write(jsonEncode({'events': events}));
       await req.close().timeout(_httpTimeout);
+      _lastFlushFailedAt = null;
     } catch (e) {
       debugPrint('[Telemetry] flush failed: $e');
+      _lastFlushFailedAt = DateTime.now();
       // Best-effort re-queue of priority events. Keep lossy for normal events
       // (would otherwise grow unbounded during prolonged offline windows).
       _priorityBuffer.insertAll(
