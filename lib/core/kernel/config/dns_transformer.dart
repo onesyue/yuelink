@@ -138,6 +138,15 @@ class DnsTransformer {
           '    - https://dns.alidns.com/dns-query\n'
           '    - https://doh.pub/dns-query\n'
           '  nameserver-policy:\n'
+          // Catch-all for non-CN domains: routes them to foreign DoH so
+          // CN providers (AliDNS / TencentDNS) never see queries for
+          // foreign hostnames the user accesses. Without this, the
+          // default `nameserver` chain (CN DoH) is hit for any foreign
+          // domain not covered by a more-specific rule, leaking the
+          // user's full foreign-traffic profile to CN DNS providers.
+          // mihomo policy priority: specific suffix > geosite group, so
+          // the apple/icloud overrides below still win.
+          '    "geosite:geolocation-!cn": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]\n'
           '    "+.apple.com": ["https://dns.alidns.com/dns-query", "https://doh.pub/dns-query"]\n'
           '    "+.icloud.com": ["https://dns.alidns.com/dns-query", "https://doh.pub/dns-query"]\n'
           // fallback: DoH only. `tls://...:853` is reliably blocked by
@@ -261,12 +270,63 @@ class DnsTransformer {
             '$indent'
             'nameserver-policy:\n'
             '$entryIndent'
+            '"geosite:geolocation-!cn": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]\n'
+            '$entryIndent'
             '"+.apple.com": ["https://dns.alidns.com/dns-query", "https://doh.pub/dns-query"]\n'
             '$entryIndent'
             '"+.icloud.com": ["https://dns.alidns.com/dns-query", "https://doh.pub/dns-query"]\n';
         config =
             config.substring(0, dnsEnd) + policy + config.substring(dnsEnd);
         dnsEnd += policy.length;
+        dnsSection = config.substring(range.start, dnsEnd);
+      } else if (!dnsSection.contains('geosite:geolocation-!cn')) {
+        // Subscription already shipped its own nameserver-policy but it
+        // doesn't cover non-CN domains as a catch-all. Splice the
+        // geolocation-!cn rule in so CN DoH stops seeing foreign-domain
+        // lookups. Handles both flow style (`policy: { 'a': [...] }`)
+        // and block style (`policy:` + indented children).
+        final flowMatch = RegExp(
+          r'nameserver-policy:\s*\{',
+        ).firstMatch(dnsSection);
+        if (flowMatch != null) {
+          final insertOffset = range.start + flowMatch.end;
+          const entry =
+              " 'geosite:geolocation-!cn': ['https://cloudflare-dns.com/dns-query', 'https://dns.google/dns-query'],";
+          config =
+              config.substring(0, insertOffset) +
+              entry +
+              config.substring(insertOffset);
+          dnsEnd += entry.length;
+          dnsSection = config.substring(range.start, dnsEnd);
+        } else {
+          final blockMatch = RegExp(
+            r'nameserver-policy:[ \t]*\n',
+          ).firstMatch(dnsSection);
+          if (blockMatch != null) {
+            final insertOffset = range.start + blockMatch.end;
+            // Detect child indent by peeking at the next non-empty line
+            // under nameserver-policy. Subscriptions in the wild use 2,
+            // 4 or 6 spaces — never trust a fixed value.
+            final remainder = config.substring(insertOffset);
+            final childIndentMatch = RegExp(
+              r'^([ \t]+)\S',
+            ).firstMatch(remainder);
+            final childIndent = childIndentMatch?.group(1) ?? entryIndent;
+            final entry =
+                '$childIndent'
+                '"geosite:geolocation-!cn":\n'
+                '$childIndent'
+                '- https://cloudflare-dns.com/dns-query\n'
+                '$childIndent'
+                '- https://dns.google/dns-query\n';
+            config =
+                config.substring(0, insertOffset) +
+                entry +
+                config.substring(insertOffset);
+            dnsEnd += entry.length;
+            dnsSection = config.substring(range.start, dnsEnd);
+          }
+        }
       }
 
       if (!dnsSection.contains('direct-nameserver:')) {
