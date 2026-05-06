@@ -35,7 +35,18 @@ class StaticSectionsTransformer {
         '    - "+.v2ex.com"\n'
         '  skip-domain:\n'
         '    - "Mijia Cloud"\n'
-        '    - "+.push.apple.com"\n';
+        '    - "+.push.apple.com"\n'
+        // Cloudflare ECH outer SNI: every cf-fronted site (ChatGPT,
+        // Claude, GitHub, Discord, …) shares "cloudflare-ech.com" as the
+        // outer SNI when the browser enables Encrypted Client Hello.
+        // Without skip-domain, sniffer overrides metadata.host to
+        // cloudflare-ech.com and routes every cf-backed connection to
+        // whatever rule that bare domain matches (usually fallback) —
+        // breaking ChatGPT/Claude on TUN whenever the browser has
+        // Secure DNS / ECH on. Skipping makes mihomo fall back to the
+        // fake-ip reverse-lookup hostname (the real business domain),
+        // which already has the correct rule.
+        '    - "cloudflare-ech.com"\n';
   }
 
   /// Ensure geodata settings so GEOIP/GEOSITE rules resolve correctly.

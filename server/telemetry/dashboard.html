@@ -272,7 +272,7 @@
       <h2>Node health — real user metrics</h2>
       <table>
         <thead><tr>
-          <th>FP</th><th>Type</th><th>Region</th>
+          <th>FP</th><th>XB</th><th>Type</th><th>Region</th><th>Path</th><th>ASN</th><th>Carrier</th>
           <th class="num">Users</th>
           <th class="num">Samples</th>
           <th class="num">Transport</th>
@@ -599,10 +599,18 @@ async function refreshNodes() {
     if (chatgpt.attempts) aiBits.push(`ChatGPT ${(chatgpt.success_rate * 100).toFixed(0)}%`);
     const state = n.state || (n.insufficient_data ? 'insufficient' : 'unknown');
     const cls = stateClass(state, n.insufficient_data);
+    const path = n.top_path_class || '—';
+    const asn = n.top_client_asn || '—';
+    const xb = n.top_xb_server_id || '—';
+    const carrier = n.top_client_carrier || '—';
     return `<tr>
       <td><code>${n.fp.substring(0, 8)}…</code></td>
+      <td class="num">${xb}</td>
       <td><code>${n.type || '?'}</code></td>
       <td>${n.region || '?'}</td>
+      <td><code>${path}</code></td>
+      <td class="num">${asn}</td>
+      <td><code>${carrier}</code></td>
       <td class="num">${n.users}</td>
       <td class="num">${n.samples ?? '—'}</td>
       <td class="num">${transportRate}</td>
@@ -611,7 +619,7 @@ async function refreshNodes() {
       <td>${aiBits.join(' · ') || '—'}</td>
       <td class="num"><span class="node-score ${cls}" title="${n.state_reason || ''}">${state}</span></td>
     </tr>`;
-  }).join('') || '<tr><td colspan="9" style="color:var(--muted)">no node data yet — client needs to send node_probe_result_v1 or legacy node_urltest events</td></tr>';
+  }).join('') || '<tr><td colspan="13" style="color:var(--muted)">no node data yet — client needs to send node_probe_result_v1 or legacy node_urltest events</td></tr>';
 }
 
 function stateClass(state, insufficient) {

@@ -1015,13 +1015,41 @@ def _normalized_probe_error(target: str, ok: bool, status_code, error_class):
     return "unknown"
 
 
+def _counter_bump(counter: dict, value) -> None:
+    if value is None:
+        return
+    key = str(value).strip()
+    if not key:
+        return
+    counter[key] = counter.get(key, 0) + 1
+
+
+def _counter_top(counter: dict):
+    if not counter:
+        return None
+    return max(counter, key=counter.get)
+
+
+def _int_or_none(value):
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    s = str(value).strip()
+    return int(s) if s.isdigit() else None
+
+
 def _aggregate_v1_node_probe_rows(rows) -> dict:
     """Pure-Python aggregator for `events.event = node_probe_result_v1`.
 
     Input row shape (extracted by SQL `SELECT props->>'fp' AS fp, …`):
       fp, type, target, ok (bool), latency_ms (int|None),
       status_code (int|None), error_class (str|None),
-      connection_mode (str|None), core_version (str|None), client_id
+      connection_mode (str|None), core_version (str|None), client_id,
+      xb_server_id, path_class, client_asn, client_cc,
+      client_region_coarse.
 
     Output: `{fp: {type, users(set), samples, per_target: {target: ...}}}`.
 
@@ -1037,11 +1065,23 @@ def _aggregate_v1_node_probe_rows(rows) -> dict:
             "users": set(),
             "samples": 0,
             "per_target": {},
+            "xb_server_ids": {},
+            "path_classes": {},
+            "client_asns": {},
+            "client_countries": {},
+            "client_regions": {},
+            "client_carriers": {},
         })
         node["samples"] += 1
         cid = r.get("client_id")
         if cid:
             node["users"].add(cid)
+        _counter_bump(node["xb_server_ids"], _int_or_none(r.get("xb_server_id")))
+        _counter_bump(node["path_classes"], r.get("path_class"))
+        _counter_bump(node["client_asns"], _int_or_none(r.get("client_asn")))
+        _counter_bump(node["client_countries"], r.get("client_cc"))
+        _counter_bump(node["client_regions"], r.get("client_region_coarse"))
+        _counter_bump(node["client_carriers"], r.get("client_carrier"))
         target = (r.get("target") or "other")
         if target not in PROBE_TARGETS:
             target = "other"
@@ -1182,6 +1222,16 @@ def _shape_node(fp: str, agg: dict, region, min_samples: int) -> dict:
         "fp": fp,
         "type": agg["type"],
         "region": region,
+        "top_xb_server_id": _int_or_none(_counter_top(agg.get("xb_server_ids") or {})),
+        "xb_server_ids": agg.get("xb_server_ids") or None,
+        "top_path_class": _counter_top(agg.get("path_classes") or {}),
+        "path_classes": agg.get("path_classes") or None,
+        "top_client_asn": _int_or_none(_counter_top(agg.get("client_asns") or {})),
+        "client_asns": agg.get("client_asns") or None,
+        "client_countries": agg.get("client_countries") or None,
+        "client_regions": agg.get("client_regions") or None,
+        "top_client_carrier": _counter_top(agg.get("client_carriers") or {}),
+        "client_carriers": agg.get("client_carriers") or None,
         "state": state,
         "state_reason": state_reason,
         "requires_human": state in ("quarantine_candidate", "quarantined"),
@@ -1197,14 +1247,35 @@ def _node_rollup(nodes: list) -> dict:
     Claude success rate' separate from 'transport success rate' instead
     of conflating the two."""
     by_target: dict = {}
+    by_path_class: dict = {}
+    by_client_asn: dict = {}
+    by_client_carrier: dict = {}
     for n in nodes:
         for target, t in n.get("per_target", {}).items():
             r = by_target.setdefault(target, {"attempts": 0, "ok": 0})
             r["attempts"] += t.get("attempts", 0)
             r["ok"] += t.get("ok", 0)
+        for path_class, samples in (n.get("path_classes") or {}).items():
+            r = by_path_class.setdefault(path_class, {"nodes": 0, "samples": 0})
+            r["nodes"] += 1
+            r["samples"] += samples
+        for asn, samples in (n.get("client_asns") or {}).items():
+            r = by_client_asn.setdefault(asn, {"nodes": 0, "samples": 0})
+            r["nodes"] += 1
+            r["samples"] += samples
+        for carrier, samples in (n.get("client_carriers") or {}).items():
+            r = by_client_carrier.setdefault(carrier, {"nodes": 0, "samples": 0})
+            r["nodes"] += 1
+            r["samples"] += samples
     for r in by_target.values():
         r["success_rate"] = (r["ok"] / r["attempts"]) if r["attempts"] else None
-    return {"total_nodes": len(nodes), "by_target_overall": by_target}
+    return {
+        "total_nodes": len(nodes),
+        "by_target_overall": by_target,
+        "by_path_class": by_path_class,
+        "by_client_asn": by_client_asn,
+        "by_client_carrier": by_client_carrier,
+    }
 
 
 @router_dashboard.get("/stats/nodes")
@@ -1238,6 +1309,16 @@ def stats_nodes(
                   NULLIF(props->>'latency_ms', '')::int   AS latency_ms,
                   NULLIF(props->>'status_code', '')::int  AS status_code,
                   props->>'error_class'              AS error_class,
+                  CASE WHEN props->>'xb_server_id' ~ '^[0-9]+$'
+                       THEN (props->>'xb_server_id')::int
+                       ELSE NULL END                  AS xb_server_id,
+                  props->>'path_class'                AS path_class,
+                  CASE WHEN props->>'client_asn' ~ '^[0-9]+$'
+                       THEN (props->>'client_asn')::int
+                       ELSE NULL END                  AS client_asn,
+                  props->>'client_cc'                 AS client_cc,
+                  props->>'client_region_coarse'      AS client_region_coarse,
+                  props->>'client_carrier'            AS client_carrier,
                   client_id
                 FROM {SCHEMA}.events
                 WHERE event = %s

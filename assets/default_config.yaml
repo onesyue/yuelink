@@ -63,6 +63,7 @@ sniffer:
   - Mijia Cloud
   - +._dns-sd._udp.*
   - +._services._dns-sd._udp.*
+  - cloudflare-ech.com
   force-domain:
   - +.v2ex.com
 dns:

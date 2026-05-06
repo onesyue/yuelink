@@ -103,6 +103,12 @@ proxy-groups:
 
 rules:
   - "AND,((DOMAIN-SUFFIX,googlevideo.com),(NETWORK,UDP)),REJECT-DROP"
+  # yuelink:secure-dns-routing -> PROXY
+  - "DOMAIN-SUFFIX,cloudflare-dns.com,PROXY"
+  - "DOMAIN-SUFFIX,chrome.cloudflare-dns.com,PROXY"
+  - "DOMAIN-SUFFIX,mozilla.cloudflare-dns.com,PROXY"
+  - "DOMAIN-SUFFIX,dns.google,PROXY"
+  - "DOMAIN-SUFFIX,cloudflare-ech.com,PROXY"
   - "DOMAIN,connectivitycheck.android.com,DIRECT"
   - "DOMAIN,connectivitycheck.platform.hicloud.com,DIRECT"
   - "DOMAIN,connectivitycheck.samsung.com,DIRECT"
@@ -137,6 +143,7 @@ sniffer:
   skip-domain:
     - "Mijia Cloud"
     - "+.push.apple.com"
+    - "cloudflare-ech.com"
 geo-auto-update: true
 geo-update-interval: 24
 geox-url:
