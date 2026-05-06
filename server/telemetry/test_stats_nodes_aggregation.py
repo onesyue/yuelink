@@ -74,7 +74,7 @@ import telemetry as T  # noqa: E402
 def _v1_row(fp, target, ok, latency=None, status=None, err=None,
             cid="client-1", typ="vless", xb_server_id=None,
             path_class=None, client_asn=None, client_cc=None,
-            client_region_coarse=None):
+            client_region_coarse=None, client_carrier=None):
     """Shape one synthetic v1 event row as the SQL would return it."""
     return {
         "fp": fp,
@@ -90,6 +90,7 @@ def _v1_row(fp, target, ok, latency=None, status=None, err=None,
         "client_asn": client_asn,
         "client_cc": client_cc,
         "client_region_coarse": client_region_coarse,
+        "client_carrier": client_carrier,
     }
 
 
@@ -189,17 +190,17 @@ class V1AggregationTest(unittest.TestCase):
             _v1_row(
                 "A", "transport", True, latency=100, xb_server_id=111,
                 path_class="via_v4_relay", client_asn=4134,
-                client_cc="CN", client_region_coarse="CN",
+                client_cc="CN", client_region_coarse="CN", client_carrier="CT",
             ),
             _v1_row(
                 "A", "transport", True, latency=110, xb_server_id="111",
                 path_class="via_v4_relay", client_asn="4134",
-                client_cc="CN", client_region_coarse="CN",
+                client_cc="CN", client_region_coarse="CN", client_carrier="CT",
             ),
             _v1_row(
                 "A", "transport", True, latency=120, xb_server_id=112,
                 path_class="via_v4_relay", client_asn=4837,
-                client_cc="CN", client_region_coarse="CN",
+                client_cc="CN", client_region_coarse="CN", client_carrier="CU",
             ),
         ]
         agg = T._aggregate_v1_node_probe_rows(rows)
@@ -211,6 +212,15 @@ class V1AggregationTest(unittest.TestCase):
         self.assertEqual(node["top_client_asn"], 4134)
         self.assertEqual(node["client_asns"], {"4134": 2, "4837": 1})
         self.assertEqual(node["client_countries"], {"CN": 3})
+        # Coarse carrier dim — paired with CN ASN above, drives "三网" axis.
+        self.assertEqual(node["top_client_carrier"], "CT")
+        self.assertEqual(node["client_carriers"], {"CT": 2, "CU": 1})
+
+        rollup = T._node_rollup([node])
+        self.assertEqual(
+            rollup["by_client_carrier"],
+            {"CT": {"nodes": 1, "samples": 2}, "CU": {"nodes": 1, "samples": 1}},
+        )
 
 
 class LegacyAggregationTest(unittest.TestCase):

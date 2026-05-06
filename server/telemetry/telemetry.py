@@ -1070,6 +1070,7 @@ def _aggregate_v1_node_probe_rows(rows) -> dict:
             "client_asns": {},
             "client_countries": {},
             "client_regions": {},
+            "client_carriers": {},
         })
         node["samples"] += 1
         cid = r.get("client_id")
@@ -1080,6 +1081,7 @@ def _aggregate_v1_node_probe_rows(rows) -> dict:
         _counter_bump(node["client_asns"], _int_or_none(r.get("client_asn")))
         _counter_bump(node["client_countries"], r.get("client_cc"))
         _counter_bump(node["client_regions"], r.get("client_region_coarse"))
+        _counter_bump(node["client_carriers"], r.get("client_carrier"))
         target = (r.get("target") or "other")
         if target not in PROBE_TARGETS:
             target = "other"
@@ -1228,6 +1230,8 @@ def _shape_node(fp: str, agg: dict, region, min_samples: int) -> dict:
         "client_asns": agg.get("client_asns") or None,
         "client_countries": agg.get("client_countries") or None,
         "client_regions": agg.get("client_regions") or None,
+        "top_client_carrier": _counter_top(agg.get("client_carriers") or {}),
+        "client_carriers": agg.get("client_carriers") or None,
         "state": state,
         "state_reason": state_reason,
         "requires_human": state in ("quarantine_candidate", "quarantined"),
@@ -1245,6 +1249,7 @@ def _node_rollup(nodes: list) -> dict:
     by_target: dict = {}
     by_path_class: dict = {}
     by_client_asn: dict = {}
+    by_client_carrier: dict = {}
     for n in nodes:
         for target, t in n.get("per_target", {}).items():
             r = by_target.setdefault(target, {"attempts": 0, "ok": 0})
@@ -1258,6 +1263,10 @@ def _node_rollup(nodes: list) -> dict:
             r = by_client_asn.setdefault(asn, {"nodes": 0, "samples": 0})
             r["nodes"] += 1
             r["samples"] += samples
+        for carrier, samples in (n.get("client_carriers") or {}).items():
+            r = by_client_carrier.setdefault(carrier, {"nodes": 0, "samples": 0})
+            r["nodes"] += 1
+            r["samples"] += samples
     for r in by_target.values():
         r["success_rate"] = (r["ok"] / r["attempts"]) if r["attempts"] else None
     return {
@@ -1265,6 +1274,7 @@ def _node_rollup(nodes: list) -> dict:
         "by_target_overall": by_target,
         "by_path_class": by_path_class,
         "by_client_asn": by_client_asn,
+        "by_client_carrier": by_client_carrier,
     }
 
 
@@ -1308,6 +1318,7 @@ def stats_nodes(
                        ELSE NULL END                  AS client_asn,
                   props->>'client_cc'                 AS client_cc,
                   props->>'client_region_coarse'      AS client_region_coarse,
+                  props->>'client_carrier'            AS client_carrier,
                   client_id
                 FROM {SCHEMA}.events
                 WHERE event = %s
