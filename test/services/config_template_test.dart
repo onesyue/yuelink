@@ -1196,4 +1196,212 @@ rules:
       },
     );
   });
+
+  // ECH outer-SNI sniffer skip + browser Secure DNS rule injection.
+  // Fixes the "ChatGPT/Claude only fail under TUN" symptom that surfaces
+  // when the browser has Encrypted Client Hello + Secure DNS turned on:
+  // every cf-fronted site shares cloudflare-ech.com as the outer SNI,
+  // which sniffer would otherwise rewrite as the routing key.
+  group('ConfigTemplate ECH / Secure DNS routing', () {
+    test('sniffer skip-domain always contains cloudflare-ech.com', () {
+      const config = 'mixed-port: 7890\nproxies: []\n';
+      final result = ConfigTemplate.process(config);
+      // The skip-domain block ends before the next top-level `force-domain`
+      // or `dns:` key, so the substring-contains check is enough.
+      expect(result, contains('"cloudflare-ech.com"'));
+      // And it lives inside the sniffer skip-domain block, not stray.
+      final snifferIdx = result.indexOf('sniffer:');
+      final skipIdx = result.indexOf('skip-domain:', snifferIdx);
+      final echIdx = result.indexOf('"cloudflare-ech.com"', skipIdx);
+      expect(skipIdx, greaterThan(snifferIdx));
+      expect(echIdx, greaterThan(skipIdx));
+    });
+
+    test('injects DoH rules into AI-themed group when present', () {
+      const config = '''
+mixed-port: 7890
+proxies: []
+proxy-groups:
+  - name: AI
+    type: select
+    proxies: [DIRECT]
+  - name: Proxy
+    type: select
+    proxies: [DIRECT]
+rules:
+  - MATCH,Proxy
+''';
+      final result = ConfigTemplate.process(config);
+      // AI wins over Proxy because of the AI keyword preference.
+      expect(result, contains('DOMAIN-SUFFIX,cloudflare-dns.com,AI'));
+      expect(result, contains('DOMAIN-SUFFIX,cloudflare-ech.com,AI'));
+      expect(result, contains('DOMAIN-SUFFIX,chrome.cloudflare-dns.com,AI'));
+      expect(result, contains('DOMAIN-SUFFIX,mozilla.cloudflare-dns.com,AI'));
+      expect(result, contains('DOMAIN-SUFFIX,dns.google,AI'));
+      // The marker line is what guards idempotency.
+      expect(result, contains('# yuelink:secure-dns-routing'));
+      // DoH rules MUST come before MATCH,Proxy or they'd never be reached.
+      final dohIdx = result.indexOf('DOMAIN-SUFFIX,cloudflare-dns.com,AI');
+      final matchIdx = result.indexOf('MATCH,Proxy');
+      expect(dohIdx, greaterThan(0));
+      expect(matchIdx, greaterThan(dohIdx));
+    });
+
+    test('falls back to GLOBAL/Proxy when no AI group exists', () {
+      const config = '''
+mixed-port: 7890
+proxies: []
+proxy-groups:
+  - name: 节点选择
+    type: select
+    proxies: [DIRECT]
+  - name: 流媒体
+    type: select
+    proxies: [DIRECT]
+rules:
+  - MATCH,节点选择
+''';
+      final result = ConfigTemplate.process(config);
+      expect(result, contains('DOMAIN-SUFFIX,cloudflare-dns.com,节点选择'));
+      expect(
+        result,
+        isNot(contains('DOMAIN-SUFFIX,cloudflare-dns.com,流媒体')),
+        reason: '流媒体 must not be picked — has no main-select keyword',
+      );
+    });
+
+    test('AI group recognized through unicode neighbours like 美国 AI', () {
+      const config = '''
+mixed-port: 7890
+proxies: []
+proxy-groups:
+  - name: 🇺🇸 美国 AI 解锁
+    type: select
+    proxies: [DIRECT]
+  - name: GLOBAL
+    type: select
+    proxies: [DIRECT]
+rules:
+  - MATCH,GLOBAL
+''';
+      final result = ConfigTemplate.process(config);
+      expect(result, contains('🇺🇸 美国 AI 解锁'));
+      expect(
+        result,
+        contains('DOMAIN-SUFFIX,cloudflare-dns.com,🇺🇸 美国 AI 解锁'),
+      );
+    });
+
+    test('"Daily" / "AIRPORT" must NOT be matched as AI groups', () {
+      // Latin-boundary regex protects against accidental partial hits on
+      // names like Daily, MAINSTREAM, AIRPORT.
+      const config = '''
+mixed-port: 7890
+proxies: []
+proxy-groups:
+  - name: Daily
+    type: select
+    proxies: [DIRECT]
+  - name: AIRPORT
+    type: select
+    proxies: [DIRECT]
+  - name: 节点选择
+    type: select
+    proxies: [DIRECT]
+rules:
+  - MATCH,节点选择
+''';
+      final result = ConfigTemplate.process(config);
+      // Falls through to 节点选择 because no real AI group exists.
+      expect(result, contains('DOMAIN-SUFFIX,cloudflare-dns.com,节点选择'));
+      expect(
+        result,
+        isNot(contains('DOMAIN-SUFFIX,cloudflare-dns.com,Daily')),
+      );
+      expect(
+        result,
+        isNot(contains('DOMAIN-SUFFIX,cloudflare-dns.com,AIRPORT')),
+      );
+    });
+
+    test('no-op when subscription has no recognisable group', () {
+      const config = '''
+mixed-port: 7890
+proxies: []
+proxy-groups:
+  - name: 流媒体
+    type: select
+    proxies: [DIRECT]
+rules:
+  - MATCH,流媒体
+''';
+      final result = ConfigTemplate.process(config);
+      // We refuse to guess. Better silent skip than wrong injection.
+      expect(result, isNot(contains('DOMAIN-SUFFIX,cloudflare-dns.com')));
+      expect(result, isNot(contains('# yuelink:secure-dns-routing')));
+    });
+
+    test('idempotent — re-process keeps single set of rules', () {
+      const config = '''
+mixed-port: 7890
+proxies: []
+proxy-groups:
+  - name: AI
+    type: select
+    proxies: [DIRECT]
+rules:
+  - MATCH,AI
+''';
+      final once = ConfigTemplate.process(config);
+      final twice = ConfigTemplate.process(once);
+      // Marker must appear exactly once even after a second pass.
+      expect(
+        '# yuelink:secure-dns-routing'.allMatches(twice).length,
+        1,
+        reason: 'marker should not be duplicated on re-process',
+      );
+      expect(
+        'DOMAIN-SUFFIX,cloudflare-dns.com,AI'.allMatches(twice).length,
+        1,
+      );
+    });
+
+    test('refuses unsafe group name (contains comma)', () {
+      // Sane subscriptions don't ship such names; if one slips in we
+      // don't try to escape — refuse the inject and let the catch-all
+      // rule handle the DoH traffic. Better than emitting a malformed
+      // rule line that would brick the entire ruleset.
+      const config = '''
+mixed-port: 7890
+proxies: []
+proxy-groups:
+  - name: "AI,broken"
+    type: select
+    proxies: [DIRECT]
+  - name: GLOBAL
+    type: select
+    proxies: [DIRECT]
+rules:
+  - MATCH,GLOBAL
+''';
+      final result = ConfigTemplate.process(config);
+      // AI,broken is unsafe → falls through to GLOBAL, which is safe.
+      expect(result, contains('DOMAIN-SUFFIX,cloudflare-dns.com,GLOBAL'));
+    });
+
+    test('skips injection when no rules section exists', () {
+      const config = '''
+mixed-port: 7890
+proxies: []
+proxy-groups:
+  - name: AI
+    type: select
+    proxies: [DIRECT]
+''';
+      final result = ConfigTemplate.process(config);
+      // No rules block to prepend into → must NOT create or mangle one.
+      expect(result, isNot(contains('# yuelink:secure-dns-routing')));
+      expect(result, isNot(contains('DOMAIN-SUFFIX,cloudflare-dns.com,AI')));
+    });
+  });
 }

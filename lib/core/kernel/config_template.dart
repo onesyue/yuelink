@@ -220,6 +220,9 @@ class ConfigTemplate {
     config = ProviderProxyTransformer.ensureProviderProxyDirect(config);
     debugPrint('[Config] 10b2 providerProxyDirect done');
 
+    config = RulesTransformer.ensureBrowserSecureDnsRules(config);
+    debugPrint('[Config] 10b3 browserSecureDnsRules done');
+
     config = RulesTransformer.ensureQuicReject(
       config,
       effectiveQuicRejectPolicy,
