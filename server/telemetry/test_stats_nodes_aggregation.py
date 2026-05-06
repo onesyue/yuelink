@@ -72,7 +72,9 @@ import telemetry as T  # noqa: E402
 
 
 def _v1_row(fp, target, ok, latency=None, status=None, err=None,
-            cid="client-1", typ="vless"):
+            cid="client-1", typ="vless", xb_server_id=None,
+            path_class=None, client_asn=None, client_cc=None,
+            client_region_coarse=None):
     """Shape one synthetic v1 event row as the SQL would return it."""
     return {
         "fp": fp,
@@ -83,6 +85,11 @@ def _v1_row(fp, target, ok, latency=None, status=None, err=None,
         "status_code": status,
         "error_class": err,
         "client_id": cid,
+        "xb_server_id": xb_server_id,
+        "path_class": path_class,
+        "client_asn": client_asn,
+        "client_cc": client_cc,
+        "client_region_coarse": client_region_coarse,
     }
 
 
@@ -177,6 +184,34 @@ class V1AggregationTest(unittest.TestCase):
         agg = T._aggregate_v1_node_probe_rows(rows)
         self.assertEqual(agg["A"]["per_target"]["transport"]["latencies"], [200])
 
+    def test_enrichment_dimensions_are_counted(self):
+        rows = [
+            _v1_row(
+                "A", "transport", True, latency=100, xb_server_id=111,
+                path_class="via_v4_relay", client_asn=4134,
+                client_cc="CN", client_region_coarse="CN",
+            ),
+            _v1_row(
+                "A", "transport", True, latency=110, xb_server_id="111",
+                path_class="via_v4_relay", client_asn="4134",
+                client_cc="CN", client_region_coarse="CN",
+            ),
+            _v1_row(
+                "A", "transport", True, latency=120, xb_server_id=112,
+                path_class="via_v4_relay", client_asn=4837,
+                client_cc="CN", client_region_coarse="CN",
+            ),
+        ]
+        agg = T._aggregate_v1_node_probe_rows(rows)
+        node = T._shape_node("A", agg["A"], region=None, min_samples=1)
+        self.assertEqual(node["top_xb_server_id"], 111)
+        self.assertEqual(node["xb_server_ids"], {"111": 2, "112": 1})
+        self.assertEqual(node["top_path_class"], "via_v4_relay")
+        self.assertEqual(node["path_classes"], {"via_v4_relay": 3})
+        self.assertEqual(node["top_client_asn"], 4134)
+        self.assertEqual(node["client_asns"], {"4134": 2, "4837": 1})
+        self.assertEqual(node["client_countries"], {"CN": 3})
+
 
 class LegacyAggregationTest(unittest.TestCase):
     """Legacy node_urltest rows must adapt cleanly into the v1 shape so
@@ -230,6 +265,8 @@ class ShapeTest(unittest.TestCase):
         node = T._shape_node("A", agg, region="HK", min_samples=3)
         self.assertEqual(node["fp"], "A")
         self.assertEqual(node["region"], "HK")
+        self.assertIsNone(node["top_path_class"])
+        self.assertIsNone(node["path_classes"])
         self.assertIn(node["state"], T.NODE_HEALTH_STATES)
         self.assertEqual(node["state"], "ai_blocked")
         self.assertFalse(node["requires_human"])
@@ -288,6 +325,8 @@ class ShapeTest(unittest.TestCase):
             rollup["by_target_overall"]["claude"],
             {"attempts": 5, "ok": 1, "success_rate": 1 / 5},
         )
+        self.assertEqual(rollup["by_path_class"], {})
+        self.assertEqual(rollup["by_client_asn"], {})
 
 
 class PercentileTest(unittest.TestCase):

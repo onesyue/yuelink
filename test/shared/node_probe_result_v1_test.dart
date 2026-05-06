@@ -115,6 +115,7 @@ void main() {
     const allowedProps = {
       'fp',
       'type',
+      'xb_server_id',
       'group',
       'node_name_hash',
       'target',
@@ -148,6 +149,7 @@ void main() {
     );
 
     // Spot-check the values that ARE allowed.
+    expect(ev['xb_server_id'], 127);
     expect(ev['target'], 'transport');
     expect(ev['ok'], isTrue);
     expect(ev['status'], 'ok');
@@ -208,6 +210,28 @@ void main() {
     expect(ev['mode'], 'tun');
     expect(ev['tun_enabled'], isTrue);
     expect(ev['route_ok'], isFalse);
+  });
+
+  test('repeated failed probes are rate limited by fp target and error', () {
+    final cursor = Telemetry.recentEvents().length;
+
+    for (var i = 0; i < 4; i++) {
+      NodeTelemetry.recordProbeResult(
+        fp: 'rate-limit-node',
+        type: 'vless',
+        target: 'transport',
+        ok: false,
+        latencyMs: 5000,
+        errorClass: 'timeout',
+      );
+    }
+
+    final events = Telemetry.recentEvents()
+        .skip(cursor)
+        .where((e) => e['event'] == TelemetryEvents.nodeProbeResultV1)
+        .toList();
+    expect(events, hasLength(3));
+    expect(events.every((e) => e['error_class'] == 'timeout'), isTrue);
   });
 
   test('AI 403 is classified as ai_blocked, not node timeout', () {

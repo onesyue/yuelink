@@ -29,8 +29,11 @@ class NodeTelemetry {
   static final Map<String, String> _nameToFp = {};
   static final Map<String, String> _nameToType = {};
   static final Map<String, Map<String, dynamic>> _nameToMeta = {};
+  static final Map<String, List<DateTime>> _probeFailureWindows = {};
 
   static const _aiTargets = {'claude', 'chatgpt'};
+  static const _failureWindow = Duration(minutes: 5);
+  static const _maxFailuresPerWindow = 3;
 
   /// Lookup a fingerprint by mihomo node name. Returns null when the node
   /// wasn't part of the most-recent inventory (e.g. edge case during a
@@ -50,6 +53,7 @@ class NodeTelemetry {
     _nameToFp.clear();
     _nameToType.clear();
     _nameToMeta.clear();
+    _probeFailureWindows.clear();
   }
 
   /// Compute the 16-hex fingerprint for a mihomo proxy entry.
@@ -298,6 +302,12 @@ class NodeTelemetry {
   /// `client_id / session_id / platform / version / ts`):
   ///   - `fp`             non-reversible 16-hex node hash
   ///   - `type`           lowercase protocol (vless / hysteria2 / …)
+  ///   - `xb_server_id`   XBoard v2_server.id, optional. Used by the
+  ///                       server-side enrichment pipeline to derive
+  ///                       `path_class` (direct / via_v4_relay / via_v6_relay)
+  ///                       from inventory; clients deliberately do NOT
+  ///                       derive path_class themselves because many nodes
+  ///                       share host=v4.yuetoto.net.
   ///   - `group`          proxy-group name (optional — null when called
   ///                       from a single-node test)
   ///   - `node_name_hash` SHA-256/16 of the mihomo label, never raw label
@@ -325,6 +335,7 @@ class NodeTelemetry {
   static void recordProbeResult({
     required String fp,
     required String type,
+    int? xbServerId,
     String? group,
     String? nodeNameHash,
     required String target,
@@ -353,6 +364,7 @@ class NodeTelemetry {
       statusCode: statusCode,
       errorClass: errorClass,
     );
+    if (!ok && !_allowFailureProbe(fp, target, normalizedError)) return;
     final status = ok ? 'ok' : normalizedError;
     final isAiTarget = _aiTargets.contains(target);
     Telemetry.event(
@@ -362,6 +374,7 @@ class NodeTelemetry {
       props: {
         'fp': fp,
         'type': type.toLowerCase(),
+        'xb_server_id': ?xbServerId,
         if (group != null && group.isNotEmpty) 'group': group,
         if (nodeNameHash != null && nodeNameHash.isNotEmpty)
           'node_name_hash': nodeNameHash,
@@ -469,6 +482,7 @@ class NodeTelemetry {
     recordProbeResult(
       fp: fp,
       type: type,
+      xbServerId: meta?['xb_server_id'] as int?,
       group: group,
       nodeNameHash: _hashText(name),
       target: classifyTarget(testUrl),
@@ -507,6 +521,17 @@ class NodeTelemetry {
 
   static String _hashText(String value) {
     return sha256.convert(utf8.encode(value)).toString().substring(0, 16);
+  }
+
+  static bool _allowFailureProbe(String fp, String target, String errorClass) {
+    final key = '$fp|$target|$errorClass';
+    final now = DateTime.now();
+    final cutoff = now.subtract(_failureWindow);
+    final window = _probeFailureWindows.putIfAbsent(key, () => <DateTime>[]);
+    window.removeWhere((ts) => ts.isBefore(cutoff));
+    if (window.length >= _maxFailuresPerWindow) return false;
+    window.add(now);
+    return true;
   }
 
   static String _nodeType(Map<dynamic, dynamic> proxy) {
