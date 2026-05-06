@@ -193,6 +193,130 @@ dns:
       expect(result, contains('proxy-server-nameserver:'));
     });
 
+    group('DNS leak prevention — geosite:geolocation-!cn catch-all', () {
+      // Regression guard for the May 6 finding: with `respect-rules: true`
+      // alone, foreign-domain DNS queries still hit `nameserver` (CN DoH),
+      // leaking the user's foreign-traffic profile to AliDNS / TencentDNS.
+      // The fix injects a `geosite:geolocation-!cn` rule that routes all
+      // non-CN domains to foreign DoH at the resolver level — the only
+      // mihomo-Meta-supported way to make CN providers blind to foreign
+      // domain lookups. mihomo policy-priority is suffix > geosite, so
+      // any subscription-shipped specific overrides keep winning.
+      test('block-style policy: splices entry at top of policy block', () {
+        const config = '''
+mixed-port: 7890
+dns:
+  enable: true
+  respect-rules: true
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  nameserver:
+  - 223.5.5.5
+  nameserver-policy:
+    geosite:cn:
+    - 223.5.5.5
+    - 119.29.29.29
+    geosite:private:
+    - 223.5.5.5
+''';
+        final result = ConfigTemplate.process(config);
+        expect(result, contains('"geosite:geolocation-!cn":'));
+        expect(
+          result,
+          contains('https://cloudflare-dns.com/dns-query'),
+          reason: 'geolocation-!cn must point at foreign DoH',
+        );
+        expect(result, contains('https://dns.google/dns-query'));
+        // The pre-existing CN policies must still be there — splice
+        // adds, never replaces.
+        expect(result, contains('geosite:cn:'));
+        expect(result, contains('geosite:private:'));
+        // Final config must be valid YAML (regression guard for indent
+        // bugs that would silently break mihomo's parser).
+        expect(ConfigTemplate.validateYaml(result), isNull);
+      });
+
+      test('flow-style policy: splices entry inside the {} dict', () {
+        const config = '''
+mixed-port: 7890
+dns:
+  enable: true
+  respect-rules: true
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  nameserver:
+  - 223.5.5.5
+  nameserver-policy: { 'geosite:cn': [223.5.5.5], 'geosite:private': [223.5.5.5] }
+''';
+        final result = ConfigTemplate.process(config);
+        expect(result, contains("'geosite:geolocation-!cn':"));
+        expect(result, contains('https://cloudflare-dns.com/dns-query'));
+        expect(result, contains('https://dns.google/dns-query'));
+        // Don't break the flow-style closing brace — bug here would
+        // produce two `nameserver-policy:` sections or unbalanced braces.
+        expect(
+          'nameserver-policy:'.allMatches(result).length,
+          1,
+          reason: 'must not duplicate nameserver-policy key',
+        );
+        expect(ConfigTemplate.validateYaml(result), isNull);
+      });
+
+      test('idempotent: re-processing a config that already has the rule '
+          'must not duplicate it', () {
+        const config = '''
+mixed-port: 7890
+dns:
+  enable: true
+  respect-rules: true
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  nameserver-policy:
+    geosite:geolocation-!cn:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    geosite:cn:
+    - 223.5.5.5
+''';
+        final once = ConfigTemplate.process(config);
+        final twice = ConfigTemplate.process(once);
+        // Subscription's own geolocation-!cn entry must be preserved
+        // exactly once, never doubled.
+        expect(
+          'geolocation-!cn'.allMatches(once).length,
+          1,
+          reason: 'first pass must not duplicate user-shipped rule',
+        );
+        expect(
+          'geolocation-!cn'.allMatches(twice).length,
+          1,
+          reason: 'second pass must be idempotent',
+        );
+      });
+
+      test('subscription with no nameserver-policy at all gets fresh '
+          'inject including geolocation-!cn', () {
+        const config = '''
+mixed-port: 7890
+dns:
+  enable: true
+  respect-rules: true
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  nameserver:
+  - 223.5.5.5
+''';
+        final result = ConfigTemplate.process(config);
+        expect(result, contains('"geosite:geolocation-!cn":'));
+        // Apple/iCloud overrides still ship for legacy compatibility
+        // (subscriptions that route Apple DIRECT need CN-CDN-aware DNS).
+        // mihomo suffix > geosite priority means these still win when
+        // the user accesses Apple domains.
+        expect(result, contains('"+.apple.com":'));
+        expect(result, contains('"+.icloud.com":'));
+      });
+    });
+
     test(
       'inline rules: [] is not treated as injectable block (S4 regression)',
       () {
@@ -395,10 +519,8 @@ proxy-groups:
       );
     });
 
-    test(
-      'removes deprecated top-level global-client-fingerprint',
-      () {
-        const config = '''
+    test('removes deprecated top-level global-client-fingerprint', () {
+      const config = '''
 mixed-port: 7890
 global-client-fingerprint: random
 proxies:
@@ -408,10 +530,9 @@ proxy-groups:
 rules:
   - MATCH,Proxy
 ''';
-        final result = ConfigTemplate.process(config);
-        expect(result, isNot(contains('global-client-fingerprint')));
-      },
-    );
+      final result = ConfigTemplate.process(config);
+      expect(result, isNot(contains('global-client-fingerprint')));
+    });
 
     test('preserves proxy-level client-fingerprint', () {
       const config = '''
@@ -1217,7 +1338,13 @@ rules:
       expect(echIdx, greaterThan(skipIdx));
     });
 
-    test('injects DoH rules into AI-themed group when present', () {
+    test('injects DoH+ECH rules into AI-themed group when present', () {
+      // Both browser DoH (`cloudflare-dns.com`, `dns.google`, etc.) and
+      // the Cloudflare ECH probe must share an exit IP with cf-fronted
+      // services so Cloudflare WAF doesn't challenge on IP mismatch.
+      // AI-themed group wins over generic when both exist (server-side
+      // template guarantees the AI group has real cf-unlock nodes — see
+      // docs/releases/v1.1.20.md).
       const config = '''
 mixed-port: 7890
 proxies: []
@@ -1232,15 +1359,13 @@ rules:
   - MATCH,Proxy
 ''';
       final result = ConfigTemplate.process(config);
-      // AI wins over Proxy because of the AI keyword preference.
       expect(result, contains('DOMAIN-SUFFIX,cloudflare-dns.com,AI'));
-      expect(result, contains('DOMAIN-SUFFIX,cloudflare-ech.com,AI'));
       expect(result, contains('DOMAIN-SUFFIX,chrome.cloudflare-dns.com,AI'));
       expect(result, contains('DOMAIN-SUFFIX,mozilla.cloudflare-dns.com,AI'));
       expect(result, contains('DOMAIN-SUFFIX,dns.google,AI'));
-      // The marker line is what guards idempotency.
+      expect(result, contains('DOMAIN-SUFFIX,cloudflare-ech.com,AI'));
       expect(result, contains('# yuelink:secure-dns-routing'));
-      // DoH rules MUST come before MATCH,Proxy or they'd never be reached.
+      // DoH rules must come before MATCH,Proxy or they'd never fire.
       final dohIdx = result.indexOf('DOMAIN-SUFFIX,cloudflare-dns.com,AI');
       final matchIdx = result.indexOf('MATCH,Proxy');
       expect(dohIdx, greaterThan(0));
@@ -1314,10 +1439,7 @@ rules:
       final result = ConfigTemplate.process(config);
       // Falls through to 节点选择 because no real AI group exists.
       expect(result, contains('DOMAIN-SUFFIX,cloudflare-dns.com,节点选择'));
-      expect(
-        result,
-        isNot(contains('DOMAIN-SUFFIX,cloudflare-dns.com,Daily')),
-      );
+      expect(result, isNot(contains('DOMAIN-SUFFIX,cloudflare-dns.com,Daily')));
       expect(
         result,
         isNot(contains('DOMAIN-SUFFIX,cloudflare-dns.com,AIRPORT')),
@@ -1360,10 +1482,7 @@ rules:
         1,
         reason: 'marker should not be duplicated on re-process',
       );
-      expect(
-        'DOMAIN-SUFFIX,cloudflare-dns.com,AI'.allMatches(twice).length,
-        1,
-      );
+      expect('DOMAIN-SUFFIX,cloudflare-dns.com,AI'.allMatches(twice).length, 1);
     });
 
     test('refuses unsafe group name (contains comma)', () {

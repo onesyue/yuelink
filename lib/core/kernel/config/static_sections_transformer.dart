@@ -16,6 +16,14 @@ class StaticSectionsTransformer {
   /// mihomo-party also keep them off in their shipped defaults. Don't
   /// re-add without re-running the throughput benchmark from that
   /// commit's user report.
+  ///
+  /// `force-domain` is the inverse safety: domains whose CDN edge IP
+  /// drifts across countries (Netflix / Disney / AWS / cf-fronted)
+  /// won't always trigger the default sniffer heuristic, so a TLS
+  /// connection to a Netflix CDN IP gets GeoIP-routed to the wrong
+  /// region group instead of the streaming group. Forcing sniff on
+  /// these domains makes mihomo always read SNI and apply the domain
+  /// rule. Pattern lifted from OpenClash's mainstream config 2026-05.
   static String ensureSniffer(String config) {
     config = _removeSection(config, 'sniffer');
     return '$config\nsniffer:\n'
@@ -33,6 +41,19 @@ class StaticSectionsTransformer {
         '      override-destination: true\n'
         '  force-domain:\n'
         '    - "+.v2ex.com"\n'
+        // Streaming CDN edges that drift across regions. Without
+        // force-sniff, mihomo can fall back to GeoIP-of-IDC routing
+        // and send Netflix/Disney/AWS-fronted services to "美国"
+        // instead of "流媒体". OpenClash 2026 ships these by default.
+        '    - "+.netflix.com"\n'
+        '    - "+.nflxvideo.net"\n'
+        '    - "+.nflximg.com"\n'
+        '    - "+.nflxext.com"\n'
+        '    - "+.nflxso.net"\n'
+        '    - "+.amazonaws.com"\n'
+        '    - "+.disney-plus.net"\n'
+        '    - "+.dssott.com"\n'
+        '    - "+.media.dssott.com"\n'
         '  skip-domain:\n'
         '    - "Mijia Cloud"\n'
         '    - "+.push.apple.com"\n'
@@ -74,11 +95,23 @@ class StaticSectionsTransformer {
   }
 
   /// Ensure profile persistence settings.
+  ///
+  /// `store-fake-ip: true` makes the fake-IP ↔ domain reverse-lookup
+  /// table survive mihomo restarts. Without it, every restart (mode
+  /// switch / subscription sync / yuelink kernel reload) rebuilds an
+  /// empty table; OS-level DNS caches still hold fake-IPs from before
+  /// the restart, and incoming connections to those stale fake-IPs
+  /// hit the "fake DNS record missing" path until sniffer recovers
+  /// the SNI — adding latency on first-second-after-restart traffic.
+  /// CVR / mihomo-party / OpenClash all ship `true`. The historical
+  /// `false` here was conservative protection against
+  /// `fake-ip-filter` changes leaving stale entries; mihomo now
+  /// invalidates entries that no longer match.
   static String ensureProfile(String config) {
     if (hasKey(config, 'profile')) return config;
     return '$config\nprofile:\n'
         '  store-selected: true\n'
-        '  store-fake-ip: false\n';
+        '  store-fake-ip: true\n';
   }
 
   /// `experimental` policy: do NOT inject defaults. Aligned with mihomo

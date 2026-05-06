@@ -19,6 +19,15 @@ class PerformanceTransformer {
     if (!hasKey(config, 'keep-alive-interval')) {
       config += 'keep-alive-interval: 30\n';
     }
+    // Keep-alive idle: without this, mihomo falls through to the OS
+    // default (Linux 7200s, macOS 7200s, Windows 7200s) before sending
+    // a single probe, which makes `keep-alive-interval` cosmetic. CVR
+    // and mihomo-party ship 600s (10 min) — long enough not to wake
+    // mobile radios on idle proxy connections, short enough that dead
+    // NAT bindings get noticed before the user perceives them.
+    if (!hasKey(config, 'keep-alive-idle')) {
+      config += 'keep-alive-idle: 600\n';
+    }
     return config;
   }
 

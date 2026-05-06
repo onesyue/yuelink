@@ -144,6 +144,7 @@ dns:
     - https://dns.alidns.com/dns-query
     - https://doh.pub/dns-query
   nameserver-policy:
+    "geosite:geolocation-!cn": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
     "+.apple.com": ["https://dns.alidns.com/dns-query", "https://doh.pub/dns-query"]
     "+.icloud.com": ["https://dns.alidns.com/dns-query", "https://doh.pub/dns-query"]
   fallback:
@@ -179,6 +180,15 @@ sniffer:
       override-destination: true
   force-domain:
     - "+.v2ex.com"
+    - "+.netflix.com"
+    - "+.nflxvideo.net"
+    - "+.nflximg.com"
+    - "+.nflxext.com"
+    - "+.nflxso.net"
+    - "+.amazonaws.com"
+    - "+.disney-plus.net"
+    - "+.dssott.com"
+    - "+.media.dssott.com"
   skip-domain:
     - "Mijia Cloud"
     - "+.push.apple.com"
@@ -195,11 +205,12 @@ geox-url:
 
 profile:
   store-selected: true
-  store-fake-ip: false
+  store-fake-ip: true
 
 tcp-concurrent: true
 unified-delay: true
 keep-alive-interval: 30
+keep-alive-idle: 600
 
 allow-lan: true
 bind-address: "*"

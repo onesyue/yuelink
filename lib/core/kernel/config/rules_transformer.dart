@@ -6,9 +6,24 @@ class RulesTransformer {
   const RulesTransformer._();
 
   /// Domains that browsers use for built-in DoH (Secure DNS) lookups
-  /// and for the Cloudflare ECH outer-SNI / config probe. Listed in the
-  /// order Chrome / Firefox / Safari try them so any common provider
-  /// flips into the user's main proxy group.
+  /// and for the Cloudflare ECH outer-SNI / config probe. All four DoH
+  /// endpoints + the ECH probe must share the AI / cf-fronted exit IP:
+  ///
+  /// - For ECH the IP-affinity requirement is hard — Cloudflare's WAF
+  ///   correlates the outer-SNI probe with the subsequent inner TLS
+  ///   connection and challenges on mismatch.
+  /// - For DoH the IP-affinity requirement is soft but still preferred
+  ///   — Chrome's anti-fingerprint fix shipped 2025 prefers the same
+  ///   exit for the DoH probe and the cf-fronted TCP, otherwise
+  ///   "Just a moment" challenges fire on chatgpt.com / claude.ai.
+  ///
+  /// Earlier (May 6) this list was split, with DoH routed to the
+  /// generic main group and ECH alone on AI, on the theory that DoH
+  /// resilience matters more than IP affinity. That regressed the
+  /// v1.1.19 cf-fronted fix and was reverted once the server template
+  /// was fixed to populate the AI group with actual unlock nodes
+  /// (see docs/releases/v1.1.20.md). The right invariant
+  /// is "AI group has real unlock nodes", not "DoH escapes from AI".
   static const _browserSecureDnsDomains = [
     'cloudflare-dns.com',
     'chrome.cloudflare-dns.com',
@@ -75,22 +90,19 @@ class RulesTransformer {
 
   /// Front-load browser DoH (Secure DNS) and Cloudflare ECH-probe
   /// domains onto the same proxy group as the user's main cf-fronted
-  /// services. Without this, Chrome/Firefox bypass mihomo's DNS by
-  /// fetching `cloudflare-dns.com` directly: that lookup falls into the
-  /// catch-all rule of the subscription, often a different region than
-  /// the main service exit. Cloudflare then sees the DoH probe and the
-  /// real connection coming from two countries and serves a JS challenge
-  /// or hard-blocks (this surfaced as "ChatGPT/Claude won't load on TUN
-  /// while system-proxy works" — system-proxy disables Chrome Secure DNS
-  /// automatically, hiding the bug).
+  /// services (AI-themed group preferred). All five domains share an
+  /// exit so Cloudflare WAF sees a consistent IP between the DNS probe
+  /// and the actual TLS connection — without that consistency, ChatGPT
+  /// / Claude / other cf-fronted endpoints serve a JS challenge or
+  /// hard-block. This depends on the AI group containing real unlock
+  /// nodes (see server template `xboard-templates/clashmeta.yaml` —
+  /// the `悦 · AI 解锁聚合` sub-group health-checked against
+  /// `chrome.cloudflare-dns.com/cdn-cgi/trace`). If the AI group is
+  /// stuffed with general-IDC nodes (Cloudflare WAF blocklist), the
+  /// route works but every cf-fronted call gets challenged. The fix
+  /// for that lives at the server-template layer, not here.
   ///
-  /// Pairs with `cloudflare-ech.com` in the sniffer skip-domain list:
-  /// the sniffer side stops outer-SNI overriding fake-ip routing for the
-  /// real TLS connection; this side ensures the DoH and ECH-config
-  /// fetches all share an exit with the user's primary proxy group.
-  ///
-  /// Target group is auto-detected. AI-themed selects win first so
-  /// cf-fronted AI services keep the same exit as their DoH probes;
+  /// Target group is auto-detected. AI-themed selects win first;
   /// otherwise we land on the typical front-page select group; failing
   /// both, this is a no-op (subscription too unusual to guess safely —
   /// users can override via OverwriteService).
@@ -157,14 +169,11 @@ class RulesTransformer {
     for (final g in groups) {
       final name = g['name'];
       if (name is! String) continue;
-      // Skip our own internal chain wrapper groups.
       if (name.startsWith('_YueLink_Chain_')) continue;
-      // Skip names we can't safely embed in a rule line.
       if (!_isSafeRuleTarget(name)) continue;
       if (bestAi == null && aiBoundaryRe.hasMatch(name)) bestAi = name;
       if (bestGeneric == null) {
-        if (genericLatinRe.hasMatch(name) ||
-            cjkKeywords.any(name.contains)) {
+        if (genericLatinRe.hasMatch(name) || cjkKeywords.any(name.contains)) {
           bestGeneric = name;
         }
       }
