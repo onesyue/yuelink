@@ -114,6 +114,42 @@ dns:
   - +.xboxlive.com
   - +.battlenet.com
   - +.battle.net
+  # ── geosite tier (catches CN domains the explicit list misses) ────
+  - geosite:cn
+  # ── 中国本土关键服务（防 fake-ip 误判破坏 App 登录 / 银行 / 出行）──
+  - +.cmpassport.com
+  - +.10086.cn
+  - +.wosms.cn
+  - +.10010.com
+  - +.10099.com.cn
+  - open.e.189.cn
+  - opencloud.wostore.cn
+  - id.mail.wo.cn
+  - mdn.open.wo.cn
+  - hmrz.wo.cn
+  - nishub1.10010.com
+  - enrichgw.10010.com
+  - +.189.cn
+  - +.cmbchina.com
+  - +.icbc.com.cn
+  - +.abchina.com
+  - +.boc.cn
+  - +.ccb.com
+  - +.bankcomm.com
+  - +.bocomcc.com
+  - +.cmbc.com.cn
+  - +.cgbchina.com.cn
+  - +.pingan.com.cn
+  - +.alipay.com
+  - +.alipayobjects.com
+  - +.jegotrip.com.cn
+  - +.icitymobile.mobi
+  - +.blzstatic.cn
+  - +.microdone.cn
+  - id6.me
+  - PDC._msDCS.*.*
+  - DC._msDCS.*.*
+  - GC._msDCS.*.*
   default-nameserver:
   - 223.5.5.5
   - 119.29.29.29
