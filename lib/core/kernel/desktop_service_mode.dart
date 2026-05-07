@@ -35,6 +35,7 @@ extension _DesktopServiceMode on CoreManager {
     List<String> tunBypassAddresses = const [],
     List<String> tunBypassProcesses = const [],
     String quicRejectPolicy = ConfigTemplate.defaultQuicRejectPolicy,
+    bool windowsLanCompatibilityMode = false,
   }) async {
     String processed = configYaml;
     String? homeDir;
@@ -74,6 +75,7 @@ extension _DesktopServiceMode on CoreManager {
             tunBypassProcesses: tunBypassProcesses,
             quicRejectPolicy: quicRejectPolicy,
             relayHostWhitelist: relay.bypassHosts,
+            windowsLanCompatibilityMode: windowsLanCompatibilityMode,
           );
           _apiPort = ConfigTemplate.getApiPort(processed);
           _mixedPort = ConfigTemplate.getMixedPort(processed);

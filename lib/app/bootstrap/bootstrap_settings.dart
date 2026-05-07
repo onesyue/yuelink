@@ -23,6 +23,8 @@ class BootstrapSettingsSnapshot {
     required this.savedAutoConnect,
     required this.savedManualStopped,
     required this.savedSystemProxy,
+    required this.savedWindowsLanCompatibilityMode,
+    required this.savedAutoLightWeightAfterMinutes,
     required this.savedLanguage,
     required this.savedTestUrl,
     required this.savedCloseBehavior,
@@ -50,6 +52,8 @@ class BootstrapSettingsSnapshot {
   final bool savedAutoConnect;
   final bool savedManualStopped;
   final bool savedSystemProxy;
+  final bool savedWindowsLanCompatibilityMode;
+  final int savedAutoLightWeightAfterMinutes;
   final String savedLanguage;
   final String savedTestUrl;
   final String savedCloseBehavior;
@@ -85,6 +89,8 @@ Future<BootstrapSettingsSnapshot> loadBootstrapSettingsSnapshot() async {
   bool savedAutoConnect = false;
   bool savedManualStopped = false;
   bool savedSystemProxy = true;
+  bool savedWindowsLanCompatibilityMode = false;
+  int savedAutoLightWeightAfterMinutes = 0;
   String savedLanguage = 'zh';
   String savedTestUrl = 'https://www.gstatic.com/generate_204';
   String savedCloseBehavior = 'tray';
@@ -123,6 +129,10 @@ Future<BootstrapSettingsSnapshot> loadBootstrapSettingsSnapshot() async {
     savedAutoConnect = await SettingsService.getAutoConnect();
     savedManualStopped = await SettingsService.getManualStopped();
     savedSystemProxy = await SettingsService.getSystemProxyOnConnect();
+    savedWindowsLanCompatibilityMode =
+        await SettingsService.getWindowsLanCompatibilityMode();
+    savedAutoLightWeightAfterMinutes =
+        await SettingsService.getAutoLightWeightAfterMinutes();
     savedLanguage = await SettingsService.getLanguage();
     savedTestUrl = await SettingsService.getTestUrl();
     savedCloseBehavior = await SettingsService.getCloseBehavior();
@@ -162,6 +172,8 @@ Future<BootstrapSettingsSnapshot> loadBootstrapSettingsSnapshot() async {
     savedAutoConnect: savedAutoConnect,
     savedManualStopped: savedManualStopped,
     savedSystemProxy: savedSystemProxy,
+    savedWindowsLanCompatibilityMode: savedWindowsLanCompatibilityMode,
+    savedAutoLightWeightAfterMinutes: savedAutoLightWeightAfterMinutes,
     savedLanguage: savedLanguage,
     savedTestUrl: savedTestUrl,
     savedCloseBehavior: savedCloseBehavior,

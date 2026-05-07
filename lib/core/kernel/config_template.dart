@@ -100,6 +100,7 @@ class ConfigTemplate {
     int? tunFd,
     String? quicRejectPolicy,
     List<String> relayHostWhitelist = const [],
+    bool windowsLanCompatibilityMode = false,
   }) {
     final effectiveQuicRejectPolicy = normalizeQuicRejectPolicy(
       quicRejectPolicy,
@@ -118,6 +119,7 @@ class ConfigTemplate {
           tunFd: tunFd,
           quicRejectPolicy: effectiveQuicRejectPolicy,
           relayHostWhitelist: relayHostWhitelist,
+          windowsLanCompatibilityMode: windowsLanCompatibilityMode,
         ),
       );
     }
@@ -136,6 +138,7 @@ class ConfigTemplate {
         tunFd: tunFd,
         quicRejectPolicy: effectiveQuicRejectPolicy,
         relayHostWhitelist: relayHostWhitelist,
+        windowsLanCompatibilityMode: windowsLanCompatibilityMode,
       ),
     );
   }
@@ -152,6 +155,7 @@ class ConfigTemplate {
     int? tunFd,
     String? quicRejectPolicy,
     List<String> relayHostWhitelist = const [],
+    bool windowsLanCompatibilityMode = false,
   }) {
     final effectiveQuicRejectPolicy = normalizeQuicRejectPolicy(
       quicRejectPolicy,
@@ -239,6 +243,7 @@ class ConfigTemplate {
           desktopTunStack,
           bypassAddresses: tunBypassAddresses,
           bypassProcesses: tunBypassProcesses,
+          windowsLanCompatibilityMode: windowsLanCompatibilityMode,
         );
       } else {
         config = TunTransformer.disableTun(config);

@@ -187,6 +187,12 @@ class CoreManager {
   bool get isRunning => _running;
   int get mixedPort => _mixedPort;
 
+  /// External-controller port. May differ from [AppConstants.defaultApiPort]
+  /// after the port-conflict scanner remaps it on startup
+  /// (see `_findAvailablePort`). Read this for live diagnostics
+  /// (e.g. WindowsDiagnosticScript) so probes hit the actual listener.
+  int get apiPort => _apiPort;
+
   /// Check Go core's actual running state via FFI (not the Dart _running flag).
   /// Use this to detect if the core is still alive after Flutter engine restart.
   bool get isCoreActuallyRunning {
@@ -283,6 +289,7 @@ class CoreManager {
     List<String> tunBypassAddresses = const [],
     List<String> tunBypassProcesses = const [],
     String quicRejectPolicy = ConfigTemplate.defaultQuicRejectPolicy,
+    bool windowsLanCompatibilityMode = false,
   }) async {
     debugPrint('[CoreManager] ══════ START ══════');
     if (_running) return true;
@@ -327,6 +334,7 @@ class CoreManager {
           tunBypassAddresses: tunBypassAddresses,
           tunBypassProcesses: tunBypassProcesses,
           quicRejectPolicy: quicRejectPolicy,
+          windowsLanCompatibilityMode: windowsLanCompatibilityMode,
         );
       }
 
@@ -339,6 +347,7 @@ class CoreManager {
           tunBypassAddresses: tunBypassAddresses,
           tunBypassProcesses: tunBypassProcesses,
           quicRejectPolicy: quicRejectPolicy,
+          windowsLanCompatibilityMode: windowsLanCompatibilityMode,
         );
       }
       _serviceModeActive = false;
@@ -446,6 +455,7 @@ class CoreManager {
               tunFd: tunFd,
               quicRejectPolicy: quicRejectPolicy,
               relayHostWhitelist: relay.bypassHosts,
+              windowsLanCompatibilityMode: windowsLanCompatibilityMode,
             );
             _apiPort = ConfigTemplate.getApiPort(processed);
             _mixedPort = ConfigTemplate.getMixedPort(processed);
@@ -478,6 +488,7 @@ class CoreManager {
               tunFd: tunFd,
               quicRejectPolicy: quicRejectPolicy,
               relayHostWhitelist: relay.bypassHosts,
+              windowsLanCompatibilityMode: windowsLanCompatibilityMode,
             );
             _apiPort = ConfigTemplate.getApiPort(processed);
             _mixedPort = ConfigTemplate.getMixedPort(processed);
@@ -698,6 +709,7 @@ class CoreManager {
     List<String> tunBypassAddresses = const [],
     List<String> tunBypassProcesses = const [],
     String quicRejectPolicy = ConfigTemplate.defaultQuicRejectPolicy,
+    bool windowsLanCompatibilityMode = false,
   }) async {
     String processed = configYaml;
 
@@ -747,6 +759,7 @@ class CoreManager {
             tunBypassProcesses: tunBypassProcesses,
             quicRejectPolicy: quicRejectPolicy,
             relayHostWhitelist: relay.bypassHosts,
+            windowsLanCompatibilityMode: windowsLanCompatibilityMode,
           );
           _apiPort = ConfigTemplate.getApiPort(processed);
           _mixedPort = ConfigTemplate.getMixedPort(processed);
