@@ -44,6 +44,31 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         // routing decisions in iOS networkd vs mihomo.
         let ipv4 = NEIPv4Settings(addresses: ["172.19.0.1"], subnetMasks: ["255.255.255.252"])
         ipv4.includedRoutes = [NEIPv4Route.default()]
+        // c.P3-2: bypass LAN / loopback / link-local / private / multicast
+        // / broadcast so AirPlay / HomeKit / AirDrop / 群晖 / 路由管理 /
+        // Continuity / Sidecar / 局域网投屏 keep working without going
+        // through the mihomo TUN. Mirrors Android `PUBLIC_IPV4_ROUTES`
+        // split-route shape (excludes the same private space) and is a
+        // direct counterpart to Clash Verge's similar behaviour.
+        //
+        // ⚠️ Apple-ecosystem regression is the merge gate for release c.
+        // No automated test catches AirPlay / HomeKit failures.
+        ipv4.excludedRoutes = [
+            NEIPv4Route(destinationAddress: "10.0.0.0",
+                        subnetMask: "255.0.0.0"),       // 10.0.0.0/8
+            NEIPv4Route(destinationAddress: "127.0.0.0",
+                        subnetMask: "255.0.0.0"),       // loopback
+            NEIPv4Route(destinationAddress: "169.254.0.0",
+                        subnetMask: "255.255.0.0"),     // link-local
+            NEIPv4Route(destinationAddress: "172.16.0.0",
+                        subnetMask: "255.240.0.0"),     // 172.16.0.0/12
+            NEIPv4Route(destinationAddress: "192.168.0.0",
+                        subnetMask: "255.255.0.0"),     // 192.168.0.0/16
+            NEIPv4Route(destinationAddress: "224.0.0.0",
+                        subnetMask: "240.0.0.0"),       // multicast 224.0.0.0/4
+            NEIPv4Route(destinationAddress: "255.255.255.255",
+                        subnetMask: "255.255.255.255"), // limited broadcast
+        ]
         settings.ipv4Settings = ipv4
 
         settings.dnsSettings = NEDNSSettings(servers: ["223.5.5.5", "8.8.8.8"])
