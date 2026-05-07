@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/storage/auth_token_service.dart';
 import '../../core/storage/settings_service.dart';
+import '../../i18n/locale_resolver.dart';
 import '../../infrastructure/datasources/xboard/models.dart';
 
 class BootstrapSettingsSnapshot {
@@ -24,8 +25,8 @@ class BootstrapSettingsSnapshot {
     required this.savedManualStopped,
     required this.savedSystemProxy,
     required this.savedWindowsLanCompatibilityMode,
-    required this.savedAutoLightWeightAfterMinutes,
     required this.savedLanguage,
+    required this.savedLanguagePreference,
     required this.savedTestUrl,
     required this.savedCloseBehavior,
     required this.savedToggleHotkey,
@@ -53,8 +54,18 @@ class BootstrapSettingsSnapshot {
   final bool savedManualStopped;
   final bool savedSystemProxy;
   final bool savedWindowsLanCompatibilityMode;
-  final int savedAutoLightWeightAfterMinutes;
+
+  /// Effective rendered language — always `zh` or `en`. Driven into
+  /// `S.setLanguage` and `languageProvider` at startup; re-derived from
+  /// [savedLanguagePreference] when the OS locale changes (only matters
+  /// when the preference is `auto`).
   final String savedLanguage;
+
+  /// User's stored preference — `auto` / `zh` / `en`. Surfaced in the
+  /// Appearance settings as a 3-way segment so the user can either
+  /// follow the OS or pin a language regardless of OS settings. `auto`
+  /// is the new install default (was hard-coded `zh` pre-v1.1.22).
+  final String savedLanguagePreference;
   final String savedTestUrl;
   final String savedCloseBehavior;
   final String savedToggleHotkey;
@@ -90,8 +101,8 @@ Future<BootstrapSettingsSnapshot> loadBootstrapSettingsSnapshot() async {
   bool savedManualStopped = false;
   bool savedSystemProxy = true;
   bool savedWindowsLanCompatibilityMode = false;
-  int savedAutoLightWeightAfterMinutes = 0;
-  String savedLanguage = 'zh';
+  String savedLanguagePreference = LanguagePreference.auto;
+  String savedLanguage = currentSystemLanguage();
   String savedTestUrl = 'https://www.gstatic.com/generate_204';
   String savedCloseBehavior = 'tray';
   String savedToggleHotkey = 'ctrl+alt+c';
@@ -131,9 +142,20 @@ Future<BootstrapSettingsSnapshot> loadBootstrapSettingsSnapshot() async {
     savedSystemProxy = await SettingsService.getSystemProxyOnConnect();
     savedWindowsLanCompatibilityMode =
         await SettingsService.getWindowsLanCompatibilityMode();
-    savedAutoLightWeightAfterMinutes =
-        await SettingsService.getAutoLightWeightAfterMinutes();
-    savedLanguage = await SettingsService.getLanguage();
+    // Stored value is the *preference*, not the rendered locale. `auto`
+    // (or `null` from a pre-v1.1.22 install where the row was never
+    // written) re-resolves against the current OS locale; pinned
+    // values (`zh` / `en`) carry through unchanged. Migration from the
+    // old hard-coded `'zh'` default happens implicitly: anyone who
+    // accepted the default still has `language=zh` in storage and will
+    // keep Chinese after upgrade. Only the new-install path benefits
+    // from auto-follow on day one — but the resume listener in
+    // main.dart handles every subsequent OS locale change for users on
+    // `auto`.
+    savedLanguagePreference = LanguagePreference.normalise(
+      await SettingsService.getLanguage(),
+    );
+    savedLanguage = effectiveLanguageForPreference(savedLanguagePreference);
     savedTestUrl = await SettingsService.getTestUrl();
     savedCloseBehavior = await SettingsService.getCloseBehavior();
     savedToggleHotkey = await SettingsService.getToggleHotkey();
@@ -173,8 +195,8 @@ Future<BootstrapSettingsSnapshot> loadBootstrapSettingsSnapshot() async {
     savedManualStopped: savedManualStopped,
     savedSystemProxy: savedSystemProxy,
     savedWindowsLanCompatibilityMode: savedWindowsLanCompatibilityMode,
-    savedAutoLightWeightAfterMinutes: savedAutoLightWeightAfterMinutes,
     savedLanguage: savedLanguage,
+    savedLanguagePreference: savedLanguagePreference,
     savedTestUrl: savedTestUrl,
     savedCloseBehavior: savedCloseBehavior,
     savedToggleHotkey: savedToggleHotkey,

@@ -391,6 +391,7 @@ class S {
   String get themeSystem => _t.themeSystem;
   String get themeLight => _t.themeLight;
   String get themeDark => _t.themeDark;
+  String get languageAuto => _t.languageAuto;
   String get languageChinese => _t.languageChinese;
   String get languageEnglish => _t.languageEnglish;
   String get coreStatus => _t.coreStatus;

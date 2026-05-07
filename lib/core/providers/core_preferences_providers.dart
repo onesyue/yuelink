@@ -121,41 +121,6 @@ class WindowsLanCompatibilityModeNotifier extends Notifier<bool> {
   void set(bool value) => state = value;
 }
 
-/// Desktop only (D-⑤ P4-5): minutes the app sits in tray before
-/// flipping `lightWeightModeProvider` true. 0 disables.
-final autoLightWeightAfterMinutesProvider =
-    NotifierProvider<AutoLightWeightAfterMinutesNotifier, int>(
-      AutoLightWeightAfterMinutesNotifier.new,
-    );
-
-class AutoLightWeightAfterMinutesNotifier extends Notifier<int> {
-  AutoLightWeightAfterMinutesNotifier([this._initial = 0]);
-  final int _initial;
-
-  @override
-  int build() => _initial;
-
-  void set(int value) => state = value;
-}
-
-/// `true` when the auto-light-weight controller has decided the app is
-/// idle in tray and consumers should release heavy resources (chart
-/// streams, webview frames, large in-memory caches). Cleared on app
-/// resumed. Single source of truth — controller writes, anyone reads.
-final lightWeightModeProvider =
-    NotifierProvider<LightWeightModeNotifier, bool>(
-      LightWeightModeNotifier.new,
-    );
-
-class LightWeightModeNotifier extends Notifier<bool> {
-  @override
-  bool build() => false;
-
-  void set(bool value) {
-    if (state != value) state = value;
-  }
-}
-
 /// Whether to auto-connect on startup
 final autoConnectProvider = NotifierProvider<AutoConnectNotifier, bool>(
   AutoConnectNotifier.new,

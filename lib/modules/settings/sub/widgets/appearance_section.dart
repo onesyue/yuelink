@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/storage/settings_service.dart';
 import '../../../../i18n/app_strings.dart';
+import '../../../../i18n/locale_resolver.dart';
 import '../../../../shared/telemetry.dart';
 import '../../providers/settings_providers.dart';
 import '../../widgets/primitives.dart';
@@ -22,7 +23,7 @@ class AppearanceSection extends ConsumerWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final theme = ref.watch(themeProvider);
     final accentHex = ref.watch(accentColorProvider);
-    final language = ref.watch(languageProvider);
+    final languagePreference = ref.watch(languagePreferenceProvider);
     final isEn = Localizations.localeOf(context).languageCode == 'en';
 
     final dividerColor = isDark
@@ -79,13 +80,30 @@ class AppearanceSection extends ConsumerWidget {
                 label: s.sectionLanguage,
                 trailing: YLAdaptiveSegmentedControl<String>(
                   semanticLabel: s.sectionLanguage,
-                  selectedValue: language,
+                  selectedValue: languagePreference,
                   segments: [
-                    YLAdaptiveSegment(value: 'zh', label: s.languageChinese),
-                    YLAdaptiveSegment(value: 'en', label: s.languageEnglish),
+                    YLAdaptiveSegment(
+                      value: LanguagePreference.auto,
+                      label: s.languageAuto,
+                    ),
+                    YLAdaptiveSegment(
+                      value: LanguagePreference.zh,
+                      label: s.languageChinese,
+                    ),
+                    YLAdaptiveSegment(
+                      value: LanguagePreference.en,
+                      label: s.languageEnglish,
+                    ),
                   ],
                   onChanged: (value) async {
-                    ref.read(languageProvider.notifier).set(value);
+                    // Preference is what's persisted; render locale
+                    // (zh/en) is derived. `auto` consults the OS at
+                    // call time; pinned values pass through. Driving
+                    // both providers keeps slang's `S` and the
+                    // MaterialApp.locale binding in lock-step.
+                    ref.read(languagePreferenceProvider.notifier).set(value);
+                    final effective = effectiveLanguageForPreference(value);
+                    ref.read(languageProvider.notifier).set(effective);
                     await SettingsService.setLanguage(value);
                   },
                 ),
