@@ -1,5 +1,35 @@
 # Changelog
 
+## v1.1.21 (2026-05-07)
+
+### 新功能
+- iOS 局域网设备直连：AirPlay / HomeKit / AirDrop / NAS / 路由管理 不再绕 TUN
+- Windows 局域网兼容模式开关（设置 → 高级），可访问内网 SMB / 远程桌面 / 网络打印机
+- Android Private DNS hostname 模式 Dashboard 提示
+- Dashboard 连通性体检（一键测 Apple / GitHub / Google / YouTube / Cloudflare / Anthropic 6 站点）
+- 导出诊断报告（设置 → 高级，markdown 11 板块、不含订阅/token/节点 PII）
+- Windows 诊断 PowerShell 脚本（设置里"复制"按钮，粘贴到 PS 即可）
+- 桌面托盘空闲标志开关（实验性，infrastructure-only）
+
+### 修复
+- Emby 视频"继续播放"从断点起播（之前 race condition 导致点继续仍从 0 起）
+- AI / cf-fronted 服务防 DNS 泄漏：`nameserver-policy` 显式枚举 60+ AI 域名，不再依赖 geosite 数据库版本
+- 国内银行 / 运营商认证 / 支付 App 不再被 fake-IP 误判：`fake-ip-filter` 加 33 项国内关键服务
+- DNS fake-ip-filter 跨子段去重 silent bug：之前整 `dns:` 段 contains 会被 `nameserver-policy` 撞中跳过插入
+- 直连流量也遵循 nameserver-policy（mihomo 1.18+ `direct-nameserver-follow-policy: true`）
+- mobile patchConfig 热切换从过度指定简化为 `{enable: bool}`（修与 Android `injectTunFd` 的 `auto-route: false` 冲突）
+
+### 内部
+- DNS 单一真源 `dns_policy_catalog`：dns_transformer + rules_transformer 共用 const 列表
+- `TunTransformer.buildDesktopTunYaml` 抽离纯函数 builder：hot-switch / cold-start 共享，一致性测试锁住
+- 诊断报告 PII redaction（homeDir / 用户路径 / 控制器 secret 六类）
+- mihomo 月度跟版 cadence governance（`governance/mihomo-bump-cadence.md`）
+- TUN strict-route 平台分支测试可注入（`TunPlatform` 覆盖 Win / Linux / macOS 三平台 × LAN-compat 双向）
+
+### 验证
+- `flutter test`：1034 / 0 fail / 1 skip（v1.1.20 是 964）
+- 70+ 新测试：DNS catalog / 子段去重 regression / TUN 平台注入 / 诊断报告 redaction / Win 诊断脚本
+
 ## v1.1.3 (2026-05-01)
 
 ### 新功能
