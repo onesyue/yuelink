@@ -1338,14 +1338,19 @@ rules:
       expect(echIdx, greaterThan(skipIdx));
     });
 
-    test('injects DoH+ECH rules into AI-themed group when present', () {
-      // Both browser DoH (`cloudflare-dns.com`, `dns.google`, etc.) and
-      // the Cloudflare ECH probe must share an exit IP with cf-fronted
-      // services so Cloudflare WAF doesn't challenge on IP mismatch.
-      // AI-themed group wins over generic when both exist (server-side
-      // template guarantees the AI group has real cf-unlock nodes — see
-      // docs/releases/v1.1.20.md).
-      const config = '''
+    test(
+      'injects _YueLink_SecureDNS fallback group when both AI and main exist',
+      () {
+        // Both browser DoH (`cloudflare-dns.com`, `dns.google`, etc.) and
+        // the Cloudflare ECH probe must share an exit IP with cf-fronted
+        // services so Cloudflare WAF doesn't challenge on IP mismatch.
+        // When both an AI-themed group and a generic main-select group
+        // exist, we wrap them in a synthetic `_YueLink_SecureDNS`
+        // fallback group: AI is preferred (cf-friendly per server
+        // template), but the fallback flips to the main group when AI
+        // nodes are unreachable — keeping Chrome SecureDNS / DoH alive
+        // for non-cf services even when the user has no AI-unlock plan.
+        const config = '''
 mixed-port: 7890
 proxies: []
 proxy-groups:
@@ -1358,18 +1363,58 @@ proxy-groups:
 rules:
   - MATCH,Proxy
 ''';
+        final result = ConfigTemplate.process(config);
+        const target = '_YueLink_SecureDNS';
+        expect(result, contains('DOMAIN-SUFFIX,cloudflare-dns.com,$target'));
+        expect(
+          result,
+          contains('DOMAIN-SUFFIX,chrome.cloudflare-dns.com,$target'),
+        );
+        expect(
+          result,
+          contains('DOMAIN-SUFFIX,mozilla.cloudflare-dns.com,$target'),
+        );
+        expect(result, contains('DOMAIN-SUFFIX,dns.google,$target'));
+        expect(result, contains('DOMAIN-SUFFIX,cloudflare-ech.com,$target'));
+        expect(result, contains('# yuelink:secure-dns-routing'));
+        // Fallback group must have been appended to proxy-groups.
+        expect(result, contains('name: "$target"'));
+        expect(result, contains('type: fallback'));
+        // Order is AI first (preferred), main second (degraded path).
+        final aiIdx = result.indexOf('- "AI"');
+        final mainIdx = result.indexOf('- "Proxy"', aiIdx);
+        expect(aiIdx, greaterThan(0));
+        expect(mainIdx, greaterThan(aiIdx));
+        // DoH rules must come before MATCH,Proxy or they'd never fire.
+        final dohIdx =
+            result.indexOf('DOMAIN-SUFFIX,cloudflare-dns.com,$target');
+        final matchIdx = result.indexOf('MATCH,Proxy');
+        expect(dohIdx, greaterThan(0));
+        expect(matchIdx, greaterThan(dohIdx));
+      },
+    );
+
+    test('only AI group present → DoH routes directly to AI (no fallback)',
+        () {
+      // Without a main-select group there's nothing to fall back to,
+      // so we route DoH straight to AI like the legacy single-target
+      // behaviour. No synthetic fallback group is created.
+      const config = '''
+mixed-port: 7890
+proxies: []
+proxy-groups:
+  - name: AI
+    type: select
+    proxies: [DIRECT]
+  - name: 流媒体
+    type: select
+    proxies: [DIRECT]
+rules:
+  - MATCH,AI
+''';
       final result = ConfigTemplate.process(config);
       expect(result, contains('DOMAIN-SUFFIX,cloudflare-dns.com,AI'));
-      expect(result, contains('DOMAIN-SUFFIX,chrome.cloudflare-dns.com,AI'));
-      expect(result, contains('DOMAIN-SUFFIX,mozilla.cloudflare-dns.com,AI'));
-      expect(result, contains('DOMAIN-SUFFIX,dns.google,AI'));
-      expect(result, contains('DOMAIN-SUFFIX,cloudflare-ech.com,AI'));
-      expect(result, contains('# yuelink:secure-dns-routing'));
-      // DoH rules must come before MATCH,Proxy or they'd never fire.
-      final dohIdx = result.indexOf('DOMAIN-SUFFIX,cloudflare-dns.com,AI');
-      final matchIdx = result.indexOf('MATCH,Proxy');
-      expect(dohIdx, greaterThan(0));
-      expect(matchIdx, greaterThan(dohIdx));
+      expect(result, isNot(contains('_YueLink_SecureDNS')));
     });
 
     test('falls back to GLOBAL/Proxy when no AI group exists', () {
@@ -1410,11 +1455,16 @@ rules:
   - MATCH,GLOBAL
 ''';
       final result = ConfigTemplate.process(config);
+      // Both AI and main are present → fallback group composes them.
       expect(result, contains('🇺🇸 美国 AI 解锁'));
       expect(
         result,
-        contains('DOMAIN-SUFFIX,cloudflare-dns.com,🇺🇸 美国 AI 解锁'),
+        contains('DOMAIN-SUFFIX,cloudflare-dns.com,_YueLink_SecureDNS'),
       );
+      // Synthetic fallback proxies AI → main, with the unicode AI name
+      // quoted so YAML doesn't mis-parse the emoji cluster.
+      expect(result, contains('- "🇺🇸 美国 AI 解锁"'));
+      expect(result, contains('- "GLOBAL"'));
     });
 
     test('"Daily" / "AIRPORT" must NOT be matched as AI groups', () {

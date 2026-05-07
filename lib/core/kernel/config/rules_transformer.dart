@@ -41,6 +41,20 @@ class RulesTransformer {
   static const _secureDnsMarker =
       '# yuelink:secure-dns-routing'; // do not translate
 
+  /// Synthetic fallback proxy-group injected when both an AI-themed
+  /// group and a generic main-select group are present in the
+  /// subscription. DoH / ECH rules target this group instead of the AI
+  /// group directly, so when the AI group's nodes are completely
+  /// unreachable (e.g. all nodes were Cloudflare-WAF-blocklisted and
+  /// the user has no AI-unlock plan), mihomo's fallback health-check
+  /// auto-routes those domains to the main group — preserving Chrome
+  /// SecureDNS / DoH for non-cf services like google.com / github.com
+  /// even though cf-fronted services (chatgpt / claude) will still get
+  /// challenged. This is a connectivity-tier fallback, not a
+  /// reputation-tier one — the latter still depends on the server
+  /// template populating AI with cf-friendly nodes.
+  static const _secureDnsFallbackGroupName = '_YueLink_SecureDNS';
+
   /// Ensure connectivity-check domains are routed DIRECT in rules.
   ///
   /// Domain list is sourced from
@@ -101,39 +115,138 @@ class RulesTransformer {
   static String ensureBrowserSecureDnsRules(String config) {
     if (config.contains(_secureDnsMarker)) return config;
 
-    final groupName = pickPrimaryProxyGroup(config);
-    if (groupName == null) return config;
+    final picks = pickAiAndMainProxyGroup(config);
+    final ai = picks.ai;
+    final main = picks.main;
+
+    // Decide rule target.
+    //   - both groups present → inject _YueLink_SecureDNS fallback
+    //     group, route DoH/ECH there
+    //   - only one group present → preserve legacy single-target
+    //     behaviour (no synthetic group needed)
+    //   - neither → no-op (subscription too unusual to guess)
+    String? target;
+    var injectFallback = false;
+    final aiSafe = ai != null && _isSafeRuleTarget(ai);
+    final mainSafe = main != null && _isSafeRuleTarget(main);
+    if (aiSafe && mainSafe) {
+      target = _secureDnsFallbackGroupName;
+      injectFallback = true;
+    } else if (aiSafe) {
+      target = ai;
+    } else if (mainSafe) {
+      target = main;
+    }
+    if (target == null) return config;
+
+    var working = config;
+    if (injectFallback) {
+      final after = _ensureSecureDnsFallbackGroup(working, ai!, main!);
+      if (after == working) {
+        // Couldn't append the synthetic group (no proxy-groups block,
+        // already exists with mismatched name, etc.) — degrade to
+        // routing DoH directly to the AI group.
+        target = ai;
+        injectFallback = false;
+      } else {
+        working = after;
+      }
+    }
 
     final rulesRange = YamlIndentDetector.findTopLevelSection(
-      config,
+      working,
       'rules',
       requireBlockHeader: true,
     );
     if (rulesRange == null) return config;
 
-    final rulesBody = config.substring(rulesRange.bodyStart);
+    final rulesBody = working.substring(rulesRange.bodyStart);
     final ruleIndent = YamlIndentDetector.detectListItemIndent(
       rulesBody,
       allowTabs: true,
     );
 
-    if (!_isSafeRuleTarget(groupName)) return config;
     final injection = StringBuffer()
-      ..write('$ruleIndent$_secureDnsMarker -> $groupName\n');
+      ..write('$ruleIndent$_secureDnsMarker -> $target\n');
     for (final domain in _browserSecureDnsDomains) {
-      injection.write('$ruleIndent- "DOMAIN-SUFFIX,$domain,$groupName"\n');
+      injection.write('$ruleIndent- "DOMAIN-SUFFIX,$domain,$target"\n');
     }
 
-    return config.substring(0, rulesRange.bodyStart) +
+    return working.substring(0, rulesRange.bodyStart) +
         injection.toString() +
-        config.substring(rulesRange.bodyStart);
+        working.substring(rulesRange.bodyStart);
+  }
+
+  /// Append the synthetic [_secureDnsFallbackGroupName] fallback group
+  /// to the end of `proxy-groups`. Idempotent: if a group with that
+  /// name already exists, returns [config] unchanged. Returns [config]
+  /// unchanged when there is no `proxy-groups:` block-style header to
+  /// extend.
+  static String _ensureSecureDnsFallbackGroup(
+    String config,
+    String aiName,
+    String mainName,
+  ) {
+    if (config.contains('name: $_secureDnsFallbackGroupName') ||
+        config.contains('name: "$_secureDnsFallbackGroupName"') ||
+        config.contains("name: '$_secureDnsFallbackGroupName'")) {
+      return config;
+    }
+
+    final pgRange = YamlIndentDetector.findTopLevelSection(
+      config,
+      'proxy-groups',
+      requireBlockHeader: true,
+    );
+    if (pgRange == null) return config;
+
+    final body = config.substring(pgRange.bodyStart, pgRange.end);
+    final itemIndent = YamlIndentDetector.detectListItemIndent(
+      body,
+      allowTabs: true,
+    );
+    final keyIndent = '$itemIndent  ';
+
+    // Group names may contain emoji / CJK / spaces — wrap in
+    // double-quotes so YAML's plain-scalar parser doesn't choke. We've
+    // already filtered out names containing `,` or `"` upstream via
+    // _isSafeRuleTarget, so the quoting is collision-free.
+    final entry = StringBuffer()
+      ..write('$itemIndent- name: "$_secureDnsFallbackGroupName"\n')
+      ..write('${keyIndent}type: fallback\n')
+      ..write('${keyIndent}proxies:\n')
+      ..write('$keyIndent  - "$aiName"\n')
+      ..write('$keyIndent  - "$mainName"\n')
+      // generate_204 is a connectivity probe, not a cf-reputation
+      // probe — fallback flips to `mainName` when AI nodes are dead
+      // (no network), not when AI nodes are alive but cf-blacklisted.
+      // The latter is the server-side template's responsibility.
+      ..write('${keyIndent}url: "http://www.gstatic.com/generate_204"\n')
+      ..write('${keyIndent}interval: 300\n');
+
+    // pgRange.end sits at the start of the next top-level key (or
+    // EOF). Splicing in front of it preserves the document's trailing
+    // sections without disturbing their indent.
+    return config.substring(0, pgRange.end) +
+        entry.toString() +
+        config.substring(pgRange.end);
   }
 
   /// Heuristic group selector exposed for testing. AI-themed groups win
   /// over generic main-select groups; both win over no-op.
   static String? pickPrimaryProxyGroup(String config) {
+    final r = pickAiAndMainProxyGroup(config);
+    return r.ai ?? r.main;
+  }
+
+  /// Same scan as [pickPrimaryProxyGroup] but returns both classifier
+  /// hits separately so callers (e.g. the SecureDNS fallback group
+  /// builder) can decide whether to compose them. Either field may be
+  /// null when the corresponding category is absent or all candidates
+  /// failed the [_isSafeRuleTarget] filter.
+  static ({String? ai, String? main}) pickAiAndMainProxyGroup(String config) {
     final groups = _extractProxyGroups(config);
-    if (groups.isEmpty) return null;
+    if (groups.isEmpty) return (ai: null, main: null);
 
     String? bestAi;
     String? bestGeneric;
@@ -171,7 +284,7 @@ class RulesTransformer {
       }
     }
 
-    return bestAi ?? bestGeneric;
+    return (ai: bestAi, main: bestGeneric);
   }
 
   /// Parse `proxy-groups` and return each entry as a Dart map. Returns
