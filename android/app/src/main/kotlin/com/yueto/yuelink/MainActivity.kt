@@ -170,6 +170,40 @@ class MainActivity : FlutterActivity() {
                     }
                     // Xiaomi/Huawei/OPPO Doze kills VpnService after ~30min idle.
                     // Users who grant the whitelist keep the VPN alive.
+                    // c.P3-1: report Android Private DNS state to Dart.
+                    // Returns mode ∈ {off, opportunistic, hostname} +
+                    // specifier (only meaningful for hostname). Dart pulls
+                    // on app launch / resumed / VPN connected; banner only
+                    // strong-warns when mode == hostname (the only mode
+                    // that bypasses TUN dns-hijack).
+                    "getPrivateDnsState" -> {
+                        try {
+                            val mode = Settings.Global.getString(
+                                contentResolver,
+                                "private_dns_mode",
+                            ) ?: "off"
+                            val specifier = Settings.Global.getString(
+                                contentResolver,
+                                "private_dns_specifier",
+                            )
+                            result.success(
+                                mapOf(
+                                    "mode" to mode,
+                                    "specifier" to specifier,
+                                ),
+                            )
+                        } catch (e: Exception) {
+                            // Some MIUI/EMUI ROMs deny Settings.Global reads
+                            // for private_dns_*. Treat as 'unknown' rather
+                            // than failing — Dart caller falls back to OFF.
+                            result.success(
+                                mapOf<String, String?>(
+                                    "mode" to "unknown",
+                                    "specifier" to null,
+                                ),
+                            )
+                        }
+                    }
                     "isBatteryOptimizationIgnored" -> {
                         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
                             result.success(true) // pre-M: no doze, nothing to ignore
