@@ -28,7 +28,6 @@ import 'widgets/quick_actions.dart';
 import '../mine/widgets/notices_card.dart';
 import 'widgets/emby_preview_row.dart';
 import 'widgets/renewal_reminder_banner.dart';
-import 'widgets/connectivity_test_card.dart';
 import 'widgets/private_dns_banner.dart';
 import 'widgets/stale_subscription_banner.dart';
 import '../../domain/emby/emby_info_entity.dart';
@@ -315,14 +314,6 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
               const _StaggeredIn(
                 index: 8,
                 child: RepaintBoundary(child: _TrafficSection()),
-              ),
-
-              const SizedBox(height: 12),
-
-              // ── 7. 连通性体检（D-④ P4-4）────────────────
-              const _StaggeredIn(
-                index: 9,
-                child: RepaintBoundary(child: ConnectivityTestCard()),
               ),
 
               const SizedBox(height: 16),
