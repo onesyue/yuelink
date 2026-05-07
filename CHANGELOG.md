@@ -1,5 +1,40 @@
 # Changelog
 
+## v1.1.22 (2026-05-07)
+
+### 新功能
+- 跟随系统语言：装完 yuelink 自动按手机/电脑系统语言显示中文或英文；用户在系统设置切换语言后 yuelink 实时跟着切（不需要重启 App、不需要进设置改）。设置 → 通用 → 语言 三选：跟随系统 / 中文 / English。
+- AI 节点缺位时仍能解 DoH：当订阅同时存在 AI 解锁组和主组，自动注入 `_YueLink_SecureDNS` fallback 组（`[AI, 主组]`）。AI 组节点全死或被 Cloudflare WAF 黑名单时，Chrome SecureDNS / DoH 自动退回主组，至少 google.com / github.com 等非 cf 服务能正常解析。
+- 代理互斥提示（Android）：参考 Clash Meta 风格，启动 yuelink 前预检系统是否已有别的 VPN 在跑，命中时弹"另一 VPN 在运行"对话框 + 一键跳"系统 VPN 设置"，不再让用户卡在转圈不知道哪里有问题。
+- 桌面 TUN 切到 jumbo 虚拟 MTU（9000）：与 mihomo Meta 主线一致；userspace stack 仍按物理接口 MTU 分段，但虚拟帧变大显著降低 TUN 读写次数 / 上下文切换开销。Android 早就是 9000，iOS 仍 1500（cellular socket 限制）。
+- Android 局域网精确放行（仿 Clash Meta 路由表）：Android VpnService 不再用 `0.0.0.0/0` 钝路由，按 Clash Meta 的 PUBLIC_IPV4_ROUTES 拆分覆盖公网段，自动绕开 LAN / 路由器 / 打印机 / hotspot 等内网流量；Android Q+ 同时通过 `setHttpProxy` + 排除列表对私网服务直连。
+
+### 修复
+- 同步订阅后立即生效：`syncSubscription` 写完 profile yaml 后调 `coreActions.restart(yaml)` 重新加载 mihomo runtime（v1.1.20 已知问题"下版会修"，v1.1.22 落地）。
+- Android TUN 重连后选择器 / fake-IP 卡死：每次启动强制 `setRoutingMode(savedMode)` 给 mihomo 一次明确 nudge，等同于用户手动 rule→global→rule 的修复。
+- 系统语言切换不跟随：之前 stored language 一旦写过就永远不再 resolve 系统 locale；新增 `didChangeLocales` 钩子，preference == auto 时实时切到系统当前语言。
+
+### 调整
+- 撤回 v1.1.21 的若干 Dashboard / 设置 UI 入口：Dashboard 顶部 Private DNS hostname 提示、设置 → 高级里的"导出诊断报告 / 复制 Windows 诊断脚本 / 局域网兼容模式 / 托盘空闲标志"四行，整体回归 v1.1.20 视觉。底层服务（DiagnosticReport / WindowsDiagnosticScript / LAN compat 配置开关 / Private DNS provider）保留，未来按需重新接 UI。
+- 删除 v1.1.21 引入的 Dashboard 连通性体检卡（与日常使用闭环重复，先收回）。
+- 删除"托盘空闲标志（实验性）"完整 wiring：`lightWeightModeProvider` / `autoLightWeightAfterMinutesProvider` / 计时器 / SettingsService getter/setter 全部移除，没消费者的 dead infrastructure 不进发布版。
+
+### 内部
+- `lib/i18n/locale_resolver.dart`：`LanguagePreference` 常量 + `effectiveLanguageForPreference` 单一入口，bootstrap / settings UI / `didChangeLocales` 三处共用同一逻辑，杜绝 preference→render 漂移。
+- `LanguagePreferenceNotifier` 与 `LanguageNotifier` 分离：preference (auto/zh/en) 是设置层，render (zh/en) 是应用层，MaterialApp.locale 只看 render。
+- `_YueLink_SecureDNS` 注入器（`rules_transformer.dart::_ensureSecureDnsFallbackGroup`）：单组 fallback 行为退化保留旧契约 + 1 项新单测。
+- Android `MainActivity::checkVpnConflict` MethodChannel：`ConnectivityManager.allNetworks` + `TRANSPORT_VPN` capability 探测，自身 `serviceBound + getTunFd > 0` 排除自家 VPN，避免重连场景误报。
+
+### 验证
+- `flutter analyze --no-fatal-infos --no-fatal-warnings` 通过，No issues found。
+- `bash scripts/check_imports.sh` 架构边界检查通过。
+- `flutter test` 全量 **1035** 通过 / 0 失败 / 1 skipped（v1.1.21 是 1034）；新增覆盖 cf-fronted fallback group / Android Public IPv4 路由表 / VPN slot 互斥 / 跟随系统语言 resolver。
+
+### 升级提示
+- 已登录用户无需重登，订阅 / 设置 / 节点选择全部保留。
+- 老用户的 `language=zh` 是显式偏好，会被尊重 —— 升级后 yuelink 仍是中文。要享受跟随系统请进 设置 → 通用 → 语言 → 跟随系统。新装用户默认即跟随。
+- 没有改 mihomo 内核版本、TUN bypass 列表、节点选择口径。
+
 ## v1.1.21 (2026-05-07)
 
 ### 新功能

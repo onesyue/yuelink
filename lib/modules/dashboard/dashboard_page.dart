@@ -13,6 +13,7 @@ import 'providers/traffic_providers.dart';
 import '../profiles/providers/profiles_providers.dart';
 import '../../shared/app_notifier.dart';
 import '../../core/kernel/core_manager.dart';
+import '../../core/platform/vpn_service.dart';
 import '../../infrastructure/repositories/profile_repository.dart';
 import '../../theme.dart';
 import '../announcements/providers/announcements_providers.dart';
@@ -28,8 +29,6 @@ import 'widgets/quick_actions.dart';
 import '../mine/widgets/notices_card.dart';
 import 'widgets/emby_preview_row.dart';
 import 'widgets/renewal_reminder_banner.dart';
-import 'widgets/connectivity_test_card.dart';
-import 'widgets/private_dns_banner.dart';
 import 'widgets/stale_subscription_banner.dart';
 import '../../domain/emby/emby_info_entity.dart';
 import '../../app/main_shell.dart';
@@ -263,14 +262,6 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
 
               const SizedBox(height: 12),
 
-              // ── 1.7 Android Private DNS hostname 提示（c.P3-1）─
-              const _StaggeredIn(
-                index: 2,
-                child: RepaintBoundary(child: PrivateDnsBanner()),
-              ),
-
-              const SizedBox(height: 12),
-
               // ── 2. 快捷操作 ───────────────────────────────
               const _StaggeredIn(
                 index: 3,
@@ -315,14 +306,6 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
               const _StaggeredIn(
                 index: 8,
                 child: RepaintBoundary(child: _TrafficSection()),
-              ),
-
-              const SizedBox(height: 12),
-
-              // ── 7. 连通性体检（D-④ P4-4）────────────────
-              const _StaggeredIn(
-                index: 9,
-                child: RepaintBoundary(child: ConnectivityTestCard()),
               ),
 
               const SizedBox(height: 16),
@@ -420,6 +403,20 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
           final proceed = await _showVpnRationale(context, s);
           if (proceed != true) return;
           await SettingsService.set('hasSeenVpnHint', true);
+        }
+      }
+
+      // Issue #3 — proxy mutex. Android allows one VPN system-wide;
+      // a foreign VPN already holding the slot makes our establish()
+      // silently fail with fd=-1 (looks identical to permission
+      // denied). Probe before we spend the user's patience: if
+      // detected, route them to system VPN settings instead.
+      if (Platform.isAndroid) {
+        final hasOther = await VpnService.hasForeignVpnActive();
+        if (hasOther) {
+          if (!context.mounted) return;
+          await _showVpnConflictDialog(context, s);
+          return;
         }
       }
 
@@ -697,6 +694,49 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
             child: Text(s.vpnPermContinue),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Issue #3 — proxy mutex dialog. Fired when [VpnService.hasForeignVpnActive]
+  /// reports another VPN already owns the system slot. The OS will not
+  /// let YueLink claim it concurrently, and we cannot identify the
+  /// foreign owner from a non-privileged app — the dialog is therefore
+  /// generic and offers the user a one-tap path to the system VPN
+  /// settings screen so they can disconnect whichever app is holding
+  /// the slot. Modeled on Clash Verge / FlClash's mutex flow.
+  Future<void> _showVpnConflictDialog(BuildContext context, S s) {
+    final isEn = Localizations.localeOf(context).languageCode == 'en';
+    return showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(
+          isEn
+              ? 'Another VPN is active'
+              : '另一个 VPN 正在运行',
+        ),
+        content: Text(
+          isEn
+              ? 'Android only allows one VPN at a time. Please disconnect '
+                  'the other VPN app first, then tap Connect again.'
+              : 'Android 系统每次只允许一个 VPN 运行。请先关闭其它 VPN 应用,'
+                  '然后再点击连接。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(s.cancel),
+          ),
+          FilledButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await VpnService.openVpnSettings();
+            },
+            child: Text(
+              isEn ? 'Open VPN settings' : '打开 VPN 设置',
+            ),
           ),
         ],
       ),

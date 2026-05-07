@@ -11,6 +11,7 @@ import 'package:window_manager/window_manager.dart';
 
 import 'constants.dart';
 import 'i18n/app_strings.dart';
+import 'i18n/locale_resolver.dart';
 import 'i18n/strings_g.dart';
 import 'modules/nodes/providers/nodes_providers.dart'
     show
@@ -177,6 +178,9 @@ Future<void> _bootstrap() async {
         languageProvider.overrideWith(
           () => LanguageNotifier(bootstrap.savedLanguage),
         ),
+        languagePreferenceProvider.overrideWith(
+          () => LanguagePreferenceNotifier(bootstrap.savedLanguagePreference),
+        ),
         accentColorProvider.overrideWith(
           () => AccentColorNotifier(bootstrap.savedAccentColor),
         ),
@@ -211,11 +215,6 @@ Future<void> _bootstrap() async {
         windowsLanCompatibilityModeProvider.overrideWith(
           () => WindowsLanCompatibilityModeNotifier(
             bootstrap.savedWindowsLanCompatibilityMode,
-          ),
-        ),
-        autoLightWeightAfterMinutesProvider.overrideWith(
-          () => AutoLightWeightAfterMinutesNotifier(
-            bootstrap.savedAutoLightWeightAfterMinutes,
           ),
         ),
         testUrlProvider.overrideWith(
@@ -288,10 +287,6 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
   late final AppQuitController _quit;
   late final AppResumeController _resume;
   late final DeeplinkController _deeplink;
-  // D-⑤ P4-5: timer fires `lightWeightModeProvider = true` when the
-  // app sits in background (tray) past `autoLightWeightAfterMinutes`.
-  // Cancelled on resumed.
-  Timer? _lightWeightTimer;
 
   // Managed provider subscriptions — cleaned up in dispose()
   ProviderSubscription? _langSub;
@@ -621,6 +616,30 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
 
   // ── App lifecycle ─────────────────────────────────────────────────
 
+  /// Re-resolve the rendered locale when the OS language changes
+  /// while we're alive. The `auto` preference is the only path that
+  /// reacts — pinned `zh` / `en` preferences explicitly opted out of
+  /// follow-the-system. Triggered by Flutter on every system language
+  /// switch (Android 7+ Settings → Languages, iOS Settings → General
+  /// → Language, macOS System Settings → General → Language, Windows
+  /// Settings → Time & language → Language). Without this, users who
+  /// switched their phone to English mid-session would see a Chinese
+  /// YueLink until the next cold start.
+  @override
+  void didChangeLocales(List<Locale>? locales) {
+    super.didChangeLocales(locales);
+    final preference = ref.read(languagePreferenceProvider);
+    if (preference != LanguagePreference.auto) return;
+    final next = effectiveLanguageForPreference(LanguagePreference.auto);
+    final current = ref.read(languageProvider);
+    if (next == current) return;
+    ref.read(languageProvider.notifier).set(next);
+    // Slang's static `S.setLanguage` updates the global `t` so calls
+    // outside the widget tree (tray menu titles, notification text)
+    // pick up the new locale without waiting for a rebuild.
+    S.setLanguage(next);
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     // Battery optimization: pause WebSocket streams and reduce heartbeat
@@ -638,17 +657,15 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
       Telemetry.event(TelemetryEvents.appBackgrounded);
       unawaited(SettingsService.flush());
       unawaited(Telemetry.flush());
-      _scheduleLightWeightTimer();
     }
 
     if (state == AppLifecycleState.resumed) {
-      _cancelLightWeightTimer();
       Telemetry.event(TelemetryEvents.appResumed);
-      // c.P3-1: pull Android Private DNS state on every resume so the
-      // Dashboard banner reflects whatever the user toggled in system
-      // Settings while we were backgrounded. Cheap (one Settings.Global
-      // read on the platform side); harmless on non-Android (refresh()
-      // returns early).
+      // Pull Android Private DNS state on every resume so the
+      // DiagnosticReport / future banners reflect whatever the user
+      // toggled in system Settings while we were backgrounded. Cheap
+      // (one Settings.Global read on the platform side); harmless on
+      // non-Android (refresh() returns early).
       if (Platform.isAndroid) {
         unawaited(
           ref.read(privateDnsStateProvider.notifier).refresh(),
@@ -676,31 +693,6 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
           ref.read(recoveryInProgressProvider.notifier).set(false);
         }
       });
-    }
-  }
-
-  // ── D-⑤ P4-5: auto-light-weight timer ────────────────────────────
-  void _scheduleLightWeightTimer() {
-    // Desktop only. Mobile already aggressively unmounts foreground
-    // widgets when paused; running this timer there would just be
-    // extra battery drain.
-    if (!(Platform.isMacOS || Platform.isWindows || Platform.isLinux)) {
-      return;
-    }
-    _lightWeightTimer?.cancel();
-    final minutes = ref.read(autoLightWeightAfterMinutesProvider);
-    if (minutes <= 0) return; // disabled
-    _lightWeightTimer = Timer(Duration(minutes: minutes), () {
-      if (!mounted) return;
-      ref.read(lightWeightModeProvider.notifier).set(true);
-    });
-  }
-
-  void _cancelLightWeightTimer() {
-    _lightWeightTimer?.cancel();
-    _lightWeightTimer = null;
-    if (mounted) {
-      ref.read(lightWeightModeProvider.notifier).set(false);
     }
   }
 

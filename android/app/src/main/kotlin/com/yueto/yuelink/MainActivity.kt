@@ -8,6 +8,8 @@ import android.content.Intent
 import android.content.ServiceConnection
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.net.Uri
 import android.net.VpnService
 import android.os.Build
@@ -202,6 +204,76 @@ class MainActivity : FlutterActivity() {
                                     "specifier" to null,
                                 ),
                             )
+                        }
+                    }
+                    // Issue #3 — proxy mutex: detect another VPN owning
+                    // the system VPN slot before we attempt establish().
+                    // Android only allows one active VPN system-wide; a
+                    // second VpnService.establish() returns null (which
+                    // surfaces in Dart as fd=-1, indistinguishable from
+                    // permission-denied). Probing here lets the UI
+                    // surface a precise "another VPN is running" dialog
+                    // and link the user to system VPN settings.
+                    //
+                    // Limitation: we cannot identify the *owner* of the
+                    // foreign VPN (NetworkCapabilities.getOwnerUid is
+                    // gated behind NETWORK_SETTINGS, a privileged
+                    // permission). The dialog therefore says "another
+                    // VPN" without naming it.
+                    "checkVpnConflict" -> {
+                        try {
+                            val cm = getSystemService(
+                                Context.CONNECTIVITY_SERVICE,
+                            ) as ConnectivityManager
+                            var foreignVpn = false
+                            for (n in cm.allNetworks) {
+                                val nc = cm.getNetworkCapabilities(n) ?: continue
+                                if (nc.hasTransport(
+                                        NetworkCapabilities.TRANSPORT_VPN,
+                                    )
+                                ) {
+                                    foreignVpn = true
+                                    break
+                                }
+                            }
+                            // YueLink's own VpnService bound to this Activity?
+                            // If so, the foreign VPN we just detected is us
+                            // — not a conflict. Reconnect / re-toggle paths
+                            // should not block on themselves.
+                            val ourVpnRunning = serviceBound &&
+                                vpnService?.getTunFd()?.let { it > 0 } == true
+                            result.success(
+                                mapOf(
+                                    "hasOtherVpn" to (foreignVpn && !ourVpnRunning),
+                                ),
+                            )
+                        } catch (e: Exception) {
+                            // Probe never throws on platform — but if a
+                            // future ROM does, treat as no-conflict
+                            // rather than stranding the user. The actual
+                            // start path will surface its own error.
+                            result.success(mapOf("hasOtherVpn" to false))
+                        }
+                    }
+                    "openVpnSettings" -> {
+                        try {
+                            val intent = Intent(Settings.ACTION_VPN_SETTINGS)
+                                .apply {
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                            startActivity(intent)
+                            result.success(true)
+                        } catch (e: Exception) {
+                            try {
+                                val fallback = Intent(Settings.ACTION_SETTINGS)
+                                    .apply {
+                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    }
+                                startActivity(fallback)
+                                result.success(true)
+                            } catch (_: Exception) {
+                                result.success(false)
+                            }
                         }
                     }
                     "isBatteryOptimizationIgnored" -> {

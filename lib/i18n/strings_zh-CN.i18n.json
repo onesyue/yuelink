@@ -351,6 +351,7 @@
   "themeSystem": "跟随系统",
   "themeLight": "浅色",
   "themeDark": "深色",
+  "languageAuto": "跟随系统",
   "languageChinese": "中文",
   "languageEnglish": "English",
   "coreStatus": "内核状态",

@@ -27,10 +27,11 @@ class AppConstants {
   static const defaultApiPort = 9090;
   static const defaultDesktopTunStack = 'mixed';
 
-  /// TUN MTU used everywhere we own the device (desktop + mobile). Matches
-  /// physical Ethernet/Wi-Fi MTU; jumbo frames silently re-fragment or drop
-  /// at the kernel socket layer and cost 15-30% throughput.
-  static const defaultTunMtu = 1500;
+  /// TUN MTU used everywhere we own the device (desktop + mobile).
+  /// Mihomo / Clash Meta's mainstream TUN path uses a jumbo virtual MTU;
+  /// the userspace stack still segments outbound packets to the physical
+  /// interface MTU, while the larger virtual frame cuts TUN read/write churn.
+  static const defaultTunMtu = 9000;
   static const serviceListenHost = '127.0.0.1';
   static const serviceListenPort = 28653;
   static const desktopServiceName = 'YueLinkServiceHelper';

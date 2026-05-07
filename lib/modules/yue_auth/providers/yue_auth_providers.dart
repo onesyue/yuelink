@@ -7,6 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/storage/auth_token_service.dart';
 import '../../../core/storage/settings_service.dart';
 import '../../../core/providers/core_provider.dart';
+import '../../../core/providers/core_runtime_providers.dart';
+import '../../../core/profile/profile_service.dart';
 import '../../../infrastructure/datasources/xboard/index.dart';
 // Re-export shared types so other modules import from auth, not datasources.
 export '../../../infrastructure/datasources/xboard/index.dart'
@@ -556,6 +558,41 @@ class AuthNotifier extends Notifier<AuthState> {
 
     // Refresh profiles list in UI
     ref.read(profilesProvider.notifier).load();
+
+    // ── Reload mihomo so subscription changes take effect immediately ──
+    //
+    // Pre-fix (acknowledged in v1.1.20 release notes as "known gap, will fix
+    // next version" — slipped through v1.1.21): updateProfile only wrote the
+    // new YAML to disk at `profiles/<id>.yaml`. mihomo runs from the
+    // **runtime** config at `<appSupport>/yuelink.yaml` written at
+    // CoreManager.start() time and was unaware of the profile update.
+    // Result: user pulled a new subscription, "拉" succeeded, but old rules
+    // kept routing.
+    //
+    // Fix: if the core is running, reload via the same path
+    // restartCoreWithActiveConfig uses — load the (just-updated) profile
+    // YAML and let CoreLifecycleManager.restart re-run ConfigTemplate.process
+    // and PUT /configs?force=true into mihomo. Brief disconnection (~1-2 s)
+    // is acceptable for an explicit user-triggered sync.
+    if (CoreManager.instance.isRunning && !CoreManager.instance.isMockMode) {
+      final activeId =
+          ref.read(activeProfileIdProvider) ??
+          await SettingsService.getActiveProfileId();
+      if (activeId != null) {
+        final yaml = await ProfileService.loadConfig(activeId);
+        if (yaml != null && yaml.trim().isNotEmpty) {
+          try {
+            await ref.read(coreActionsProvider).restart(yaml);
+            EventLog.write('[Sync] core_reloaded after subscription sync');
+          } catch (e) {
+            // Non-fatal: profile still updated on disk, will take effect
+            // on the next natural reload (mode switch / app restart).
+            debugPrint('[Auth] post-sync core reload failed: $e');
+            EventLog.write('[Sync] core_reload_failed err=$e');
+          }
+        }
+      }
+    }
 
     // First-time sync: welcome the user
     if (isFirstTime) {

@@ -189,6 +189,52 @@ class VpnService {
     }
   }
 
+  /// Issue #3 — proxy mutex: detect whether ANOTHER VPN currently owns
+  /// the Android system VPN slot. Android allows at most one active
+  /// VPN system-wide; a second `establish()` silently returns null and
+  /// the user sees the connect spinner spin forever. Dashboard calls
+  /// this *before* `start()` so a clean dialog can fire instead of an
+  /// opaque failure. Returns false when not on Android, when probing
+  /// fails, or when the only VPN active is YueLink's own (re-toggle
+  /// scenario). The native side cannot identify the foreign owner —
+  /// `NetworkCapabilities.getOwnerUid` requires NETWORK_SETTINGS — so
+  /// the UI must phrase the dialog as "another VPN" without naming it.
+  static Future<bool> hasForeignVpnActive() async {
+    if (!Platform.isAndroid) return false;
+    try {
+      final raw = await _channel
+          .invokeMethod<Map<dynamic, dynamic>>('checkVpnConflict')
+          .timeout(_kQuickOpBudget);
+      return (raw?['hasOtherVpn'] as bool?) ?? false;
+    } on TimeoutException {
+      // 10 s on a local probe means something is very wrong — treat as
+      // "couldn't determine, let the user proceed and surface the real
+      // failure mode at establish() time".
+      return false;
+    } on PlatformException catch (_) {
+      return false;
+    }
+  }
+
+  /// Open the system "VPN" settings screen so the user can disconnect
+  /// the conflicting VPN reported by [hasForeignVpnActive]. Falls back
+  /// to the top-level Settings activity when the VPN sub-page intent
+  /// is rejected (some OEM ROMs deny direct access). Returns true when
+  /// any settings screen successfully opened.
+  static Future<bool> openVpnSettings() async {
+    if (!Platform.isAndroid) return false;
+    try {
+      final ok = await _channel
+          .invokeMethod<bool>('openVpnSettings')
+          .timeout(_kQuickOpBudget);
+      return ok ?? false;
+    } on TimeoutException {
+      return false;
+    } on PlatformException catch (_) {
+      return false;
+    }
+  }
+
   /// Request VPN permission (Android only).
   static Future<bool> requestPermission() async {
     if (!Platform.isAndroid) return true;

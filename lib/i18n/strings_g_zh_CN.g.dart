@@ -391,6 +391,7 @@ class TranslationsZhCn extends Translations with BaseTranslations<AppLocale, Tra
 	@override String get themeSystem => '跟随系统';
 	@override String get themeLight => '浅色';
 	@override String get themeDark => '深色';
+	@override String get languageAuto => '跟随系统';
 	@override String get languageChinese => '中文';
 	@override String get languageEnglish => 'English';
 	@override String get coreStatus => '内核状态';
@@ -1204,6 +1205,7 @@ extension on TranslationsZhCn {
 			'themeSystem' => '跟随系统',
 			'themeLight' => '浅色',
 			'themeDark' => '深色',
+			'languageAuto' => '跟随系统',
 			'languageChinese' => '中文',
 			'languageEnglish' => 'English',
 			'coreStatus' => '内核状态',
@@ -1363,9 +1365,9 @@ extension on TranslationsZhCn {
 			'storeHandlingFee' => '手续费',
 			'storeOrderHistory' => '订单记录',
 			'storeOrderNo' => '订单号',
-			'storeOrderDate' => '下单时间',
 			_ => null,
 		} ?? switch (path) {
+			'storeOrderDate' => '下单时间',
 			'storeNoOrders' => '暂无订单记录',
 			'storeOrderDetail' => '订单详情',
 			'storeOrderStatusPending' => '待支付',

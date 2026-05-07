@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:launch_at_startup/launch_at_startup.dart';
 
@@ -12,10 +11,7 @@ import '../../../i18n/app_strings.dart';
 import '../../../i18n/strings_g.dart';
 import '../../../core/providers/core_provider.dart';
 import '../../../shared/app_notifier.dart';
-import '../../../shared/diagnostic_report.dart';
-import '../../../shared/log_export_service.dart';
 import '../../../shared/telemetry.dart';
-import '../../../shared/windows_diagnostic_script.dart';
 import '../../../shared/widgets/yl_scaffold.dart';
 import '../../../theme.dart';
 import '../providers/settings_providers.dart';
@@ -333,8 +329,6 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
     final quicPolicy = ref.watch(quicPolicyProvider);
     final desktopTunStack = ref.watch(desktopTunStackProvider);
     final systemProxyOnConnect = ref.watch(systemProxyOnConnectProvider);
-    final winLanCompat = ref.watch(windowsLanCompatibilityModeProvider);
-    final lightWeightMin = ref.watch(autoLightWeightAfterMinutesProvider);
     final status = ref.watch(coreStatusProvider);
     final routingMode = ref.watch(routingModeProvider);
     final isDesktop =
@@ -456,46 +450,6 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
                             _pickConnectionMode(context, connectionMode),
                       ),
                       Divider(height: 1, thickness: 0.5, color: dividerColor),
-                      YLSettingsRow(
-                        title: isEn
-                            ? 'Export diagnostic report'
-                            : '导出诊断报告',
-                        description: isEn
-                            ? 'Read-only markdown bundle: connection mode, '
-                                  'ports, startup steps, system proxy, '
-                                  'Service Mode, Private DNS, bypass list. '
-                                  'Safe to share — no tokens / nodes / IPs.'
-                            : '只读 markdown 报告:连接模式 / 端口 / 启动步骤 / '
-                                  '系统代理 / Service Mode / Private DNS / '
-                                  'bypass 列表。可放心上报 —— 不含 token/节点/IP。',
-                        trailing: YLSettingsValueButton(
-                          label: isEn ? 'Export' : '导出',
-                        ),
-                        onTap: () async {
-                          final report = await DiagnosticReport.build(ref);
-                          final ts = DateTime.now()
-                              .toIso8601String()
-                              .replaceAll(':', '-')
-                              .split('.')
-                              .first;
-                          final result = await LogExportService.saveText(
-                            fileName: 'yuelink-diagnostic-$ts.md',
-                            content: report,
-                          );
-                          if (!context.mounted) return;
-                          if (result.saved) {
-                            AppNotifier.success(
-                              isEn ? 'Saved' : '已导出',
-                            );
-                          } else if (!result.cancelled) {
-                            AppNotifier.error(
-                              result.error ??
-                                  (isEn ? 'Export failed' : '导出失败'),
-                            );
-                          }
-                        },
-                      ),
-                      Divider(height: 1, thickness: 0.5, color: dividerColor),
                       const ServiceModeRow(),
                       if (connectionMode == 'tun') ...[
                         Divider(height: 1, thickness: 0.5, color: dividerColor),
@@ -515,75 +469,6 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
                           ),
                           onTap: () => _showTunBypassEditor(context),
                         ),
-                        if (Platform.isWindows) ...[
-                          Divider(height: 1, thickness: 0.5, color: dividerColor),
-                          YLSettingsRow(
-                            title: isEn
-                                ? 'Copy Windows diagnostic script'
-                                : '复制 Windows 诊断脚本',
-                            description: isEn
-                                ? 'Read-only PowerShell. Paste into Win + R '
-                                      '→ powershell to generate a markdown '
-                                      'report (Wintun / NIC / routes / DNS / '
-                                      'firewall / proxy / service / API).'
-                                : '只读 PowerShell 脚本。粘贴到 Win+R → '
-                                      'powershell 执行,生成 markdown 报告 '
-                                      '(Wintun / 网卡 / 路由 / DNS / 防火墙 / '
-                                      '系统代理 / Service / API)。',
-                            trailing: YLSettingsValueButton(
-                              label: isEn ? 'Copy' : '复制',
-                            ),
-                            onTap: () async {
-                              // Live runtime ports if core is up; defaults
-                              // otherwise. Both ports flow into the script's
-                              // `127.0.0.1:<port>/configs` reachability check
-                              // — pass apiPort too because port-conflict
-                              // remapping at startup may have moved it off
-                              // the 9090 default.
-                              final script = WindowsDiagnosticScript.generate(
-                                mixedPort: CoreManager.instance.mixedPort,
-                                apiPort: CoreManager.instance.apiPort,
-                              );
-                              await Clipboard.setData(
-                                ClipboardData(text: script),
-                              );
-                              if (!context.mounted) return;
-                              AppNotifier.success(
-                                isEn
-                                    ? 'Diagnostic script copied to clipboard'
-                                    : '诊断脚本已复制到剪贴板',
-                              );
-                            },
-                          ),
-                          Divider(height: 1, thickness: 0.5, color: dividerColor),
-                          YLSettingsRow(
-                            title: isEn
-                                ? 'LAN compatibility mode'
-                                : '局域网兼容模式',
-                            description: isEn
-                                ? 'Disables strict-route on Windows TUN. '
-                                      'Enable to reach SMB shares, network '
-                                      'printers, remote-desktop to intranet, '
-                                      'or NAS web UIs while connected. '
-                                      'Slightly relaxes the leak-tightness '
-                                      'guarantee. Restart to apply.'
-                                : '关闭 Windows TUN 的 strict-route。开启后可访问 '
-                                      '内网共享 / 网络打印机 / 远程桌面 / NAS '
-                                      '管理页;会略微放松防泄漏严格度,需重连生效。',
-                            trailing: CupertinoSwitch(
-                              value: winLanCompat,
-                              activeTrackColor: YLColors.connected,
-                              onChanged: (v) async {
-                                ref
-                                    .read(windowsLanCompatibilityModeProvider
-                                        .notifier)
-                                    .set(v);
-                                await SettingsService
-                                    .setWindowsLanCompatibilityMode(v);
-                              },
-                            ),
-                          ),
-                        ],
                       ],
                       Divider(height: 1, thickness: 0.5, color: dividerColor),
                       YLSettingsRow(
@@ -597,37 +482,6 @@ class _GeneralSettingsPageState extends ConsumerState<GeneralSettingsPage> {
                                 .read(systemProxyOnConnectProvider.notifier)
                                 .set(v);
                             await SettingsService.setSystemProxyOnConnect(v);
-                          },
-                        ),
-                      ),
-                      Divider(height: 1, thickness: 0.5, color: dividerColor),
-                      YLSettingsRow(
-                        title: isEn
-                            ? 'Tray idle flag (experimental)'
-                            : '托盘空闲标志（实验性）',
-                        description: isEn
-                            ? 'Sets a Riverpod flag (lightWeightModeProvider) '
-                                  '10 minutes after the window is hidden into '
-                                  'tray. Currently no widget consumes the '
-                                  'flag — it is wiring only, ready for future '
-                                  'opt-in resource releases. Tray + mihomo '
-                                  'always keep running regardless.'
-                            : '窗口隐藏托盘 10 分钟后将 Riverpod '
-                                  'lightWeightModeProvider 设为 true。'
-                                  '当前**无**消费者实际释放资源 —— 仅作为'
-                                  'opt-in 接线点供未来按页接入。无论开关与否,'
-                                  '托盘 + mihomo 始终正常运行。',
-                        trailing: CupertinoSwitch(
-                          value: lightWeightMin > 0,
-                          activeTrackColor: YLColors.connected,
-                          onChanged: (v) async {
-                            final next = v ? 10 : 0;
-                            ref
-                                .read(autoLightWeightAfterMinutesProvider
-                                    .notifier)
-                                .set(next);
-                            await SettingsService
-                                .setAutoLightWeightAfterMinutes(next);
                           },
                         ),
                       ),

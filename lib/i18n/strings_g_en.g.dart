@@ -1097,6 +1097,9 @@ class Translations with BaseTranslations<AppLocale, Translations> {
 	/// en: 'Dark'
 	String get themeDark => 'Dark';
 
+	/// en: 'Follow system'
+	String get languageAuto => 'Follow system';
+
 	/// en: '中文'
 	String get languageChinese => '中文';
 
@@ -2811,6 +2814,7 @@ extension on Translations {
 			'themeSystem' => 'System',
 			'themeLight' => 'Light',
 			'themeDark' => 'Dark',
+			'languageAuto' => 'Follow system',
 			'languageChinese' => '中文',
 			'languageEnglish' => 'English',
 			'coreStatus' => 'Core Status',
@@ -2970,9 +2974,9 @@ extension on Translations {
 			'storeHandlingFee' => 'Handling fee',
 			'storeOrderHistory' => 'Order History',
 			'storeOrderNo' => 'Order No.',
-			'storeOrderDate' => 'Date',
 			_ => null,
 		} ?? switch (path) {
+			'storeOrderDate' => 'Date',
 			'storeNoOrders' => 'No orders yet',
 			'storeOrderDetail' => 'Order Detail',
 			'storeOrderStatusPending' => 'Pending',

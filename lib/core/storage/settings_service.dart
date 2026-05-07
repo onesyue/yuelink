@@ -467,21 +467,6 @@ class SettingsService {
     await set('systemProxyOnConnect', value);
   }
 
-  // ── Auto light-weight idle minutes (D-⑤ P4-5, desktop only) ────────────
-  //
-  // When > 0 and the app sits in tray (window hidden) for that many
-  // minutes, lightWeightModeProvider flips true; consumers can dispose
-  // heavy resources (chart timers, webview frames). 0 disables.
-  // Default 0 — opt-in, since the unmount semantics are platform-fragile.
-
-  static Future<int> getAutoLightWeightAfterMinutes() async {
-    return (await get<int>('autoLightWeightAfterMinutes')) ?? 0;
-  }
-
-  static Future<void> setAutoLightWeightAfterMinutes(int value) async {
-    await set('autoLightWeightAfterMinutes', value);
-  }
-
   // ── Windows LAN compatibility mode (TUN strict-route off) ──────────────
   //
   // When true, desktop TUN config uses `strict-route: false` on Windows so
@@ -506,14 +491,24 @@ class SettingsService {
     await set('launchAtStartup', value);
   }
 
-  // ── Language (zh / en) ──────────────────────────────────────────────────
+  // ── Language preference (auto / zh / en) ───────────────────────────────
+  //
+  // Stored value is the user's *preference*, not the rendered language.
+  // `auto` (or null on a fresh install) means "follow the system locale";
+  // bootstrap + `didChangeLocales` resolve that to a concrete `zh` / `en`
+  // before driving `languageProvider`. Pinned values (`zh` / `en`) ignore
+  // the OS and keep the UI in that language across reinstalls + locale
+  // changes — useful for users on a non-zh system who want the Chinese
+  // UI, or vice versa.
 
-  static Future<String> getLanguage() async {
-    return (await get<String>('language')) ?? 'zh';
+  /// Raw preference as stored. `null` on first install (caller treats as
+  /// `auto`); see [LanguagePreference] for the canonical token list.
+  static Future<String?> getLanguage() async {
+    return await get<String>('language');
   }
 
-  static Future<void> setLanguage(String langCode) async {
-    await set('language', langCode);
+  static Future<void> setLanguage(String preference) async {
+    await set('language', preference);
   }
 
   // ── Close window behavior (desktop) ─────────────────────────────────────────

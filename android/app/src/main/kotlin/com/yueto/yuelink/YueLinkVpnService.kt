@@ -9,12 +9,14 @@ import android.net.ConnectivityManager
 import android.net.LinkProperties
 import android.net.Network
 import android.net.NetworkCapabilities
+import android.net.ProxyInfo
 import android.net.NetworkRequest
 import android.net.VpnService
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
 import android.os.ParcelFileDescriptor
+import android.provider.Settings
 
 class YueLinkVpnService : VpnService() {
     companion object {
@@ -29,6 +31,87 @@ class YueLinkVpnService : VpnService() {
 
         private const val NOTIFICATION_ID = 1
         private const val CHANNEL_ID = "yuelink_vpn"
+        private const val DEFAULT_TUN_MTU = 9000
+
+        // Public IPv4 coverage excluding loopback, LAN/private, link-local,
+        // multicast and common local-control ranges. This mirrors the route
+        // shape used by Clash Meta on Android instead of installing a blunt
+        // 0.0.0.0/0 route that drags NAS, printer, hotspot and router traffic
+        // through the VPN unnecessarily.
+        private val PUBLIC_IPV4_ROUTES = arrayOf(
+            "1.0.0.0" to 8,
+            "2.0.0.0" to 7,
+            "4.0.0.0" to 6,
+            "8.0.0.0" to 7,
+            "11.0.0.0" to 8,
+            "12.0.0.0" to 6,
+            "16.0.0.0" to 4,
+            "32.0.0.0" to 3,
+            "64.0.0.0" to 3,
+            "96.0.0.0" to 4,
+            "112.0.0.0" to 5,
+            "120.0.0.0" to 6,
+            "124.0.0.0" to 7,
+            "126.0.0.0" to 8,
+            "128.0.0.0" to 3,
+            "160.0.0.0" to 5,
+            "168.0.0.0" to 8,
+            "169.0.0.0" to 9,
+            "169.128.0.0" to 10,
+            "169.192.0.0" to 11,
+            "169.224.0.0" to 12,
+            "169.240.0.0" to 13,
+            "169.248.0.0" to 14,
+            "169.252.0.0" to 15,
+            "169.255.0.0" to 16,
+            "170.0.0.0" to 7,
+            "172.0.0.0" to 12,
+            "172.32.0.0" to 11,
+            "172.64.0.0" to 10,
+            "172.128.0.0" to 9,
+            "173.0.0.0" to 8,
+            "174.0.0.0" to 7,
+            "176.0.0.0" to 4,
+            "192.0.0.0" to 9,
+            "192.128.0.0" to 11,
+            "192.160.0.0" to 13,
+            "192.169.0.0" to 16,
+            "192.170.0.0" to 15,
+            "192.172.0.0" to 14,
+            "192.176.0.0" to 12,
+            "192.192.0.0" to 10,
+            "193.0.0.0" to 8,
+            "194.0.0.0" to 7,
+            "196.0.0.0" to 6,
+            "200.0.0.0" to 5,
+            "208.0.0.0" to 4,
+        )
+
+        private val VPN_HTTP_PROXY_EXCLUSIONS = listOf(
+            "localhost",
+            "*.local",
+            "*.lan",
+            "127.*",
+            "10.*",
+            "169.254.*",
+            "172.16.*",
+            "172.17.*",
+            "172.18.*",
+            "172.19.*",
+            "172.20.*",
+            "172.21.*",
+            "172.22.*",
+            "172.23.*",
+            "172.24.*",
+            "172.25.*",
+            "172.26.*",
+            "172.27.*",
+            "172.28.*",
+            "172.29.*",
+            "172.30.*",
+            "172.31.*",
+            "192.168.*",
+        )
 
         /** Called when VPN is revoked by the system or another app. */
         var onVpnRevoked: (() -> Unit)? = null
@@ -131,20 +214,15 @@ class YueLinkVpnService : VpnService() {
         val builder = Builder()
             .setSession("YueLink")
             .addAddress("172.19.0.1", 30)
-            .addRoute("0.0.0.0", 0)
             // No IPv6 route — mihomo TUN only has inet4-address.
             // Use TUN gateway as DNS so queries reliably enter TUN for dns-hijack.
             .addDnsServer("172.19.0.2")
-            // mtu: 1500 matches the physical cellular/Wi-Fi MTU. The
-            // previous 9000 was inherited from mihomo's jumbo-frame
-            // default (only makes sense for desktop utun), but Android
-            // apps emit IP packets through the kernel socket layer
-            // which is still bound to the physical MTU — the extra 7500
-            // bytes of TUN MTU weren't helping and wasted buffer memory
-            // in sing-tun's gvisor stack. Clash Meta for Android and
-            // mihomo-party desktop both use 1500.
-            .setMtu(1500)
+            .setMtu(DEFAULT_TUN_MTU)
             .setBlocking(false)
+
+        addPublicIpv4Routes(builder)
+        configureVpnHttpProxy(builder, mixedPort)
+        logPrivateDnsState()
 
         // Tell Android this VPN is not metered — prevents traffic throttling
         // and allows background data for all apps through the VPN.
@@ -193,6 +271,43 @@ class YueLinkVpnService : VpnService() {
         // Start monitoring network changes for DNS updates and underlying-network
         // tracking. Must come AFTER establish() so setUnderlyingNetworks() works.
         startNetworkMonitor()
+    }
+
+    private fun addPublicIpv4Routes(builder: Builder) {
+        for ((address, prefix) in PUBLIC_IPV4_ROUTES) {
+            builder.addRoute(address, prefix)
+        }
+        // Host route for the synthetic DNS peer used by addDnsServer().
+        builder.addRoute("172.19.0.2", 32)
+    }
+
+    private fun configureVpnHttpProxy(builder: Builder, mixedPort: Int) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
+        try {
+            builder.setHttpProxy(
+                ProxyInfo.buildDirectProxy(
+                    "127.0.0.1",
+                    mixedPort,
+                    VPN_HTTP_PROXY_EXCLUSIONS,
+                ),
+            )
+        } catch (e: Exception) {
+            android.util.Log.w("YueLinkVpn", "setHttpProxy failed: ${e.message}")
+        }
+    }
+
+    private fun logPrivateDnsState() {
+        try {
+            val mode = Settings.Global.getString(contentResolver, "private_dns_mode")
+            val spec = Settings.Global.getString(contentResolver, "private_dns_specifier")
+            if (mode == "hostname" || mode == "opportunistic") {
+                android.util.Log.i(
+                    "YueLinkVpn",
+                    "Android Private DNS is $mode${if (spec.isNullOrBlank()) "" else " ($spec)"}; " +
+                        "DNS hijack depends on the platform allowing VPN DNS capture",
+                )
+            }
+        } catch (_: Exception) {}
     }
 
     private var stopped = false

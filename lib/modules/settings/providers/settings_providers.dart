@@ -82,6 +82,29 @@ class LanguageNotifier extends Notifier<String> {
   void set(String value) => state = value;
 }
 
+/// User's *stored* language preference — distinct from [languageProvider]
+/// which holds the resolved render locale. Values: `auto` / `zh` / `en`
+/// (see `LanguagePreference` for the canonical token list). `auto`
+/// follows the OS locale and re-resolves on every `didChangeLocales`
+/// callback; pinned values bypass the OS entirely. Settings UI binds
+/// to this provider; everything else (MaterialApp, slang, S) keeps
+/// reading [languageProvider] so the resolver stays a single point of
+/// translation between preference and rendered locale.
+final languagePreferenceProvider =
+    NotifierProvider<LanguagePreferenceNotifier, String>(
+      LanguagePreferenceNotifier.new,
+    );
+
+class LanguagePreferenceNotifier extends Notifier<String> {
+  LanguagePreferenceNotifier([this._initial = 'auto']);
+  final String _initial;
+
+  @override
+  String build() => _initial;
+
+  void set(String value) => state = value;
+}
+
 /// Accent color stored as hex string (without '#'), e.g. '3B82F6'.
 final accentColorProvider = NotifierProvider<AccentColorNotifier, String>(
   AccentColorNotifier.new,
