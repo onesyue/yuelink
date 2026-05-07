@@ -231,8 +231,9 @@ class CoreLifecycleManager {
         tunBypassAddresses: bypassAddrs,
         tunBypassProcesses: bypassProcs,
         quicRejectPolicy: ref.read(quicPolicyProvider),
-        windowsLanCompatibilityMode:
-            ref.read(windowsLanCompatibilityModeProvider),
+        windowsLanCompatibilityMode: ref.read(
+          windowsLanCompatibilityModeProvider,
+        ),
       );
       if (!ok) {
         ref.read(coreStatusProvider.notifier).set(CoreStatus.stopped);
@@ -260,6 +261,7 @@ class CoreLifecycleManager {
 
       // Apply routing mode (non-blocking — errors logged, not thrown)
       await _applyRoutingMode(manager);
+      await _stabilizeAndroidTunnel(manager);
 
       // Apply log-level — must run AFTER start, because subscription configs
       // typically include `log-level: info` which overrides our setting
@@ -359,7 +361,11 @@ class CoreLifecycleManager {
   Future<void> _applyRoutingMode(CoreManager manager) async {
     final savedMode = ref.read(routingModeProvider);
     try {
-      if (savedMode != 'rule') {
+      // Android TUN can retain stale selector / fake-ip state across
+      // reconnects even when the saved mode is the default `rule`. Re-applying
+      // the mode on start gives mihomo the same nudge as the manual
+      // rule→global→rule toggle users already found fixes stuck HTTPS flows.
+      if (savedMode != 'rule' || Platform.isAndroid) {
         await manager.api.setRoutingMode(savedMode);
       }
       final actual = await manager.api.getRoutingMode();
@@ -371,6 +377,101 @@ class CoreLifecycleManager {
       }
     } catch (e) {
       debugPrint('[CoreLifecycle] setRoutingMode error: $e');
+    }
+  }
+
+  /// Android post-connect stabilization.
+  ///
+  /// VpnService + fake-ip + rule-mode has more moving parts than desktop
+  /// system proxy. On some reconnects the tunnel and DNS are valid, but
+  /// existing mihomo selector/cache state still leaves Google/GitHub HTTPS
+  /// handshakes stuck until the user toggles routing mode. Do the cheap,
+  /// bounded cleanup automatically right after routing mode is applied.
+  Future<void> _stabilizeAndroidTunnel(CoreManager manager) async {
+    if (!Platform.isAndroid || manager.isMockMode) return;
+
+    try {
+      final health = await manager.api.healthSnapshot().timeout(
+        const Duration(seconds: 2),
+      );
+      if (!health.ok) {
+        EventLog.write(
+          '[Core] android_tunnel_stabilize skipped api=${health.reason}',
+        );
+        return;
+      }
+
+      var closeOk = false;
+      var fakeIpOk = false;
+      Object? lastError;
+
+      try {
+        closeOk = await manager.api.closeAllConnections().timeout(
+          const Duration(seconds: 2),
+        );
+      } catch (e) {
+        lastError = e;
+      }
+
+      try {
+        fakeIpOk = await manager.api.flushFakeIpCache().timeout(
+          const Duration(seconds: 2),
+        );
+      } catch (e) {
+        lastError = e;
+      }
+
+      EventLog.write(
+        '[Core] android_tunnel_stabilize close=$closeOk fake_ip=$fakeIpOk',
+      );
+
+      if (!closeOk && !fakeIpOk && lastError != null) {
+        debugPrint(
+          '[CoreLifecycle] android tunnel cleanup failed: '
+          '${lastError.toString().split("\n").first}',
+        );
+      }
+
+      // Provider healthcheck is useful, but not worth delaying the connected
+      // state. Run it in the background with tight per-call timeouts.
+      unawaited(_warmAndroidProxyProviders(manager));
+    } catch (e) {
+      debugPrint('[CoreLifecycle] android tunnel stabilize error: $e');
+      EventLog.write(
+        '[Core] android_tunnel_stabilize err=${e.toString().split("\n").first}',
+      );
+    }
+  }
+
+  Future<void> _warmAndroidProxyProviders(CoreManager manager) async {
+    try {
+      final data = await manager.api.getProxyProviders().timeout(
+        const Duration(seconds: 3),
+      );
+      final raw = data['providers'];
+      if (raw is! Map || raw.isEmpty) return;
+
+      var ok = 0;
+      var failed = 0;
+      final names = raw.keys.cast<String>().take(8).toList();
+      await Future.wait(
+        names.map((name) async {
+          try {
+            await manager.api
+                .healthCheckProvider(name)
+                .timeout(const Duration(seconds: 4));
+            ok++;
+          } catch (_) {
+            failed++;
+          }
+        }),
+        eagerError: false,
+      );
+      EventLog.write(
+        '[Core] android_provider_warmup providers=${names.length} ok=$ok failed=$failed',
+      );
+    } catch (e) {
+      debugPrint('[CoreLifecycle] android provider warmup failed: $e');
     }
   }
 
