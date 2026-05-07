@@ -467,6 +467,35 @@ class SettingsService {
     await set('systemProxyOnConnect', value);
   }
 
+  // ── Auto light-weight idle minutes (D-⑤ P4-5, desktop only) ────────────
+  //
+  // When > 0 and the app sits in tray (window hidden) for that many
+  // minutes, lightWeightModeProvider flips true; consumers can dispose
+  // heavy resources (chart timers, webview frames). 0 disables.
+  // Default 0 — opt-in, since the unmount semantics are platform-fragile.
+
+  static Future<int> getAutoLightWeightAfterMinutes() async {
+    return (await get<int>('autoLightWeightAfterMinutes')) ?? 0;
+  }
+
+  static Future<void> setAutoLightWeightAfterMinutes(int value) async {
+    await set('autoLightWeightAfterMinutes', value);
+  }
+
+  // ── Windows LAN compatibility mode (TUN strict-route off) ──────────────
+  //
+  // When true, desktop TUN config uses `strict-route: false` on Windows so
+  // SMB / 远程桌面 / 网络打印机 / NAS web UI 可达内网。Default false keeps
+  // the safer `strict-route: true` (yuelink's historical default).
+
+  static Future<bool> getWindowsLanCompatibilityMode() async {
+    return (await get<bool>('windowsLanCompatibilityMode')) ?? false;
+  }
+
+  static Future<void> setWindowsLanCompatibilityMode(bool value) async {
+    await set('windowsLanCompatibilityMode', value);
+  }
+
   // ── Auto-start on boot (macOS / Windows) ────────────────────────────────
 
   static Future<bool> getLaunchAtStartup() async {

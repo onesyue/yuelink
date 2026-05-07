@@ -168,6 +168,22 @@ class _EmbyPlayerPageState extends State<EmbyPlayerPage>
       await np.setProperty('demuxer-max-back-bytes', '50MiB');
       await np.setProperty('hr-seek', 'yes');
       await np.setProperty('hr-seek-framedrop', 'yes');
+      // Open paused so the resume-position dialog (if any) can settle
+      // before the playhead starts moving. Pre-fix this used the default
+      // `play: true`: the player started from 0 and the user-facing
+      // "上次播放到 12:34 — 继续 / 从头" dialog only popped after the
+      // Emby UserData REST round-trip (~200-500 ms via the proxy).
+      // By the time the user clicked "继续", playback had already been
+      // running for 1-3 s; the subsequent `_player.seek(posSeconds)` then
+      // raced with the player's own load/buffer pipeline and frequently
+      // got reset to 0 — so "继续" felt identical to "从头".
+      //
+      // New flow:
+      //   1. open(play: false) — register media, no playhead motion
+      //   2. await _checkResume() — fetch UserData, show dialog,
+      //      `seek` if user picks 继续 (resolves quickly because
+      //      seeking on a paused player has no race with autoplay)
+      //   3. _player.play() — single, deterministic start point
       await _player.open(
         Media(
           widget.streamUrl,
@@ -178,6 +194,7 @@ class _EmbyPlayerPageState extends State<EmbyPlayerPage>
                 'Token="${widget.accessToken}"',
           },
         ),
+        play: false,
       );
       _bufferingSub = _player.stream.buffering.listen((b) {
         if (mounted && _loading && !b) setState(() => _loading = false);
@@ -186,7 +203,12 @@ class _EmbyPlayerPageState extends State<EmbyPlayerPage>
         if (mounted) setState(() {});
       });
       _fetchMediaStreams();
-      _checkResume();
+      // Await resume decision (dialog + optional seek) BEFORE starting
+      // playback. _checkResume tolerates network failure / no resume
+      // position and simply returns — caller still proceeds to play().
+      await _checkResume();
+      if (!mounted) return;
+      await _player.play();
       _startProgressReporting();
     } catch (e) {
       if (mounted) {

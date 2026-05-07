@@ -49,6 +49,7 @@ import 'core/profile/subscription_sync_service.dart';
 import 'modules/updater/update_checker.dart';
 import 'modules/updater/update_dialog.dart';
 import 'core/storage/settings_service.dart';
+import 'core/system/private_dns_state.dart';
 import 'app/android_tile_controller.dart';
 import 'app/app_quit_controller.dart';
 import 'app/app_resume_controller.dart';
@@ -207,6 +208,16 @@ Future<void> _bootstrap() async {
         systemProxyOnConnectProvider.overrideWith(
           () => SystemProxyOnConnectNotifier(bootstrap.savedSystemProxy),
         ),
+        windowsLanCompatibilityModeProvider.overrideWith(
+          () => WindowsLanCompatibilityModeNotifier(
+            bootstrap.savedWindowsLanCompatibilityMode,
+          ),
+        ),
+        autoLightWeightAfterMinutesProvider.overrideWith(
+          () => AutoLightWeightAfterMinutesNotifier(
+            bootstrap.savedAutoLightWeightAfterMinutes,
+          ),
+        ),
         testUrlProvider.overrideWith(
           () => TestUrlNotifier(bootstrap.savedTestUrl),
         ),
@@ -277,6 +288,10 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
   late final AppQuitController _quit;
   late final AppResumeController _resume;
   late final DeeplinkController _deeplink;
+  // D-⑤ P4-5: timer fires `lightWeightModeProvider = true` when the
+  // app sits in background (tray) past `autoLightWeightAfterMinutes`.
+  // Cancelled on resumed.
+  Timer? _lightWeightTimer;
 
   // Managed provider subscriptions — cleaned up in dispose()
   ProviderSubscription? _langSub;
@@ -623,10 +638,22 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
       Telemetry.event(TelemetryEvents.appBackgrounded);
       unawaited(SettingsService.flush());
       unawaited(Telemetry.flush());
+      _scheduleLightWeightTimer();
     }
 
     if (state == AppLifecycleState.resumed) {
+      _cancelLightWeightTimer();
       Telemetry.event(TelemetryEvents.appResumed);
+      // c.P3-1: pull Android Private DNS state on every resume so the
+      // Dashboard banner reflects whatever the user toggled in system
+      // Settings while we were backgrounded. Cheap (one Settings.Global
+      // read on the platform side); harmless on non-Android (refresh()
+      // returns early).
+      if (Platform.isAndroid) {
+        unawaited(
+          ref.read(privateDnsStateProvider.notifier).refresh(),
+        );
+      }
       // On Android, the first resume after engine recreate is already
       // handled by addPostFrameCallback. Without this guard, the resume
       // handler runs TWICE on the same cycle: once from post-frame, once
@@ -649,6 +676,31 @@ class _YueLinkAppState extends ConsumerState<YueLinkApp>
           ref.read(recoveryInProgressProvider.notifier).set(false);
         }
       });
+    }
+  }
+
+  // ── D-⑤ P4-5: auto-light-weight timer ────────────────────────────
+  void _scheduleLightWeightTimer() {
+    // Desktop only. Mobile already aggressively unmounts foreground
+    // widgets when paused; running this timer there would just be
+    // extra battery drain.
+    if (!(Platform.isMacOS || Platform.isWindows || Platform.isLinux)) {
+      return;
+    }
+    _lightWeightTimer?.cancel();
+    final minutes = ref.read(autoLightWeightAfterMinutesProvider);
+    if (minutes <= 0) return; // disabled
+    _lightWeightTimer = Timer(Duration(minutes: minutes), () {
+      if (!mounted) return;
+      ref.read(lightWeightModeProvider.notifier).set(true);
+    });
+  }
+
+  void _cancelLightWeightTimer() {
+    _lightWeightTimer?.cancel();
+    _lightWeightTimer = null;
+    if (mounted) {
+      ref.read(lightWeightModeProvider.notifier).set(false);
     }
   }
 

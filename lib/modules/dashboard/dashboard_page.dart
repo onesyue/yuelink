@@ -28,6 +28,8 @@ import 'widgets/quick_actions.dart';
 import '../mine/widgets/notices_card.dart';
 import 'widgets/emby_preview_row.dart';
 import 'widgets/renewal_reminder_banner.dart';
+import 'widgets/connectivity_test_card.dart';
+import 'widgets/private_dns_banner.dart';
 import 'widgets/stale_subscription_banner.dart';
 import '../../domain/emby/emby_info_entity.dart';
 import '../../app/main_shell.dart';
@@ -261,6 +263,14 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
 
               const SizedBox(height: 12),
 
+              // ── 1.7 Android Private DNS hostname 提示（c.P3-1）─
+              const _StaggeredIn(
+                index: 2,
+                child: RepaintBoundary(child: PrivateDnsBanner()),
+              ),
+
+              const SizedBox(height: 12),
+
               // ── 2. 快捷操作 ───────────────────────────────
               const _StaggeredIn(
                 index: 3,
@@ -305,6 +315,14 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
               const _StaggeredIn(
                 index: 8,
                 child: RepaintBoundary(child: _TrafficSection()),
+              ),
+
+              const SizedBox(height: 12),
+
+              // ── 7. 连通性体检（D-④ P4-4）────────────────
+              const _StaggeredIn(
+                index: 9,
+                child: RepaintBoundary(child: ConnectivityTestCard()),
               ),
 
               const SizedBox(height: 16),

@@ -34,7 +34,11 @@ rules:
   - "DOMAIN-SUFFIX,dns.google,PROXY"
   - "DOMAIN-SUFFIX,cloudflare-ech.com,PROXY"
   - "DOMAIN,connectivitycheck.android.com,DIRECT"
+  - "DOMAIN,captive.apple.com,DIRECT"
+  - "DOMAIN,gsp-ssl.ls.apple.com,DIRECT"
+  - "DOMAIN,gsp-ssl.ls-apple.com.akadns.net,DIRECT"
   - "DOMAIN,connectivitycheck.platform.hicloud.com,DIRECT"
+  - "DOMAIN,wifi.huawei.com,DIRECT"
   - "DOMAIN,connectivitycheck.samsung.com,DIRECT"
   - "DOMAIN,connect.rom.miui.com,DIRECT"
   - "DOMAIN,connectivitycheck.platform.xiaomi.com,DIRECT"
@@ -43,7 +47,7 @@ rules:
   - "DOMAIN,connectivitycheck.platform.hihonorcloud.com,DIRECT"
   - "DOMAIN,connectivitycheck.meizu.com,DIRECT"
   - "DOMAIN,wifi.vivo.com.cn,DIRECT"
-  - "DOMAIN,captive.apple.com,DIRECT"
+  - "DOMAIN,noisyfox.cn,DIRECT"
   - RULE-SET,google,PROXY
   - RULE-SET,github,PROXY
   - MATCH,PROXY
@@ -112,6 +116,7 @@ dns:
     - "+.connectivitycheck.android.com"
     - "clients1.google.com"
     - "clients3.google.com"
+    - "clients4.google.com"
     - "play.googleapis.com"
     - "captive.apple.com"
     - "gsp-ssl.ls.apple.com"
@@ -127,6 +132,43 @@ dns:
     - "connectivitycheck.meizu.com"
     - "wifi.vivo.com.cn"
     - "noisyfox.cn"
+    - "www.msftconnecttest.com"
+    - "www.msftncsi.com"
+    - "dns.msftncsi.com"
+    - "+.cmpassport.com"
+    - "+.10086.cn"
+    - "+.wosms.cn"
+    - "+.10010.com"
+    - "+.10099.com.cn"
+    - "open.e.189.cn"
+    - "opencloud.wostore.cn"
+    - "id.mail.wo.cn"
+    - "mdn.open.wo.cn"
+    - "hmrz.wo.cn"
+    - "nishub1.10010.com"
+    - "enrichgw.10010.com"
+    - "+.189.cn"
+    - "+.cmbchina.com"
+    - "+.icbc.com.cn"
+    - "+.abchina.com"
+    - "+.boc.cn"
+    - "+.ccb.com"
+    - "+.bankcomm.com"
+    - "+.bocomcc.com"
+    - "+.cmbc.com.cn"
+    - "+.cgbchina.com.cn"
+    - "+.pingan.com.cn"
+    - "+.alipay.com"
+    - "+.alipayobjects.com"
+    - "+.jegotrip.com.cn"
+    - "+.icitymobile.mobi"
+    - "+.blzstatic.cn"
+    - "+.microdone.cn"
+    - "id6.me"
+    - "PDC._msDCS.*.*"
+    - "DC._msDCS.*.*"
+    - "GC._msDCS.*.*"
+    - "geosite:cn"
   default-nameserver:
     - 223.5.5.5
     - 119.29.29.29
@@ -137,6 +179,7 @@ dns:
   direct-nameserver:
     - https://dns.alidns.com/dns-query
     - https://doh.pub/dns-query
+  direct-nameserver-follow-policy: true
   proxy-server-nameserver:
     - 223.5.5.5
     - 119.29.29.29
@@ -145,8 +188,72 @@ dns:
     - https://doh.pub/dns-query
   nameserver-policy:
     "geosite:geolocation-!cn": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "geosite:cn": ["https://dns.alidns.com/dns-query", "https://doh.pub/dns-query"]
+    "geosite:private": ["https://dns.alidns.com/dns-query", "https://doh.pub/dns-query"]
     "+.apple.com": ["https://dns.alidns.com/dns-query", "https://doh.pub/dns-query"]
     "+.icloud.com": ["https://dns.alidns.com/dns-query", "https://doh.pub/dns-query"]
+    "+.openai.com": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.cdn.openai.com": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.chatgpt.com": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.chat.openai.com": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.operator.chatgpt.com": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.oaistatic.com": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.oaiusercontent.com": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.sora.com": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.anthropic.com": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.claude.ai": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.claude.site": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.claudeusercontent.com": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.gemini.google.com": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.bard.google.com": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.notebooklm.google": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.ai.google.dev": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.aistudio.google.com": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.generativelanguage.googleapis.com": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.deepmind.google": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.labs.google": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.copilot.microsoft.com": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.sydney.bing.com": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.x.ai": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.grok.com": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.meta.ai": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.perplexity.ai": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.poe.com": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.huggingface.co": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.cohere.com": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.mistral.ai": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.together.ai": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.groq.com": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.fireworks.ai": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.replicate.com": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.openrouter.ai": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.lmsys.org": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.cursor.com": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.cursor.sh": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.codeium.com": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.windsurf.com": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.bolt.new": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.v0.dev": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.replit.com": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.replit.dev": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.vercel.ai": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.devin.ai": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.cognition.ai": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.lovable.dev": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.midjourney.com": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.stability.ai": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.runway.com": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.runwayml.com": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.suno.ai": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.suno.com": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.udio.com": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.elevenlabs.io": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.heygen.com": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.synthesia.io": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.dify.ai": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.coze.com": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.character.ai": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
+    "+.jasper.ai": ["https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query"]
   fallback:
     - "https://1.1.1.1/dns-query"
     - "https://dns.google/dns-query"

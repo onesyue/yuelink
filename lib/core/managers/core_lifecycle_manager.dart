@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../constants.dart';
 import '../../core/kernel/core_manager.dart';
 import '../../core/profile/profile_service.dart';
 import '../../core/storage/settings_service.dart';
@@ -232,6 +231,8 @@ class CoreLifecycleManager {
         tunBypassAddresses: bypassAddrs,
         tunBypassProcesses: bypassProcs,
         quicRejectPolicy: ref.read(quicPolicyProvider),
+        windowsLanCompatibilityMode:
+            ref.read(windowsLanCompatibilityModeProvider),
       );
       if (!ok) {
         ref.read(coreStatusProvider.notifier).set(CoreStatus.stopped);
@@ -499,16 +500,22 @@ class CoreLifecycleManager {
       }
 
       if (newMode == 'tun') {
-        final stack = ref.read(desktopTunStackProvider);
+        // Mobile-only path (desktop returned earlier via _restartDesktopConnectionMode).
+        //
+        // Hot-switch on mobile is enable-only. The full TUN config (stack,
+        // file-descriptor, auto-route, auto-detect-interface, dns-hijack,
+        // inet4-address, mtu) was already set at startup via
+        // `TunTransformer.injectTunFd`. Re-specifying here would clobber
+        // critical Android invariants:
+        //   * `auto-route: false` (we route via VpnService fd, not netlink)
+        //   * `auto-detect-interface: false` (Android 14+ blocks netlink)
+        //   * `find-process-mode: off` (no permission)
+        //
+        // Pre-fix this path patched `auto-route: true / auto-detect-interface: true`
+        // which contradicted startup config; if the patch ever landed it would
+        // break the running TUN. Simplest correct payload: just toggle `enable`.
         final ok = await manager.api.patchConfig({
-          'tun': {
-            'enable': true,
-            'stack': stack,
-            'auto-route': true,
-            'auto-detect-interface': true,
-            'dns-hijack': ['any:53'],
-            'mtu': AppConstants.defaultTunMtu,
-          },
+          'tun': {'enable': true},
         });
         if (!ok) {
           AppNotifier.error(S.current.errTunSwitchFailed);
