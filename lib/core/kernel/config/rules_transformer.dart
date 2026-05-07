@@ -1,5 +1,6 @@
 import 'package:yaml/yaml.dart';
 
+import 'dns_policy_catalog.dart';
 import 'yaml_indent_detector.dart';
 
 class RulesTransformer {
@@ -24,13 +25,12 @@ class RulesTransformer {
   /// was fixed to populate the AI group with actual unlock nodes
   /// (see docs/releases/v1.1.20.md). The right invariant
   /// is "AI group has real unlock nodes", not "DoH escapes from AI".
-  static const _browserSecureDnsDomains = [
-    'cloudflare-dns.com',
-    'chrome.cloudflare-dns.com',
-    'mozilla.cloudflare-dns.com',
-    'dns.google',
-    'cloudflare-ech.com',
-  ];
+  ///
+  /// Single source of truth is [DnsPolicyCatalog.secureDnsDomains].
+  /// Tests reference the catalog directly; this getter only exists for
+  /// readable error messages in legacy code paths.
+  static List<String> get _browserSecureDnsDomains =>
+      DnsPolicyCatalog.secureDnsDomains;
 
   /// Sentinel comment marker for idempotency. Looking for a literal
   /// rule string (e.g. `DOMAIN-SUFFIX,cloudflare-dns.com,`) is too
@@ -42,6 +42,12 @@ class RulesTransformer {
       '# yuelink:secure-dns-routing'; // do not translate
 
   /// Ensure connectivity-check domains are routed DIRECT in rules.
+  ///
+  /// Domain list is sourced from
+  /// [DnsPolicyCatalog.rulesConnectivityDomains] which already excludes
+  /// google/gstatic/msft (those typically resolve DIRECT via geosite:cn
+  /// carve-outs in mainstream subscriptions, so injecting duplicates
+  /// would just be rule-list noise).
   static String ensureConnectivityRules(String config) {
     final rulesRange = YamlIndentDetector.findTopLevelSection(
       config,
@@ -50,22 +56,7 @@ class RulesTransformer {
     );
     if (rulesRange == null) return config;
 
-    const domains = [
-      'connectivitycheck.gstatic.com',
-      'connectivitycheck.android.com',
-      'clients3.google.com',
-      'connectivitycheck.platform.hicloud.com',
-      'connectivitycheck.samsung.com',
-      'connect.rom.miui.com',
-      'connectivitycheck.platform.xiaomi.com',
-      'conn1.coloros.com',
-      'conn2.coloros.com',
-      'connectivitycheck.platform.hihonorcloud.com',
-      'connectivitycheck.meizu.com',
-      'wifi.vivo.com.cn',
-      'captive.apple.com',
-      'www.msftconnecttest.com',
-    ];
+    final domains = DnsPolicyCatalog.rulesConnectivityDomains();
 
     // Tail-scan semantics preserved per S4 Step 2 spec.
     final ruleIndent = YamlIndentDetector.detectListItemIndent(
@@ -74,11 +65,12 @@ class RulesTransformer {
     );
     var injection = '';
     for (final d in domains) {
-      if (d.contains('google') || d.contains('gstatic') || d.contains('msft')) {
-        continue;
-      }
-      if (!config.contains('DOMAIN,$d,')) {
-        injection += '$ruleIndent- "DOMAIN,$d,DIRECT"\n';
+      // Strip wildcard prefix when checking for an existing rule —
+      // catalog uses `+.connectivitycheck.android.com` for fake-ip-filter
+      // form, but the rule injection writes the bare hostname.
+      final bare = d.startsWith('+.') ? d.substring(2) : d;
+      if (!config.contains('DOMAIN,$bare,')) {
+        injection += '$ruleIndent- "DOMAIN,$bare,DIRECT"\n';
       }
     }
     if (injection.isEmpty) return config;
